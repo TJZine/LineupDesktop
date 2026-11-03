@@ -237,4 +237,128 @@ void main() {
       await tester.pump();
     },
   );
+
+  testWidgets(
+    'returning to the previous policy while a new policy is in flight wins',
+    (tester) async {
+      const platform = MethodChannel('lineup/platform');
+      final messenger =
+          TestDefaultBinaryMessengerBinding.instance.defaultBinaryMessenger;
+      final calls = <MethodCall>[];
+      final releaseBOrientation = Completer<void>();
+      final postReleaseMode = Completer<void>();
+      var holdBOrientation = false;
+      messenger.setMockMethodCallHandler(platform, (_) async => true);
+      messenger.setMockMethodCallHandler(SystemChannels.platform, (call) async {
+        calls.add(call);
+        if (call.method == 'SystemChrome.setPreferredOrientations' &&
+            holdBOrientation &&
+            (call.arguments as List).contains(
+              'DeviceOrientation.landscapeLeft',
+            )) {
+          await releaseBOrientation.future;
+        }
+        if (call.method == 'SystemChrome.setEnabledSystemUIMode' &&
+            releaseBOrientation.isCompleted &&
+            holdBOrientation &&
+            !postReleaseMode.isCompleted) {
+          postReleaseMode.complete();
+        }
+        return null;
+      });
+      addTearDown(() {
+        messenger.setMockMethodCallHandler(platform, null);
+        messenger.setMockMethodCallHandler(SystemChannels.platform, null);
+      });
+      tester.view
+        ..devicePixelRatio = 1
+        ..physicalSize = const Size(412, 891);
+      tester.view.display
+        ..devicePixelRatio = 1
+        ..size = const Size(412, 915);
+      addTearDown(tester.view.reset);
+      addTearDown(tester.view.display.reset);
+      Widget host({bool player = false, bool osd = true}) => MaterialApp(
+        home: HandheldSystemUi(
+          playerVisible: player,
+          osdVisible: osd,
+          child: const SizedBox(),
+        ),
+      );
+
+      await tester.pumpWidget(host());
+      await tester.pump();
+      final factDone = Completer<void>();
+      await messenger.handlePlatformMessage(
+        platform.name,
+        platform.codec.encodeMethodCall(
+          const MethodCall('multiWindowChanged', false),
+        ),
+        (_) => factDone.complete(),
+      );
+      await factDone.future;
+      await tester.pump();
+      await tester.pump();
+      expect(
+        calls
+            .where(
+              (call) => call.method == 'SystemChrome.setPreferredOrientations',
+            )
+            .last
+            .arguments,
+        ['DeviceOrientation.portraitUp'],
+      );
+      expect(
+        calls
+            .where(
+              (call) => call.method == 'SystemChrome.setEnabledSystemUIMode',
+            )
+            .last
+            .arguments,
+        'SystemUiMode.edgeToEdge',
+      );
+
+      holdBOrientation = true;
+      await tester.pumpWidget(host(player: true, osd: false));
+      await tester.pump();
+      expect(
+        calls
+            .where(
+              (call) => call.method == 'SystemChrome.setPreferredOrientations',
+            )
+            .last
+            .arguments,
+        [
+          'DeviceOrientation.portraitUp',
+          'DeviceOrientation.landscapeLeft',
+          'DeviceOrientation.landscapeRight',
+        ],
+      );
+
+      await tester.pumpWidget(host());
+      await tester.pump();
+      releaseBOrientation.complete();
+      await postReleaseMode.future;
+      expect(
+        calls
+            .where(
+              (call) => call.method == 'SystemChrome.setPreferredOrientations',
+            )
+            .last
+            .arguments,
+        ['DeviceOrientation.portraitUp'],
+      );
+      expect(
+        calls
+            .where(
+              (call) => call.method == 'SystemChrome.setEnabledSystemUIMode',
+            )
+            .last
+            .arguments,
+        'SystemUiMode.edgeToEdge',
+      );
+      await tester.pumpWidget(const SizedBox.shrink());
+      await tester.pump();
+    },
+  );
 }

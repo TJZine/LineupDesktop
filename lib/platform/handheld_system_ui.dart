@@ -114,7 +114,9 @@ class _HandheldSystemUiState extends State<HandheldSystemUi>
         other.$1.length == next.$1.length &&
         Iterable<int>.generate(next.$1.length)
             .every((i) => other.$1[i] == next.$1[i]);
-    if (same(_pending) || (_pending == null && same(_applied))) return;
+    if (same(_pending) || (_pending == null && !_applying && same(_applied))) {
+      return;
+    }
     _pending = next;
     WidgetsBinding.instance.addPostFrameCallback((_) {
       if (mounted && _ownsWindow && !_applying) unawaited(_applyPending());
