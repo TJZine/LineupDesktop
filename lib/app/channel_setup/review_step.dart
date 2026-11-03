@@ -2,6 +2,7 @@ import 'dart:async';
 import 'dart:math' as math;
 
 import 'package:flutter/material.dart';
+import 'package:flutter/rendering.dart';
 import 'package:flutter/services.dart';
 import 'package:lineup_desktop/platform/device_profile.dart';
 
@@ -9,6 +10,8 @@ import '../../channels/channel.dart';
 import '../../channels/channel_builder.dart';
 import '../../ui/app_theme.dart';
 import '../../ui/app_ui.dart';
+import '../../ui/handheld_management.dart';
+import '../../ui/lineup_canvas.dart';
 import '../setup_review.dart';
 import 'step_scaffold.dart';
 
@@ -70,6 +73,83 @@ class _SetupReviewStepState extends State<SetupReviewStep> {
   double _returnOffset = 0;
   bool _rosterFocused = false;
   int _revealGeneration = 0;
+
+  final _handheldRowsKey = GlobalKey();
+  List<SetupReviewEntry> _laidOutEntries = const [];
+  bool? _stackedLayout;
+  int _anchorGeneration = 0;
+
+  RenderSliverMultiBoxAdaptor? get _handheldRows =>
+      _handheldRowsKey.currentContext?.findRenderObject()
+          as RenderSliverMultiBoxAdaptor?;
+
+  void _trackHandheldLayout(bool stacked) {
+    final previous = _stackedLayout;
+    _stackedLayout = stacked;
+    final entries = _visibleEntries;
+    if (previous != null && stacked != previous && _rosterScroll.hasClients) {
+      final generation = ++_anchorGeneration;
+      final rows = _handheldRows;
+      if (rows != null && rows.geometry != null) {
+        final top = rows.constraints.scrollOffset;
+        for (
+          var row = rows.firstChild;
+          row != null;
+          row = rows.childAfter(row)
+        ) {
+          final offset = rows.childScrollOffset(row)!;
+          if (offset > top || offset + row.size.height <= top) continue;
+          final index = rows.indexOf(row);
+          if (index < _laidOutEntries.length) {
+            final id = _laidOutEntries[index].channel.id;
+            unawaited(_restoreHandheldAnchor(id, generation));
+          }
+          break;
+        }
+      }
+    }
+    _laidOutEntries = entries;
+  }
+
+  Future<void> _restoreHandheldAnchor(String id, int generation) async {
+    final entries = _visibleEntries;
+    final target = entries.indexWhere((entry) => entry.channel.id == id);
+    if (target < 0) return;
+    // The new layout has different row extents. Advance by viewports until
+    // the sliver has built the same ID, then align it using its real extent.
+    for (var attempt = 0; attempt <= entries.length; attempt++) {
+      await WidgetsBinding.instance.endOfFrame;
+      if (!mounted ||
+          generation != _anchorGeneration ||
+          !_rosterScroll.hasClients) {
+        return;
+      }
+      final rows = _handheldRows;
+      if (rows == null) return;
+      for (var row = rows.firstChild; row != null; row = rows.childAfter(row)) {
+        if (rows.indexOf(row) == target) {
+          final viewport = RenderAbstractViewport.of(row);
+          final position = _rosterScroll.position;
+          position.jumpTo(
+            viewport
+                .getOffsetToReveal(row, 0)
+                .offset
+                .clamp(0.0, position.maxScrollExtent),
+          );
+          return;
+        }
+      }
+      final position = _rosterScroll.position;
+      final first = rows.firstChild;
+      final forward = first == null || target > rows.indexOf(first);
+      final next =
+          (position.pixels +
+                  (forward ? 1 : -1) * position.viewportDimension * .8)
+              .clamp(0.0, position.maxScrollExtent);
+      if (next == position.pixels) return;
+      position.jumpTo(next);
+    }
+  }
 
   List<SetupReviewEntry> get _visibleEntries {
     final query = _search.text.trim().toLowerCase();
@@ -288,6 +368,9 @@ class _SetupReviewStepState extends State<SetupReviewStep> {
   Widget build(BuildContext context) {
     final review = widget.review;
     final noChanges = !review.counts.hasChanges;
+    if (DeviceProfile.of(context).isHandheld) {
+      _trackHandheldLayout(handheldStacked(context));
+    }
     final body = SetupStage(
       footer: Focus(
         canRequestFocus: false,
@@ -296,6 +379,9 @@ class _SetupReviewStepState extends State<SetupReviewStep> {
         onFocusChange: _footerFocusChanged,
         child: SetupFooter(
           configuration: true,
+          confirmation: handheldStacked(context) && review.counts.removed > 0
+              ? _stackedConfirmation(review.counts.removed)
+              : null,
           leading: [
             TextButton(
               key: const ValueKey('back-to-configure'),
@@ -347,6 +433,10 @@ class _SetupReviewStepState extends State<SetupReviewStep> {
               const SizedBox(height: 8),
             ],
             _reviewOverview(),
+            if (handheldStacked(context) && !_firstSetup) ...[
+              const SizedBox(height: 16),
+              _stackedMethod(),
+            ],
             if (_missingSources.isNotEmpty &&
                 !DeviceProfile.of(context).isTv) ...[
               const SizedBox(height: 16),
@@ -364,6 +454,7 @@ class _SetupReviewStepState extends State<SetupReviewStep> {
           if (DeviceProfile.of(context).isTv) {
             return _roster(leading: orderedIntro, includeRemoval: true);
           }
+          if (handheldStacked(context)) return _stackedRoster(intro);
           if (constraints.maxHeight < 650 ||
               MediaQuery.textScalerOf(context).scale(1) >= 1.5) {
             return Column(
@@ -636,11 +727,11 @@ class _SetupReviewStepState extends State<SetupReviewStep> {
         borderRadius: BorderRadius.circular(8),
       ),
       child: Padding(
-        padding: const EdgeInsets.all(28),
+        padding: EdgeInsets.all(handheldStacked(context) ? 18 : 28),
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.stretch,
           children: [
-            if (!_firstSetup) ...[
+            if (!_firstSetup && !handheldStacked(context)) ...[
               _methodDecision(),
               const SizedBox(height: 16),
             ],
@@ -649,7 +740,16 @@ class _SetupReviewStepState extends State<SetupReviewStep> {
                 final effectiveWidth =
                     constraints.maxWidth /
                     MediaQuery.textScalerOf(context).scale(1);
-                final inline = !_firstSetup && effectiveWidth >= 760;
+                final inline =
+                    !_firstSetup &&
+                    effectiveWidth >= 760 &&
+                    !handheldStacked(context);
+                if (handheldStacked(context)) {
+                  return Column(
+                    crossAxisAlignment: CrossAxisAlignment.stretch,
+                    children: [total],
+                  );
+                }
                 if (inline) {
                   return Row(
                     crossAxisAlignment: CrossAxisAlignment.center,
@@ -671,7 +771,7 @@ class _SetupReviewStepState extends State<SetupReviewStep> {
             if (!_firstSetup) ...[
               const SizedBox(height: 24),
               Text(
-                'Changes in this review${review.counts.removed > 0 ? ' · Includes channels being removed' : ''}',
+                'Changes in this review${review.counts.removed > 0 && !handheldStacked(context) ? ' · Includes channels being removed' : ''}',
                 style: supportingStyle,
               ),
               const SizedBox(height: 12),
@@ -707,26 +807,27 @@ class _SetupReviewStepState extends State<SetupReviewStep> {
                   ),
                 ),
               const SizedBox(height: 8),
-              Wrap(
-                spacing: 20,
-                runSpacing: 4,
-                children: [
-                  for (final item in [
-                    ('Unchanged', roles.mutedText),
-                    ('Updated', roles.secondaryText),
-                    ('Added', roles.progressFill),
-                    ('Removed', roles.liveAccent),
-                  ])
-                    Row(
-                      mainAxisSize: MainAxisSize.min,
-                      children: [
-                        Container(width: 10, height: 10, color: item.$2),
-                        const SizedBox(width: 8),
-                        Text(item.$1, style: supportingStyle),
-                      ],
-                    ),
-                ],
-              ),
+              if (!handheldStacked(context))
+                Wrap(
+                  spacing: 20,
+                  runSpacing: 4,
+                  children: [
+                    for (final item in [
+                      ('Unchanged', roles.mutedText),
+                      ('Updated', roles.secondaryText),
+                      ('Added', roles.progressFill),
+                      ('Removed', roles.liveAccent),
+                    ])
+                      Row(
+                        mainAxisSize: MainAxisSize.min,
+                        children: [
+                          Container(width: 10, height: 10, color: item.$2),
+                          const SizedBox(width: 8),
+                          Text(item.$1, style: supportingStyle),
+                        ],
+                      ),
+                  ],
+                ),
             ],
             const SizedBox(height: 24),
             Divider(height: 1, color: roles.subtleBorder),
@@ -757,6 +858,268 @@ class _SetupReviewStepState extends State<SetupReviewStep> {
         ),
       ),
     );
+  }
+
+  /// UI-B item 2: the removal consent sits in the action bar, beside the
+  /// primary action it unlocks, so it can never scroll or clip away.
+  Widget _stackedConfirmation(int count) {
+    final roles = LineupTheme.of(context);
+    return Material(
+      color: roles.elevatedSurface,
+      shape: RoundedRectangleBorder(
+        borderRadius: BorderRadius.circular(8),
+        side: BorderSide(color: Theme.of(context).colorScheme.error),
+      ),
+      child: CheckboxListTile(
+        key: const ValueKey('channel-setup-replace-confirmation'),
+        controlAffinity: ListTileControlAffinity.leading,
+        contentPadding: const EdgeInsets.only(left: 4, right: 12),
+        minTileHeight: 56,
+        value: widget.removalConfirmed,
+        title: const Text('I understand'),
+        subtitle: Text(
+          '$count existing generated ${count == 1 ? 'channel will' : 'channels will'} be removed.',
+          style: TextStyle(color: roles.secondaryText, fontSize: 15),
+        ),
+        onChanged: (value) =>
+            widget.onRemovalConfirmationChanged(value == true),
+      ),
+    );
+  }
+
+  Widget _stackedMethod() {
+    final roles = LineupTheme.of(context);
+    final busy = widget.notice == 'Updating review…';
+    return Semantics(
+      key: const ValueKey('review-build-method'),
+      container: true,
+      label: 'Build method',
+      child: RadioGroup<ChannelBuildMode>(
+        groupValue: widget.review.mode,
+        onChanged: (mode) {
+          if (mode != null) widget.onModeChanged(mode);
+        },
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.stretch,
+          children: [
+            Text(
+              'How to apply this setup',
+              style: TextStyle(color: roles.secondaryText, fontSize: 16),
+            ),
+            const SizedBox(height: 8),
+            for (final mode in const [
+              ChannelBuildMode.merge,
+              ChannelBuildMode.replace,
+              ChannelBuildMode.append,
+            ])
+              Padding(
+                padding: const EdgeInsets.only(bottom: 8),
+                child: Material(
+                  color: widget.review.mode == mode
+                      ? roles.selectedSurface
+                      : Colors.transparent,
+                  shape: RoundedRectangleBorder(
+                    borderRadius: BorderRadius.circular(8),
+                    side: BorderSide(
+                      color: widget.review.mode == mode
+                          ? roles.progressFill
+                          : roles.defaultBorder,
+                    ),
+                  ),
+                  child: RadioListTile<ChannelBuildMode>(
+                    value: mode,
+                    contentPadding: const EdgeInsets.only(left: 4, right: 12),
+                    title: Text(switch (mode) {
+                      ChannelBuildMode.merge => 'Update and add',
+                      ChannelBuildMode.replace => 'Replace generated channels',
+                      ChannelBuildMode.append => 'Add as new channels',
+                    }),
+                    subtitle: Text(
+                      _modeDescription(mode),
+                      style: TextStyle(
+                        color: roles.secondaryText,
+                        fontSize: 15,
+                      ),
+                    ),
+                  ),
+                ),
+              ),
+            if (busy)
+              Text(
+                widget.notice!,
+                style: TextStyle(color: roles.secondaryText, fontSize: 16),
+              ),
+          ],
+        ),
+      ),
+    );
+  }
+
+  Widget _pinnedSearch() => TextField(
+    key: const ValueKey('channel-setup-review-search'),
+    controller: _search,
+    focusNode: _searchFocus,
+    decoration: InputDecoration(
+      prefixIcon: const Icon(Icons.search),
+      suffixIconConstraints: BoxConstraints(
+        minWidth: LineupCanvas.minimumTouchExtentOf(context) + .001,
+        minHeight: LineupCanvas.minimumTouchExtentOf(context) + .001,
+      ),
+      hintText: 'Search by name or number',
+      suffixIcon: _search.text.isEmpty
+          ? null
+          : IconButton(
+              tooltip: 'Clear search',
+              onPressed: () {
+                _search.clear();
+                setState(() {});
+                widget.onSearchChanged('');
+              },
+              icon: const Icon(Icons.close),
+            ),
+    ),
+    onChanged: (value) {
+      setState(() {});
+      widget.onSearchChanged(value);
+    },
+  );
+
+  Widget _stackedRoster(List<Widget> intro) {
+    final review = widget.review;
+    final roles = LineupTheme.of(context);
+    final entries = _visibleEntries;
+    final filtered = _filter != SetupReviewFilter.all;
+    final query = _search.text.trim().toLowerCase();
+    final textStyle = TextStyle(color: roles.secondaryText, fontSize: 16);
+    Widget gutter(Widget child) => Padding(
+      padding: const EdgeInsets.symmetric(horizontal: handheldGutter),
+      child: child,
+    );
+    final kinds = review.entries.map((entry) => entry.kind).toSet().length;
+    // B7/item 2: the search field sits outside the scroll view, so it never
+    // scrolls away under the keyboard and results scroll beneath it.
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.stretch,
+      children: [
+        gutter(_pinnedSearch()),
+        const SizedBox(height: 8),
+        Expanded(
+          child: CustomScrollView(
+            controller: _rosterScroll,
+            key: const ValueKey('channel-setup-review-roster'),
+            slivers: [
+              SliverList.list(
+                children: [for (final child in intro) gutter(child)],
+              ),
+              SliverToBoxAdapter(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.stretch,
+                  children: [
+                    HandheldChipRow(
+                      children: [
+                        HandheldFilterChip(
+                          label: 'All',
+                          count: review.entries.length,
+                          selected: !filtered,
+                          onSelected: () {
+                            setState(() => _filter = SetupReviewFilter.all);
+                            widget.onFilterChanged(SetupReviewFilter.all);
+                          },
+                        ),
+                        for (final (filter, count) in [
+                          (SetupReviewFilter.added, review.counts.added),
+                          (SetupReviewFilter.updated, review.counts.updated),
+                          (SetupReviewFilter.removed, review.counts.removed),
+                          (
+                            SetupReviewFilter.unchanged,
+                            review.counts.unchanged,
+                          ),
+                        ])
+                          if (count > 0)
+                            HandheldFilterChip(
+                              label: _capitalized(filter.name),
+                              count: count,
+                              swatch: _changeColor(filter),
+                              selected: _filter == filter,
+                              onSelected: () {
+                                setState(() => _filter = filter);
+                                widget.onFilterChanged(filter);
+                              },
+                            ),
+                      ],
+                    ),
+                    const SizedBox(height: 8),
+                    gutter(
+                      Text(
+                        filtered || query.isNotEmpty
+                            ? '${entries.length} matching ${entries.length == 1 ? 'channel' : 'channels'}'
+                            : '${entries.length} review entries',
+                        style: textStyle,
+                      ),
+                    ),
+                    const SizedBox(height: 8),
+                    Divider(height: 1, color: roles.subtleBorder),
+                  ],
+                ),
+              ),
+              if (entries.isEmpty)
+                SliverToBoxAdapter(child: _emptyRoster(query, filtered))
+              else
+                SliverList.builder(
+                  key: _handheldRowsKey,
+                  itemCount: entries.length,
+                  itemBuilder: (_, index) {
+                    final entry = entries[index];
+                    final channel = entry.channel;
+                    final changes = entry.kind == SetupReviewKind.updated
+                        ? _changedFields(entry.before, channel)
+                        : const <String>[];
+                    final kind = SetupReviewFilter.values.byName(
+                      entry.kind.name,
+                    );
+                    return KeyedSubtree(
+                      key: ValueKey(channel.id),
+                      child: Padding(
+                        padding: const EdgeInsets.symmetric(
+                          horizontal: handheldGutter,
+                        ),
+                        child: HandheldStackedRow(
+                          key: ValueKey('review-channel-${channel.id}'),
+                          number: channel.number,
+                          name: channel.name,
+                          removed: entry.kind == SetupReviewKind.removed,
+                          facts: [
+                            '${widget.sourceLabel(channel.source)} · ${_playbackLabel(channel)}',
+                            ...changes,
+                          ].join('\n'),
+                          badge: kinds > 1
+                              ? HandheldBadge(
+                                  _capitalized(entry.kind.name),
+                                  color: _changeColor(kind),
+                                )
+                              : null,
+                        ),
+                      ),
+                    );
+                  },
+                ),
+              const SliverToBoxAdapter(child: SizedBox(height: 24)),
+            ],
+          ),
+        ),
+      ],
+    );
+  }
+
+  Color _changeColor(SetupReviewFilter filter) {
+    final roles = LineupTheme.of(context);
+    return switch (filter) {
+      SetupReviewFilter.unchanged => roles.mutedText,
+      SetupReviewFilter.updated => roles.secondaryText,
+      SetupReviewFilter.added => roles.progressFill,
+      SetupReviewFilter.removed => Theme.of(context).colorScheme.error,
+      SetupReviewFilter.all => roles.mutedText,
+    };
   }
 
   Widget _segment(int count, Color color, {required double height}) =>
@@ -831,7 +1194,8 @@ class _SetupReviewStepState extends State<SetupReviewStep> {
     final query = _search.text.trim().toLowerCase();
     final entries = _visibleEntries;
     final filtered = _filter != SetupReviewFilter.all;
-    return LineupCompactControls(
+    final pinned = DeviceProfile.of(context).isHandheld;
+    final roster = LineupCompactControls(
       child: Focus(
         canRequestFocus: false,
         skipTraversal: true,
@@ -847,57 +1211,60 @@ class _SetupReviewStepState extends State<SetupReviewStep> {
             if (leading.isNotEmpty) SliverList.list(children: leading),
             SliverList.list(
               children: [
-                Row(
-                  crossAxisAlignment: CrossAxisAlignment.center,
-                  children: [
-                    Expanded(
-                      child: FocusTraversalOrder(
-                        order: const NumericFocusOrder(0),
-                        child: LineupTextFieldActivation(
-                          focusNode: _searchFocus,
-                          builder: (fieldContext, fieldFocus, finishEditing) =>
-                              TextField(
-                                onEditingComplete: finishEditing,
-                                focusNode: fieldFocus,
-                                key: const ValueKey(
-                                  'channel-setup-review-search',
-                                ),
-                                controller: _search,
-                                style: searchStyle.copyWith(
-                                  color: LineupTheme.of(fieldContext)
-                                      .primaryText,
-                                ),
-                                decoration: InputDecoration(
-                                  hintText: 'Search channels by name or number',
-                                  hintStyle: searchStyle.copyWith(
-                                    color: LineupTheme.of(fieldContext)
-                                        .primaryText,
-                                  ),
-                                ),
-                                onChanged: (value) {
-                                  setState(() {});
-                                  widget.onSearchChanged(value);
-                                },
-                              ),
+                if (!pinned)
+                  Row(
+                    crossAxisAlignment: CrossAxisAlignment.center,
+                    children: [
+                      Expanded(
+                        child: FocusTraversalOrder(
+                          order: const NumericFocusOrder(0),
+                          child: LineupTextFieldActivation(
+                            focusNode: _searchFocus,
+                            builder:
+                                (fieldContext, fieldFocus, finishEditing) =>
+                                    TextField(
+                                      onEditingComplete: finishEditing,
+                                      focusNode: fieldFocus,
+                                      key: const ValueKey(
+                                        'channel-setup-review-search',
+                                      ),
+                                      controller: _search,
+                                      style: searchStyle.copyWith(
+                                        color: LineupTheme.of(fieldContext)
+                                            .primaryText,
+                                      ),
+                                      decoration: InputDecoration(
+                                        hintText:
+                                            'Search channels by name or number',
+                                        hintStyle: searchStyle.copyWith(
+                                          color: LineupTheme.of(fieldContext)
+                                              .primaryText,
+                                        ),
+                                      ),
+                                      onChanged: (value) {
+                                        setState(() {});
+                                        widget.onSearchChanged(value);
+                                      },
+                                    ),
+                          ),
                         ),
                       ),
-                    ),
-                    if (!_firstSetup) ...[
-                      const SizedBox(width: 12),
-                      FocusTraversalOrder(
-                        order: const NumericFocusOrder(0),
-                        child: TextButton(
-                          key: const ValueKey('review-show-all'),
-                          onPressed: () {
-                            setState(() => _filter = SetupReviewFilter.all);
-                            widget.onFilterChanged(SetupReviewFilter.all);
-                          },
-                          child: const Text('Show all'),
+                      if (!_firstSetup) ...[
+                        const SizedBox(width: 12),
+                        FocusTraversalOrder(
+                          order: const NumericFocusOrder(0),
+                          child: TextButton(
+                            key: const ValueKey('review-show-all'),
+                            onPressed: () {
+                              setState(() => _filter = SetupReviewFilter.all);
+                              widget.onFilterChanged(SetupReviewFilter.all);
+                            },
+                            child: const Text('Show all'),
+                          ),
                         ),
-                      ),
+                      ],
                     ],
-                  ],
-                ),
+                  ),
                 const SizedBox(height: 8),
                 Text(
                   filtered
@@ -913,6 +1280,7 @@ class _SetupReviewStepState extends State<SetupReviewStep> {
               SliverToBoxAdapter(child: _emptyRoster(query, filtered))
             else
               SliverList.builder(
+                key: pinned ? _handheldRowsKey : null,
                 itemCount: entries.length,
                 itemBuilder: (_, index) => KeyedSubtree(
                   key: ValueKey(entries[index].channel.id),
@@ -945,6 +1313,27 @@ class _SetupReviewStepState extends State<SetupReviewStep> {
           ],
         ),
       ),
+    );
+    if (!pinned) return roster;
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.stretch,
+      children: [
+        Row(
+          children: [
+            Expanded(child: _pinnedSearch()),
+            if (!_firstSetup)
+              TextButton(
+                key: const ValueKey('review-show-all'),
+                onPressed: () {
+                  setState(() => _filter = SetupReviewFilter.all);
+                  widget.onFilterChanged(SetupReviewFilter.all);
+                },
+                child: const Text('Show all'),
+              ),
+          ],
+        ),
+        Expanded(child: roster),
+      ],
     );
   }
 

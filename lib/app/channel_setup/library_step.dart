@@ -6,6 +6,7 @@ import 'package:lineup_desktop/platform/device_profile.dart';
 import '../../channels/channel.dart';
 import '../../plex/plex_models.dart';
 import '../../ui/app_theme.dart';
+import '../../ui/handheld_management.dart';
 import '../../ui/app_ui.dart';
 import '../lineup_controller.dart' show LibraryScanFact, LibraryScanStatus;
 import '../lineup_restore_view.dart';
@@ -194,114 +195,111 @@ class SetupLibraryStep extends StatelessWidget {
         : 'Retry failed scans';
     final scanError = error ?? data.error;
     final excluded = selectedLibraryIds.length - ready.length;
+    final stacked = handheldStacked(context);
+    final switchServer = FilledButton(
+      key: const ValueKey('setup-switch-server'),
+      focusNode:
+          DeviceProfile.of(context).isTv && !data.busy && data.canSwitchServer
+          ? entryFocusNode
+          : null,
+      autofocus:
+          DeviceProfile.of(context).isTv && !data.busy && data.canSwitchServer,
+      onPressed: data.canSwitchServer ? onSwitchServer : null,
+      child: const Text('Switch server'),
+    );
+    final Widget primaryAction = !hasLibraries
+        ? (stacked
+              ? switchServer
+              : Wrap(
+                  spacing: 12,
+                  runSpacing: 12,
+                  alignment: WrapAlignment.end,
+                  crossAxisAlignment: WrapCrossAlignment.center,
+                  children: [
+                    if (onRequestLogout != null)
+                      TextButton(
+                        onPressed: data.busy ? null : onRequestLogout,
+                        child: const Text('Sign out'),
+                      ),
+                    switchServer,
+                  ],
+                ))
+        : scanning
+        ? TextButton(
+            autofocus: DeviceProfile.of(context).isTv,
+            onPressed: onCancelScan,
+            child: actionLabel('Cancel scan'),
+          )
+        : canContinue
+        ? FilledButton(
+            key: const ValueKey('continue-ready-libraries'),
+            onPressed: data.busy ? null : () => onCommit(ready),
+            child: Text(
+              'Continue with ${ready.length} ${ready.length == 1 ? 'library' : 'libraries'}',
+            ),
+          )
+        : canRetry
+        ? FilledButton(
+            key: const ValueKey('retry-failed-libraries'),
+            onPressed: selectedLibraryIds.isEmpty || data.busy
+                ? null
+                : () => onScan(retryFailedOnly: true),
+            child: Text(retryLabel),
+          )
+        : FilledButton(
+            key: const ValueKey('scan-selected-libraries'),
+            onPressed: selectedLibraryIds.isEmpty || data.busy ? null : onScan,
+            child: Text(_settled ? 'Scan again' : 'Scan selected libraries'),
+          );
+    final secondaryActions = <Widget>[
+      if (hasLibraries)
+        TextButton(
+          key: const ValueKey('setup-switch-server'),
+          style: TextButton.styleFrom(
+            padding: DeviceProfile.of(context).isTv
+                ? const EdgeInsets.symmetric(horizontal: 20)
+                : EdgeInsets.zero,
+            minimumSize: const Size(0, 48),
+            alignment: Alignment.centerLeft,
+          ),
+          onPressed: data.canSwitchServer ? onSwitchServer : null,
+          child: actionLabel('Switch server'),
+        ),
+      if (!scanning && data.channelSetupCanCancel)
+        TextButton(
+          style: DeviceProfile.of(context).isTv
+              ? TextButton.styleFrom(minimumSize: const Size(0, 48))
+              : null,
+          onPressed: onCancelSetup,
+          child: actionLabel('Cancel'),
+        ),
+    ];
+    final scanActions = <Widget>[
+      if (hasLibraries &&
+          !scanning &&
+          data.libraryScanReadyIds.intersection(selectedLibraryIds).isNotEmpty)
+        OutlinedButton(
+          key: const ValueKey('scan-again-libraries'),
+          onPressed: data.busy ? null : () => onScan(advanceWhenReady: false),
+          child: const Text('Scan again'),
+        ),
+      if (canRetry && canContinue)
+        OutlinedButton(
+          key: const ValueKey('retry-failed-libraries'),
+          onPressed: data.busy ? null : () => onScan(retryFailedOnly: true),
+          child: Text(retryLabel),
+        ),
+    ];
     final footer = SetupFooter(
       configuration: true,
-      summary: Wrap(
-        spacing: 8,
-        children: [
-          if (hasLibraries)
-            TextButton(
-              key: const ValueKey('setup-switch-server'),
-              style: TextButton.styleFrom(
-                padding: DeviceProfile.of(context).isTv
-                    ? const EdgeInsets.symmetric(horizontal: 20)
-                    : EdgeInsets.zero,
-                minimumSize: const Size(0, 48),
-                alignment: Alignment.centerLeft,
-              ),
-              onPressed: data.canSwitchServer ? onSwitchServer : null,
-              child: actionLabel('Switch server'),
-            ),
-          if (!scanning && data.channelSetupCanCancel)
-            TextButton(
-              style: DeviceProfile.of(context).isTv
-                  ? TextButton.styleFrom(minimumSize: const Size(0, 48))
-                  : null,
-              onPressed: onCancelSetup,
-              child: actionLabel('Cancel'),
-            ),
-        ],
-      ),
-      leading: [
-        if (hasLibraries &&
-            !scanning &&
-            data.libraryScanReadyIds
-                .intersection(selectedLibraryIds)
-                .isNotEmpty)
-          OutlinedButton(
-            key: const ValueKey('scan-again-libraries'),
-            onPressed: data.busy ? null : () => onScan(advanceWhenReady: false),
-            child: const Text('Scan again'),
-          ),
-        if (canRetry && canContinue)
-          OutlinedButton(
-            key: const ValueKey('retry-failed-libraries'),
-            onPressed: data.busy ? null : () => onScan(retryFailedOnly: true),
-            child: Text(retryLabel),
-          ),
-      ],
-      trailing: !hasLibraries
-          ? Wrap(
-              spacing: 12,
-              runSpacing: 12,
-              alignment: WrapAlignment.end,
-              crossAxisAlignment: WrapCrossAlignment.center,
-              children: [
-                if (onRequestLogout != null)
-                  TextButton(
-                    onPressed: data.busy ? null : onRequestLogout,
-                    child: const Text('Sign out'),
-                  ),
-                FilledButton(
-                  key: const ValueKey('setup-switch-server'),
-                  focusNode:
-                      DeviceProfile.of(context).isTv &&
-                          !data.busy &&
-                          data.canSwitchServer
-                      ? entryFocusNode
-                      : null,
-                  autofocus:
-                      DeviceProfile.of(context).isTv &&
-                      !data.busy &&
-                      data.canSwitchServer,
-                  onPressed: data.canSwitchServer ? onSwitchServer : null,
-                  child: const Text('Switch server'),
-                ),
-              ],
-            )
-          : scanning
-          ? TextButton(
-              autofocus: DeviceProfile.of(context).isTv,
-              onPressed: onCancelScan,
-              child: actionLabel('Cancel scan'),
-            )
-          : canContinue
-          ? FilledButton(
-              key: const ValueKey('continue-ready-libraries'),
-              onPressed: data.busy ? null : () => onCommit(ready),
-              child: Text(
-                'Continue with ${ready.length} ${ready.length == 1 ? 'library' : 'libraries'}',
-              ),
-            )
-          : canRetry
-          ? FilledButton(
-              key: const ValueKey('retry-failed-libraries'),
-              onPressed: selectedLibraryIds.isEmpty || data.busy
-                  ? null
-                  : () => onScan(retryFailedOnly: true),
-              child: Text(retryLabel),
-            )
-          : FilledButton(
-              key: const ValueKey('scan-selected-libraries'),
-              onPressed: selectedLibraryIds.isEmpty || data.busy
-                  ? null
-                  : onScan,
-              child: Text(_settled ? 'Scan again' : 'Scan selected libraries'),
-            ),
+      summary: Wrap(spacing: 8, children: secondaryActions),
+      leading: scanActions,
+      trailing: primaryAction,
     );
     final body = LayoutBuilder(
       builder: (context, constraints) {
         final singleScroll =
+            stacked ||
             DeviceProfile.of(context).isTv ||
             constraints.maxHeight < 800 ||
             MediaQuery.textScalerOf(context).scale(1) >= 1.5;
@@ -323,11 +321,14 @@ class SetupLibraryStep extends StatelessWidget {
           mainAxisSize: MainAxisSize.min,
           crossAxisAlignment: CrossAxisAlignment.stretch,
           children: [
-            _header(
-              context,
-              title,
-              data.libraries.isEmpty || _settled || scanning ? '' : _summary(),
-            ),
+            if (!stacked)
+              _header(
+                context,
+                title,
+                data.libraries.isEmpty || _settled || scanning
+                    ? ''
+                    : _summary(),
+              ),
             if (scanning) ...[
               const SizedBox(height: 10),
               LibraryScanPhaseStatus(progress: data.progress, centered: false),
@@ -365,12 +366,50 @@ class SetupLibraryStep extends StatelessWidget {
                   ),
                 ),
               ),
-            if (!DeviceProfile.of(context).isTv) ...[
+            if (!stacked && !DeviceProfile.of(context).isTv) ...[
               const SizedBox(height: 24),
               footer,
             ],
           ],
         );
+        if (stacked) {
+          final secondary = [
+            if (!hasLibraries && onRequestLogout != null)
+              TextButton(
+                onPressed: data.busy ? null : onRequestLogout,
+                child: const Text('Sign out'),
+              ),
+            ...scanActions,
+            ...secondaryActions,
+          ];
+          return Column(
+            crossAxisAlignment: CrossAxisAlignment.stretch,
+            children: [
+              Expanded(
+                child: SingleChildScrollView(
+                  key: const ValueKey('channel-setup-single-scroll'),
+                  padding: const EdgeInsets.fromLTRB(
+                    handheldGutter,
+                    4,
+                    handheldGutter,
+                    24,
+                  ),
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.stretch,
+                    children: [
+                      ...content.children,
+                      if (secondary.isNotEmpty) ...[
+                        const SizedBox(height: 24),
+                        Wrap(spacing: 8, runSpacing: 8, children: secondary),
+                      ],
+                    ],
+                  ),
+                ),
+              ),
+              HandheldSetupActionBar(primary: primaryAction),
+            ],
+          );
+        }
         if (DeviceProfile.of(context).isTv) {
           return Align(
             alignment: Alignment.topCenter,
@@ -450,72 +489,74 @@ class SetupLibraryStep extends StatelessWidget {
         : selected == 0
         ? false
         : null;
-    return Padding(
-      padding: const EdgeInsets.fromLTRB(0, 0, 8, 16),
-      child: Row(
-        children: [
-          if (libraries.length > 1)
-            FocusTraversalOrder(
-              order: const NumericFocusOrder(0),
-              // One focus target covers the checkbox and its label, matching
-              // the library rows. The button carries the tri-state semantics.
-              child: MergeSemantics(
-                child: Semantics(
-                  checked: value ?? false,
-                  mixed: value == null,
-                  child: TextButton(
-                    focusNode:
-                        DeviceProfile.of(context).isTv &&
-                            data.libraryScanStatus !=
-                                LibraryScanStatus.scanning &&
-                            editable
-                        ? entryFocusNode
-                        : null,
-                    autofocus: DeviceProfile.of(context).isTv && editable,
-                    style: const ButtonStyle(
-                      padding: WidgetStatePropertyAll(
-                        EdgeInsets.symmetric(horizontal: 8),
-                      ),
-                    ),
-                    onPressed: editable ? onToggleAll : null,
-                    child: Row(
-                      mainAxisSize: MainAxisSize.min,
-                      children: [
-                        _checkbox(
-                          key: const ValueKey('select-all-libraries'),
-                          skipTraversal: true,
-                          tristate: true,
-                          value: value,
-                          onChanged: editable ? (_) => onToggleAll() : null,
-                        ),
-                        const SizedBox(width: 8),
-                        Builder(
-                          builder: (context) {
-                            final ink = LineupTheme.of(context);
-                            return Text(
-                              'Select all',
-                              style: summaryStyle.copyWith(
-                                fontSize: 16,
-                                color: editable
-                                    ? ink.secondaryText
-                                    : ink.mutedText,
-                              ),
-                            );
-                          },
-                        ),
-                      ],
-                    ),
+    final actions = <Widget>[
+      if (libraries.length > 1)
+        FocusTraversalOrder(
+          order: const NumericFocusOrder(0),
+          // One focus target covers the checkbox and its label, matching
+          // the library rows. The button carries the tri-state semantics.
+          child: MergeSemantics(
+            child: Semantics(
+              checked: value ?? false,
+              mixed: value == null,
+              child: TextButton(
+                focusNode:
+                    DeviceProfile.of(context).isTv &&
+                        data.libraryScanStatus != LibraryScanStatus.scanning &&
+                        editable
+                    ? entryFocusNode
+                    : null,
+                autofocus: DeviceProfile.of(context).isTv && editable,
+                style: const ButtonStyle(
+                  padding: WidgetStatePropertyAll(
+                    EdgeInsets.symmetric(horizontal: 8),
                   ),
+                ),
+                onPressed: editable ? onToggleAll : null,
+                child: Row(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    _checkbox(
+                      key: const ValueKey('select-all-libraries'),
+                      skipTraversal: true,
+                      tristate: true,
+                      value: value,
+                      onChanged: editable ? (_) => onToggleAll() : null,
+                    ),
+                    const SizedBox(width: 8),
+                    Builder(
+                      builder: (context) {
+                        final ink = LineupTheme.of(context);
+                        return Text(
+                          'Select all',
+                          style: summaryStyle.copyWith(
+                            fontSize: 16,
+                            color: editable ? ink.secondaryText : ink.mutedText,
+                          ),
+                        );
+                      },
+                    ),
+                  ],
                 ),
               ),
             ),
-          const Spacer(),
-          Text(
-            '$selected of ${libraries.length} selected',
-            style: summaryStyle,
           ),
-        ],
-      ),
+        ),
+    ];
+    final summary = Text(
+      '$selected of ${libraries.length} selected',
+      style: summaryStyle,
+    );
+    return Padding(
+      padding: const EdgeInsets.fromLTRB(0, 0, 8, 16),
+      child: handheldStacked(context)
+          ? Wrap(
+              alignment: WrapAlignment.spaceBetween,
+              crossAxisAlignment: WrapCrossAlignment.center,
+              spacing: 12,
+              children: [...actions, summary],
+            )
+          : Row(children: [...actions, const Spacer(), summary]),
     );
   }
 

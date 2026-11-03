@@ -6,6 +6,7 @@ import '../channels/channel.dart';
 import '../channels/channel_builder.dart';
 import '../ui/app_theme.dart';
 import '../ui/app_ui.dart';
+import '../ui/handheld_management.dart';
 import 'channel_setup_projection.dart';
 import 'channel_setup/review_step.dart';
 import 'channel_setup/result_step.dart';
@@ -71,6 +72,8 @@ class UpstreamChannelSetupViewState extends State<UpstreamChannelSetupView> {
   bool _libraryEntryWasEnabled = false;
 
   SetupReview? get _review => _phase?.review;
+
+  final _stageKey = GlobalKey();
 
   bool get _firstSetup => _review?.base.isEmpty ?? true;
 
@@ -351,56 +354,51 @@ class UpstreamChannelSetupViewState extends State<UpstreamChannelSetupView> {
     _clearLibraryEntryFocusIfUnavailable();
     final resultState = _step == _SetupStep.result;
     final phase = _phase;
-    final page = SafeArea(
-      child: IconTheme.merge(
-        data: const IconThemeData(size: 24),
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.stretch,
-          children: [
-            LineupTopBar(
-              divider: phase is! Completed && phase is! Applying,
-              trailing: Align(
-                alignment: Alignment.centerRight,
-                child: SingleChildScrollView(child: _setupSteps()),
-              ),
-            ),
-            Expanded(
-              child: LineupContentWidth(
-                key: const ValueKey('channel-setup-content'),
-                maxWidth: _step == _SetupStep.libraries ? 1040 : 1824,
-                vertical: 24,
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.stretch,
-                  children: [
-                    if (_step != _SetupStep.libraries && !resultState) ...[
-                      _header(),
-                      const SizedBox(height: 32),
-                    ],
-                    if (_error != null &&
-                        phase is! Failed &&
-                        _step != _SetupStep.libraries) ...[
-                      LineupNotice(message: _error!),
-                      const SizedBox(height: 12),
-                    ],
-                    Expanded(
-                      child: KeyedSubtree(
-                        key: const ValueKey('channel-setup-stage'),
-                        child: switch (_step) {
-                          _SetupStep.libraries => _libraryStep(),
-                          _SetupStep.configure => _configureStep(),
-                          _SetupStep.review => _reviewStep(),
-                          _SetupStep.result => _resultStep(),
-                        },
+    final stacked = handheldStacked(context);
+    final page = stacked && !resultState
+        ? _stackedPage()
+        : SafeArea(
+            child: IconTheme.merge(
+              data: const IconThemeData(size: 24),
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.stretch,
+                children: [
+                  LineupTopBar(
+                    divider: phase is! Completed && phase is! Applying,
+                    trailing: Align(
+                      alignment: Alignment.centerRight,
+                      child: SingleChildScrollView(child: _setupSteps()),
+                    ),
+                  ),
+                  Expanded(
+                    child: LineupContentWidth(
+                      key: const ValueKey('channel-setup-content'),
+                      maxWidth: _step == _SetupStep.libraries ? 1040 : 1824,
+                      vertical: 24,
+                      handheldContent: stacked,
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.stretch,
+                        children: [
+                          if (_step != _SetupStep.libraries &&
+                              !resultState) ...[
+                            _header(),
+                            const SizedBox(height: 32),
+                          ],
+                          if (_error != null &&
+                              phase is! Failed &&
+                              _step != _SetupStep.libraries) ...[
+                            LineupNotice(message: _error!),
+                            const SizedBox(height: 12),
+                          ],
+                          Expanded(child: _stage()),
+                        ],
                       ),
                     ),
-                  ],
-                ),
+                  ),
+                ],
               ),
             ),
-          ],
-        ),
-      ),
-    );
+          );
     return Focus(
       // Route descendant Back keys without becoming a directional focus target.
       canRequestFocus: false,
@@ -415,6 +413,76 @@ class UpstreamChannelSetupViewState extends State<UpstreamChannelSetupView> {
                   child: page,
                 )
               : page,
+        ),
+      ),
+    );
+  }
+
+  // Keep the active step mounted when the handheld composition changes.
+  Widget _stage() => KeyedSubtree(
+    key: _stageKey,
+    child: KeyedSubtree(
+      key: const ValueKey('channel-setup-stage'),
+      child: switch (_step) {
+        _SetupStep.libraries => _libraryStep(),
+        _SetupStep.configure => _configureStep(),
+        _SetupStep.review => _reviewStep(),
+        _SetupStep.result => _resultStep(),
+      },
+    ),
+  );
+
+  Widget _stackedPage() {
+    final (title, backLabel) = switch (_step) {
+      _SetupStep.libraries => ('Choose libraries', 'Cancel setup'),
+      _SetupStep.configure => ('Shape your lineup', 'Back to libraries'),
+      _SetupStep.review => (
+        _firstSetup ? 'Review your first lineup' : 'Review your lineup',
+        'Back to configure',
+      ),
+      _SetupStep.result => throw StateError('Results use the existing page'),
+    };
+    final libraries = _step == _SetupStep.libraries;
+    final controller = widget.controller;
+    final canCancel =
+        controller.channelSetupCanCancel &&
+        controller.canSwitchServer &&
+        !_committingLibraries &&
+        controller.libraryScanStatus != LibraryScanStatus.scanning;
+    return SafeArea(
+      bottom: false,
+      child: Center(
+        child: ConstrainedBox(
+          // The shared bars apply their own gutter.
+          constraints: const BoxConstraints(
+            maxWidth: handheldMaxContent + 2 * handheldGutter,
+          ),
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.stretch,
+            children: [
+              HandheldPageBar(
+                title: title,
+                onBack: !libraries || canCancel ? handleBack : null,
+                backTooltip: backLabel,
+                backIcon: libraries ? Icons.close : Icons.arrow_back,
+              ),
+              HandheldStepProgress(
+                step: _step.index + 1,
+                label: const ['Libraries', 'Configure', 'Review'][_step.index],
+              ),
+              if (_error != null && !libraries)
+                Padding(
+                  padding: const EdgeInsets.fromLTRB(
+                    handheldGutter,
+                    0,
+                    handheldGutter,
+                    12,
+                  ),
+                  child: LineupNotice(message: _error!),
+                ),
+              Expanded(child: _stage()),
+            ],
+          ),
         ),
       ),
     );

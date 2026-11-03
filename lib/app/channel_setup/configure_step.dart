@@ -7,6 +7,7 @@ import 'package:lineup_desktop/platform/device_profile.dart';
 import '../../channels/channel.dart';
 import '../../channels/channel_builder.dart';
 import '../../ui/app_theme.dart';
+import '../../ui/handheld_management.dart';
 import '../../ui/app_ui.dart';
 import 'step_scaffold.dart';
 
@@ -188,10 +189,19 @@ class _SetupConfigureStepState extends State<SetupConfigureStep> {
             1 => _configureSectionContent(widget.allocation, 1, _focus),
             _ => _configureSectionContent(widget.allocation, 2, _focus),
           };
+          final stacked = handheldStacked(context);
           final content = KeyedSubtree(
             key: const ValueKey('channel-configuration'),
             child: ListView(
               key: ValueKey(widget.section),
+              padding: stacked
+                  ? const EdgeInsets.fromLTRB(
+                      handheldGutter,
+                      8,
+                      handheldGutter,
+                      24,
+                    )
+                  : null,
               children: [
                 if (widget.section != 2)
                   _heading(
@@ -204,6 +214,29 @@ class _SetupConfigureStepState extends State<SetupConfigureStep> {
               ],
             ),
           );
+          if (stacked) {
+            // UI-B item 1: one-line section chips over one scrolling list.
+            return Column(
+              crossAxisAlignment: CrossAxisAlignment.stretch,
+              children: [
+                HandheldChipRow(
+                  children: [
+                    for (var index = 0; index < labels.length; index++)
+                      HandheldFilterChip(
+                        section: index + 1,
+                        sectionCount: labels.length,
+                        key: ValueKey('configure-section-$index'),
+                        label: labels[index],
+                        selected: widget.section == index,
+                        onSelected: () => widget.onSectionChanged(index),
+                      ),
+                  ],
+                ),
+                const SizedBox(height: 8),
+                Expanded(child: content),
+              ],
+            );
+          }
           if (compact) {
             return Column(
               crossAxisAlignment: CrossAxisAlignment.stretch,
@@ -469,6 +502,24 @@ class _SetupConfigureStepState extends State<SetupConfigureStep> {
       fontSize: 18,
       height: 1.4,
     );
+    if (handheldStacked(context)) {
+      return Text.rich(
+        key: const ValueKey('configuration-allocation-summary'),
+        TextSpan(
+          children: [
+            TextSpan(
+              text: '$total generated ${total == 1 ? 'channel' : 'channels'}',
+              style: TextStyle(
+                color: roles.primaryText,
+                fontWeight: FontWeight.w600,
+              ),
+            ),
+            TextSpan(text: ' · ${details.join(' · ')}'),
+          ],
+        ),
+        style: secondaryStyle.copyWith(fontSize: 16),
+      );
+    }
     return MergeSemantics(
       key: const ValueKey('configuration-allocation-summary'),
       child: Column(
@@ -753,6 +804,26 @@ class _SetupConfigureStepState extends State<SetupConfigureStep> {
             BuilderStrategy.directors => 'Combine matching directors',
             _ => 'Combine matching values',
           };
+          if (handheldStacked(context)) {
+            return LineupField(
+              label: 'Library grouping',
+              child: HandheldSelectField<bool>(
+                key: ValueKey('source-grouping-${strategy.name}'),
+                label: 'Library grouping',
+                value: _grouped.contains(strategy),
+                choices: [
+                  const HandheldChoice(
+                    value: false,
+                    label: 'Separate by library',
+                  ),
+                  HandheldChoice(value: true, label: groupingLabel),
+                ],
+                onChanged: enabled
+                    ? (value) => widget.onGroupingChanged(strategy, value)
+                    : null,
+              ),
+            );
+          }
           final groupingStyle = Theme.of(context).textTheme.bodyMedium!
               .copyWith(
                 fontSize: 16,
@@ -992,7 +1063,46 @@ class _SetupConfigureStepState extends State<SetupConfigureStep> {
             ),
           ),
         ),
-        if (_extras)
+        if (_extras && handheldStacked(context)) ...[
+          LineupField(
+            label: 'Different playback mode',
+            child: HandheldSelectField<String>(
+              label: 'Different playback mode',
+              value: _variantMode?.name ?? '',
+              choices: [
+                const HandheldChoice(value: '', label: 'None'),
+                for (final (mode, label) in const [
+                  (PlaybackMode.shuffle, 'Shuffle'),
+                  (PlaybackMode.sequential, 'In order'),
+                  (PlaybackMode.block, 'Mini-marathons'),
+                ])
+                  HandheldChoice(value: mode.name, label: label),
+              ],
+              onChanged: (value) => widget.onVariantModeChanged(
+                value.isEmpty ? null : PlaybackMode.values.byName(value),
+              ),
+            ),
+          ),
+          if (_variantMode == PlaybackMode.block) ...[
+            const SizedBox(height: 12),
+            _blockField(main: false),
+          ],
+          const SizedBox(height: 12),
+          LineupField(
+            label: 'Alternate schedules',
+            child: HandheldSelectField<int>(
+              label: 'Alternate schedules',
+              value: _alternateCopies,
+              choices: [
+                for (final value in const [0, 1, 2, 3])
+                  HandheldChoice(value: value, label: '$value'),
+              ],
+              onChanged: _playback == PlaybackMode.sequential
+                  ? null
+                  : widget.onAlternateCopiesChanged,
+            ),
+          ),
+        ] else if (_extras)
           Wrap(
             spacing: 16,
             runSpacing: 12,
@@ -1068,13 +1178,19 @@ class _SetupConfigureStepState extends State<SetupConfigureStep> {
     );
   }
 
-  Widget _specialsControl() => IntrinsicWidth(
-    child: CheckboxMenuButton(
-      value: _includeSpecials,
-      onChanged: (value) => widget.onIncludeSpecialsChanged(value ?? false),
-      child: const Text('Include specials'),
-    ),
-  );
+  Widget _specialsControl() {
+    final control = IntrinsicWidth(
+      child: CheckboxMenuButton(
+        value: _includeSpecials,
+        onChanged: (value) => widget.onIncludeSpecialsChanged(value ?? false),
+        child: const Text('Include specials'),
+      ),
+    );
+    return LineupTouchTarget(
+      onPressed: () => widget.onIncludeSpecialsChanged(!_includeSpecials),
+      child: control,
+    );
+  }
 
   Widget _playbackChoice(
     PlaybackMode mode,
@@ -1336,6 +1452,22 @@ class _SetupConfigureStepState extends State<SetupConfigureStep> {
   }
 
   Widget _blockField({required bool main}) {
+    final label = main ? 'Episodes per block' : 'Extra block size';
+    final size = main ? _blockSize : _variantBlockSize;
+    if (handheldStacked(context)) {
+      return LineupField(
+        label: label,
+        child: HandheldSelectField<int>(
+          label: label,
+          value: size,
+          choices: [
+            for (final value in const [2, 3, 4, 5])
+              HandheldChoice(value: value, label: '$value'),
+          ],
+          onChanged: (value) => widget.onBlockSizeChanged(main, value),
+        ),
+      );
+    }
     final metrics = _dropdownMetrics(
       desiredWidth: 220,
       baseHeight: 48,
@@ -1344,10 +1476,10 @@ class _SetupConfigureStepState extends State<SetupConfigureStep> {
       style: Theme.of(context).textTheme.titleMedium!,
     );
     return LineupField(
-      label: main ? 'Episodes per block' : 'Extra block size',
+      label: label,
       child: lineupDropdownField<int>(
         context: context,
-        initialValue: main ? _blockSize : _variantBlockSize,
+        initialValue: size,
         iconSize: 24,
         itemHeight: metrics.itemHeight,
         decoration: InputDecoration(),
@@ -1412,12 +1544,13 @@ class _SetupConfigureStepState extends State<SetupConfigureStep> {
       required String description,
       required ValueChanged<int> onChanged,
     }) {
+      final stacked = handheldStacked(context);
       return DecoratedBox(
         decoration: BoxDecoration(
           border: Border(bottom: BorderSide(color: roles.subtleBorder)),
         ),
         child: Padding(
-          padding: EdgeInsets.symmetric(vertical: 36),
+          padding: EdgeInsets.symmetric(vertical: stacked ? 20 : 36),
           child: LayoutBuilder(
             builder: (_, constraints) {
               final textScale = MediaQuery.textScalerOf(context).scale(1);
@@ -1438,63 +1571,78 @@ class _SetupConfigureStepState extends State<SetupConfigureStep> {
               );
               final dropdownWidth = metrics.width;
               final inline =
+                  !stacked &&
                   constraints.maxWidth / textScale >= 320 &&
                   constraints.maxWidth >= dropdownWidth + 16;
-              final dropdown = Semantics(
-                label: label,
-                container: true,
-                child: SizedBox(
-                  width: dropdownWidth,
-                  height: math.max(56, metrics.closedHeight),
-                  child: DropdownButtonHideUnderline(
-                    child: LineupDropdownBox(
-                      compact: false,
-                      enabled: true,
-                      child: DropdownButton<int>(
-                        key: key,
-                        isExpanded: true,
-                        isDense: true,
-                        iconSize: 24,
-                        icon: DeviceProfile.of(context).isTv
-                            ? Builder(
-                                builder: (context) => Icon(
-                                  Icons.arrow_drop_down,
-                                  color: LineupTheme.of(context).secondaryText,
-                                ),
-                              )
-                            : null,
-                        padding: EdgeInsets.symmetric(horizontal: 10),
-                        itemHeight: metrics.itemHeight,
-                        value: value,
-                        style: dropdownStyle,
-                        items: lineupMenuItems(
-                          [
-                            for (final choice in choices)
-                              DropdownMenuItem(
-                                value: choice,
-                                child: choiceLabel(choice),
+              final Widget dropdown = stacked
+                  ? HandheldSelectField<int>(
+                      key: key,
+                      label: label,
+                      value: value,
+                      choices: [
+                        for (final choice in choices)
+                          HandheldChoice(value: choice, label: '$choice'),
+                      ],
+                      onChanged: onChanged,
+                    )
+                  : Semantics(
+                      label: label,
+                      container: true,
+                      child: SizedBox(
+                        width: dropdownWidth,
+                        height: math.max(56, metrics.closedHeight),
+                        child: DropdownButtonHideUnderline(
+                          child: LineupDropdownBox(
+                            compact: false,
+                            enabled: true,
+                            child: DropdownButton<int>(
+                              key: key,
+                              isExpanded: true,
+                              isDense: true,
+                              iconSize: 24,
+                              icon: DeviceProfile.of(context).isTv
+                                  ? Builder(
+                                      builder: (context) => Icon(
+                                        Icons.arrow_drop_down,
+                                        color: LineupTheme.of(context)
+                                            .secondaryText,
+                                      ),
+                                    )
+                                  : null,
+                              padding: EdgeInsets.symmetric(horizontal: 10),
+                              itemHeight: metrics.itemHeight,
+                              value: value,
+                              style: dropdownStyle,
+                              items: lineupMenuItems(
+                                [
+                                  for (final choice in choices)
+                                    DropdownMenuItem(
+                                      value: choice,
+                                      child: choiceLabel(choice),
+                                    ),
+                                ],
+                                value,
+                                menuTheme: DeviceProfile.of(context).isTv
+                                    ? Theme.of(context)
+                                    : null,
                               ),
-                          ],
-                          value,
-                          menuTheme: DeviceProfile.of(context).isTv
-                              ? Theme.of(context)
-                              : null,
+                              onChanged: (next) {
+                                if (next != null) onChanged(next);
+                              },
+                              dropdownColor: LineupTheme.of(context)
+                                  .elevatedSurface,
+                              menuWidth: DeviceProfile.of(context).isTv
+                                  ? dropdownWidth
+                                  : null,
+                              selectedItemBuilder: (_) => [
+                                for (final choice in choices)
+                                  choiceLabel(choice),
+                              ],
+                            ),
+                          ),
                         ),
-                        onChanged: (next) {
-                          if (next != null) onChanged(next);
-                        },
-                        dropdownColor: LineupTheme.of(context).elevatedSurface,
-                        menuWidth: DeviceProfile.of(context).isTv
-                            ? dropdownWidth
-                            : null,
-                        selectedItemBuilder: (_) => [
-                          for (final choice in choices) choiceLabel(choice),
-                        ],
                       ),
-                    ),
-                  ),
-                ),
-              );
+                    );
               return Column(
                 crossAxisAlignment: CrossAxisAlignment.stretch,
                 children: [

@@ -4,6 +4,7 @@ import 'package:flutter/material.dart';
 import 'package:lineup_desktop/platform/device_profile.dart';
 
 import '../../ui/app_theme.dart';
+import '../../ui/handheld_management.dart';
 
 class SetupStage extends StatelessWidget {
   const SetupStage({
@@ -19,6 +20,16 @@ class SetupStage extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    if (handheldStacked(context)) {
+      // UI-B item 1: the step scrolls as one surface above a sticky bar.
+      return Column(
+        crossAxisAlignment: CrossAxisAlignment.stretch,
+        children: [
+          Expanded(child: child),
+          footer,
+        ],
+      );
+    }
     final media = MediaQuery.of(context);
     final singleScroll =
         !DeviceProfile.of(context).isTv &&
@@ -58,6 +69,7 @@ class SetupFooter extends StatelessWidget {
     required this.trailing,
     this.summary,
     this.configuration = false,
+    this.confirmation,
     super.key,
   });
 
@@ -66,9 +78,23 @@ class SetupFooter extends StatelessWidget {
   final Widget? summary;
   final bool configuration;
 
+  /// UI-B item 2: a consent control that must sit beside the primary action.
+  final Widget? confirmation;
+
   @override
   Widget build(BuildContext context) {
     final roles = LineupTheme.of(context);
+    if (handheldStacked(context)) {
+      return HandheldSetupActionBar(
+        primary: trailing,
+        summary: summary is SizedBox ? null : summary,
+        consent: confirmation,
+      );
+    }
+    if (DeviceProfile.of(context).isHandheld &&
+        View.of(context).viewInsets.bottom > 0) {
+      return const SizedBox.shrink();
+    }
     if (configuration) {
       const footerTop = 24.0;
       final actionGroup = Wrap(
