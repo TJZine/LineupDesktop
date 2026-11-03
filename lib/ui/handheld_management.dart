@@ -875,7 +875,8 @@ class HandheldStackedRow extends StatelessWidget {
         _HandheldWordText(name, style: nameStyle, fitOverwideWords: true),
         if (facts.isNotEmpty) ...[
           const SizedBox(height: 2),
-          _HandheldWordText(facts, style: factsStyle, fitOverwideWords: true),
+          for (final line in facts.split('\n'))
+            _HandheldWordText(line, style: factsStyle, fitOverwideWords: true),
         ],
         if (warning != null)
           Padding(
