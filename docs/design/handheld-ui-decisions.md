@@ -769,6 +769,26 @@ text 1.0, 1.3 and 2.0; stacked rows instead of desktop tables).
     optional error line ("Schedule issue — open this channel to recover");
   - the row is at least 72 cu, the whole row is the tap target, and an optional
     trailing ⋮ (56 cu).
+  - **Large text** (amended November 3, 2026, maintainer approval; H5 found
+    "Documentaries" breaking mid-word in a 360 dp reorder row at text 2.0). A
+    row stacks when its width ÷ the name's text scale (the scaled 18 cu name
+    ÷ 18) is under 280 cu, or when a word of its text doesn't fit beside the
+    number block at the current size:
+    - the top line keeps the leading checkbox (selection), the number block and
+      the trailing ⋮ and drag handle;
+    - the name, facts, warning, badge and change lines use the full width below,
+      from the number block's left edge to the 18 cu gutter;
+    - on 360–412 dp phones, text 2.0 stacks and 1.3 doesn't. Tablets and wide
+      windows keep the side-by-side row;
+    - on the stacked line, rule 1d's single-word fallback applies to all B3
+      text: a word wider than its line shrinks to fit, never below its text-1.0
+      size. Only a word wider than the full line at text 1.0 (about 35
+      characters without a space) may break. This is the one named limit of
+      the no-mid-word rule for row text.
+    - The number block and its clamp, the 72 cu minimum, the whole-row target
+      and the TalkBack order are unchanged.
+    - Rendered: `sheets/ub3-large-text.png` (Android's 1.3/2.0 curve,
+      synthetic names); specimen `harness/b3_large_text_sheet_test.dart`.
 - **B4. Filters** are one line of horizontally scrolling chips (54 cu tall and
   at least 56 cu wide), never wrapping, with counts. Change chips with zero
   count are hidden. Section chips (Configure) expose "Section N of 3".
@@ -915,6 +935,8 @@ text 1.0, 1.3 and 2.0; stacked rows instead of desktop tables).
   and above a 300 dp keyboard, hit at center). No layout exceptions from UI-B
   code.
 - No word broken mid-word in any UI-B title, row name or header (text probe).
+  The probe covers normal, selection and reorder rows, a long compound name,
+  and an over-wide page-bar title word (B3 large-text amendment).
 - Back performs the page bar's arrow on every UI-B page; Setup Back never
   discards a draft without today's confirmation.
 - Touch audit: every new control ≥ 48 dp; the B9 list is expanded per 1c.
