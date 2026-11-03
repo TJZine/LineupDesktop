@@ -92,29 +92,36 @@ class _SetupReviewStepState extends State<SetupReviewStep> {
       final rows = _handheldRows;
       if (rows != null && rows.geometry != null) {
         final top = rows.constraints.scrollOffset;
-        for (
-          var row = rows.firstChild;
-          row != null;
-          row = rows.childAfter(row)
-        ) {
-          final offset = rows.childScrollOffset(row)!;
-          if (offset > top || offset + row.size.height <= top) continue;
-          final index = rows.indexOf(row);
-          if (index < _laidOutEntries.length) {
-            final id = _laidOutEntries[index].channel.id;
-            unawaited(_restoreHandheldAnchor(id, generation));
+        if (top <= 0) {
+          // The overview and method can still be above the first roster row.
+          unawaited(_restoreHandheldAnchor(null, generation));
+        } else {
+          for (
+            var row = rows.firstChild;
+            row != null;
+            row = rows.childAfter(row)
+          ) {
+            final offset = rows.childScrollOffset(row)!;
+            if (offset > top || offset + row.size.height <= top) continue;
+            final index = rows.indexOf(row);
+            if (index < _laidOutEntries.length) {
+              final id = _laidOutEntries[index].channel.id;
+              unawaited(_restoreHandheldAnchor(id, generation));
+            }
+            break;
           }
-          break;
         }
       }
     }
     _laidOutEntries = entries;
   }
 
-  Future<void> _restoreHandheldAnchor(String id, int generation) async {
+  Future<void> _restoreHandheldAnchor(String? id, int generation) async {
     final entries = _visibleEntries;
-    final target = entries.indexWhere((entry) => entry.channel.id == id);
-    if (target < 0) return;
+    final target = id == null
+        ? null
+        : entries.indexWhere((entry) => entry.channel.id == id);
+    if (target == -1) return;
     // The new layout has different row extents. Advance by viewports until
     // the sliver has built the same ID, then align it using its real extent.
     for (var attempt = 0; attempt <= entries.length; attempt++) {
@@ -122,6 +129,10 @@ class _SetupReviewStepState extends State<SetupReviewStep> {
       if (!mounted ||
           generation != _anchorGeneration ||
           !_rosterScroll.hasClients) {
+        return;
+      }
+      if (target == null) {
+        _rosterScroll.jumpTo(0);
         return;
       }
       final rows = _handheldRows;

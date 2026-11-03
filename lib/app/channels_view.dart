@@ -1208,25 +1208,28 @@ class ChannelsViewState extends State<ChannelsView> {
         (_laidOutMode == _DirectoryMode.reorder) ==
         (_mode == _DirectoryMode.reorder);
     if (previous != null && previous != geometry && sameList) {
+      final generation = ++_anchorGeneration;
       final rows = _directoryRows;
       if (rows != null && rows.geometry != null) {
         final top = rows.constraints.scrollOffset;
-        for (
-          var row = rows.firstChild;
-          row != null;
-          row = rows.childAfter(row)
-        ) {
-          if (rows.childScrollOffset(row)! + row.size.height <= top) continue;
-          final index = _directoryRowIndex(rows.indexOf(row));
-          if (index < _laidOutRowIds.length) {
-            unawaited(
-              _restoreDirectoryAnchor(
-                _laidOutRowIds[index],
-                ++_anchorGeneration,
-              ),
-            );
+        if (top <= 0) {
+          // The reorder hint can precede the rows.
+          unawaited(_restoreDirectoryAnchor(null, generation));
+        } else {
+          for (
+            var row = rows.firstChild;
+            row != null;
+            row = rows.childAfter(row)
+          ) {
+            if (rows.childScrollOffset(row)! + row.size.height <= top) continue;
+            final index = _directoryRowIndex(rows.indexOf(row));
+            if (index < _laidOutRowIds.length) {
+              unawaited(
+                _restoreDirectoryAnchor(_laidOutRowIds[index], generation),
+              );
+            }
+            break;
           }
-          break;
         }
       }
     } else if (!sameList) {
@@ -1245,12 +1248,20 @@ class ChannelsViewState extends State<ChannelsView> {
       ? sliverIndex ~/ 2
       : sliverIndex;
 
-  Future<void> _restoreDirectoryAnchor(String id, int generation) async {
+  Future<void> _restoreDirectoryAnchor(String? id, int generation) async {
     // Row heights change with composition and text scale. Seek by viewport
     // until the same ID is laid out, then align using its actual geometry.
     for (var attempt = 0; attempt <= _laidOutRowIds.length; attempt++) {
       await WidgetsBinding.instance.endOfFrame;
-      if (!mounted || generation != _anchorGeneration) return;
+      if (!mounted ||
+          generation != _anchorGeneration ||
+          !_handheldScroll.hasClients) {
+        return;
+      }
+      if (id == null) {
+        _handheldScroll.jumpTo(0);
+        return;
+      }
       final target = _laidOutRowIds.indexOf(id);
       final rows = _directoryRows;
       if (target < 0 || rows == null) return;

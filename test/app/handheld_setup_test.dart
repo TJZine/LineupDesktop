@@ -113,6 +113,18 @@ void main() {
       await tester.runAsync(loadPinnedTestFonts);
       await tester.pumpWidget(_host(1, _ReviewFixture()));
       await tester.pumpAndSettle();
+      for (final scale in [2.0, 1.0]) {
+        await tester.pumpWidget(_host(scale, _ReviewFixture()));
+        await tester.pumpAndSettle();
+        final roster = tester.widget<CustomScrollView>(_roster);
+        expect(roster.controller!.offset, 0);
+        final method = _key('review-build-method');
+        expect(method, findsOneWidget);
+        final window =
+            Offset.zero &
+            (tester.view.physicalSize / tester.view.devicePixelRatio);
+        expect(tester.getRect(method).overlaps(window), isTrue);
+      }
       await tester.enterText(_search, 'Test');
       FocusManager.instance.primaryFocus?.unfocus();
       await tester.pumpAndSettle();
