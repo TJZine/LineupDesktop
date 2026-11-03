@@ -85,20 +85,22 @@ void main() {
             expect(find.text('Edit custom channel · Saved'), findsOneWidget);
             _checkWords(tester);
 
-            final canvasWidth =
-                size.width /
-                LineupCanvas.scaleFor(size, formFactor: FormFactor.handheld);
-            final identityStacks = canvasWidth / textScale < 420;
+            final identity = find.byKey(const Key('studio-identity'));
+            expect(identity, findsOneWidget);
+            final identityStacks =
+                tester.getSize(identity).width / textScale < 420;
             final nameLabel = find.text('Channel name');
             final numberLabel = find.text('Number');
             expect(nameLabel, findsOneWidget);
             expect(numberLabel, findsOneWidget);
-            if (identityStacks) {
-              expect(
-                tester.getTopLeft(numberLabel).dy,
-                greaterThan(tester.getBottomLeft(nameLabel).dy),
-              );
-            }
+            final numberTop = tester.getTopLeft(numberLabel).dy;
+            final nameBottom = tester.getBottomLeft(nameLabel).dy;
+            expect(
+              numberTop,
+              identityStacks
+                  ? greaterThan(nameBottom)
+                  : lessThanOrEqualTo(nameBottom),
+            );
 
             await tester.ensureVisible(find.textContaining('Channel programs'));
             expect(find.text('Move to…'), findsWidgets);
@@ -338,6 +340,7 @@ void _checkWords(WidgetTester tester) {
       find.text('Second program'),
       find.text('Programming'),
       find.textContaining('Channel programs'),
+      find.text('Channel name'),
     ])
       ...tester.renderObjectList<RenderParagraph>(finder),
   ];

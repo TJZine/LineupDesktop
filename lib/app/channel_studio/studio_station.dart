@@ -77,74 +77,82 @@ class _StudioStationState extends State<_StudioStation> {
         children: [
           LayoutBuilder(
             builder: (context, constraints) {
-              final textScale = MediaQuery.textScalerOf(context).scale(1);
-              final double numberWidth = 120 * (textScale > 1 ? textScale : 1);
-              final stackIdentity =
-                  handheldStacked(context) &&
-                  textScale > 0 &&
-                  constraints.maxWidth / textScale < 420;
-              final identity = Flex(
-                direction: stackIdentity ? Axis.vertical : Axis.horizontal,
-                crossAxisAlignment: stackIdentity
-                    ? CrossAxisAlignment.stretch
-                    : CrossAxisAlignment.center,
-                children: [
-                  _IdentityName(
-                    stacked: stackIdentity,
-                    child: LineupField(
-                      label: 'Channel name',
-                      child: LineupTextFieldActivation(
-                        focusNode: _nameFocus,
-                        enabled: !_saving,
-                        builder: (fieldContext, fieldFocus, finishEditing) =>
-                            TextFormField(
-                              key: const Key('studio-name'),
-                              controller: _name,
-                              focusNode: fieldFocus,
-                              onEditingComplete: finishEditing,
-                              enabled: !_saving,
-                              style: _studioBodyStyle(fieldContext),
-                              decoration: const InputDecoration(
-                                hintText: 'Required',
-                              ),
-                              onChanged: (_) => _changed(),
-                              validator: (value) =>
-                                  value == null || value.trim().isEmpty
-                                  ? 'Enter a channel name.'
-                                  : null,
-                            ),
-                      ),
-                    ),
-                  ),
-                  SizedBox(width: 12, height: 12),
-                  Align(
-                    alignment: Alignment.centerLeft,
-                    widthFactor: 1,
-                    child: SizedBox(
-                      width: numberWidth,
-                      child: LineupField(
-                        label: 'Number',
-                        child: LineupTextFieldActivation(
-                          focusNode: _numberFocus,
-                          enabled: !_saving,
-                          builder: (fieldContext, fieldFocus, finishEditing) =>
-                              TextFormField(
-                                key: const Key('studio-number'),
-                                controller: _number,
-                                focusNode: fieldFocus,
-                                onEditingComplete: finishEditing,
-                                enabled: !_saving,
-                                keyboardType: TextInputType.number,
-                                style: _studioBodyStyle(fieldContext),
-                                decoration: const InputDecoration(),
-                                onChanged: (_) => _changed(),
-                                validator: _validateNumber,
-                              ),
+              final identity = LayoutBuilder(
+                builder: (context, identityConstraints) {
+                  final textScale = MediaQuery.textScalerOf(context).scale(1);
+                  final double numberWidth =
+                      120 * (textScale > 1 ? textScale : 1);
+                  final stackIdentity =
+                      handheldStacked(context) &&
+                      textScale > 0 &&
+                      identityConstraints.maxWidth / textScale < 420;
+                  return Flex(
+                    key: const Key('studio-identity'),
+                    direction: stackIdentity ? Axis.vertical : Axis.horizontal,
+                    crossAxisAlignment: stackIdentity
+                        ? CrossAxisAlignment.stretch
+                        : CrossAxisAlignment.center,
+                    children: [
+                      _IdentityName(
+                        stacked: stackIdentity,
+                        child: LineupField(
+                          label: 'Channel name',
+                          child: LineupTextFieldActivation(
+                            focusNode: _nameFocus,
+                            enabled: !_saving,
+                            builder:
+                                (fieldContext, fieldFocus, finishEditing) =>
+                                    TextFormField(
+                                      key: const Key('studio-name'),
+                                      controller: _name,
+                                      focusNode: fieldFocus,
+                                      onEditingComplete: finishEditing,
+                                      enabled: !_saving,
+                                      style: _studioBodyStyle(fieldContext),
+                                      decoration: const InputDecoration(
+                                        hintText: 'Required',
+                                      ),
+                                      onChanged: (_) => _changed(),
+                                      validator: (value) =>
+                                          value == null || value.trim().isEmpty
+                                          ? 'Enter a channel name.'
+                                          : null,
+                                    ),
+                          ),
                         ),
                       ),
-                    ),
-                  ),
-                ],
+                      SizedBox(width: 12, height: 12),
+                      Align(
+                        alignment: Alignment.centerLeft,
+                        widthFactor: 1,
+                        child: SizedBox(
+                          width: numberWidth,
+                          child: LineupField(
+                            label: 'Number',
+                            child: LineupTextFieldActivation(
+                              focusNode: _numberFocus,
+                              enabled: !_saving,
+                              builder:
+                                  (fieldContext, fieldFocus, finishEditing) =>
+                                      TextFormField(
+                                        key: const Key('studio-number'),
+                                        controller: _number,
+                                        focusNode: fieldFocus,
+                                        onEditingComplete: finishEditing,
+                                        enabled: !_saving,
+                                        keyboardType: TextInputType.number,
+                                        style: _studioBodyStyle(fieldContext),
+                                        decoration: const InputDecoration(),
+                                        onChanged: (_) => _changed(),
+                                        validator: _validateNumber,
+                                      ),
+                            ),
+                          ),
+                        ),
+                      ),
+                    ],
+                  );
+                },
               );
               final playback = Column(
                 crossAxisAlignment: CrossAxisAlignment.stretch,
