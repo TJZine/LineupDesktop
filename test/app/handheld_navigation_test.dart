@@ -168,6 +168,34 @@ void main() {
   );
 
   navigationTest(
+    'portrait tabs and mini player hide while the keyboard is open',
+    (tester) async {
+      tester.view
+        ..devicePixelRatio = 1
+        ..physicalSize = const Size(800, 1280);
+      addTearDown(tester.view.reset);
+      final fixture = _ready();
+      await tester.pumpWidget(fixture.build());
+      await tester.pumpAndSettle();
+      await tab(tester, 'channels');
+      expect(find.byType(HandheldTabBar), findsOneWidget);
+      expect(find.byType(HandheldMiniPlayer), findsOneWidget);
+
+      // TestFlutterView.viewInsets is expressed in physical pixels; at this
+      // 1x test scale, this is the required 300 dp keyboard inset.
+      tester.view.viewInsets = const FakeViewPadding(bottom: 300);
+      await tester.pumpAndSettle();
+      expect(find.byType(HandheldTabBar), findsNothing);
+      expect(find.byType(HandheldMiniPlayer), findsNothing);
+
+      tester.view.viewInsets = FakeViewPadding.zero;
+      await tester.pumpAndSettle();
+      expect(find.byType(HandheldTabBar), findsOneWidget);
+      expect(find.byType(HandheldMiniPlayer), findsOneWidget);
+    },
+  );
+
+  navigationTest(
     'resize keeps the Settings element and selection while transferring its output',
     (tester) async {
       tester.view

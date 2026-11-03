@@ -1444,7 +1444,9 @@ class _LineupShellState extends State<LineupShell> {
     };
     final roles = LineupTheme.of(context);
     final showTabs =
-        _portraitComposition && _destination != ShellDestination.player;
+        _portraitComposition &&
+        _destination != ShellDestination.player &&
+        !(View.of(context).viewInsets.bottom > 0);
     final routeColor =
         _destination == ShellDestination.settings ||
             _destination == ShellDestination.player ||
