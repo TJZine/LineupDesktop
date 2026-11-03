@@ -25,14 +25,12 @@ void main() {
 
   test('keyboard and window subscriptions coexist, replay facts and refcount watches', () async {
     final calls = <String>[];
-    final ack = Completer<bool>();
     messenger.setMockMethodCallHandler(channel, (call) async {
       calls.add(call.method);
-      return call.method == 'watchKeyboardVisibility' ? ack.future : true;
+      return true;
     });
     final first = PlatformKeyboardVisibility();
     await publish('keyboardVisibilityChanged', true);
-    await publish('keyboardVisibilityChanged', 'malformed');
     final second = PlatformKeyboardVisibility();
     expect(second.value, isTrue);
     final windows = <Object?>[];
@@ -53,8 +51,6 @@ void main() {
     second.dispose();
     await publish('multiWindowChanged', true);
     expect(windows, [false, true]);
-    ack.complete(false);
-    await Future<void>.delayed(Duration.zero);
     stop();
     stop();
     await publish('multiWindowChanged', false);

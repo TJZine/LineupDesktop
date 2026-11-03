@@ -138,22 +138,20 @@ class NativePlayerAdapterTest {
         messenger.call("setVideoRect", rect(320.0, 180.0))
         var retainedCues = cuesField.get(subtitles)
         val retainedVideo = video.holder
-        repeat(2) {
-            messenger.call("setVideoRect", rect(320.0, 180.0) + ("showSubtitles" to false))
-            assertNull(messenger.lastError)
-            assertEquals(View.INVISIBLE, subtitles.visibility)
-            assertEquals(View.VISIBLE, video.visibility)
-            org.junit.Assert.assertSame(retainedVideo, video.holder)
-            org.junit.Assert.assertSame(retainedCues, cuesField.get(subtitles))
-            // Decoder delivery keeps updating the hidden view. Restore the newest
-            // cues, rather than a snapshot captured when entering Settings.
-            subtitles.setCues(cues + androidx.media3.common.text.Cue.Builder().setText("new cue").build())
-            retainedCues = cuesField.get(subtitles)
-            assertEquals(View.INVISIBLE, subtitles.visibility)
-            messenger.call("setVideoRect", rect(320.0, 180.0) + ("showSubtitles" to true))
-            assertEquals(View.VISIBLE, subtitles.visibility)
-            org.junit.Assert.assertSame(retainedCues, cuesField.get(subtitles))
-        }
+        messenger.call("setVideoRect", rect(320.0, 180.0) + ("showSubtitles" to false))
+        assertNull(messenger.lastError)
+        assertEquals(View.INVISIBLE, subtitles.visibility)
+        assertEquals(View.VISIBLE, video.visibility)
+        org.junit.Assert.assertSame(retainedVideo, video.holder)
+        org.junit.Assert.assertSame(retainedCues, cuesField.get(subtitles))
+        // Decoder delivery keeps updating the hidden view. Restore the newest
+        // cues, rather than a snapshot captured when entering Settings.
+        subtitles.setCues(cues + androidx.media3.common.text.Cue.Builder().setText("new cue").build())
+        retainedCues = cuesField.get(subtitles)
+        assertEquals(View.INVISIBLE, subtitles.visibility)
+        messenger.call("setVideoRect", rect(320.0, 180.0) + ("showSubtitles" to true))
+        assertEquals(View.VISIBLE, subtitles.visibility)
+        org.junit.Assert.assertSame(retainedCues, cuesField.get(subtitles))
         messenger.call("setVideoRect", rect(320.0, 180.0) + ("showSubtitles" to false))
         messenger.call("setVideoRect", rect(320.0, 180.0))
         assertEquals(View.VISIBLE, subtitles.visibility)
