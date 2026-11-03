@@ -103,14 +103,33 @@ void main() {
         ),
         findsOneWidget,
       );
-      await tester.pumpWidget(
-        MaterialApp(
-          theme: LineupTheme.forName(LineupThemeName.emberSteel),
-          home: PlayerSurface(controller: f.player, showSubtitles: false),
+      expect(f.native.videoRects.last.showSubtitles, isTrue);
+      for (final profile in [
+        tvProfile,
+        desktopProfile,
+        const DeviceProfile(
+          host: TargetPlatform.android,
+          formFactor: FormFactor.handheld,
         ),
-      );
-      expect(find.byType(SubtitleLayer), findsNothing);
-      expect(find.byType(NativeVideoSurface), findsOneWidget);
+      ]) {
+        await tester.pumpWidget(
+          DeviceProfileScope(
+            profile: profile,
+            child: MaterialApp(
+              theme: LineupTheme.forName(LineupThemeName.emberSteel),
+              home: PlayerSurface(controller: f.player, showSubtitles: false),
+            ),
+          ),
+        );
+        expect(find.byType(SubtitleLayer), findsNothing);
+        expect(find.byType(NativeVideoSurface), findsOneWidget);
+        expect(f.native.videoRects.last.width, greaterThan(0));
+        expect(
+          f.native.videoRects.last.showSubtitles,
+          !profile.isHandheld,
+          reason: '${profile.formFactor} native caption policy for Settings',
+        );
+      }
     },
   );
 

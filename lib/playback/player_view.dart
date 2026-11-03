@@ -1038,7 +1038,8 @@ class PlayerSurface extends StatelessWidget {
         else
           NativeVideoSurface(
             player: controller.player,
-            showSubtitles: showSubtitles,
+            showSubtitles:
+                !DeviceProfile.of(context).isHandheld || showSubtitles,
           ),
         if (showSubtitles)
           SubtitleLayer(
