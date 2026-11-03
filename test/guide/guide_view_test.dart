@@ -157,9 +157,24 @@ void main() {
     });
   }
 
-  testWidgets(
-    'current Guide cell omits live marker below 19 cu on Android handheld',
-    (tester) async {
+  // The width guard is form-factor-neutral by approved decision; cover the
+  // desktop and Android handheld canvases so a profile branch cannot return.
+  for (final (name, builder) in <(String, TransitionBuilder)>[
+    ('desktop', _guideCanvasBuilder),
+    (
+      'Android handheld',
+      (context, child) => DeviceProfileScope(
+        profile: const DeviceProfile(
+          host: TargetPlatform.android,
+          formFactor: FormFactor.handheld,
+        ),
+        child: LineupCanvas(child: child ?? const SizedBox.shrink()),
+      ),
+    ),
+  ]) {
+    testWidgets('current Guide cell omits live marker below 19 cu on $name', (
+      tester,
+    ) async {
       tester.view
         ..devicePixelRatio = 1
         ..physicalSize = const Size(1280, 720);
@@ -199,13 +214,7 @@ void main() {
       addTearDown(guide.dispose);
       await tester.pumpWidget(
         MaterialApp(
-          builder: (context, child) => DeviceProfileScope(
-            profile: const DeviceProfile(
-              host: TargetPlatform.android,
-              formFactor: FormFactor.handheld,
-            ),
-            child: LineupCanvas(child: child ?? const SizedBox.shrink()),
-          ),
+          builder: builder,
           home: GuideView(
             controller: guide,
             onClose: (_, _) {},
@@ -233,8 +242,8 @@ void main() {
       );
       expect(semantics.properties.label, endsWith(', currently airing'));
       await tester.pumpWidget(const SizedBox.shrink());
-    },
-  );
+    });
+  }
 
   testWidgets('Guide toolbar icons expose explicit accessible names', (
     tester,
