@@ -243,19 +243,29 @@ class LineupContentWidth extends StatelessWidget {
     required this.child,
     this.maxWidth = 1824,
     this.vertical = 0,
+    this.handheldContent = false,
     super.key,
   });
   final Widget child;
   final double maxWidth;
   final double vertical;
 
+  /// Uses the UI-B stacked-surface gutter and content cap when enabled.
+  ///
+  /// The default remains the existing 48 cu gutter and caller-provided cap so
+  /// desktop and TV surfaces retain their current geometry.
+  final bool handheldContent;
+
   @override
   Widget build(BuildContext context) => Padding(
-    padding: EdgeInsets.symmetric(horizontal: 48, vertical: vertical),
+    padding: EdgeInsets.symmetric(
+      horizontal: handheldContent ? 18 : 48,
+      vertical: vertical,
+    ),
     child: Align(
       alignment: Alignment.topCenter,
       child: ConstrainedBox(
-        constraints: BoxConstraints(maxWidth: maxWidth),
+        constraints: BoxConstraints(maxWidth: handheldContent ? 840 : maxWidth),
         child: SizedBox(width: double.infinity, child: child),
       ),
     ),
@@ -303,6 +313,7 @@ class LineupPage extends StatelessWidget {
     this.traversalPolicy,
     this.topBar,
     this.showTitle = true,
+    this.handheldContent = false,
     super.key,
   });
 
@@ -313,6 +324,9 @@ class LineupPage extends StatelessWidget {
   final FocusTraversalPolicy? traversalPolicy;
   final Widget? topBar;
   final bool showTitle;
+
+  /// Opts this page into the UI-B stacked-surface content geometry.
+  final bool handheldContent;
 
   @override
   Widget build(BuildContext context) => FocusTraversalGroup(
@@ -330,6 +344,7 @@ class LineupPage extends StatelessWidget {
                 Expanded(
                   child: LineupContentWidth(
                     vertical: 24,
+                    handheldContent: handheldContent,
                     child: Column(
                       key: const ValueKey('lineup-page-content'),
                       crossAxisAlignment: CrossAxisAlignment.stretch,
