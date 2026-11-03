@@ -1,6 +1,8 @@
 import 'dart:async';
+import 'dart:math' as math;
 
 import 'package:flutter/material.dart';
+import 'package:flutter/rendering.dart';
 import 'package:flutter/services.dart';
 import 'package:lineup_desktop/platform/device_profile.dart';
 
@@ -8,6 +10,8 @@ import '../channels/channel.dart';
 import '../playback/player_coordinator.dart';
 import '../ui/app_theme.dart';
 import '../ui/app_ui.dart';
+import '../ui/handheld_management.dart';
+import '../ui/lineup_canvas.dart';
 import 'channel_health_monitor.dart';
 import 'channel_studio_view.dart';
 import 'lineup_controller.dart';
@@ -18,6 +22,15 @@ enum _DirectoryFilter { all, custom, generated }
 enum _DirectoryMode { normal, selection, reorder }
 
 enum _RowAction { duplicate, delete }
+
+enum _DirectoryAction { generate, select, reorder }
+
+enum _MoveAction { up, down, to }
+
+typedef _MoveDestination = ({String id, bool after});
+
+double _channelTouchExtent(BuildContext context) =>
+    math.max(56, LineupCanvas.minimumTouchExtentOf(context) + .001);
 
 class ChannelsView extends StatefulWidget {
   const ChannelsView({
@@ -55,6 +68,11 @@ class ChannelsViewState extends State<ChannelsView> {
   ChannelStudioMode? _studioMode;
   Channel? _studioChannel;
   String? _returnFocusId;
+  final _handheldScroll = ScrollController();
+  ({bool stacked, Size size, TextScaler scaler})? _directoryGeometry;
+  List<String> _laidOutRowIds = const [];
+  _DirectoryMode? _laidOutMode;
+  int _anchorGeneration = 0;
   final _search = TextEditingController();
   final _searchFocus = FocusNode(debugLabel: 'Search channels');
   _DirectoryFilter _filter = _DirectoryFilter.all;
@@ -155,7 +173,7 @@ class ChannelsViewState extends State<ChannelsView> {
       unawaited(closeStudio());
       return true;
     }
-    if (_showSelected) {
+    if (_showSelected && !handheldStacked(context)) {
       final selectedFocusId = _selectedIds.firstOrNull;
       setState(() => _showSelected = false);
       _restoreNavigationFocus(preferredId: selectedFocusId);
@@ -279,6 +297,7 @@ class ChannelsViewState extends State<ChannelsView> {
     _healthMonitor
       ..removeListener(_healthChanged)
       ..dispose();
+    _handheldScroll.dispose();
     _search.dispose();
     _searchFocus.dispose();
     _addFocus.dispose();
@@ -355,6 +374,10 @@ class ChannelsViewState extends State<ChannelsView> {
     _lastChannelOrder = channels
         .map((channel) => channel.id)
         .toList(growable: false);
+    final handheld = DeviceProfile.of(context).isHandheld;
+    final stacked = handheldStacked(context);
+    if (handheld) _trackDirectoryGeometry(stacked, visible);
+    if (stacked) return _stackedDirectory(channels, matching, visible);
     final headingStyle = LineupTypography.pageTitle.copyWith(
       color: LineupTheme.of(context).primaryText,
     );
@@ -527,6 +550,7 @@ class ChannelsViewState extends State<ChannelsView> {
                   )
                 : ListView.separated(
                     key: const PageStorageKey('channels-directory'),
+                    controller: handheld ? _handheldScroll : null,
                     itemCount: visible.length,
                     separatorBuilder: (_, _) => const Divider(height: 1),
                     itemBuilder: (context, index) {
@@ -715,6 +739,540 @@ class ChannelsViewState extends State<ChannelsView> {
       },
       child: page,
     );
+  }
+
+  Widget _stackedDirectory(
+    List<Channel> channels,
+    List<Channel> matching,
+    List<Channel> visible,
+  ) {
+    final selecting = _mode == _DirectoryMode.selection;
+    final reordering = _mode == _DirectoryMode.reorder;
+    final bar = switch (_mode) {
+      _DirectoryMode.normal => HandheldPageBar(
+        title: 'Channels',
+        subtitle:
+            '${channels.length} ${channels.length == 1 ? 'channel' : 'channels'}',
+        tabRoot: true,
+        actions: [
+          _channelIcon(
+            'Add a custom channel',
+            Icons.add,
+            _saving ? null : openNew,
+            focusNode: channels.isEmpty ? null : _addFocus,
+          ),
+          if (channels.isNotEmpty)
+            _channelIcon(
+              'More channel actions',
+              Icons.adaptive.more,
+              _saving ? null : _stackedMoreActions,
+              focusNode: widget.focusNode,
+            ),
+        ],
+      ),
+      _DirectoryMode.selection => HandheldPageBar(
+        title: '${_selectedIds.length} selected',
+        onBack: _saving ? null : _cancelSelection,
+        backIcon: Icons.close,
+        backTooltip: 'Cancel selection',
+        actions: [
+          TextButton(
+            style: TextButton.styleFrom(
+              padding: const EdgeInsets.symmetric(horizontal: 8),
+            ),
+            onPressed: _saving || matching.isEmpty
+                ? null
+                : () => setState(
+                    () => _selectedIds.addAll(
+                      matching.map((channel) => channel.id),
+                    ),
+                  ),
+            child: const Text('Select all'),
+          ),
+          _channelIcon(
+            'Delete selected',
+            Icons.delete_outline,
+            _selectedIds.isEmpty || _saving ? null : _deleteSelected,
+          ),
+        ],
+      ),
+      _DirectoryMode.reorder => HandheldPageBar(
+        title: 'Reorder channels',
+        onBack: _saving ? null : _cancelReorder,
+        backIcon: Icons.close,
+        backTooltip: 'Cancel reorder',
+        actions: [
+          FilledButton(
+            onPressed:
+                _saving ||
+                    _sameOrder(
+                      _reorderBase.map((channel) => channel.id),
+                      _reorderIds,
+                    )
+                ? null
+                : _saveOrder,
+            child: Text(_saving ? 'Saving…' : 'Save'),
+          ),
+        ],
+      ),
+    };
+
+    return SafeArea(
+      child: Column(
+        children: [
+          if (widget.showNavigationMenu)
+            LineupTopBar(
+              menuKey: const Key('channels-app-menu'),
+              menuFocusNode: widget.menuFocusNode,
+              onOpenMenu: widget.onOpenMenu,
+              trailing: widget.onBack == null
+                  ? null
+                  : Align(
+                      alignment: Alignment.centerRight,
+                      child: LineupTouchTarget(
+                        onPressed: widget.onBack,
+                        child: TextButton(
+                          onPressed: widget.onBack,
+                          child: Text(widget.backLabel),
+                        ),
+                      ),
+                    ),
+            ),
+          Expanded(
+            child: HandheldColumnWidth(
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.stretch,
+                children: [
+                  bar,
+                  if (channels.isNotEmpty && !reordering) ...[
+                    _stackedSearch(),
+                    const SizedBox(height: 10),
+                    _stackedFilters(channels),
+                    const Divider(height: 8),
+                  ],
+                  Expanded(
+                    child: channels.isEmpty
+                        ? _stackedEmptyDirectory()
+                        : reordering
+                        ? _reorderList(channels, stacked: true)
+                        : visible.isEmpty
+                        ? LineupEmptyState(
+                            icon: Icons.search_off,
+                            title: _showSelected
+                                ? 'No channels selected'
+                                : 'No matching channels',
+                            message: _showSelected
+                                ? 'Return to results and select channels to inspect.'
+                                : 'Adjust the search or channel type.',
+                          )
+                        : ListView.builder(
+                            key: const PageStorageKey('channels-directory'),
+                            controller: _handheldScroll,
+                            itemCount: visible.length,
+                            itemBuilder: (context, index) =>
+                                _stackedChannelRow(visible[index], selecting),
+                          ),
+                  ),
+                  if (_error != null) LineupNotice(message: _error!),
+                ],
+              ),
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _stackedEmptyDirectory() => LineupEmptyState(
+    icon: Icons.view_list,
+    title: 'Build your first channel',
+    message: 'Generate a lineup from Plex or create one custom channel.',
+    action: Column(
+      mainAxisSize: MainAxisSize.min,
+      crossAxisAlignment: CrossAxisAlignment.stretch,
+      children: [
+        FilledButton.icon(
+          focusNode: widget.focusNode,
+          onPressed: _saving ? null : widget.controller.enterChannelSetup,
+          icon: const Icon(Icons.auto_awesome_outlined),
+          label: const Text('Generate lineup'),
+          style: FilledButton.styleFrom(
+            minimumSize: Size.square(_channelTouchExtent(context)),
+          ),
+        ),
+        const SizedBox(height: 8),
+        OutlinedButton.icon(
+          focusNode: _addFocus,
+          onPressed: _saving ? null : openNew,
+          icon: const Icon(Icons.add),
+          label: const Text('Create a custom channel'),
+          style: OutlinedButton.styleFrom(
+            minimumSize: Size.square(_channelTouchExtent(context)),
+          ),
+        ),
+      ],
+    ),
+  );
+
+  Widget _channelIcon(
+    String tooltip,
+    IconData icon,
+    VoidCallback? onPressed, {
+    FocusNode? focusNode,
+  }) {
+    final extent = _channelTouchExtent(context);
+    return IconButton(
+      focusNode: focusNode,
+      tooltip: tooltip,
+      onPressed: onPressed,
+      constraints: BoxConstraints.tightFor(width: extent, height: extent),
+      icon: Icon(icon),
+    );
+  }
+
+  Widget _stackedSearch() {
+    final extent = _channelTouchExtent(context);
+    return ConstrainedBox(
+      constraints: BoxConstraints(minHeight: extent),
+      child: TextField(
+        key: const Key('channels-search'),
+        controller: _search,
+        focusNode: _searchFocus,
+        enabled: !_saving,
+        scrollPadding: const EdgeInsets.all(96),
+        decoration: InputDecoration(
+          hintText: 'Search by name or number',
+          prefixIcon: const Icon(Icons.search),
+          suffixIcon: _search.text.isEmpty
+              ? null
+              : _channelIcon(
+                  'Clear search',
+                  Icons.close,
+                  _saving ? null : () => setState(_search.clear),
+                ),
+        ),
+        onChanged: (_) => setState(() {}),
+      ),
+    );
+  }
+
+  Widget _stackedFilters(List<Channel> channels) {
+    final custom = channels
+        .where((channel) => channel.builderKey == null)
+        .length;
+    return HandheldChipRow(
+      children: [
+        for (final (filter, label, count) in [
+          (_DirectoryFilter.all, 'All', channels.length),
+          (_DirectoryFilter.custom, 'Custom', custom),
+          (_DirectoryFilter.generated, 'Generated', channels.length - custom),
+        ])
+          HandheldFilterChip(
+            label: label,
+            count: count,
+            selected: _filter == filter && !_showSelected,
+            onSelected: _saving
+                ? null
+                : () => setState(() {
+                    _filter = filter;
+                    _showSelected = false;
+                  }),
+          ),
+        if (_mode == _DirectoryMode.selection)
+          HandheldFilterChip(
+            label: 'Selected ${_selectedIds.length}',
+            selected: _showSelected,
+            onSelected: _saving || _selectedIds.isEmpty
+                ? null
+                : () => setState(() => _showSelected = !_showSelected),
+          ),
+      ],
+    );
+  }
+
+  void _beginSelection([String? id]) => setState(() {
+    _mode = _DirectoryMode.selection;
+    _selectedIds.clear();
+    if (id != null) _selectedIds.add(id);
+  });
+
+  Widget _stackedChannelRow(Channel channel, bool selecting) {
+    _noteVisibleHealth(channel.id);
+    final source = channelSourceLabel(channel.source, widget.controller);
+    final playback = channelRhythmLabel(
+      channel.playbackMode,
+      channel.blockSize,
+    );
+    final ownership = channel.builderKey == null ? 'Custom' : 'Generated';
+    final extent = _channelTouchExtent(context);
+    return KeyedSubtree(
+      key: ValueKey('channel-row-${channel.id}'),
+      child: HandheldStackedRow(
+        number: channel.number,
+        name: channel.name,
+        facts: '$source · $playback · $ownership',
+        warning: _healthMonitor.issueFor(channel.id) == true
+            ? 'Schedule issue — open this channel to recover'
+            : null,
+        onTap: _saving
+            ? null
+            : selecting
+            ? () => _toggleSelected(channel.id)
+            : () => _open(channel),
+        onLongPress: _saving || selecting
+            ? null
+            : () => _beginSelection(channel.id),
+        leading: selecting
+            ? SizedBox.square(
+                dimension: extent,
+                child: Checkbox(
+                  semanticLabel: 'Select ${channel.name}',
+                  materialTapTargetSize: MaterialTapTargetSize.padded,
+                  value: _selectedIds.contains(channel.id),
+                  onChanged: _saving
+                      ? null
+                      : (_) => _toggleSelected(channel.id),
+                ),
+              )
+            : null,
+        trailing: selecting
+            ? null
+            : _channelIcon(
+                'Actions for ${channel.name}',
+                Icons.adaptive.more,
+                _saving ? null : () => _stackedRowActions(channel),
+              ),
+      ),
+    );
+  }
+
+  Widget _stackedReorderRow(
+    Channel channel,
+    int index,
+    int nextNumber,
+    Map<String, Channel> byId,
+  ) => HandheldStackedRow(
+    key: ValueKey('reorder-${channel.id}'),
+    number: channel.number,
+    next: nextNumber,
+    name: channel.name,
+    facts: '',
+    trailing: Row(
+      mainAxisSize: MainAxisSize.min,
+      children: [
+        _channelIcon(
+          'Move ${channel.name}',
+          Icons.adaptive.more,
+          _saving ? null : () => _stackedMoveActions(index, byId),
+        ),
+        ReorderableDragStartListener(
+          key: ValueKey('reorder-drag-${channel.id}'),
+          enabled: !_saving,
+          index: index,
+          child: Semantics(
+            label: 'Drag to reorder ${channel.name}',
+            child: SizedBox.square(
+              dimension: _channelTouchExtent(context),
+              child: Icon(
+                Icons.drag_handle,
+                color: LineupTheme.of(context).secondaryText,
+              ),
+            ),
+          ),
+        ),
+      ],
+    ),
+  );
+
+  Future<void> _stackedMoreActions() async {
+    final action = await showHandheldChoiceSheet(
+      context,
+      title: 'Channels',
+      showSelection: false,
+      choices: const [
+        HandheldChoice(
+          value: _DirectoryAction.generate,
+          label: 'Generate lineup',
+          detail: 'Build or update channels from your Plex libraries',
+        ),
+        HandheldChoice(
+          value: _DirectoryAction.select,
+          label: 'Select channels',
+          detail: 'Choose channels to delete',
+        ),
+        HandheldChoice(
+          value: _DirectoryAction.reorder,
+          label: 'Reorder channels',
+          detail: 'Change channel order and numbers',
+        ),
+      ],
+    );
+    if (!mounted) return;
+    switch (action) {
+      case _DirectoryAction.generate:
+        await widget.controller.enterChannelSetup();
+      case _DirectoryAction.select:
+        _beginSelection();
+      case _DirectoryAction.reorder:
+        _beginReorder();
+      case null:
+    }
+  }
+
+  Future<void> _stackedRowActions(Channel channel) async {
+    final action = await showHandheldChoiceSheet(
+      context,
+      title: '${channel.number} · ${channel.name}',
+      showSelection: false,
+      choices: [
+        if (channel.builderKey != null)
+          const HandheldChoice(
+            value: _RowAction.duplicate,
+            label: 'Duplicate as custom',
+            detail: 'Copy this channel so you can edit it',
+          ),
+        const HandheldChoice(
+          value: _RowAction.delete,
+          label: 'Delete…',
+          destructive: true,
+        ),
+      ],
+    );
+    if (!mounted) return;
+    switch (action) {
+      case _RowAction.duplicate:
+        _openDuplicate(channel);
+      case _RowAction.delete:
+        await _delete(channel);
+      case null:
+    }
+  }
+
+  Future<void> _stackedMoveActions(int index, Map<String, Channel> byId) async {
+    final action = await showHandheldChoiceSheet(
+      context,
+      title: 'Move channel',
+      showSelection: false,
+      choices: [
+        if (index > 0)
+          const HandheldChoice(value: _MoveAction.up, label: 'Move up'),
+        if (index < _reorderIds.length - 1)
+          const HandheldChoice(value: _MoveAction.down, label: 'Move down'),
+        const HandheldChoice(
+          value: _MoveAction.to,
+          label: 'Move to…',
+          detail: 'Choose a position by channel',
+        ),
+      ],
+    );
+    if (!mounted) return;
+    switch (action) {
+      case _MoveAction.up:
+        _moveReorder(index, index - 1);
+      case _MoveAction.down:
+        _moveReorder(index, index + 1);
+      case _MoveAction.to:
+        await _moveTo(index, byId, stacked: true);
+      case null:
+    }
+  }
+
+  RenderSliverMultiBoxAdaptor? get _directoryRows {
+    if (!_handheldScroll.hasClients) return null;
+    // The directory and reorder scrollables both use a lazy sliver. Resolve
+    // it from the active position so the anchor works in either presentation.
+    RenderSliverMultiBoxAdaptor? rows;
+    void visit(RenderObject node) {
+      if (rows != null) return;
+      if (node is RenderSliverMultiBoxAdaptor) {
+        rows = node;
+      } else {
+        node.visitChildren(visit);
+      }
+    }
+
+    final root = _handheldScroll.position.context.notificationContext
+        ?.findRenderObject();
+    if (root != null) visit(root);
+    return rows;
+  }
+
+  void _trackDirectoryGeometry(bool stacked, List<Channel> visible) {
+    final geometry = (
+      stacked: stacked,
+      size: MediaQuery.sizeOf(context),
+      scaler: MediaQuery.textScalerOf(context),
+    );
+    final previous = _directoryGeometry;
+    final sameList =
+        (_laidOutMode == _DirectoryMode.reorder) ==
+        (_mode == _DirectoryMode.reorder);
+    if (previous != null && previous != geometry && sameList) {
+      final rows = _directoryRows;
+      if (rows != null && rows.geometry != null) {
+        final top = rows.constraints.scrollOffset;
+        for (
+          var row = rows.firstChild;
+          row != null;
+          row = rows.childAfter(row)
+        ) {
+          if (rows.childScrollOffset(row)! + row.size.height <= top) continue;
+          final index = _directoryRowIndex(rows.indexOf(row));
+          if (index < _laidOutRowIds.length) {
+            unawaited(
+              _restoreDirectoryAnchor(
+                _laidOutRowIds[index],
+                ++_anchorGeneration,
+              ),
+            );
+          }
+          break;
+        }
+      }
+    } else if (!sameList) {
+      _anchorGeneration++;
+    }
+    _directoryGeometry = geometry;
+    _laidOutMode = _mode;
+    _laidOutRowIds = _mode == _DirectoryMode.reorder
+        ? List.of(_reorderIds)
+        : visible.map((channel) => channel.id).toList(growable: false);
+  }
+
+  int _directoryRowIndex(int sliverIndex) =>
+      _directoryGeometry?.stacked == false &&
+          _laidOutMode != _DirectoryMode.reorder
+      ? sliverIndex ~/ 2
+      : sliverIndex;
+
+  Future<void> _restoreDirectoryAnchor(String id, int generation) async {
+    // Row heights change with composition and text scale. Seek by viewport
+    // until the same ID is laid out, then align using its actual geometry.
+    for (var attempt = 0; attempt <= _laidOutRowIds.length; attempt++) {
+      await WidgetsBinding.instance.endOfFrame;
+      if (!mounted || generation != _anchorGeneration) return;
+      final target = _laidOutRowIds.indexOf(id);
+      final rows = _directoryRows;
+      if (target < 0 || rows == null) return;
+      final position = _handheldScroll.position;
+      for (var row = rows.firstChild; row != null; row = rows.childAfter(row)) {
+        if (_directoryRowIndex(rows.indexOf(row)) != target) continue;
+        final offset = RenderAbstractViewport.of(row)
+            .getOffsetToReveal(row, 0)
+            .offset;
+        position.jumpTo(offset.clamp(0.0, position.maxScrollExtent));
+        return;
+      }
+      final first = rows.firstChild;
+      final forward =
+          first == null || target > _directoryRowIndex(rows.indexOf(first));
+      final next =
+          (position.pixels +
+                  (forward ? 1 : -1) * position.viewportDimension * .8)
+              .clamp(0.0, position.maxScrollExtent);
+      if (next == position.pixels) return;
+      position.jumpTo(next);
+    }
   }
 
   List<Channel> _sortedChannels() =>
@@ -992,12 +1550,7 @@ class ChannelsViewState extends State<ChannelsView> {
     final actions = [
       OutlinedButton(
         focusNode: _selectionFocus,
-        onPressed: _saving
-            ? null
-            : () => setState(() {
-                _mode = _DirectoryMode.selection;
-                _selectedIds.clear();
-              }),
+        onPressed: _saving ? null : _beginSelection,
         child: const Text('Select'),
       ),
       OutlinedButton(
@@ -1221,15 +1774,18 @@ class ChannelsViewState extends State<ChannelsView> {
   Future<bool> _confirmChannelDeletion(
     List<Channel> channels,
     String confirmLabel,
-  ) async =>
-      await showDialog<bool>(
-        context: context,
-        builder: (context) => _ChannelDeletionDialog(
-          channels: channels,
-          confirmLabel: confirmLabel,
-        ),
-      ) ??
-      false;
+  ) async {
+    final expandActions = handheldStacked(context);
+    return await showDialog<bool>(
+          context: context,
+          builder: (context) => _ChannelDeletionDialog(
+            channels: channels,
+            confirmLabel: confirmLabel,
+            expandActions: expandActions,
+          ),
+        ) ??
+        false;
+  }
 
   Future<void> _deleteSelected() async {
     if (_saving || _selectedIds.isEmpty) return;
@@ -1292,25 +1848,38 @@ class ChannelsViewState extends State<ChannelsView> {
     _restoreNavigationFocus(preferredNode: _reorderFocus);
   }
 
-  Widget _reorderList(List<Channel> current) {
+  Widget _reorderList(List<Channel> current, {bool stacked = false}) {
     final byId = {for (final channel in current) channel.id: channel};
     final positions = _reorderBase.map((channel) => channel.number).toList()
       ..sort();
     return ReorderableListView.builder(
       key: const Key('channels-reorder-list'),
       buildDefaultDragHandles: false,
+      scrollController: DeviceProfile.of(context).isHandheld
+          ? _handheldScroll
+          : null,
+      header: stacked
+          ? Padding(
+              padding: const EdgeInsets.only(bottom: 12),
+              child: Text(
+                'Drag a handle, or use a row menu, to move a channel. Saving renumbers channels in this order.',
+                style: TextStyle(
+                  color: LineupTheme.of(context).secondaryText,
+                  fontSize: 16,
+                ),
+              ),
+            )
+          : null,
       itemCount: _reorderIds.length,
-      onReorderItem: _saving
-          ? (_, _) {}
-          : (from, to) => setState(() {
-              final id = _reorderIds.removeAt(from);
-              _reorderIds.insert(to, id);
-            }),
+      onReorderItem: _saving ? (_, _) {} : _moveReorder,
       itemBuilder: (context, index) {
         final channel =
             byId[_reorderIds[index]] ??
             _reorderBase.firstWhere((item) => item.id == _reorderIds[index]);
         final nextNumber = positions[index];
+        if (stacked) {
+          return _stackedReorderRow(channel, index, nextNumber, byId);
+        }
         final rowNameStyle = Theme.of(context).textTheme.titleMedium?.copyWith(
           fontSize: _directorySize(22, 16),
           fontWeight: FontWeight.w500,
@@ -1380,17 +1949,37 @@ class ChannelsViewState extends State<ChannelsView> {
     _reorderIds.insert(to, id);
   });
 
-  Future<void> _moveTo(int from, Map<String, Channel> byId) async {
+  Future<void> _moveTo(
+    int from,
+    Map<String, Channel> byId, {
+    bool stacked = false,
+  }) async {
     final movedId = _reorderIds[from];
-    final target = await showDialog<({String id, bool after})>(
-      context: context,
-      builder: (context) => _MoveChannelDialog(
-        channels: [
-          for (final id in _reorderIds)
-            if (id != movedId) ?byId[id],
-        ],
-      ),
-    );
+    final destinations = [
+      for (final id in _reorderIds)
+        if (id != movedId) ?byId[id],
+    ];
+    final target = stacked
+        ? await showModalBottomSheet<_MoveDestination>(
+            context: context,
+            isScrollControlled: true,
+            useSafeArea: true,
+            showDragHandle: false,
+            backgroundColor: Colors.transparent,
+            builder: (context) => _MoveChannelDialog(
+              channels: destinations,
+              movingName:
+                  (byId[movedId] ??
+                          _reorderBase.firstWhere(
+                            (channel) => channel.id == movedId,
+                          ))
+                      .name,
+            ),
+          )
+        : await showDialog<_MoveDestination>(
+            context: context,
+            builder: (context) => _MoveChannelDialog(channels: destinations),
+          );
     if (target == null || !mounted) return;
     setState(() {
       final id = _reorderIds.removeAt(from);
@@ -1552,9 +2141,10 @@ class ChannelsViewState extends State<ChannelsView> {
 }
 
 class _MoveChannelDialog extends StatefulWidget {
-  const _MoveChannelDialog({required this.channels});
+  const _MoveChannelDialog({required this.channels, this.movingName});
 
   final List<Channel> channels;
+  final String? movingName;
 
   @override
   State<_MoveChannelDialog> createState() => _MoveChannelDialogState();
@@ -1592,6 +2182,9 @@ class _MoveChannelDialogState extends State<_MoveChannelDialog> {
               channel.number.toString().contains(query),
         )
         .toList(growable: false);
+    if (widget.movingName case final name?) {
+      return _buildSheet(context, name, channels);
+    }
     final size = MediaQuery.sizeOf(context);
     final viewInsets = MediaQuery.viewInsetsOf(context);
 
@@ -1672,16 +2265,136 @@ class _MoveChannelDialogState extends State<_MoveChannelDialog> {
     );
     return dialog;
   }
+
+  Widget _buildSheet(
+    BuildContext context,
+    String name,
+    List<Channel> channels,
+  ) {
+    final size = MediaQuery.sizeOf(context);
+    // Subscribe to inset changes, but use the view's unconsumed IME height.
+    MediaQuery.viewInsetsOf(context);
+    final view = View.of(context);
+    final keyboard =
+        view.viewInsets.bottom / LineupCanvas.physicalPixelRatioOf(context);
+    final height = math.max(0.0, size.height - keyboard) * .9;
+    final roles = LineupTheme.of(context);
+    return Padding(
+      padding: EdgeInsets.only(bottom: keyboard),
+      child: Material(
+        color: roles.elevatedSurface,
+        clipBehavior: Clip.antiAlias,
+        borderRadius: const BorderRadius.vertical(top: Radius.circular(20)),
+        child: SizedBox(
+          height: height,
+          child: SafeArea(
+            top: false,
+            child: HandheldColumnWidth(
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.stretch,
+                children: [
+                  SizedBox(
+                    height: 43 / LineupCanvas.scaleOf(context),
+                    child: Center(
+                      child: DecoratedBox(
+                        decoration: ShapeDecoration(
+                          color: roles.mutedText,
+                          shape: const StadiumBorder(),
+                        ),
+                        child: const SizedBox(width: 36, height: 4),
+                      ),
+                    ),
+                  ),
+                  HandheldPageBar(
+                    title: 'Move $name',
+                    actions: [
+                      TextButton(
+                        onPressed: () => Navigator.pop(context),
+                        child: const Text('Cancel'),
+                      ),
+                    ],
+                  ),
+                  ConstrainedBox(
+                    constraints: BoxConstraints(
+                      minHeight: _channelTouchExtent(context),
+                    ),
+                    child: TextField(
+                      key: const Key('channels-move-search'),
+                      controller: _search,
+                      focusNode: _searchFocus,
+                      decoration: const InputDecoration(
+                        prefixIcon: Icon(Icons.search),
+                        hintText: 'Search channels',
+                      ),
+                      onChanged: (_) => setState(() {}),
+                    ),
+                  ),
+                  const SizedBox(height: 8),
+                  Expanded(
+                    child: ListView.builder(
+                      itemCount: channels.length,
+                      itemBuilder: (context, index) {
+                        final channel = channels[index];
+                        return Padding(
+                          padding: const EdgeInsets.symmetric(vertical: 8),
+                          child: Column(
+                            crossAxisAlignment: CrossAxisAlignment.start,
+                            children: [
+                              HandheldStackedRow(
+                                number: channel.number,
+                                name: channel.name,
+                                facts: '',
+                              ),
+                              Wrap(
+                                spacing: 8,
+                                runSpacing: 8,
+                                children: [
+                                  for (final after in [false, true])
+                                    OutlinedButton(
+                                      style: OutlinedButton.styleFrom(
+                                        minimumSize: Size.square(
+                                          _channelTouchExtent(context),
+                                        ),
+                                      ),
+                                      onPressed: () => Navigator.pop(context, (
+                                        id: channel.id,
+                                        after: after,
+                                      )),
+                                      child: Text(
+                                        after ? 'Move after' : 'Move before',
+                                        semanticsLabel: after
+                                            ? 'Move after ${channel.name}'
+                                            : 'Move before ${channel.name}',
+                                      ),
+                                    ),
+                                ],
+                              ),
+                            ],
+                          ),
+                        );
+                      },
+                    ),
+                  ),
+                ],
+              ),
+            ),
+          ),
+        ),
+      ),
+    );
+  }
 }
 
 class _ChannelDeletionDialog extends StatefulWidget {
   const _ChannelDeletionDialog({
     required this.channels,
     required this.confirmLabel,
+    required this.expandActions,
   });
 
   final List<Channel> channels;
   final String confirmLabel;
+  final bool expandActions;
 
   @override
   State<_ChannelDeletionDialog> createState() => _ChannelDeletionDialogState();
@@ -1753,6 +2466,16 @@ class _ChannelDeletionDialogState extends State<_ChannelDeletionDialog> {
     final availableHeight = (size.height - viewInsets.vertical - (48))
         .clamp(0.0, 720)
         .toDouble();
+
+    final cancel = TextButton(
+      autofocus: true,
+      onPressed: () => Navigator.pop(context, false),
+      child: const Text('Cancel'),
+    );
+    final confirm = LineupDestructiveButton(
+      onPressed: () => Navigator.pop(context, true),
+      child: Text(widget.confirmLabel),
+    );
 
     return Dialog(
       backgroundColor: roles.primarySurface,
@@ -1918,15 +2641,19 @@ class _ChannelDeletionDialogState extends State<_ChannelDeletionDialog> {
                 runSpacing: 8,
                 crossAxisAlignment: WrapCrossAlignment.center,
                 children: [
-                  TextButton(
-                    autofocus: true,
-                    onPressed: () => Navigator.pop(context, false),
-                    child: const Text('Cancel'),
-                  ),
-                  LineupDestructiveButton(
-                    onPressed: () => Navigator.pop(context, true),
-                    child: Text(widget.confirmLabel),
-                  ),
+                  if (widget.expandActions) ...[
+                    LineupTouchTarget(
+                      onPressed: cancel.onPressed,
+                      child: cancel,
+                    ),
+                    LineupTouchTarget(
+                      onPressed: confirm.onPressed,
+                      child: confirm,
+                    ),
+                  ] else ...[
+                    cancel,
+                    confirm,
+                  ],
                 ],
               ),
             ],
