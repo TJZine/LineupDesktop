@@ -69,17 +69,28 @@ TextStyle _controlStyle(BuildContext context, {Color? color}) =>
 
 /// A page-bar title that only breaks between words.
 class _HandheldWordText extends StatelessWidget {
-  const _HandheldWordText(this.text, {required this.style, this.maxLines});
+  const _HandheldWordText(
+    this.text, {
+    required this.style,
+    this.maxLines,
+    this.fitOverwideWords = false,
+  });
 
   final String text;
   final TextStyle style;
   final int? maxLines;
+  final bool fitOverwideWords;
 
-  double _width(BuildContext context, String value) {
+  double _width(
+    BuildContext context,
+    String value, {
+    TextScaler? textScaler,
+    TextStyle? textStyle,
+  }) {
     final painter = TextPainter(
-      text: TextSpan(text: value, style: style),
+      text: TextSpan(text: value, style: textStyle ?? style),
       textDirection: Directionality.of(context),
-      textScaler: MediaQuery.textScalerOf(context),
+      textScaler: textScaler ?? MediaQuery.textScalerOf(context),
       maxLines: 1,
     )..layout();
     final width = painter.width;
@@ -87,72 +98,62 @@ class _HandheldWordText extends StatelessWidget {
     return width;
   }
 
-  List<String> _lines(BuildContext context, double maxWidth) {
-    final words = text.trim().split(RegExp(r'\s+'));
-    if (words.length == 1 && words.single.isEmpty) return const [];
-    if (!maxWidth.isFinite || maxWidth <= 0) return [text];
-
-    final lines = <String>[];
-    var current = '';
-    var wordIndex = 0;
-    while (wordIndex < words.length) {
-      final word = words[wordIndex];
-      final candidate = current.isEmpty ? word : '$current $word';
-      if (current.isEmpty || _width(context, candidate) <= maxWidth) {
-        current = candidate;
-        wordIndex++;
-        continue;
-      }
-
-      final isLastLine = maxLines != null && lines.length >= maxLines! - 1;
-      if (isLastLine) {
-        var last = current;
-        while (wordIndex < words.length) {
-          final withWord = '$last ${words[wordIndex]}';
-          if (_width(context, withWord) <= maxWidth) {
-            last = withWord;
-            wordIndex++;
-          } else if (_width(context, '$last…') <= maxWidth) {
-            last = '$last…';
-            wordIndex = words.length;
-            break;
-          } else {
-            // Keep the current whole word rather than letting Text split it.
-            wordIndex = words.length;
-            break;
-          }
-        }
-        lines.add(last);
-        current = '';
-        break;
-      }
-      lines.add(current);
-      current = word;
-      wordIndex++;
+  TextStyle _styleForWord(BuildContext context, String word, double maxWidth) {
+    final requested = MediaQuery.textScalerOf(context);
+    if (!fitOverwideWords || style.fontSize == null) return style;
+    if (_width(context, word, textScaler: requested) <= maxWidth ||
+        _width(context, word, textScaler: TextScaler.noScaling) > maxWidth) {
+      return style;
     }
-    if (current.isNotEmpty && (maxLines == null || lines.length < maxLines!)) {
-      lines.add(current);
+
+    var floor = 0.0;
+    var ceiling = 1.0;
+    for (var step = 0; step < 16; step++) {
+      final middle = (floor + ceiling) / 2;
+      if (requested.scale(style.fontSize! * middle) >= style.fontSize!) {
+        floor = middle;
+      } else {
+        ceiling = middle;
+      }
     }
-    return lines;
+    var low = floor;
+    var high = 1.0;
+    for (var step = 0; step < 16; step++) {
+      final middle = (low + high) / 2;
+      final wordStyle = style.copyWith(fontSize: style.fontSize! * middle);
+      if (_width(context, word, textScaler: requested, textStyle: wordStyle) <=
+          maxWidth) {
+        low = middle;
+      } else {
+        high = middle;
+      }
+    }
+    return style.copyWith(fontSize: style.fontSize! * low);
   }
 
   @override
   Widget build(BuildContext context) => LayoutBuilder(
     builder: (context, constraints) {
-      final lines = _lines(context, constraints.maxWidth);
-      return Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        mainAxisSize: MainAxisSize.min,
-        children: [
-          for (final line in lines)
-            Text(
-              line,
-              style: style,
-              maxLines: 1,
-              softWrap: false,
-              overflow: TextOverflow.visible,
-            ),
-        ],
+      final words = text.trim().isEmpty
+          ? const <String>[]
+          : text.trim().split(RegExp(r'\s+'));
+      final spans = <InlineSpan>[];
+      for (var index = 0; index < words.length; index++) {
+        if (index > 0) spans.add(TextSpan(text: ' ', style: style));
+        spans.add(
+          TextSpan(
+            text: words[index],
+            style: _styleForWord(context, words[index], constraints.maxWidth),
+          ),
+        );
+      }
+      return Text.rich(
+        TextSpan(style: style, children: spans),
+        maxLines: maxLines,
+        softWrap: true,
+        overflow: maxLines == null
+            ? TextOverflow.visible
+            : TextOverflow.ellipsis,
       );
     },
   );
@@ -241,7 +242,15 @@ class HandheldPageBar extends StatelessWidget {
                     crossAxisAlignment: CrossAxisAlignment.start,
                     mainAxisSize: MainAxisSize.min,
                     children: [
-                      _HandheldWordText(title, style: titleStyle, maxLines: 2),
+                      KeyedSubtree(
+                        key: const ValueKey('handheld-page-bar-title'),
+                        child: _HandheldWordText(
+                          title,
+                          style: titleStyle,
+                          maxLines: 2,
+                          fitOverwideWords: true,
+                        ),
+                      ),
                       if (subtitle != null)
                         Text(
                           subtitle!,
@@ -855,6 +864,7 @@ class HandheldChoiceSheet<T> extends StatelessWidget {
                         90,
                       ).copyWith(color: roles.primaryText),
                       maxLines: 2,
+                      fitOverwideWords: true,
                     ),
                   ),
                 ),

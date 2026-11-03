@@ -1,3 +1,5 @@
+import 'package:flutter/foundation.dart'
+    show TargetPlatform, debugDefaultTargetPlatformOverride;
 import 'package:flutter/rendering.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
@@ -22,7 +24,7 @@ const _tv = DeviceProfile(
 );
 
 void main() {
-  testWidgets('B0 keeps profile and canvas composition boundaries', (
+  androidWidgetTest('B0 keeps profile and canvas composition boundaries', (
     tester,
   ) async {
     Future<bool> stacked(
@@ -54,6 +56,10 @@ void main() {
     expect(await stacked(const Size(960, 600), _handheld), isTrue);
     expect(await stacked(const Size(1280, 800), _handheld), isFalse);
     expect(
+      await stacked(const Size(1280, 800), _handheld, textScale: 1.3),
+      isFalse,
+    );
+    expect(
       await stacked(const Size(1280, 800), _handheld, textScale: 1.5),
       isTrue,
     );
@@ -61,99 +67,108 @@ void main() {
     expect(await stacked(const Size(412, 915), _tv), isFalse);
   });
 
-  testWidgets('app-ui geometry keeps the old default and opts into B1 width', (
-    tester,
-  ) async {
-    tester.view
-      ..physicalSize = const Size(1200, 800)
-      ..devicePixelRatio = 1;
-    addTearDown(tester.view.reset);
-
-    await tester.pumpWidget(
-      MaterialApp(
-        home: Scaffold(
-          body: Column(
-            children: [
-              LineupContentWidth(
-                child: ColoredBox(
-                  key: const Key('default-content'),
-                  color: Colors.red,
-                ),
-              ),
-              LineupContentWidth(
-                handheldContent: true,
-                child: ColoredBox(
-                  key: const Key('handheld-content'),
-                  color: Colors.blue,
-                ),
-              ),
-            ],
-          ),
-        ),
-      ),
-    );
-
-    expect(
-      tester.getRect(find.byKey(const Key('default-content'))).width,
-      1104,
-    );
-    expect(
-      tester.getRect(find.byKey(const Key('handheld-content'))).width,
-      840,
-    );
-  });
-
-  testWidgets('action row stacks below 420 cu and stays beside at 420 cu', (
-    tester,
-  ) async {
-    Future<void> pumpRow(Size size, double textScale) async {
+  androidWidgetTest(
+    'app-ui geometry keeps the old default and opts into B1 width',
+    (tester) async {
       tester.view
-        ..physicalSize = size
+        ..physicalSize = const Size(1200, 800)
         ..devicePixelRatio = 1;
+      addTearDown(tester.view.reset);
+
       await tester.pumpWidget(
-        _app(
-          profile: _handheld,
-          textScale: textScale,
-          child: Scaffold(
-            body: HandheldActionRow(
-              primary: SizedBox(
-                key: const Key('primary'),
-                child: FilledButton(
-                  onPressed: () {},
-                  child: const Text('Continue'),
+        MaterialApp(
+          home: Scaffold(
+            body: Column(
+              children: [
+                LineupContentWidth(
+                  child: ColoredBox(
+                    key: const Key('default-content'),
+                    color: Colors.red,
+                  ),
                 ),
-              ),
-              secondary: SizedBox(
-                key: const Key('secondary'),
-                child: OutlinedButton(
-                  onPressed: () {},
-                  child: const Text('Back'),
+                LineupContentWidth(
+                  handheldContent: true,
+                  child: ColoredBox(
+                    key: const Key('handheld-content'),
+                    color: Colors.blue,
+                  ),
                 ),
-              ),
+              ],
             ),
           ),
         ),
       );
-    }
 
-    addTearDown(tester.view.reset);
-    await pumpRow(const Size(360, 800), 1);
-    final narrowPrimary = tester.getRect(find.byKey(const Key('primary')));
-    final narrowSecondary = tester.getRect(find.byKey(const Key('secondary')));
-    expect(narrowPrimary.top, greaterThan(narrowSecondary.bottom - .01));
+      expect(
+        tester.getRect(find.byKey(const Key('default-content'))).width,
+        1104,
+      );
+      expect(
+        tester.getRect(find.byKey(const Key('handheld-content'))).width,
+        840,
+      );
+    },
+  );
 
-    await pumpRow(const Size(800, 1280), 1);
-    final widePrimary = tester.getRect(find.byKey(const Key('primary')));
-    final wideSecondary = tester.getRect(find.byKey(const Key('secondary')));
-    expect(widePrimary.top, closeTo(wideSecondary.top, .01));
+  androidWidgetTest(
+    'action row stacks below 420 cu and stays beside at 420 cu',
+    (tester) async {
+      Future<void> pumpRow(Size size, double textScale) async {
+        tester.view
+          ..physicalSize = size
+          ..devicePixelRatio = 1;
+        await tester.pumpWidget(
+          _app(
+            profile: _handheld,
+            textScale: textScale,
+            child: Scaffold(
+              body: HandheldActionRow(
+                primary: SizedBox(
+                  key: const Key('primary'),
+                  child: FilledButton(
+                    onPressed: () {},
+                    child: const Text('Continue'),
+                  ),
+                ),
+                secondary: SizedBox(
+                  key: const Key('secondary'),
+                  child: OutlinedButton(
+                    onPressed: () {},
+                    child: const Text('Back'),
+                  ),
+                ),
+              ),
+            ),
+          ),
+        );
+      }
 
-    await pumpRow(const Size(800, 1280), 2);
-    final scaledPrimary = tester.getRect(find.byKey(const Key('primary')));
-    final scaledSecondary = tester.getRect(find.byKey(const Key('secondary')));
-    expect(scaledPrimary.top, greaterThan(scaledSecondary.bottom - .01));
-  });
+      addTearDown(tester.view.reset);
+      await pumpRow(const Size(360, 800), 1);
+      final narrowPrimary = tester.getRect(find.byKey(const Key('primary')));
+      final narrowSecondary = tester.getRect(
+        find.byKey(const Key('secondary')),
+      );
+      expect(narrowPrimary.top, greaterThan(narrowSecondary.bottom - .01));
 
-  testWidgets('Setup action bar reads raw View insets and returns', (
+      await pumpRow(const Size(800, 1280), 1);
+      final widePrimary = tester.getRect(find.byKey(const Key('primary')));
+      final wideSecondary = tester.getRect(find.byKey(const Key('secondary')));
+      expect(widePrimary.top, closeTo(wideSecondary.top, .01));
+
+      // The corrected fixture exposes the canvas width (888.9 cu), so 2x text
+      // still has 444.4 cu and remains beside. The 360px case above is the
+      // real <420 cu stacked boundary after canvas conversion.
+      await pumpRow(const Size(800, 1280), 2);
+      final scaledPrimary = tester.getRect(find.byKey(const Key('primary')));
+      final scaledSecondary = tester.getRect(
+        find.byKey(const Key('secondary')),
+      );
+      expect(scaledPrimary.top, closeTo(scaledSecondary.top, .01));
+    },
+  );
+
+  androidWidgetTest('Setup action bar reads raw View insets and returns', (
     tester,
   ) async {
     tester.view
@@ -195,7 +210,7 @@ void main() {
     );
   });
 
-  testWidgets(
+  androidWidgetTest(
     'choice sheet and select field activate with selection semantics',
     (tester) async {
       tester.view
@@ -255,7 +270,7 @@ void main() {
     },
   );
 
-  testWidgets(
+  androidWidgetTest(
     'page bar, filters, rows and choices keep 48dp targets at scale .8',
     (tester) async {
       tester.view
@@ -317,81 +332,180 @@ void main() {
     },
   );
 
-  testWidgets('page bar and number block clamp only their named text roles', (
-    tester,
-  ) async {
-    tester.view
-      ..physicalSize = const Size(360, 800)
-      ..devicePixelRatio = 1;
-    addTearDown(tester.view.reset);
-    await tester.pumpWidget(
-      _app(
-        profile: _handheld,
-        textScale: 2,
-        child: Scaffold(
-          body: Column(
-            children: [
-              SizedBox(
-                key: const Key('bar'),
-                child: const HandheldPageBar(
-                  title: 'Midsummer Television Guide',
-                  subtitle: 'Three sections',
+  androidWidgetTest(
+    'page bar and number block clamp only their named text roles',
+    (tester) async {
+      tester.view
+        ..physicalSize = const Size(360, 800)
+        ..devicePixelRatio = 1;
+      addTearDown(tester.view.reset);
+      await tester.pumpWidget(
+        _app(
+          profile: _handheld,
+          textScale: 2,
+          child: Scaffold(
+            body: Column(
+              children: [
+                SizedBox(
+                  key: const Key('bar'),
+                  child: const HandheldPageBar(
+                    title: 'Midsummer Television Guide',
+                    subtitle: 'Three sections',
+                  ),
                 ),
-              ),
-              const HandheldNumberBlock(42, next: 43),
-              const Text('body text reflows at two'),
-            ],
+                const HandheldNumberBlock(42, next: 43),
+                const Text('body text reflows at two'),
+              ],
+            ),
           ),
         ),
-      ),
-    );
-    final titleParagraphs = <RenderParagraph>[];
-    for (final element
-        in find
-            .descendant(
-              of: find.byKey(const Key('bar')),
-              matching: find.byType(Text),
-            )
-            .evaluate()) {
-      final renderObject = element.renderObject;
-      if (renderObject is RenderParagraph) titleParagraphs.add(renderObject);
-    }
-    expect(titleParagraphs, isNotEmpty);
-    for (final paragraph in titleParagraphs) {
-      expect(
-        paragraph.textScaler.scale(paragraph.text.style!.fontSize!),
-        lessThanOrEqualTo(1.3 * paragraph.text.style!.fontSize! + .01),
       );
-    }
-    final number = tester.renderObject<RenderParagraph>(find.text('42'));
-    expect(
-      number.textScaler.scale(number.text.style!.fontSize!),
-      lessThanOrEqualTo(1.3 * number.text.style!.fontSize! + .01),
-    );
+      final titleParagraph = tester.renderObject<RenderParagraph>(
+        find.descendant(
+          of: find.byKey(const ValueKey('handheld-page-bar-title')),
+          matching: find.byType(RichText),
+        ),
+      );
+      final title = titleParagraph.text.toPlainText();
+      final titleBoxes = titleParagraph.getBoxesForSelection(
+        TextSelection(baseOffset: 0, extentOffset: title.length),
+      );
+      expect(titleBoxes, isNotEmpty);
+      expect(
+        titleBoxes.map((box) => box.top).toSet(),
+        hasLength(greaterThanOrEqualTo(2)),
+      );
+      for (final match in RegExp(r'\S+').allMatches(title)) {
+        final wordBoxes = titleParagraph.getBoxesForSelection(
+          TextSelection(baseOffset: match.start, extentOffset: match.end),
+        );
+        // A two-line page-bar title may ellipsize words after the visible
+        // range. Geometry assertions apply to the rendered words only.
+        if (wordBoxes.isEmpty) continue;
+        expect(
+          wordBoxes.map((box) => box.top).toSet(),
+          hasLength(1),
+          reason: 'word split across lines: ${match.group(0)}',
+        );
+      }
+      expect(
+        titleParagraph.textScaler.scale(titleParagraph.text.style!.fontSize!),
+        lessThanOrEqualTo(1.3 * titleParagraph.text.style!.fontSize! + .01),
+      );
+      final number = tester.renderObject<RenderParagraph>(find.text('42'));
+      expect(
+        number.textScaler.scale(number.text.style!.fontSize!),
+        lessThanOrEqualTo(1.3 * number.text.style!.fontSize! + .01),
+      );
 
-    final titleLines = tester
-        .widgetList<Text>(
-          find.descendant(
-            of: find.byKey(const Key('bar')),
-            matching: find.byType(Text),
+      expect(tester.takeException(), isNull);
+    },
+  );
+
+  androidWidgetTest(
+    'page bar fits a scaled over-wide word without dropping below text 1.0',
+    (tester) async {
+      tester.view
+        ..physicalSize = const Size(360, 800)
+        ..devicePixelRatio = 1;
+      addTearDown(tester.view.reset);
+
+      final style = LineupTypography.title(26, 90, height: 1.12);
+      const candidates = [
+        'Midsummer',
+        'MidsummerTelevision',
+        'Internationalization',
+        'Supercalifragilistic',
+        'Characteristically',
+        'Photolithography',
+      ];
+      const availableWidth = 260 - handheldGutter - 4;
+      String? word;
+      for (final candidate in candidates) {
+        final unscaled = TextPainter(
+          text: TextSpan(text: candidate, style: style),
+          textDirection: TextDirection.ltr,
+          textScaler: TextScaler.noScaling,
+        )..layout();
+        final requested = TextPainter(
+          text: TextSpan(text: candidate, style: style),
+          textDirection: TextDirection.ltr,
+          textScaler: const TextScaler.linear(1.3),
+        )..layout();
+        if (unscaled.width <= availableWidth &&
+            requested.width > availableWidth) {
+          word = candidate;
+          unscaled.dispose();
+          requested.dispose();
+          break;
+        }
+        unscaled.dispose();
+        requested.dispose();
+      }
+      expect(word, isNotNull);
+
+      await tester.pumpWidget(
+        _app(
+          profile: _handheld,
+          textScale: 2,
+          child: Scaffold(
+            body: Align(
+              alignment: Alignment.topLeft,
+              child: SizedBox(width: 260, child: HandheldPageBar(title: word!)),
+            ),
           ),
-        )
-        .map((text) => text.data)
-        .whereType<String>()
-        .toList();
-    final titleOnly = titleLines.sublist(0, titleLines.length - 1);
-    expect(titleLines, isNotEmpty);
-    const words = {'Midsummer', 'Television', 'Guide'};
-    expect(
-      titleOnly.every(
-        (line) => line
-            .replaceAll('…', '')
-            .split(RegExp(r'\s+'))
-            .every(words.contains),
-      ),
-      isTrue,
-    );
-    expect(tester.takeException(), isNull);
+        ),
+      );
+      final paragraph = tester.renderObject<RenderParagraph>(
+        find.descendant(
+          of: find.byKey(const ValueKey('handheld-page-bar-title')),
+          matching: find.byType(RichText),
+        ),
+      );
+      final boxes = paragraph.getBoxesForSelection(
+        TextSelection(baseOffset: 0, extentOffset: word.length),
+      );
+      expect(boxes, hasLength(1));
+      expect(
+        boxes.single.right - boxes.single.left,
+        lessThanOrEqualTo(paragraph.constraints.maxWidth + .01),
+      );
+      TextSpan? findWordSpan(InlineSpan span) {
+        if (span is TextSpan) {
+          if (span.text == word) return span;
+          for (final child in span.children ?? const <InlineSpan>[]) {
+            final match = findWordSpan(child);
+            if (match != null) return match;
+          }
+        }
+        return null;
+      }
+
+      final span = findWordSpan(paragraph.text);
+      expect(span, isNotNull);
+      final fontSize = span!.style?.fontSize;
+      expect(fontSize, isNotNull);
+      expect(
+        paragraph.textScaler.scale(fontSize!),
+        greaterThanOrEqualTo(style.fontSize! - .01),
+      );
+      expect(
+        paragraph.textScaler.scale(fontSize),
+        lessThanOrEqualTo(style.fontSize! * 1.3 + .01),
+      );
+      expect(tester.takeException(), isNull);
+    },
+  );
+}
+
+void androidWidgetTest(String name, WidgetTesterCallback body) {
+  testWidgets(name, (tester) async {
+    debugDefaultTargetPlatformOverride = TargetPlatform.android;
+    try {
+      await body(tester);
+    } finally {
+      debugDefaultTargetPlatformOverride = null;
+    }
   });
 }
 
@@ -410,8 +524,8 @@ Widget _app({
     builder: (context, route) {
       final media = MediaQuery.of(context)
           .copyWith(textScaler: TextScaler.linear(textScale));
-      final contents = MediaQuery(data: media, child: route!);
-      return canvas ? LineupCanvas(child: contents) : contents;
+      final contents = canvas ? LineupCanvas(child: route!) : route!;
+      return MediaQuery(data: media, child: contents);
     },
     home: child,
   ),
