@@ -53,19 +53,9 @@ void main() {
               find.byType(HandheldPageBar),
               stacked ? findsOneWidget : findsNothing,
             );
-            expect(
-              find.textContaining('Alt+Up/Down reorders'),
-              stacked ? findsNothing : findsOneWidget,
-            );
+            expect(find.textContaining('Alt+Up/Down reorders'), findsNothing);
             expect(tester.takeException(), isNull);
 
-            if (!stacked) return;
-
-            expect(find.text('Back to Channels'), findsNothing);
-            final back = find.byTooltip('Back to Channels').last;
-            expect(back, findsOneWidget);
-            expect(find.text('Edit custom channel · Saved'), findsOneWidget);
-            _checkWords(tester);
             await _reachable(
               tester,
               find
@@ -86,6 +76,14 @@ void main() {
                   .last,
               touch: true,
             );
+
+            if (!stacked) return;
+
+            expect(find.text('Back to Channels'), findsNothing);
+            final back = find.byTooltip('Back to Channels').last;
+            expect(back, findsOneWidget);
+            expect(find.text('Edit custom channel · Saved'), findsOneWidget);
+            _checkWords(tester);
 
             final canvasWidth =
                 size.width /

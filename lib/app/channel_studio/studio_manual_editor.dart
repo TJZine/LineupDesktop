@@ -542,7 +542,7 @@ class _StudioManualEditorState extends State<_StudioManualEditor>
             Text(
               entries.isEmpty
                   ? 'No programs selected. Return to Browse library to add programming.'
-                  : handheldStacked(context)
+                  : DeviceProfile.of(context).isHandheld
                   ? '${rundownEntries.length} of ${entries.length} shown${rundownQuery.isEmpty ? '' : ' · Clear search to drag reorder'}'
                   : '${rundownEntries.length} of ${entries.length} shown · Alt+Up/Down reorders · Delete removes${rundownQuery.isEmpty ? '' : ' · Clear search to drag reorder'}',
             ),
