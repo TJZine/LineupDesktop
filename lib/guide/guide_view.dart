@@ -3406,10 +3406,7 @@ class _ProgramCellContent extends StatelessWidget {
         );
         final time =
             '${_time(context, program.scheduled.start)}–${_time(context, program.scheduled.end)}';
-        final showLiveIndicator =
-            current &&
-            (!DeviceProfile.of(context).isHandheld ||
-                constraints.maxWidth >= 7 + gap);
+        final showLiveIndicator = current && constraints.maxWidth >= 7 + gap;
         final liveWidth = showLiveIndicator ? 7 + gap : 0.0;
         final titleWidth = episodeCode == null
             ? 0.0
