@@ -1,6 +1,7 @@
 import 'dart:math' as math;
 
 import 'package:flutter/material.dart';
+import 'package:flutter/rendering.dart';
 import 'package:lineup_desktop/platform/device_profile.dart';
 
 import 'app_theme.dart';
@@ -88,7 +89,10 @@ class _HandheldWordText extends StatelessWidget {
     TextStyle? textStyle,
   }) {
     final painter = TextPainter(
-      text: TextSpan(text: value, style: textStyle ?? style),
+      text: TextSpan(
+        text: value,
+        style: DefaultTextStyle.of(context).style.merge(textStyle ?? style),
+      ),
       textDirection: Directionality.of(context),
       textScaler: textScaler ?? MediaQuery.textScalerOf(context),
       maxLines: 1,
@@ -111,18 +115,18 @@ class _HandheldWordText extends StatelessWidget {
     for (var step = 0; step < 16; step++) {
       final middle = (floor + ceiling) / 2;
       if (requested.scale(style.fontSize! * middle) >= style.fontSize!) {
-        floor = middle;
-      } else {
         ceiling = middle;
+      } else {
+        floor = middle;
       }
     }
-    var low = floor;
+    var low = ceiling;
     var high = 1.0;
     for (var step = 0; step < 16; step++) {
       final middle = (low + high) / 2;
       final wordStyle = style.copyWith(fontSize: style.fontSize! * middle);
       if (_width(context, word, textScaler: requested, textStyle: wordStyle) <=
-          maxWidth) {
+          maxWidth - 1) {
         low = middle;
       } else {
         high = middle;
@@ -532,6 +536,286 @@ class HandheldBadge extends StatelessWidget {
   }
 }
 
+enum _HandheldRowSlot { leading, number, text, trailing }
+
+class _HandheldRowParentData extends ContainerBoxParentData<RenderBox> {
+  _HandheldRowSlot? slot;
+}
+
+class _HandheldRowSlotChild extends ParentDataWidget<_HandheldRowParentData> {
+  const _HandheldRowSlotChild({required this.slot, required super.child});
+
+  final _HandheldRowSlot slot;
+
+  @override
+  void applyParentData(RenderObject renderObject) {
+    final parentData = renderObject.parentData! as _HandheldRowParentData;
+    if (parentData.slot == slot) return;
+    parentData.slot = slot;
+    renderObject.parent?.markNeedsLayout();
+  }
+
+  @override
+  Type get debugTypicalAncestorWidgetClass => _HandheldRowLayout;
+}
+
+class _HandheldRowLayout extends MultiChildRenderObjectWidget {
+  _HandheldRowLayout({
+    required this.leading,
+    required this.number,
+    required this.text,
+    required this.trailing,
+    required this.name,
+    required this.facts,
+    required this.warning,
+    required this.nameStyle,
+    required this.factsStyle,
+    required this.warningStyle,
+    required this.textScaler,
+    required this.textDirection,
+    required this.touchExtent,
+  }) : super(
+         children: [
+           if (leading != null)
+             _HandheldRowSlotChild(
+               slot: _HandheldRowSlot.leading,
+               child: leading,
+             ),
+           _HandheldRowSlotChild(slot: _HandheldRowSlot.number, child: number),
+           _HandheldRowSlotChild(slot: _HandheldRowSlot.text, child: text),
+           if (trailing != null)
+             _HandheldRowSlotChild(
+               slot: _HandheldRowSlot.trailing,
+               child: trailing,
+             ),
+         ],
+       );
+
+  final Widget? leading;
+  final Widget number;
+  final Widget text;
+  final Widget? trailing;
+  final String name;
+  final String facts;
+  final String? warning;
+  final TextStyle nameStyle;
+  final TextStyle factsStyle;
+  final TextStyle warningStyle;
+  final TextScaler textScaler;
+  final TextDirection textDirection;
+  final double touchExtent;
+
+  @override
+  RenderObject createRenderObject(BuildContext context) => _RenderHandheldRow(
+    name: name,
+    facts: facts,
+    warning: warning,
+    nameStyle: nameStyle,
+    factsStyle: factsStyle,
+    warningStyle: warningStyle,
+    textScaler: textScaler,
+    textDirection: textDirection,
+    touchExtent: touchExtent,
+  );
+
+  @override
+  void updateRenderObject(
+    BuildContext context,
+    _RenderHandheldRow renderObject,
+  ) {
+    renderObject
+      ..name = name
+      ..facts = facts
+      ..warning = warning
+      ..nameStyle = nameStyle
+      ..factsStyle = factsStyle
+      ..warningStyle = warningStyle
+      ..textScaler = textScaler
+      ..textDirection = textDirection
+      ..touchExtent = touchExtent
+      ..markNeedsLayout();
+  }
+}
+
+class _RenderHandheldRow extends RenderBox
+    with
+        ContainerRenderObjectMixin<RenderBox, _HandheldRowParentData>,
+        RenderBoxContainerDefaultsMixin<RenderBox, _HandheldRowParentData> {
+  _RenderHandheldRow({
+    required this.name,
+    required this.facts,
+    required this.warning,
+    required this.nameStyle,
+    required this.factsStyle,
+    required this.warningStyle,
+    required this.textScaler,
+    required this.textDirection,
+    required this.touchExtent,
+  });
+
+  String name;
+  String facts;
+  String? warning;
+  TextStyle nameStyle;
+  TextStyle factsStyle;
+  TextStyle warningStyle;
+  TextScaler textScaler;
+  TextDirection textDirection;
+  double touchExtent;
+
+  RenderBox? _childFor(_HandheldRowSlot slot) {
+    for (var child = firstChild; child != null; child = childAfter(child)) {
+      final parentData = child.parentData! as _HandheldRowParentData;
+      if (parentData.slot == slot) return child;
+    }
+    return null;
+  }
+
+  void _layoutChrome(RenderBox? child, double width, double maxHeight) {
+    child?.layout(
+      BoxConstraints.loose(Size(width, maxHeight)),
+      parentUsesSize: true,
+    );
+  }
+
+  bool _wordTooWide(String value, TextStyle style, double maxWidth) {
+    if (value.trim().isEmpty) return false;
+    for (final word in value.trim().split(RegExp(r'\s+'))) {
+      final painter = TextPainter(
+        text: TextSpan(text: word, style: style),
+        textDirection: textDirection,
+        textScaler: textScaler,
+        maxLines: 1,
+      )..layout();
+      final tooWide = painter.width > maxWidth;
+      painter.dispose();
+      if (tooWide) return true;
+    }
+    return false;
+  }
+
+  void _position(RenderBox child, double x, double y) {
+    (child.parentData! as _HandheldRowParentData).offset = Offset(x, y);
+  }
+
+  @override
+  void setupParentData(RenderBox child) {
+    if (child.parentData is! _HandheldRowParentData) {
+      child.parentData = _HandheldRowParentData();
+    }
+  }
+
+  @override
+  void performLayout() {
+    final width = constraints.hasBoundedWidth
+        ? constraints.maxWidth
+        : constraints.minWidth;
+    final maxHeight = constraints.maxHeight;
+    final leading = _childFor(_HandheldRowSlot.leading);
+    final number = _childFor(_HandheldRowSlot.number)!;
+    final text = _childFor(_HandheldRowSlot.text)!;
+    final trailing = _childFor(_HandheldRowSlot.trailing);
+    _layoutChrome(leading, width, maxHeight);
+    _layoutChrome(number, width, maxHeight);
+    _layoutChrome(trailing, width, maxHeight);
+
+    final leftPadding = leading == null ? handheldGutter : 4.0;
+    final rightPadding = trailing == null ? handheldGutter : 2.0;
+    final leadingWidth = leading?.size.width ?? 0;
+    final trailingWidth = trailing?.size.width ?? 0;
+    final double sideWidth = math
+        .max(
+          0,
+          width -
+              leftPadding -
+              rightPadding -
+              leadingWidth -
+              number.size.width -
+              trailingWidth,
+        )
+        .toDouble();
+    final nameScale = textScaler.scale(18) / 18;
+    final listStacked = nameScale <= 0 || width / nameScale < 280;
+    final stacked =
+        listStacked ||
+        _wordTooWide(name, nameStyle, sideWidth) ||
+        _wordTooWide(facts, factsStyle, sideWidth) ||
+        (warning != null && _wordTooWide(warning!, warningStyle, sideWidth));
+
+    final numberX = leftPadding + leadingWidth;
+    final sideTextX = numberX + number.size.width;
+    if (stacked) {
+      final double topHeight = math
+          .max(
+            touchExtent,
+            math.max(
+              leading?.size.height ?? 0,
+              math.max(number.size.height, trailing?.size.height ?? 0),
+            ),
+          )
+          .toDouble();
+      final double stackedTextWidth = math
+          .max(0, width - numberX - handheldGutter)
+          .toDouble();
+      text.layout(
+        BoxConstraints.tightFor(width: stackedTextWidth),
+        parentUsesSize: true,
+      );
+      final top = 12.0;
+      if (leading != null) {
+        _position(
+          leading,
+          leftPadding,
+          top + (topHeight - leading.size.height) / 2,
+        );
+      }
+      _position(number, numberX, top + (topHeight - number.size.height) / 2);
+      if (trailing != null) {
+        _position(
+          trailing,
+          width - rightPadding - trailingWidth,
+          top + (topHeight - trailing.size.height) / 2,
+        );
+      }
+      _position(text, numberX, top + topHeight);
+      size = constraints.constrain(
+        Size(width, math.max(72, top + topHeight + text.size.height + 12)),
+      );
+      return;
+    }
+
+    text.layout(
+      BoxConstraints.tightFor(width: sideWidth),
+      parentUsesSize: true,
+    );
+    if (leading != null) _position(leading, leftPadding, 12);
+    _position(number, numberX, 12);
+    _position(text, sideTextX, 12);
+    if (trailing != null) {
+      _position(trailing, width - rightPadding - trailingWidth, 12);
+    }
+    final double contentHeight = math
+        .max(
+          text.size.height,
+          math.max(
+            leading?.size.height ?? 0,
+            math.max(number.size.height, trailing?.size.height ?? 0),
+          ),
+        )
+        .toDouble();
+    size = constraints.constrain(Size(width, math.max(72, contentHeight + 24)));
+  }
+
+  @override
+  void paint(PaintingContext context, Offset offset) {
+    defaultPaint(context, offset);
+  }
+
+  @override
+  bool hitTestChildren(BoxHitTestResult result, {required Offset position}) =>
+      defaultHitTestChildren(result, position: position);
+}
+
 /// B3 stacked row. The row itself is the tap and long-press target.
 class HandheldStackedRow extends StatelessWidget {
   const HandheldStackedRow({
@@ -564,68 +848,72 @@ class HandheldStackedRow extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final roles = LineupTheme.of(context);
+    final inheritedStyle = DefaultTextStyle.of(context).style;
+    final nameStyle = inheritedStyle.merge(
+      _controlStyle(context).copyWith(
+        color: removed ? roles.secondaryText : roles.primaryText,
+        decoration: removed ? TextDecoration.lineThrough : null,
+      ),
+    );
+    final factsStyle = inheritedStyle.merge(
+      LineupTypography.small.copyWith(
+        color: roles.secondaryText,
+        fontSize: 15,
+        height: 1.35,
+      ),
+    );
+    final warningStyle = inheritedStyle.merge(
+      LineupTypography.small.copyWith(
+        color: Theme.of(context).colorScheme.error,
+        fontSize: 15,
+      ),
+    );
+    final text = Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      mainAxisSize: MainAxisSize.min,
+      children: [
+        _HandheldWordText(name, style: nameStyle, fitOverwideWords: true),
+        if (facts.isNotEmpty) ...[
+          const SizedBox(height: 2),
+          _HandheldWordText(facts, style: factsStyle, fitOverwideWords: true),
+        ],
+        if (warning != null)
+          Padding(
+            padding: const EdgeInsets.only(top: 4),
+            child: _HandheldWordText(
+              warning!,
+              style: warningStyle,
+              fitOverwideWords: true,
+            ),
+          ),
+        if (badge != null) ...[const SizedBox(height: 6), badge!],
+      ],
+    );
+    final trailingWidget = trailing == null
+        ? null
+        : ConstrainedBox(
+            constraints: BoxConstraints(
+              minWidth: _minimumTouchExtent(context, designExtent: 56),
+              minHeight: _minimumTouchExtent(context, designExtent: 56),
+            ),
+            child: trailing,
+          );
     final row = ConstrainedBox(
       constraints: const BoxConstraints(minHeight: 72),
-      child: Padding(
-        padding: EdgeInsets.fromLTRB(
-          leading == null ? handheldGutter : 4,
-          12,
-          trailing == null ? handheldGutter : 2,
-          12,
-        ),
-        child: Row(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            ?leading,
-            HandheldNumberBlock(number, next: next),
-            Expanded(
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                mainAxisSize: MainAxisSize.min,
-                children: [
-                  _HandheldWordText(
-                    name,
-                    style: _controlStyle(context).copyWith(
-                      color: removed ? roles.secondaryText : roles.primaryText,
-                      decoration: removed ? TextDecoration.lineThrough : null,
-                    ),
-                  ),
-                  if (facts.isNotEmpty) ...[
-                    const SizedBox(height: 2),
-                    _HandheldWordText(
-                      facts,
-                      style: LineupTypography.small.copyWith(
-                        color: roles.secondaryText,
-                        fontSize: 15,
-                        height: 1.35,
-                      ),
-                    ),
-                  ],
-                  if (warning != null)
-                    Padding(
-                      padding: const EdgeInsets.only(top: 4),
-                      child: _HandheldWordText(
-                        warning!,
-                        style: LineupTypography.small.copyWith(
-                          color: Theme.of(context).colorScheme.error,
-                          fontSize: 15,
-                        ),
-                      ),
-                    ),
-                  if (badge != null) ...[const SizedBox(height: 6), badge!],
-                ],
-              ),
-            ),
-            if (trailing != null)
-              ConstrainedBox(
-                constraints: BoxConstraints(
-                  minWidth: _minimumTouchExtent(context, designExtent: 56),
-                  minHeight: _minimumTouchExtent(context, designExtent: 56),
-                ),
-                child: trailing,
-              ),
-          ],
-        ),
+      child: _HandheldRowLayout(
+        leading: leading,
+        number: HandheldNumberBlock(number, next: next),
+        text: text,
+        trailing: trailingWidget,
+        name: name,
+        facts: facts,
+        warning: warning,
+        nameStyle: nameStyle,
+        factsStyle: factsStyle,
+        warningStyle: warningStyle,
+        textScaler: MediaQuery.textScalerOf(context),
+        textDirection: Directionality.of(context),
+        touchExtent: _minimumTouchExtent(context, designExtent: 56),
       ),
     );
     final decorated = DecoratedBox(

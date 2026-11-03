@@ -10,6 +10,8 @@ import 'package:lineup_desktop/ui/app_ui.dart';
 import 'package:lineup_desktop/ui/handheld_management.dart';
 import 'package:lineup_desktop/ui/lineup_canvas.dart';
 
+import '../../test/support/golden_test_support.dart';
+
 const _handheld = DeviceProfile(
   host: TargetPlatform.android,
   formFactor: FormFactor.handheld,
@@ -24,6 +26,8 @@ const _tv = DeviceProfile(
 );
 
 void main() {
+  setUpAll(loadPinnedTestFonts);
+
   androidWidgetTest('B0 keeps profile and canvas composition boundaries', (
     tester,
   ) async {
@@ -399,6 +403,148 @@ void main() {
       );
 
       expect(tester.takeException(), isNull);
+    },
+  );
+
+  androidWidgetTest(
+    'B3 row words stay on one glyph line across large text modes',
+    (tester) async {
+      addTearDown(tester.view.reset);
+      const names = [
+        'Documentaries',
+        'Late Night News',
+        'Weihnachtsfilmklassiker',
+      ];
+      const modes = ['normal', 'selection', 'reorder'];
+      const scales = [1.0, 1.3, 2.0];
+      const sizes = [Size(360, 800), Size(412, 915)];
+
+      for (final size in sizes) {
+        tester.view
+          ..physicalSize = size
+          ..devicePixelRatio = 1;
+        for (final scale in scales) {
+          final keys = <String, Key>{};
+          await tester.pumpWidget(
+            _app(
+              profile: _handheld,
+              textScale: scale,
+              child: Scaffold(
+                body: SingleChildScrollView(
+                  child: Column(
+                    children: [
+                      for (final mode in modes)
+                        for (final name in names)
+                          Builder(
+                            builder: (context) {
+                              final id = '$mode-$name';
+                              final key = ValueKey('b3-probe-$id');
+                              keys[id] = key;
+                              return HandheldStackedRow(
+                                key: key,
+                                number: 42,
+                                next: mode == 'reorder' ? 43 : null,
+                                name: name,
+                                facts: mode == 'reorder'
+                                    ? ''
+                                    : 'Source · Playback · Generated',
+                                leading: mode == 'selection'
+                                    ? Checkbox(value: false, onChanged: (_) {})
+                                    : null,
+                                trailing: Row(
+                                  mainAxisSize: MainAxisSize.min,
+                                  children: [
+                                    IconButton(
+                                      onPressed: () {},
+                                      icon: const Icon(Icons.more_vert),
+                                    ),
+                                    if (mode == 'reorder')
+                                      const SizedBox.square(
+                                        dimension: 56,
+                                        child: Icon(Icons.drag_handle),
+                                      ),
+                                  ],
+                                ),
+                              );
+                            },
+                          ),
+                    ],
+                  ),
+                ),
+              ),
+            ),
+          );
+          await tester.pumpAndSettle();
+
+          for (final entry in keys.entries) {
+            final paragraphs = find
+                .descendant(
+                  of: find.byKey(entry.value),
+                  matching: find.byType(RichText),
+                )
+                .evaluate()
+                .map((element) => element.renderObject)
+                .whereType<RenderParagraph>();
+            for (final paragraph in paragraphs) {
+              final paragraphText = paragraph.text.toPlainText();
+              for (final match in RegExp(r'\S+').allMatches(paragraphText)) {
+                final word = match.group(0)!;
+                if (word.length < 2) continue;
+                final boxes = paragraph.getBoxesForSelection(
+                  TextSelection(
+                    baseOffset: match.start,
+                    extentOffset: match.end,
+                  ),
+                );
+                expect(boxes, isNotEmpty, reason: '${entry.key}: $word');
+                expect(
+                  boxes.map((box) => box.top.round()).toSet(),
+                  hasLength(1),
+                  reason: '${entry.key}: $word split across lines',
+                );
+              }
+            }
+          }
+
+          final representativeKey = keys['normal-Documentaries']!;
+          final nameParagraph = tester.renderObject<RenderParagraph>(
+            find.descendant(
+              of: find.byKey(representativeKey),
+              matching: find.byWidgetPredicate(
+                (widget) =>
+                    widget is RichText &&
+                    widget.text.toPlainText() == 'Documentaries',
+              ),
+            ),
+          );
+          final numberRect = tester.getRect(
+            find.descendant(
+              of: find.byKey(representativeKey),
+              matching: find.byType(HandheldNumberBlock),
+            ),
+          );
+          final nameRect = tester.getRect(
+            find.descendant(
+              of: find.byKey(representativeKey),
+              matching: find.byWidgetPredicate(
+                (widget) =>
+                    widget is RichText &&
+                    widget.text.toPlainText() == 'Documentaries',
+              ),
+            ),
+          );
+          expect(nameParagraph.text.toPlainText(), 'Documentaries');
+          if (scale == 1.3) {
+            expect(nameRect.top, lessThan(numberRect.bottom));
+            expect(nameRect.left, greaterThan(numberRect.right - .01));
+          }
+          if (scale == 2.0) {
+            expect(nameRect.top, greaterThanOrEqualTo(numberRect.bottom - .01));
+            expect(nameRect.left, closeTo(numberRect.left, .01));
+          }
+          expect(tester.takeException(), isNull);
+        }
+      }
     },
   );
 
