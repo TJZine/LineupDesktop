@@ -434,6 +434,8 @@ class _LineupShellState extends State<LineupShell> {
         if (_player.overlay == PlayerOverlay.miniGuide ||
             _player.overlay == PlayerOverlay.nowPlaying) {
           _player.showOsd();
+        } else if (_player.canToggleFullscreen && _player.fullscreen) {
+          unawaited(_player.toggleFullscreen());
         } else {
           // OS Back never dismisses the OSD as an intermediate state.
           unawaited(_select(ShellDestination.guide));
@@ -1229,14 +1231,26 @@ class _LineupShellState extends State<LineupShell> {
     final managed =
         widget.profile.host == TargetPlatform.android &&
             widget.profile.isHandheld
-        ? HandheldSystemUi(
-            playerVisible:
-                widget.controller.stage == SetupStage.ready &&
-                _destination == ShellDestination.player &&
-                !_licensesOpen,
-            osdVisible:
-                _player.overlay != PlayerOverlay.none || _appMenu != null,
+        ? ListenableBuilder(
+            listenable: _player,
             child: rooted,
+            builder: (context, child) {
+              final playerVisible =
+                  widget.controller.stage == SetupStage.ready &&
+                  _destination == ShellDestination.player &&
+                  !_licensesOpen;
+              final window = LineupCanvas.windowSizeOf(context);
+              return HandheldSystemUi(
+                playerVisible: playerVisible,
+                osdVisible:
+                    (window.height > window.width &&
+                        LineupCanvas.usesPortraitCompositionOf(context)) ||
+                    _player.overlay != PlayerOverlay.none ||
+                    _appMenu != null,
+                fullscreen: _player.canToggleFullscreen && _player.fullscreen,
+                child: child!,
+              );
+            },
           )
         : rooted;
     return DeviceProfileScope(profile: widget.profile, child: managed);

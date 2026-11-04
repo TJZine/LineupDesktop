@@ -360,6 +360,8 @@ class PlayerCoordinator extends ChangeNotifier with WidgetsBindingObserver {
 
   String? get error => _error;
   bool get fullscreen => _fullscreen;
+  bool get canToggleFullscreen =>
+      player.capabilities.fullscreen != PlayerFullscreenMode.fixed;
   bool get cursorVisible => _cursorVisible;
   bool get tuning => _tuning;
   bool get canRetry => _canRetry;
@@ -637,6 +639,15 @@ class PlayerCoordinator extends ChangeNotifier with WidgetsBindingObserver {
             httpStatus: event.status.httpStatus,
           )
         : event.status;
+    if (resumeOnInactive && load != null && !holdTransition) {
+      if (event.status.state == PlayerState.paused &&
+          previousState == PlayerState.playing &&
+          !_userPaused) {
+        load.transientPause = true;
+      } else if (event.status.state == PlayerState.playing) {
+        load.transientPause = false;
+      }
+    }
     if (load != null &&
         (event.status.state != PlayerState.error ||
             event.position > Duration.zero ||
@@ -2122,6 +2133,8 @@ class PlayerCoordinator extends ChangeNotifier with WidgetsBindingObserver {
   }
 
   Future<void> toggleFullscreen() {
+    final mode = player.capabilities.fullscreen;
+    if (mode == PlayerFullscreenMode.fixed) return Future.value();
     final controlGeneration = ++_controlGeneration;
     final tuneGeneration = _tuneGeneration;
     final epoch = _fullscreenEpoch;
@@ -2140,6 +2153,7 @@ class PlayerCoordinator extends ChangeNotifier with WidgetsBindingObserver {
         return;
       }
       if (_disposed ||
+          mode == PlayerFullscreenMode.systemBars ||
           epoch != _fullscreenEpoch ||
           observation != _fullscreenObservationRevision) {
         return;
@@ -2173,6 +2187,14 @@ class PlayerCoordinator extends ChangeNotifier with WidgetsBindingObserver {
     try {
       if (!paused && await _expireSleepIfNeeded()) return;
       if (!current()) return;
+      if (!paused && load?.transientPause == true) {
+        load!.transientPause = false;
+        final channelId = _active?.channel?.id;
+        if (channelId != null) {
+          await _tune(channelId);
+          return;
+        }
+      }
       // A deferred tune consumes the intent when its load starts. There is no
       // current native load for an unscoped play/pause command to control yet.
       if (!awaitingTuneLoad) {
@@ -2899,6 +2921,7 @@ class _PlaybackLoad {
   // Resume intent until actual telemetry supersedes it; never used as a
   // landing observation. Native restart diagnostics read libmpv directly.
   Duration resumePosition = Duration.zero;
+  bool transientPause = false;
   bool replacing;
   bool pending = true;
   bool liveJoinCorrected = false;

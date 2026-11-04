@@ -15,12 +15,14 @@ void main() {
         bool? multiWindow = false,
         bool player = false,
         bool osd = true,
+        bool fullscreen = false,
       }) => HandheldSystemUiPolicy(
         displaySize: display,
         windowSize: window,
         multiWindow: multiWindow,
         playerVisible: player,
         osdVisible: osd,
+        fullscreen: fullscreen,
       );
       expect(policy().orientations, [DeviceOrientation.portraitUp]);
       expect(policy(player: true).orientations, [
@@ -28,6 +30,25 @@ void main() {
         DeviceOrientation.landscapeLeft,
         DeviceOrientation.landscapeRight,
       ]);
+      expect(policy(player: true, fullscreen: true).orientations, [
+        DeviceOrientation.landscapeLeft,
+        DeviceOrientation.landscapeRight,
+      ]);
+      expect(policy(fullscreen: true).orientations, [
+        DeviceOrientation.portraitUp,
+      ]);
+      expect(
+        policy(
+          player: true,
+          fullscreen: true,
+          display: const Size(800, 1280),
+        ).orientations,
+        isEmpty,
+      );
+      expect(
+        policy(player: true, fullscreen: true, multiWindow: true).orientations,
+        isEmpty,
+      );
       expect(
         policy(
           display: const Size(1280, 800),

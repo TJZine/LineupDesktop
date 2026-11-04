@@ -17,6 +17,7 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:lineup_desktop/ui/lineup_canvas.dart';
 import 'package:lineup_desktop/app/lineup_controller.dart';
 import 'package:lineup_desktop/app/lineup_shell.dart';
+import 'package:lineup_desktop/platform/handheld_system_ui.dart';
 import 'package:lineup_desktop/channels/channel.dart';
 import 'package:lineup_desktop/channels/scheduler.dart';
 import 'package:lineup_desktop/guide/guide_controller.dart';
@@ -65,6 +66,424 @@ TransitionBuilder _playerCanvasBuilderFor(bool tv) =>
 
 void main() {
   tearDown(debugResetClearLogoCache);
+
+  group('handheld Player composition', () {
+    const configs = [
+      (Size(412, 915), 2.625),
+      (Size(360, 800), 3.0),
+      (Size(800, 1280), 2.0),
+      (Size(600, 960), 2.0),
+      (Size(690, 840), 2.6),
+      (Size(960, 600), 2.0),
+      (Size(1280, 800), 2.0),
+    ];
+    const scales = [1.0, 1.3, 2.0];
+    const audio = PlayerTrack(
+      id: 1,
+      type: PlayerTrackType.audio,
+      language: 'eng',
+      selected: true,
+    );
+    const secondAudio = PlayerTrack(
+      id: 2,
+      type: PlayerTrackType.audio,
+      language: 'fra',
+      selected: false,
+    );
+    const subtitle = PlayerTrack(
+      id: 3,
+      type: PlayerTrackType.subtitle,
+      language: 'eng',
+      selected: false,
+    );
+
+    void handheldTest(String name, WidgetTesterCallback callback) {
+      testWidgets(name, (tester) async {
+        debugDefaultTargetPlatformOverride = TargetPlatform.android;
+        try {
+          await callback(tester);
+        } finally {
+          debugDefaultTargetPlatformOverride = null;
+        }
+      });
+    }
+
+    for (final (size, dpr) in configs) {
+      for (final scale in scales) {
+        handheldTest(
+          '${size.width.toInt()}×${size.height.toInt()}@$dpr text $scale',
+          (tester) async {
+            final f = _Fixture(
+              PlayerState.playing,
+              channelCount: 12,
+              richProgram: true,
+              dvrControlsEnabled: true,
+              tracks: const [audio, secondAudio, subtitle],
+            );
+            f.native.capabilities = const PlayerCapabilities.unavailable();
+
+            tester.view
+              ..devicePixelRatio = dpr
+              ..physicalSize = size * dpr;
+            addTearDown(tester.view.reset);
+            final semantics = tester.ensureSemantics();
+
+            expect(await f.player.tune('channel'), isTrue);
+            f.native.emitState(PlayerState.playing);
+            f.player.showOsd();
+            await _pumpHandheldPlayer(tester, f, scale: scale);
+
+            if (size.height > size.width) {
+              final video = find.byKey(const Key('handheld-player-video'));
+              expect(tester.getSize(video).aspectRatio, closeTo(16 / 9, .01));
+              expect(find.byTooltip('Full screen'), findsNothing);
+              await _handheldPlayerTarget(
+                tester,
+                find.byTooltip('Minimize to Guide'),
+                'Minimize to Guide',
+              );
+              _expectUnbrokenPlayerWords(tester, find.text('CHANNELS'));
+              final content = find.byKey(
+                const PageStorageKey('handheld-player-content'),
+              );
+              final sleep = find.widgetWithText(OutlinedButton, 'Sleep');
+              await tester.ensureVisible(sleep);
+              await tester.pumpAndSettle();
+              await _handheldPlayerTarget(tester, sleep, 'Sleep');
+              await tester.tap(sleep);
+              await tester.pumpAndSettle();
+              final sheet = find.byKey(const Key('handheld-player-sheet'));
+              expect(
+                tester.getRect(sheet).height,
+                closeTo(size.height * .62, .01),
+              );
+              final done = find.widgetWithText(TextButton, 'Done');
+              await _handheldPlayerTarget(tester, done, 'Done');
+              await tester.tap(find.text('30 minutes'));
+              await tester.pumpAndSettle();
+              expect(f.player.sleepDuration, const Duration(minutes: 30));
+              expect(sheet, findsNothing);
+              final audioChip = find.widgetWithText(
+                OutlinedButton,
+                'Audio · English',
+              );
+              await tester.ensureVisible(audioChip);
+              await tester.pumpAndSettle();
+              await tester.tap(audioChip);
+              await tester.pumpAndSettle();
+              await tester.tap(find.text('Français'));
+              await tester.pump();
+              expect(f.native.selectedTracks, [(PlayerTrackType.audio, 2)]);
+              expect(
+                f.player.tracks.singleWhere((track) => track.selected).id,
+                1,
+              );
+              f.native.emitTracks(const [
+                PlayerTrack(
+                  id: 1,
+                  type: PlayerTrackType.audio,
+                  language: 'eng',
+                  selected: false,
+                ),
+                PlayerTrack(
+                  id: 2,
+                  type: PlayerTrackType.audio,
+                  language: 'fra',
+                  selected: true,
+                ),
+                subtitle,
+              ]);
+              await tester.pumpAndSettle();
+              expect(
+                f.player.tracks.singleWhere((track) => track.selected).id,
+                2,
+              );
+              await tester.tap(done);
+              await tester.pumpAndSettle();
+              final scroll = find.descendant(
+                of: content,
+                matching: find.byType(Scrollable),
+              );
+              final row = find.textContaining('Channel 1 ·').last;
+              await tester.scrollUntilVisible(
+                row.hitTestable(),
+                100,
+                scrollable: scroll,
+              );
+              _expectUnbrokenPlayerWords(tester, row);
+              await tester.tap(row);
+              await tester.pumpAndSettle();
+              expect(f.player.currentChannel?.id, 'channel-1');
+            } else {
+              expect(
+                find.byKey(const Key('handheld-player-video')),
+                findsNothing,
+              );
+              final pause = find.byTooltip('Pause');
+              await _handheldPlayerTarget(tester, pause, 'Pause');
+              expect(find.byTooltip('Full screen'), findsNothing);
+              f.player.closeOverlay();
+              await tester.pumpAndSettle();
+              await tester.tapAt(Offset(size.width / 2, 40));
+              await tester.pumpAndSettle();
+              expect(pause, findsOneWidget);
+              await tester.tapAt(Offset(size.width / 2, 40));
+              await tester.pumpAndSettle();
+              expect(pause, findsNothing);
+              f.player.showMiniGuide();
+              await tester.pumpAndSettle();
+              expect(find.text('Mini Guide'), findsOneWidget);
+              expect(find.textContaining('Enter Tune'), findsNothing);
+              final next = find.byTooltip('Next channel').last;
+              await _handheldPlayerTarget(tester, next, 'Next channel');
+              final selected = f.player.miniGuideChannelId;
+              await tester.ensureVisible(next);
+              await tester.tap(next);
+              await tester.pumpAndSettle();
+              expect(f.player.miniGuideChannelId, isNot(selected));
+            }
+            expect(tester.takeException(), isNull);
+            await tester.pumpWidget(const SizedBox.shrink());
+            semantics.dispose();
+            f.dispose();
+          },
+        );
+      }
+    }
+
+    handheldTest(
+      'rotation keeps the surface, sheet, and scroll position including top',
+      (tester) async {
+        final f = _Fixture(
+          PlayerState.playing,
+          channelCount: 12,
+          tracks: const [audio, subtitle],
+        );
+
+        final portrait = const Size(412, 915);
+        final landscape = const Size(800, 360);
+        tester.view
+          ..devicePixelRatio = 1
+          ..physicalSize = portrait;
+        addTearDown(tester.view.reset);
+        await _pumpHandheldPlayer(tester, f);
+        final native = tester.state(find.byType(NativeVideoSurface));
+        final content = find.byKey(
+          const PageStorageKey('handheld-player-content'),
+        );
+        final scroll = find.descendant(
+          of: content,
+          matching: find.byType(Scrollable),
+        );
+        double offset() =>
+            tester.state<ScrollableState>(scroll).position.pixels;
+
+        Future<void> rotate(Size size) async {
+          tester.view.physicalSize = size;
+          await tester.pumpAndSettle();
+          expect(tester.state(find.byType(NativeVideoSurface)), same(native));
+        }
+
+        f.player.showTracks(PlayerTrackType.audio);
+        await tester.pumpAndSettle();
+        expect(find.byKey(const Key('handheld-player-sheet')), findsOneWidget);
+        await rotate(landscape);
+        expect(find.byKey(const Key('handheld-player-sheet')), findsNothing);
+        expect(f.player.overlay, PlayerOverlay.audioTracks);
+        await rotate(portrait);
+        expect(find.byKey(const Key('handheld-player-sheet')), findsOneWidget);
+        f.player.closeOverlay();
+        await tester.pumpAndSettle();
+        expect(offset(), 0);
+        await tester.drag(content, const Offset(0, -350));
+        await tester.pumpAndSettle();
+        final scrolled = offset();
+        expect(scrolled, greaterThan(0));
+        await rotate(landscape);
+        await rotate(portrait);
+        expect(offset(), scrolled);
+        expect(
+          f.native.videoRects.any((r) => r.width == 0 || r.height == 0),
+          isFalse,
+        );
+        expect(
+          f.native.videoRects.map((r) => r.width),
+          containsAllInOrder([412, 800, 412]),
+        );
+        expect(f.native.loadCalls, 0);
+        await tester.pumpWidget(const SizedBox.shrink());
+        f.dispose();
+      },
+    );
+
+    handheldTest(
+      'portrait stopped state and minimize use existing recovery paths',
+      (tester) async {
+        final f = _Fixture(
+          PlayerState.stopped,
+          failLoad: true,
+          channelCount: 2,
+        );
+
+        tester.view
+          ..devicePixelRatio = 1
+          ..physicalSize = const Size(360, 800);
+        addTearDown(tester.view.reset);
+        var minimized = false;
+        await _pumpHandheldPlayer(
+          tester,
+          f,
+          scale: 2,
+          onGuide: () => minimized = true,
+        );
+        expect(find.text('Playback stopped'), findsOneWidget);
+        expect(find.byType(NativeVideoSurface), findsNothing);
+        expect(await f.player.tune('channel'), isFalse);
+        await tester.pumpAndSettle();
+        final retry = find.widgetWithText(FilledButton, 'Retry');
+        await tester.ensureVisible(retry);
+        await tester.pumpAndSettle();
+        await tester.tap(retry);
+        await tester.pumpAndSettle();
+        expect(f.native.loadCalls, 2);
+        await tester.tap(find.byTooltip('Minimize to Guide'));
+        expect(minimized, isTrue);
+        expect(f.player.overlay, PlayerOverlay.fullGuide);
+        expect(tester.takeException(), isNull);
+        await tester.pumpWidget(const SizedBox.shrink());
+        f.dispose();
+      },
+    );
+
+    for (final mode in [
+      PlayerFullscreenMode.systemBars,
+      PlayerFullscreenMode.fixed,
+    ]) {
+      handheldTest('Android Back and phone orientation with $mode', (
+        tester,
+      ) async {
+        final f = _Fixture(PlayerState.playing);
+        final player = f.native
+          ..capabilities = PlayerCapabilities(
+            displayMatching: false,
+            fullscreen: mode,
+          );
+        tester.view
+          ..devicePixelRatio = 1
+          ..physicalSize = const Size(412, 915);
+        addTearDown(tester.view.reset);
+        await tester.pumpWidget(
+          MaterialApp(
+            theme: LineupTheme.forName(
+              LineupThemeName.emberSteel,
+              formFactor: FormFactor.handheld,
+            ),
+            builder: (context, child) => DeviceProfileScope(
+              profile: _handheldPlayerProfile,
+              child: LineupCanvas(child: child!),
+            ),
+            home: LineupShell(
+              player: player,
+              controller: f.lineup,
+              profile: _handheldPlayerProfile,
+              initialMediaPath: 'file:///fixture.mp4',
+            ),
+          ),
+        );
+        await tester.pump();
+        player.emitState(PlayerState.playing);
+        await tester.pumpAndSettle();
+        final view = find.byType(PlayerView);
+        final coordinator = tester.widget<PlayerView>(view).controller;
+        player.emitFullscreen(true);
+        coordinator.showSleepTimer();
+        await tester.pumpAndSettle();
+        final policy = tester.widget<HandheldSystemUi>(
+          find.byType(HandheldSystemUi),
+        );
+        final canToggle = mode != PlayerFullscreenMode.fixed;
+        expect(policy.fullscreen, canToggle);
+        Future<void> back() async {
+          await tester.binding.handlePopRoute();
+          await tester.pumpAndSettle();
+        }
+
+        await back();
+        expect(coordinator.sleepPickerOpen, isFalse);
+        expect(coordinator.fullscreen, isTrue);
+        coordinator.showMiniGuide();
+        await tester.pumpAndSettle();
+        await back();
+        expect(coordinator.overlay, PlayerOverlay.osd);
+        expect(coordinator.fullscreen, isTrue);
+        if (canToggle) {
+          await back();
+          expect(coordinator.fullscreen, isFalse);
+          expect(view, findsOneWidget);
+          expect(player.fullscreenValues, [false]);
+        }
+        await back();
+        expect(view, findsNothing);
+        if (!canToggle) {
+          expect(coordinator.fullscreen, isTrue);
+          expect(player.fullscreenValues, isEmpty);
+        }
+        await tester.pumpWidget(const SizedBox.shrink());
+        f.dispose();
+      });
+    }
+
+    handheldTest('portrait title keeps a long word together at text 2.0', (
+      tester,
+    ) async {
+      const title = 'Broadcasting Tonight';
+      final f = _Fixture(
+        PlayerState.playing,
+        richItemOverride: const ChannelItem(
+          id: 'broadcast',
+          title: title,
+          duration: Duration(hours: 24),
+        ),
+      );
+      tester.view
+        ..devicePixelRatio = 1
+        ..physicalSize = const Size(412, 915);
+      addTearDown(tester.view.reset);
+      expect(await f.player.tune('channel'), isTrue);
+      await _pumpHandheldPlayer(tester, f, scale: 2);
+      _expectUnbrokenPlayerWords(tester, find.text(title).first);
+      await tester.pumpWidget(const SizedBox.shrink());
+      f.dispose();
+    });
+
+    handheldTest(
+      'system-bars capability enables the portrait fullscreen action',
+      (tester) async {
+        final f = _Fixture(PlayerState.playing);
+
+        tester.view
+          ..devicePixelRatio = 1
+          ..physicalSize = const Size(412, 915);
+        addTearDown(tester.view.reset);
+        f.native.capabilities = const PlayerCapabilities(
+          displayMatching: false,
+          fullscreen: PlayerFullscreenMode.systemBars,
+        );
+        await _pumpHandheldPlayer(tester, f);
+        final fullscreen = find.byTooltip('Full screen');
+        final semantics = tester.ensureSemantics();
+
+        await _handheldPlayerTarget(tester, fullscreen, 'Full screen');
+        await tester.tap(fullscreen);
+        await tester.pumpAndSettle();
+        expect(f.native.fullscreenValues, [true]);
+        expect(find.byTooltip('Exit full screen'), findsOneWidget);
+        await tester.pumpWidget(const SizedBox.shrink());
+        semantics.dispose();
+        f.dispose();
+      },
+    );
+  });
 
   testWidgets(
     'surface subtitles stay above native video and can be hidden for Settings',
@@ -2596,6 +3015,7 @@ void main() {
     final previousPlatform = debugDefaultTargetPlatformOverride;
     debugDefaultTargetPlatformOverride = TargetPlatform.android;
     final fixture = _Fixture(PlayerState.playing, dvrControlsEnabled: true);
+    fixture.native.capabilities = const PlayerCapabilities.unavailable();
     try {
       fixture.player.showOsd();
       await tester.pumpWidget(
@@ -8942,6 +9362,93 @@ void main() {
   );
 }
 
+const _handheldPlayerProfile = DeviceProfile(
+  host: TargetPlatform.android,
+  formFactor: FormFactor.handheld,
+);
+
+Future<void> _pumpHandheldPlayer(
+  WidgetTester tester,
+  _Fixture fixture, {
+  double scale = 1,
+  VoidCallback? onGuide,
+}) async {
+  await tester.pumpWidget(
+    MaterialApp(
+      theme: LineupTheme.forName(
+        LineupThemeName.emberSteel,
+        formFactor: FormFactor.handheld,
+      ),
+      builder: (context, child) => DeviceProfileScope(
+        profile: _handheldPlayerProfile,
+        child: MediaQuery(
+          data: MediaQuery.of(context)
+              .copyWith(textScaler: TextScaler.linear(scale)),
+          child: LineupCanvas(child: child!),
+        ),
+      ),
+      home: PlayerView(controller: fixture.player, openGuide: onGuide ?? () {}),
+    ),
+  );
+  await tester.pumpAndSettle();
+}
+
+Future<void> _handheldPlayerTarget(
+  WidgetTester tester,
+  Finder target,
+  String label,
+) async {
+  await tester.ensureVisible(target);
+  await tester.pumpAndSettle();
+  expect(target.hitTestable(), findsOneWidget);
+  final rect = tester.getRect(target);
+  expect(rect.width, greaterThanOrEqualTo(47.99), reason: label);
+  expect(rect.height, greaterThanOrEqualTo(47.99), reason: label);
+  final nodes = find.semantics
+      .byPredicate(
+        (node) =>
+            !node.isInvisible &&
+            !node.isMergedIntoParent &&
+            (node.label == label || node.getSemanticsData().tooltip == label),
+      )
+      .evaluate();
+  expect(nodes, hasLength(1), reason: label);
+  final node = nodes.single;
+  expect(
+    node.getSemanticsData().hasAction(SemanticsAction.tap),
+    isTrue,
+    reason: label,
+  );
+  var bounds = node.rect;
+  for (
+    SemanticsNode? current = node;
+    current != null;
+    current = current.parent
+  ) {
+    if (current.transform case final transform?) {
+      bounds = MatrixUtils.transformRect(transform, bounds);
+    }
+  }
+  expect(bounds.width, greaterThanOrEqualTo(47.99), reason: label);
+  expect(bounds.height, greaterThanOrEqualTo(47.99), reason: label);
+}
+
+void _expectUnbrokenPlayerWords(WidgetTester tester, Finder text) {
+  final paragraph = tester.renderObject<RenderParagraph>(text);
+  for (final word in RegExp(
+    r'[^\s-]+',
+  ).allMatches(paragraph.text.toPlainText())) {
+    final boxes = paragraph.getBoxesForSelection(
+      TextSelection(baseOffset: word.start, extentOffset: word.end),
+    );
+    expect(
+      boxes.map((box) => box.bottom).toSet(),
+      hasLength(1),
+      reason: word.group(0),
+    );
+  }
+}
+
 class _Fixture {
   _Fixture(
     PlayerState state, {
@@ -9394,7 +9901,9 @@ class _Native implements NativePlayer {
   @override
   bool fullscreen = false;
   @override
-  PlayerCapabilities capabilities = const PlayerCapabilities.unavailable();
+  PlayerCapabilities capabilities = PlayerCapabilities.forHost(
+    desktopProfile.host,
+  );
   final _fullscreenChanges = StreamController<bool>.broadcast(sync: true);
   @override
   Stream<bool> get fullscreenChanges => _fullscreenChanges.stream;

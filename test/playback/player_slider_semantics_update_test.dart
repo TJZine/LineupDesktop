@@ -613,6 +613,7 @@ class _Fixture {
   }
   final lineup = _Lineup();
   final native = FakeNativePlayer(
+    capabilities: PlayerCapabilities.forHost(desktopProfile.host),
     initialStatus: const PlayerStatus(
       state: PlayerState.playing,
       message: 'Playing',

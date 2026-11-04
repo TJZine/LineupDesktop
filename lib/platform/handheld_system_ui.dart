@@ -15,6 +15,7 @@ class HandheldSystemUiPolicy {
     required this.multiWindow,
     required this.playerVisible,
     required this.osdVisible,
+    this.fullscreen = false,
   });
 
   final Size displaySize;
@@ -22,6 +23,7 @@ class HandheldSystemUiPolicy {
   final bool? multiWindow;
   final bool playerVisible;
   final bool osdVisible;
+  final bool fullscreen;
 
   List<DeviceOrientation> get orientations {
     if (multiWindow != false ||
@@ -30,13 +32,12 @@ class HandheldSystemUiPolicy {
         displaySize.shortestSide >= 600) {
       return const [];
     }
-    return playerVisible
-        ? const [
-            DeviceOrientation.portraitUp,
-            DeviceOrientation.landscapeLeft,
-            DeviceOrientation.landscapeRight,
-          ]
-        : const [DeviceOrientation.portraitUp];
+    if (!playerVisible) return const [DeviceOrientation.portraitUp];
+    return [
+      if (!fullscreen) DeviceOrientation.portraitUp,
+      DeviceOrientation.landscapeLeft,
+      DeviceOrientation.landscapeRight,
+    ];
   }
 
   SystemUiMode get mode =>
@@ -52,11 +53,13 @@ class HandheldSystemUi extends StatefulWidget {
     required this.playerVisible,
     required this.osdVisible,
     required this.child,
+    this.fullscreen = false,
     super.key,
   });
 
   final bool playerVisible;
   final bool osdVisible;
+  final bool fullscreen;
   final Widget child;
 
   @override
@@ -163,6 +166,7 @@ class _HandheldSystemUiState extends State<HandheldSystemUi>
         multiWindow: _multiWindow,
         playerVisible: widget.playerVisible,
         osdVisible: widget.osdVisible,
+        fullscreen: widget.fullscreen,
       ),
     );
     return AnnotatedRegion<SystemUiOverlayStyle>(

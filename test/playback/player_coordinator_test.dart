@@ -1563,6 +1563,85 @@ void main() {
     }
   });
 
+  group('handheld transient pauses', () {
+    for (final dvr in [false, true]) {
+      for (final userPause in [false, true]) {
+        test('resume with DVR $dvr and user pause $userPause', () async {
+          final player = _EventPlayer(sync: true);
+          final fixture = _ContinuationFixture(
+            player: player,
+            isHandheld: true,
+            lineupController: _TestLineup(
+              scenario: LineupScenario(
+                settings: LineupSettings(dvrControlsEnabled: dvr),
+              ),
+            ),
+          );
+          addTearDown(fixture.close);
+          final coordinator = fixture.coordinator;
+          expect(fixture.lineup.settings.dvrControlsEnabled, dvr);
+          expect(await coordinator.tune('channel-0'), isTrue);
+          final generation = player.loadGenerations.last;
+          player.emitStatus(PlayerState.playing, generation: generation);
+          if (userPause) await coordinator.pause();
+          player.emitStatus(PlayerState.paused, generation: generation);
+          fixture.now = fixture.now.add(const Duration(seconds: 145));
+          await coordinator.togglePlayback();
+          if (userPause) {
+            expect(player.loads, hasLength(1));
+            expect(player.plays, 1);
+          } else {
+            expect(player.loads, hasLength(2));
+            expect(player.plays, 0);
+            expect(fixture.lineup.lastPlaybackItemId, 'short-1');
+            expect(player.loadStartPositions.last, const Duration(seconds: 25));
+          }
+        });
+      }
+    }
+
+    test(
+      'system bars only change fullscreen state on native observation',
+      () async {
+        final player = _PendingFullscreenPlayer()
+          ..capabilities = const PlayerCapabilities(
+            displayMatching: false,
+            fullscreen: PlayerFullscreenMode.systemBars,
+          );
+        final lineup = _TestLineup();
+        final guide = _ContinuationGuide(lineup: lineup, clock: DateTime.now);
+        final coordinator = PlayerCoordinator(
+          player: player,
+          lineup: lineup,
+          guide: guide,
+        );
+        addTearDown(() async {
+          coordinator.dispose();
+          guide.dispose();
+          lineup.dispose();
+          await player.dispose();
+        });
+        final enter = coordinator.toggleFullscreen();
+        await player.started.future;
+        player.reply.complete();
+        await enter;
+        expect(coordinator.fullscreen, isFalse);
+        player.emitFullscreen(true);
+        expect(coordinator.fullscreen, isTrue);
+        expect(player.fullscreenValues, [true]);
+      },
+    );
+
+    test('fixed fullscreen capability suppresses a command', () async {
+      final player = _EventPlayer()
+        ..capabilities = const PlayerCapabilities.unavailable();
+      final fixture = _ContinuationFixture(player: player);
+      addTearDown(fixture.close);
+      await fixture.coordinator.toggleFullscreen();
+      expect(player.fullscreenValues, isEmpty);
+    });
+  });
+
   group('handheld visible without focus lifecycle', () {
     test('inactive playing is inert; paused to inactive retunes the current schedule once', () async {
       final f = _ContinuationFixture(isHandheld: true);
@@ -10299,6 +10378,7 @@ class _BlockingLineup extends _TestLineup {
 class _Player extends FakeNativePlayer {
   _Player()
     : super(
+        capabilities: PlayerCapabilities.forHost(TargetPlatform.windows),
         initialStatus: const PlayerStatus(
           state: PlayerState.playing,
           message: 'Playing',

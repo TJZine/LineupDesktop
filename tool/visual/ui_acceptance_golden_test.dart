@@ -163,7 +163,8 @@ UiFixture _readyFixture({
   PlayerStatus? playerState,
   bool useWordmarkArtwork = false,
 }) {
-  final player = FixturePlayer();
+  final player = FixturePlayer()
+    ..capabilities = PlayerCapabilities.forHost(desktopProfile.host);
   if (playerState != null) {
     player.emit(
       playerState,
