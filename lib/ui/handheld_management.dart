@@ -5,6 +5,7 @@ import 'package:flutter/rendering.dart';
 import 'package:lineup_desktop/platform/device_profile.dart';
 
 import 'app_theme.dart';
+import 'handheld_text.dart';
 import 'lineup_canvas.dart';
 import 'lineup_controls.dart';
 
@@ -68,119 +69,6 @@ TextStyle _controlStyle(BuildContext context, {Color? color}) =>
       color: color ?? LineupTheme.of(context).primaryText,
     );
 
-/// A page-bar title that only breaks between words.
-class _HandheldWordText extends StatelessWidget {
-  const _HandheldWordText(
-    this.text, {
-    required this.style,
-    this.maxLines,
-    this.fitOverwideWords = false,
-    this.breakAfter,
-  });
-
-  final String text;
-  final TextStyle style;
-  final int? maxLines;
-  final bool fitOverwideWords;
-  final Pattern? breakAfter;
-
-  double _width(
-    BuildContext context,
-    String value, {
-    TextScaler? textScaler,
-    TextStyle? textStyle,
-  }) {
-    final painter = TextPainter(
-      text: TextSpan(
-        text: value,
-        style: DefaultTextStyle.of(context).style.merge(textStyle ?? style),
-      ),
-      textDirection: Directionality.of(context),
-      textScaler: textScaler ?? MediaQuery.textScalerOf(context),
-      maxLines: 1,
-    )..layout();
-    final width = painter.width;
-    painter.dispose();
-    return width;
-  }
-
-  TextStyle _styleForWord(BuildContext context, String word, double maxWidth) {
-    final requested = MediaQuery.textScalerOf(context);
-    if (!fitOverwideWords || style.fontSize == null) return style;
-    if (_width(context, word, textScaler: requested) <= maxWidth ||
-        _width(context, word, textScaler: TextScaler.noScaling) > maxWidth) {
-      return style;
-    }
-
-    var floor = 0.0;
-    var ceiling = 1.0;
-    for (var step = 0; step < 16; step++) {
-      final middle = (floor + ceiling) / 2;
-      if (requested.scale(style.fontSize! * middle) >= style.fontSize!) {
-        ceiling = middle;
-      } else {
-        floor = middle;
-      }
-    }
-    var low = ceiling;
-    var high = 1.0;
-    for (var step = 0; step < 16; step++) {
-      final middle = (low + high) / 2;
-      final wordStyle = style.copyWith(fontSize: style.fontSize! * middle);
-      if (_width(context, word, textScaler: requested, textStyle: wordStyle) <=
-          maxWidth - 1) {
-        low = middle;
-      } else {
-        high = middle;
-      }
-    }
-    return style.copyWith(fontSize: style.fontSize! * low);
-  }
-
-  @override
-  Widget build(BuildContext context) => LayoutBuilder(
-    builder: (context, constraints) {
-      final words = text.trim().isEmpty
-          ? const <String>[]
-          : text.trim().split(RegExp(r'\s+'));
-      final spans = <InlineSpan>[];
-      for (var index = 0; index < words.length; index++) {
-        if (index > 0) spans.add(TextSpan(text: ' ', style: style));
-        final word = words[index];
-        var start = 0;
-        for (final match in breakAfter?.allMatches(word) ?? const <Match>[]) {
-          if (match.end <= start || match.end == word.length) continue;
-          final part = word.substring(start, match.end);
-          spans.add(
-            TextSpan(
-              text: part,
-              style: _styleForWord(context, part, constraints.maxWidth),
-            ),
-          );
-          // Keep the separator visible with its preceding text.
-          spans.add(const TextSpan(text: '\u200b'));
-          start = match.end;
-        }
-        final part = word.substring(start);
-        spans.add(
-          TextSpan(
-            text: part,
-            style: _styleForWord(context, part, constraints.maxWidth),
-          ),
-        );
-      }
-      return Text.rich(
-        TextSpan(style: style, children: spans),
-        maxLines: maxLines,
-        softWrap: true,
-        overflow: maxLines == null
-            ? TextOverflow.visible
-            : TextOverflow.ellipsis,
-      );
-    },
-  );
-}
-
 /// B1 page bar for stacked management surfaces.
 class HandheldPageBar extends StatelessWidget {
   const HandheldPageBar({
@@ -189,7 +77,7 @@ class HandheldPageBar extends StatelessWidget {
     this.backTooltip = 'Back',
     this.backIcon = Icons.arrow_back,
     this.actions = const [],
-    this.leading,
+    this.backFocusNode,
     this.subtitle,
     this.tabRoot = false,
     this.titleBreakAfter,
@@ -202,7 +90,7 @@ class HandheldPageBar extends StatelessWidget {
   final String backTooltip;
   final IconData backIcon;
   final List<Widget> actions;
-  final Widget? leading;
+  final FocusNode? backFocusNode;
   final bool tabRoot;
 
   /// Optional separators after which the visual title may wrap.
@@ -213,6 +101,7 @@ class HandheldPageBar extends StatelessWidget {
     return LineupTouchTarget(
       onPressed: onBack,
       child: IconButton(
+        focusNode: backFocusNode,
         tooltip: backTooltip,
         onPressed: onBack,
         padding: EdgeInsets.zero,
@@ -236,7 +125,7 @@ class HandheldPageBar extends StatelessWidget {
         constraints: const BoxConstraints(minHeight: 72),
         child: Padding(
           padding: EdgeInsets.fromLTRB(
-            onBack == null && leading == null && !tabRoot ? handheldGutter : 4,
+            onBack == null && !tabRoot ? handheldGutter : 4,
             6,
             4,
             6,
@@ -245,7 +134,7 @@ class HandheldPageBar extends StatelessWidget {
             crossAxisAlignment: CrossAxisAlignment.center,
             children: [
               if (onBack != null) _backButton(context),
-              if (tabRoot && leading == null)
+              if (tabRoot)
                 Padding(
                   padding: const EdgeInsets.symmetric(horizontal: 8),
                   child: Image.asset(
@@ -255,7 +144,6 @@ class HandheldPageBar extends StatelessWidget {
                     excludeFromSemantics: true,
                   ),
                 ),
-              ?leading,
               Expanded(
                 child: Semantics(
                   header: true,
@@ -267,11 +155,13 @@ class HandheldPageBar extends StatelessWidget {
                     children: [
                       KeyedSubtree(
                         key: const ValueKey('handheld-page-bar-title'),
-                        child: _HandheldWordText(
+                        child: HandheldWordText(
                           title,
                           style: titleStyle,
                           maxLines: 2,
-                          fitOverwideWords: true,
+                          unfitWord: titleBreakAfter == null
+                              ? HandheldUnfitWord.ellipsis
+                              : HandheldUnfitWord.lastResortBreak,
                           breakAfter: titleBreakAfter,
                         ),
                       ),
@@ -407,22 +297,16 @@ class HandheldStepProgress extends StatelessWidget {
   const HandheldStepProgress({
     required this.step,
     required this.label,
-    this.total = 3,
-    this.complete = false,
     super.key,
   });
 
   final int step;
-  final int total;
   final String label;
-  final bool complete;
 
   @override
   Widget build(BuildContext context) {
     final roles = LineupTheme.of(context);
-    final description = complete
-        ? 'Setup complete'
-        : 'Step $step of $total, $label';
+    final description = 'Step $step of 3, $label';
     return Semantics(
       label: description,
       container: true,
@@ -438,7 +322,7 @@ class HandheldStepProgress extends StatelessWidget {
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
               Text(
-                complete ? 'Setup complete' : 'Step $step of $total · $label',
+                'Step $step of 3 · $label',
                 style: LineupTypography.small.copyWith(
                   color: roles.secondaryText,
                   fontSize: 15,
@@ -447,13 +331,13 @@ class HandheldStepProgress extends StatelessWidget {
               const SizedBox(height: 8),
               Row(
                 children: [
-                  for (var index = 1; index <= total; index++) ...[
+                  for (var index = 1; index <= 3; index++) ...[
                     if (index > 1) const SizedBox(width: 6),
                     Expanded(
                       child: Container(
                         height: 4,
                         decoration: BoxDecoration(
-                          color: complete || index <= step
+                          color: index <= step
                               ? roles.progressFill
                               : roles.progressTrack,
                           borderRadius: BorderRadius.circular(2),
@@ -496,7 +380,7 @@ class HandheldNumberBlock extends StatelessWidget {
               crossAxisAlignment: CrossAxisAlignment.start,
               mainAxisSize: MainAxisSize.min,
               children: [
-                Text(
+                HandheldWordText(
                   '$number',
                   style: LineupTypography.title(22, 90).copyWith(
                     color: roles.primaryText,
@@ -504,8 +388,9 @@ class HandheldNumberBlock extends StatelessWidget {
                   ),
                 ),
                 if (changes)
-                  Text(
+                  HandheldWordText(
                     '→ $next',
+                    unfitWord: HandheldUnfitWord.lastResortBreak,
                     style: LineupTypography.small.copyWith(
                       color: roles.progressFill,
                       fontSize: 14,
@@ -894,19 +779,27 @@ class HandheldStackedRow extends StatelessWidget {
       crossAxisAlignment: CrossAxisAlignment.start,
       mainAxisSize: MainAxisSize.min,
       children: [
-        _HandheldWordText(name, style: nameStyle, fitOverwideWords: true),
+        HandheldWordText(
+          name,
+          style: nameStyle,
+          unfitWord: HandheldUnfitWord.lastResortBreak,
+        ),
         if (facts.isNotEmpty) ...[
           const SizedBox(height: 2),
           for (final line in facts.split('\n'))
-            _HandheldWordText(line, style: factsStyle, fitOverwideWords: true),
+            HandheldWordText(
+              line,
+              style: factsStyle,
+              unfitWord: HandheldUnfitWord.lastResortBreak,
+            ),
         ],
         if (warning != null)
           Padding(
             padding: const EdgeInsets.only(top: 4),
-            child: _HandheldWordText(
+            child: HandheldWordText(
               warning!,
               style: warningStyle,
-              fitOverwideWords: true,
+              unfitWord: HandheldUnfitWord.lastResortBreak,
             ),
           ),
         if (badge != null) ...[const SizedBox(height: 6), badge!],
@@ -996,7 +889,6 @@ class HandheldFilterChip extends StatelessWidget {
     this.swatch,
     this.section,
     this.sectionCount = 3,
-    this.hideWhenZero = false,
     super.key,
   });
 
@@ -1007,11 +899,9 @@ class HandheldFilterChip extends StatelessWidget {
   final Color? swatch;
   final int? section;
   final int sectionCount;
-  final bool hideWhenZero;
 
   @override
   Widget build(BuildContext context) {
-    if (hideWhenZero && count == 0) return const SizedBox.shrink();
     final roles = LineupTheme.of(context);
     final text = count == null ? label : '$label ($count)';
     final sectionText = section == null
@@ -1104,17 +994,26 @@ Future<T?> showHandheldChoiceSheet<T>(
   useSafeArea: true,
   showDragHandle: false,
   backgroundColor: LineupTheme.of(context).elevatedSurface,
-  constraints: BoxConstraints(
-    maxHeight: MediaQuery.sizeOf(context).height * .9,
-  ),
+  // Preserve the sheet's full width instead of Material 3's default cap.
+  constraints: const BoxConstraints(),
   shape: const RoundedRectangleBorder(
     borderRadius: BorderRadius.vertical(top: Radius.circular(20)),
   ),
-  builder: (context) => HandheldChoiceSheet<T>(
-    title: title,
-    choices: choices,
-    selected: selected,
-    showSelection: showSelection,
+  builder: (context) => ConstrainedBox(
+    constraints: BoxConstraints(
+      maxHeight: MediaQuery.sizeOf(context).height * .9,
+    ),
+    child: Padding(
+      padding: EdgeInsets.only(
+        bottom: MediaQuery.viewPaddingOf(context).bottom,
+      ),
+      child: HandheldChoiceSheet<T>(
+        title: title,
+        choices: choices,
+        selected: selected,
+        showSelection: showSelection,
+      ),
+    ),
   ),
 );
 
@@ -1169,14 +1068,13 @@ class HandheldChoiceSheet<T> extends StatelessWidget {
                   alignment: Alignment.centerLeft,
                   child: MediaQuery.withClampedTextScaling(
                     maxScaleFactor: 1.3,
-                    child: _HandheldWordText(
+                    child: HandheldWordText(
                       title,
                       style: LineupTypography.title(
                         24,
                         90,
                       ).copyWith(color: roles.primaryText),
                       maxLines: 2,
-                      fitOverwideWords: true,
                     ),
                   ),
                 ),
@@ -1237,12 +1135,12 @@ class _HandheldChoiceRow<T> extends StatelessWidget {
                     crossAxisAlignment: CrossAxisAlignment.start,
                     mainAxisSize: MainAxisSize.min,
                     children: [
-                      _HandheldWordText(
+                      HandheldWordText(
                         choice.label,
                         style: _controlStyle(context, color: color),
                       ),
                       if (choice.detail != null)
-                        _HandheldWordText(
+                        HandheldWordText(
                           choice.detail!,
                           style: LineupTypography.small.copyWith(
                             color: roles.secondaryText,

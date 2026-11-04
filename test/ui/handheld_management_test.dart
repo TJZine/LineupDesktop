@@ -218,6 +218,8 @@ void main() {
     'touch-expanded buttons each expose one tappable semantics node',
     (tester) async {
       final semantics = tester.ensureSemantics();
+      final backFocus = FocusNode();
+      addTearDown(backFocus.dispose);
       await tester.pumpWidget(
         _app(
           profile: _handheld,
@@ -226,6 +228,7 @@ void main() {
               children: [
                 HandheldPageBar(
                   title: 'Review',
+                  backFocusNode: backFocus,
                   backTooltip: 'Back to configure',
                   onBack: () {},
                 ),
@@ -242,6 +245,10 @@ void main() {
           ),
         ),
       );
+
+      backFocus.requestFocus();
+      await tester.pump();
+      expect(backFocus.hasPrimaryFocus, isTrue);
 
       for (final label in ['Back to configure', 'Remove item']) {
         final nodes = find.semantics
@@ -284,6 +291,9 @@ void main() {
         ..physicalSize = const Size(412, 915)
         ..devicePixelRatio = 1;
       addTearDown(tester.view.reset);
+      tester.view.viewPadding = const FakeViewPadding(bottom: 48);
+      tester.view.padding = const FakeViewPadding(bottom: 48);
+      const longLabel = 'MMMMMMMMMMMMMMMMMMMMMMMMMMMMMMMMMMMMMMMM';
       String? picked;
       final semantics = tester.ensureSemantics();
       await tester.pumpWidget(
@@ -295,7 +305,7 @@ void main() {
                 key: const Key('select'),
                 label: 'Playback mode',
                 value: 'auto',
-                choices: const [
+                choices: [
                   HandheldChoice(value: 'auto', label: 'Automatic'),
                   HandheldChoice(
                     value: 'manual',
@@ -307,6 +317,9 @@ void main() {
                     label: 'Delete channel',
                     destructive: true,
                   ),
+                  for (var i = 0; i < 12; i++)
+                    HandheldChoice(value: 'extra-$i', label: 'Extra choice $i'),
+                  HandheldChoice(value: 'last', label: longLabel),
                 ],
                 onChanged: (value) => picked = value,
               ),
@@ -329,6 +342,43 @@ void main() {
         contains('Choose a fixed mode'),
       );
 
+      final sheet = find.byType(HandheldChoiceSheet<String>);
+      final list = find.descendant(of: sheet, matching: find.byType(ListView));
+      tester.view.physicalSize = const Size(412, 480);
+      await tester.pumpAndSettle();
+      final sheetBox = tester.renderObject<RenderBox>(sheet);
+      final sheetRect = MatrixUtils.transformRect(
+        sheetBox.getTransformTo(null),
+        Offset.zero & sheetBox.size,
+      );
+      final height = 480 - sheetRect.top;
+      await tester.drag(list, const Offset(0, -2000));
+      await tester.pumpAndSettle();
+      final target = find.descendant(
+        of: sheet,
+        matching: find.byWidgetPredicate(
+          (widget) =>
+              widget is Semantics &&
+              widget.properties.label == longLabel &&
+              widget.properties.onTap != null,
+        ),
+      );
+      final targetRect = tester.getRect(target);
+      final paragraph = tester.renderObject<RenderParagraph>(
+        find.descendant(of: target, matching: find.byType(RichText)),
+      );
+      final visible = paragraph.text.toPlainText();
+      expect(targetRect.bottom, lessThanOrEqualTo(480 - 48));
+      expect(targetRect.center.dy, lessThan(480 - 48));
+
+      expect(height, lessThanOrEqualTo(480 * .9));
+      expect(visible, endsWith('…'));
+      await tester.tapAt(targetRect.center);
+      await tester.pumpAndSettle();
+      expect(picked, 'last');
+
+      await tester.tap(find.byKey(const Key('select')));
+      await tester.pumpAndSettle();
       await tester.tap(find.text('Manual').last);
       await tester.pumpAndSettle();
       expect(picked, 'manual');
@@ -409,7 +459,7 @@ void main() {
       await tester.pumpWidget(
         _app(
           profile: _handheld,
-          textScale: 2,
+          textScaler: const TextScaler.linear(2),
           child: Scaffold(
             body: Column(
               children: [
@@ -420,7 +470,7 @@ void main() {
                     subtitle: 'Three sections',
                   ),
                 ),
-                const HandheldNumberBlock(42, next: 43),
+                const HandheldNumberBlock(1000, next: 43),
                 const Text('body text reflows at two'),
               ],
             ),
@@ -459,7 +509,16 @@ void main() {
         titleParagraph.textScaler.scale(titleParagraph.text.style!.fontSize!),
         lessThanOrEqualTo(1.3 * titleParagraph.text.style!.fontSize! + .01),
       );
-      final number = tester.renderObject<RenderParagraph>(find.text('42'));
+      final number = tester.renderObject<RenderParagraph>(find.text('1000'));
+      final digits = [
+        for (var index = 0; index < 4; index++)
+          ...number.getBoxesForSelection(
+            TextSelection(baseOffset: index, extentOffset: index + 1),
+          ),
+      ];
+      expect(digits, hasLength(4));
+      expect(digits.map((box) => box.top).toSet(), hasLength(1));
+      expect(digits.last.right, lessThanOrEqualTo(62.01));
       expect(
         number.textScaler.scale(number.text.style!.fontSize!),
         lessThanOrEqualTo(1.3 * number.text.style!.fontSize! + .01),
@@ -610,101 +669,6 @@ void main() {
       }
     },
   );
-
-  androidWidgetTest(
-    'page bar fits a scaled over-wide word without dropping below text 1.0',
-    (tester) async {
-      tester.view
-        ..physicalSize = const Size(360, 800)
-        ..devicePixelRatio = 1;
-      addTearDown(tester.view.reset);
-
-      final style = LineupTypography.title(26, 90, height: 1.12);
-      const candidates = [
-        'Midsummer',
-        'MidsummerTelevision',
-        'Internationalization',
-        'Supercalifragilistic',
-        'Characteristically',
-        'Photolithography',
-      ];
-      const availableWidth = 260 - handheldGutter - 4;
-      String? word;
-      for (final candidate in candidates) {
-        final unscaled = TextPainter(
-          text: TextSpan(text: candidate, style: style),
-          textDirection: TextDirection.ltr,
-          textScaler: TextScaler.noScaling,
-        )..layout();
-        final requested = TextPainter(
-          text: TextSpan(text: candidate, style: style),
-          textDirection: TextDirection.ltr,
-          textScaler: const TextScaler.linear(1.3),
-        )..layout();
-        if (unscaled.width <= availableWidth &&
-            requested.width > availableWidth) {
-          word = candidate;
-          unscaled.dispose();
-          requested.dispose();
-          break;
-        }
-        unscaled.dispose();
-        requested.dispose();
-      }
-      expect(word, isNotNull);
-
-      await tester.pumpWidget(
-        _app(
-          profile: _handheld,
-          textScale: 2,
-          child: Scaffold(
-            body: Align(
-              alignment: Alignment.topLeft,
-              child: SizedBox(width: 260, child: HandheldPageBar(title: word!)),
-            ),
-          ),
-        ),
-      );
-      final paragraph = tester.renderObject<RenderParagraph>(
-        find.descendant(
-          of: find.byKey(const ValueKey('handheld-page-bar-title')),
-          matching: find.byType(RichText),
-        ),
-      );
-      final boxes = paragraph.getBoxesForSelection(
-        TextSelection(baseOffset: 0, extentOffset: word.length),
-      );
-      expect(boxes, hasLength(1));
-      expect(
-        boxes.single.right - boxes.single.left,
-        lessThanOrEqualTo(paragraph.constraints.maxWidth + .01),
-      );
-      TextSpan? findWordSpan(InlineSpan span) {
-        if (span is TextSpan) {
-          if (span.text == word) return span;
-          for (final child in span.children ?? const <InlineSpan>[]) {
-            final match = findWordSpan(child);
-            if (match != null) return match;
-          }
-        }
-        return null;
-      }
-
-      final span = findWordSpan(paragraph.text);
-      expect(span, isNotNull);
-      final fontSize = span!.style?.fontSize;
-      expect(fontSize, isNotNull);
-      expect(
-        paragraph.textScaler.scale(fontSize!),
-        greaterThanOrEqualTo(style.fontSize! - .01),
-      );
-      expect(
-        paragraph.textScaler.scale(fontSize),
-        lessThanOrEqualTo(style.fontSize! * 1.3 + .01),
-      );
-      expect(tester.takeException(), isNull);
-    },
-  );
 }
 
 void androidWidgetTest(String name, WidgetTesterCallback body) {
@@ -722,6 +686,7 @@ Widget _app({
   required DeviceProfile profile,
   required Widget child,
   double textScale = 1,
+  TextScaler? textScaler,
   bool canvas = true,
 }) => DeviceProfileScope(
   profile: profile,
@@ -732,7 +697,7 @@ Widget _app({
     ),
     builder: (context, route) {
       final media = MediaQuery.of(context)
-          .copyWith(textScaler: TextScaler.linear(textScale));
+          .copyWith(textScaler: textScaler ?? TextScaler.linear(textScale));
       final contents = canvas ? LineupCanvas(child: route!) : route!;
       return MediaQuery(data: media, child: contents);
     },

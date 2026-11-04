@@ -7,10 +7,13 @@ import 'package:flutter/material.dart';
 import 'package:lineup_desktop/platform/device_profile.dart';
 
 import 'app_theme.dart';
+import 'handheld_management.dart';
+import 'handheld_text.dart';
 import 'lineup_canvas.dart';
 import 'lineup_focus.dart';
 import 'lineup_controls.dart';
 
+export 'handheld_text.dart' show HandheldWordText;
 export 'lineup_controls.dart';
 export 'lineup_focus.dart';
 export 'lineup_text_field_activation.dart';
@@ -44,92 +47,8 @@ class LineupHeading extends StatelessWidget {
     if (!DeviceProfile.of(context).isHandheld || (style.fontSize ?? 0) < 28) {
       return Text(text, style: style);
     }
-    final effectiveStyle = DefaultTextStyle.of(context).style.merge(style);
-    final scaler = MediaQuery.textScalerOf(context);
-    final direction = Directionality.of(context);
-    return LayoutBuilder(
-      builder: (context, constraints) {
-        double width(String value, TextScaler textScaler) {
-          final painter = TextPainter(
-            text: TextSpan(text: value, style: effectiveStyle),
-            textDirection: direction,
-            textScaler: textScaler,
-            maxLines: 1,
-          )..layout();
-          final result = painter.width;
-          painter.dispose();
-          return result;
-        }
-
-        TextScaler fit(String word) {
-          if (width(word, scaler) <= constraints.maxWidth ||
-              width(word, scaler) <= width(word, TextScaler.noScaling)) {
-            return scaler;
-          }
-          // Keep the role's text-1.0 floor, even when an exceptionally long
-          // unscaled word cannot fit. Never split or silently shrink below it.
-          if (width(word, TextScaler.noScaling) >= constraints.maxWidth) {
-            return TextScaler.noScaling;
-          }
-          var low = 0.0;
-          var high = 1.0;
-          for (var step = 0; step < 16; step++) {
-            final mid = (low + high) / 2;
-            if (width(word, _HeadingWordScaler(scaler, mid)) <=
-                constraints.maxWidth) {
-              low = mid;
-            } else {
-              high = mid;
-            }
-          }
-          return _HeadingWordScaler(scaler, low);
-        }
-
-        return Semantics(
-          label: text,
-          excludeSemantics: true,
-          child: Column(
-            mainAxisSize: MainAxisSize.min,
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              for (final line in text.split('\n'))
-                line.trim().isEmpty
-                    ? SizedBox(
-                        height:
-                            scaler.scale(effectiveStyle.fontSize!) *
-                            (effectiveStyle.height ?? 1),
-                      )
-                    : Wrap(
-                        textDirection: direction,
-                        spacing: width(' ', scaler),
-                        children: [
-                          for (final word in line.trim().split(RegExp(r'\s+')))
-                            Text(
-                              word,
-                              style: effectiveStyle,
-                              textScaler: fit(word),
-                              softWrap: false,
-                              overflow: TextOverflow.visible,
-                            ),
-                        ],
-                      ),
-            ],
-          ),
-        );
-      },
-    );
+    return HandheldWordText(text, style: style);
   }
-}
-
-class _HeadingWordScaler extends TextScaler {
-  const _HeadingWordScaler(this.requested, this.fraction);
-  final TextScaler requested;
-  final double fraction;
-  @override
-  double scale(double fontSize) =>
-      fontSize + (requested.scale(fontSize) - fontSize) * fraction;
-  @override
-  double get textScaleFactor => scale(14) / 14;
 }
 
 /// Shared shell geometry is expressed in canvas pixels; LineupCanvas scales it.
@@ -257,19 +176,24 @@ class LineupContentWidth extends StatelessWidget {
   final bool handheldContent;
 
   @override
-  Widget build(BuildContext context) => Padding(
-    padding: EdgeInsets.symmetric(
-      horizontal: handheldContent ? 18 : 48,
-      vertical: vertical,
-    ),
-    child: Align(
-      alignment: Alignment.topCenter,
-      child: ConstrainedBox(
-        constraints: BoxConstraints(maxWidth: handheldContent ? 840 : maxWidth),
-        child: SizedBox(width: double.infinity, child: child),
+  Widget build(BuildContext context) {
+    if (handheldContent) {
+      return Padding(
+        padding: EdgeInsets.symmetric(vertical: vertical),
+        child: HandheldColumnWidth(child: child),
+      );
+    }
+    return Padding(
+      padding: EdgeInsets.symmetric(horizontal: 48, vertical: vertical),
+      child: Align(
+        alignment: Alignment.topCenter,
+        child: ConstrainedBox(
+          constraints: BoxConstraints(maxWidth: maxWidth),
+          child: SizedBox(width: double.infinity, child: child),
+        ),
       ),
-    ),
-  );
+    );
+  }
 }
 
 class LineupNotice extends StatelessWidget {
