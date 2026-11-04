@@ -1053,35 +1053,54 @@ class _SettingsSection extends StatelessWidget {
   final String description;
   final List<Widget> children;
 
+  TextStyle? _titleStyle(BuildContext context) =>
+      Theme.of(context).textTheme.headlineMedium?.copyWith(
+        color: LineupTheme.of(context).primaryText,
+        fontSize: 44,
+        fontWeight: FontWeight.w600,
+        height: 1.08,
+      );
+
+  TextStyle? _descriptionStyle(BuildContext context) => Theme.of(context)
+      .textTheme
+      .bodyLarge
+      ?.copyWith(
+        color: LineupTheme.of(context).secondaryText,
+        fontSize: 18,
+        height: 1.5,
+      );
+
+  double naturalHeadingHeight(BuildContext context, double width) {
+    final defaultStyle = DefaultTextStyle.of(context).style;
+    double textHeight(String value, TextStyle? style) {
+      final painter = TextPainter(
+        text: TextSpan(text: value, style: defaultStyle.merge(style)),
+        textDirection: Directionality.of(context),
+        textScaler: MediaQuery.textScalerOf(context),
+      )..layout(maxWidth: width);
+      final height = painter.height;
+      painter.dispose();
+      return height;
+    }
+
+    return (title == null ? 0 : textHeight(title!, _titleStyle(context))) +
+        6 +
+        textHeight(description, _descriptionStyle(context)) +
+        trailingGap;
+  }
+
   @override
   Widget build(BuildContext context) {
-    final roles = LineupTheme.of(context);
-    final theme = Theme.of(context);
     return Column(
       crossAxisAlignment: CrossAxisAlignment.stretch,
       children: [
         if (title case final title?)
           Semantics(
             header: true,
-            child: Text(
-              title,
-              style: theme.textTheme.headlineMedium?.copyWith(
-                color: roles.primaryText,
-                fontSize: 44,
-                fontWeight: FontWeight.w600,
-                height: 1.08,
-              ),
-            ),
+            child: Text(title, style: _titleStyle(context)),
           ),
         SizedBox(height: 6),
-        Text(
-          description,
-          style: theme.textTheme.bodyLarge?.copyWith(
-            color: roles.secondaryText,
-            fontSize: 18,
-            height: 1.5,
-          ),
-        ),
+        Text(description, style: _descriptionStyle(context)),
         SizedBox(height: trailingGap),
         ...children,
       ],

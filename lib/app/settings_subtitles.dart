@@ -334,18 +334,27 @@ extension _SubtitleSettingsPage on SettingsViewState {
       child: LayoutBuilder(
         key: _subtitlePageKey,
         builder: (context, pageConstraints) {
-          final scrollHeading = _subtitleHeadingScrollRow != null;
+          final section = _SettingsSection(
+            title: handheldPage ? null : 'Subtitles',
+            trailingGap: 16,
+            description: SettingsViewState._categoryDescription(
+              SettingsCategory.subtitles,
+            ),
+            children: const [],
+          );
+          // A focused row cannot fit if the pinned heading alone consumes
+          // the viewport. Use the existing scrolling-heading layout from
+          // the first frame, before a row receives focus.
+          final headingFillsViewport =
+              DeviceProfile.of(context).isHandheld &&
+              section.naturalHeadingHeight(context, pageConstraints.maxWidth) >=
+                  pageConstraints.maxHeight;
+          final scrollHeading =
+              _subtitleHeadingScrollRow != null || headingFillsViewport;
           _subtitleHeadingIsPinned = !scrollHeading;
           final heading = KeyedSubtree(
             key: _subtitleHeadingKey,
-            child: _SettingsSection(
-              title: handheldPage ? null : 'Subtitles',
-              trailingGap: 16,
-              description: SettingsViewState._categoryDescription(
-                SettingsCategory.subtitles,
-              ),
-              children: const [],
-            ),
+            child: section,
           );
           return Column(
             crossAxisAlignment: CrossAxisAlignment.stretch,

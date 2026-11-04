@@ -79,6 +79,12 @@ void main() {
           _oneTappableNode(tester, RegExp(r'^Back to Settings$'));
           await _tap(tester, back);
         }
+        await _tap(tester, find.text('Subtitles').first);
+        expect(find.byKey(const ValueKey('subtitle-rows')), findsOneWidget);
+        expect(tester.takeException(), isNull);
+        if (list) {
+          await _tap(tester, find.byTooltip('Back to Settings'));
+        }
         await _tap(tester, find.text('Support').first);
         final openDiagnostics = find.text('Open Diagnostics');
         if (list) {
