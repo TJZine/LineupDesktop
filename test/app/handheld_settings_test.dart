@@ -210,6 +210,33 @@ void main() {
     }
   }
 
+  _h4Test('hardware Backspace clears failed PIN feedback at zero digits', (
+    tester,
+  ) async {
+    _window(tester, const Size(412, 915), 1, 1);
+    final controller = _PinController();
+    await _pump(tester, UiFixture(profile: _handheld, controller: controller));
+    await _tap(tester, find.text('Taylor'));
+    for (final digit in ['1', '2', '3', '4']) {
+      await _tap(tester, find.text(digit).last);
+    }
+    final feedback = find.text('Incorrect PIN. Try again.');
+    final progress = find.byKey(const ValueKey('profile-pin-progress'));
+    expect(feedback, findsOneWidget);
+    expect(
+      tester.widget<Semantics>(progress).properties.label,
+      '0 of 4 digits entered',
+    );
+    await tester.sendKeyEvent(LogicalKeyboardKey.backspace);
+    await tester.pumpAndSettle();
+    expect(feedback, findsNothing);
+    expect(
+      tester.widget<Semantics>(progress).properties.label,
+      '0 of 4 digits entered',
+    );
+    expect(controller.pinAttempts, ['1234']);
+  });
+
   _h4Test('a profile word wider than the unscaled line breaks in place', (
     tester,
   ) async {

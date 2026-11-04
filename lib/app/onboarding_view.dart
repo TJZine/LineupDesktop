@@ -1943,8 +1943,7 @@ class _ProfilePinStepState extends State<_ProfilePinStep> {
       return KeyEventResult.handled;
     }
     if (event.logicalKey == LogicalKeyboardKey.backspace) {
-      if (!_submitting &&
-          (_pin.isNotEmpty || !DeviceProfile.of(context).isHandheld)) {
+      if (!_submitting) {
         setState(() {
           _error = null;
           if (_pin.isNotEmpty) _pin = _pin.substring(0, _pin.length - 1);
