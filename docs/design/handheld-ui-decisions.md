@@ -963,8 +963,9 @@ text 1.0, 1.3 and 2.0; stacked rows instead of desktop tables).
   gutter is 18 cu (was 48). The reader is otherwise unchanged.
 - Rendered: the same sheet as item 5.
 - **Index names** (amended November 4, 2026, maintainer approval; Phone35 at
-  text 2.0 broke "androidx.fragment:fragment" mid-word). In the Licenses index,
-  a line may break after `.`, `:`, `-`, `_` or `/` in a package name. A part
+  text 2.0 broke "androidx.fragment:fragment" mid-word). In the Licenses index
+  and in the Licenses page-bar title (a package page's title is its package
+  name; clarified November 4), a line may break after `.`, `:`, `-`, `_` or `/` in a package name. A part
   that still doesn't fit follows the B3 large-text fallback: it shrinks to
   fit, never below text 1.0, and only a part wider than the full line at text
   1.0 may break. The spoken label is the unchanged name.
