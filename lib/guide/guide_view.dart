@@ -3,21 +3,28 @@ import 'dart:math' as math;
 import 'dart:ui' as ui;
 
 import 'package:flutter/foundation.dart'
-    show TargetPlatform, defaultTargetPlatform, setEquals;
+    show TargetPlatform, ValueListenable, defaultTargetPlatform, setEquals;
 import 'package:flutter/material.dart';
+import 'package:flutter/rendering.dart';
 import 'package:flutter/services.dart';
 import 'package:lineup_desktop/platform/device_profile.dart';
 
 import '../app/navigation_shortcuts.dart';
 import '../channels/channel.dart';
+import '../channels/channel_artwork.dart';
 import '../ui/media_badges.dart';
 import '../settings/lineup_settings.dart';
 import '../ui/app_theme.dart';
 import '../ui/app_ui.dart';
+import '../ui/handheld_management.dart';
 import '../ui/lineup_canvas.dart';
 import 'focused_ticker.dart';
 import 'guide_controller.dart';
 import 'guide_playback_placeholder.dart';
+
+part 'handheld_guide.dart';
+part 'handheld_guide_program.dart';
+part 'handheld_guide_timeline.dart';
 
 const _guideTimelineGutter = 1.0;
 const _guideEdgeContentInset = 12.0;
@@ -378,6 +385,9 @@ class _GuideViewState extends State<GuideView>
   );
   final _scheduleKey = GlobalKey(debugLabel: 'Guide schedule');
   final _searchController = TextEditingController();
+  final _handheldTimelineStart = ValueNotifier<DateTime?>(null);
+  bool _restoredHandheldTimeline = false;
+  bool? _lastPortraitComposition;
   late String _observedSearchQuery;
   late int _searchContentGeneration;
   bool _publishingSearchEdit = false;
@@ -465,6 +475,27 @@ class _GuideViewState extends State<GuideView>
     _scheduleViewportRequest();
   }
 
+  @override
+  void didChangeDependencies() {
+    super.didChangeDependencies();
+    if (_restoredHandheldTimeline || !DeviceProfile.of(context).isHandheld) {
+      return;
+    }
+    _restoredHandheldTimeline = true;
+    final stored = PageStorage.maybeOf(context)
+        ?.readState(context, identifier: _handheldTimelineStorageKey);
+    if (stored
+        case (
+          final GuideController controller,
+          final int generation,
+          final DateTime? start,
+        )
+        when identical(controller, widget.controller) &&
+            generation == widget.controller.lineup.contentGeneration) {
+      _handheldTimelineStart.value = start;
+    }
+  }
+
   void _refreshClock() {
     if (!mounted) return;
     widget.controller.refreshForPresentation();
@@ -501,6 +532,7 @@ class _GuideViewState extends State<GuideView>
     widget.controller.focus.removeListener(_focusChanged);
     _clockTimer?.cancel();
     _presentationClock.dispose();
+    _handheldTimelineStart.dispose();
     _scroll
       ?..removeListener(_scrolled)
       ..dispose();
@@ -536,7 +568,10 @@ class _GuideViewState extends State<GuideView>
     return KeyEventResult.ignored;
   }
 
-  ScrollController _scrollFor(double rowHeight) {
+  ScrollController _scrollFor(
+    double rowHeight, {
+    bool compositionChanged = false,
+  }) {
     final existing = _scroll;
     if (existing == null) {
       _effectiveRowHeight = rowHeight;
@@ -552,7 +587,8 @@ class _GuideViewState extends State<GuideView>
     }
 
     final previousRowHeight = _effectiveRowHeight;
-    if (previousRowHeight == null || previousRowHeight == rowHeight) {
+    if (previousRowHeight == null ||
+        (previousRowHeight == rowHeight && !compositionChanged)) {
       _effectiveRowHeight = rowHeight;
       return existing;
     }
@@ -566,6 +602,9 @@ class _GuideViewState extends State<GuideView>
     _effectiveRowHeight = rowHeight;
     if (!_rowHeightAdjustmentScheduled) {
       _rowHeightAdjustmentScheduled = true;
+      final handheldRowPosition = DeviceProfile.of(context).isHandheld
+          ? widget.controller.verticalOffsetFor(1)
+          : null;
       WidgetsBinding.instance.addPostFrameCallback((_) {
         _rowHeightAdjustmentScheduled = false;
         final currentRowHeight = _effectiveRowHeight;
@@ -573,8 +612,9 @@ class _GuideViewState extends State<GuideView>
           return;
         }
         existing.jumpTo(
-          widget.controller
-              .verticalOffsetFor(currentRowHeight)
+          (handheldRowPosition == null
+                  ? widget.controller.verticalOffsetFor(currentRowHeight)
+                  : handheldRowPosition * currentRowHeight)
               .clamp(0.0, existing.position.maxScrollExtent),
         );
         _scheduleViewportRequest();
@@ -722,7 +762,11 @@ class _GuideViewState extends State<GuideView>
     if (key == LogicalKeyboardKey.keyF &&
         commandModifier(keyboard) &&
         !nativeFullscreenChord) {
-      _searchFocus.requestFocus();
+      if (LineupCanvas.usesPortraitCompositionOf(context)) {
+        unawaited(_openHandheldChannelSearch(context, _searchController));
+      } else {
+        _searchFocus.requestFocus();
+      }
       return KeyEventResult.handled;
     }
     final isAndroidTvMenu =
@@ -807,7 +851,7 @@ class _GuideViewState extends State<GuideView>
     } else if (key == LogicalKeyboardKey.mediaPlay ||
         (key == LogicalKeyboardKey.keyP && !commandModified) ||
         key == LogicalKeyboardKey.home) {
-      widget.controller.playToNow();
+      _returnToNow();
     } else if (key == LogicalKeyboardKey.enter ||
         key == LogicalKeyboardKey.numpadEnter ||
         key == LogicalKeyboardKey.space ||
@@ -965,8 +1009,15 @@ class _GuideViewState extends State<GuideView>
     ),
   );
 
-  Widget _schedule(GuideLayoutPolicy policy, List<Channel> channels) {
-    final scroll = _scrollFor(policy.rowHeight);
+  Widget _schedule(
+    GuideLayoutPolicy policy,
+    List<Channel> channels, {
+    required bool compositionChanged,
+  }) {
+    final scroll = _scrollFor(
+      policy.rowHeight,
+      compositionChanged: compositionChanged,
+    );
     return Column(
       key: _scheduleKey,
       children: [
@@ -977,6 +1028,7 @@ class _GuideViewState extends State<GuideView>
           child: _GuideControls(
             key: const Key('guide-control-content'),
             controller: widget.controller,
+            onNow: _returnToNow,
             railWidth: policy.channelRailWidth,
             searchController: _searchController,
             libraryFocus: _libraryFocus,
@@ -1197,6 +1249,16 @@ class _GuideViewState extends State<GuideView>
             color: Colors.transparent,
             child: LayoutBuilder(
               builder: (context, outer) {
+                final portrait = LineupCanvas.usesPortraitCompositionOf(
+                  context,
+                );
+                final changed =
+                    _lastPortraitComposition != null &&
+                    _lastPortraitComposition != portrait;
+                _lastPortraitComposition = portrait;
+                if (portrait) {
+                  return _buildHandheldGuide(context, changed);
+                }
                 final numberWidth = _measureNumberColumn(context);
                 var policy = GuideLayoutPolicy.forSize(
                   outer.biggest,
@@ -1250,7 +1312,11 @@ class _GuideViewState extends State<GuideView>
                     tvPictureMinimum: _tvSchema!.pictureMinimum,
                   );
                 }
-                final schedule = _schedule(policy, channels);
+                final schedule = _schedule(
+                  policy,
+                  channels,
+                  compositionChanged: changed,
+                );
                 final theme = Theme.of(context);
                 return DefaultTextStyle(
                   style: theme.textTheme.bodyMedium!,
@@ -1622,6 +1688,7 @@ class _GuideControls extends StatelessWidget {
   const _GuideControls({
     super.key,
     required this.controller,
+    required this.onNow,
     required this.railWidth,
     required this.searchController,
     required this.libraryFocus,
@@ -1637,6 +1704,7 @@ class _GuideControls extends StatelessWidget {
   });
 
   final GuideController controller;
+  final VoidCallback onNow;
   final double railWidth;
   final TextEditingController searchController;
   final FocusNode libraryFocus;
@@ -1932,7 +2000,7 @@ class _GuideControls extends StatelessWidget {
                       ),
                     )
                   : null,
-              onPressed: controller.playToNow,
+              onPressed: onNow,
               child: Text(
                 nowLabel,
                 semanticsLabel: returnToLive ? 'Return to live' : null,
@@ -3931,17 +3999,20 @@ class _GuideDetailsPlaceholder extends StatelessWidget {
     final identity = '${inspected.number} • ${inspected.name}';
     final identityStyle = Theme.of(context).textTheme.labelLarge
         ?.copyWith(color: roles.progressFill, fontWeight: FontWeight.w600);
+    final details = Column(
+      mainAxisSize: MainAxisSize.min,
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Text(identity, style: identityStyle),
+        const SizedBox(height: 8),
+        Text(status),
+      ],
+    );
     return Align(
       alignment: Alignment.centerLeft,
-      child: Column(
-        mainAxisSize: MainAxisSize.min,
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          Text(identity, style: identityStyle),
-          const SizedBox(height: 8),
-          Text(status),
-        ],
-      ),
+      child: DeviceProfile.of(context).isHandheld
+          ? SingleChildScrollView(child: details)
+          : details,
     );
   }
 }
@@ -4141,7 +4212,7 @@ class _ProgramDetails extends StatelessWidget {
             ],
           ],
         );
-        return Column(
+        final details = Column(
           crossAxisAlignment: CrossAxisAlignment.stretch,
           children: [
             Expanded(
@@ -4216,6 +4287,21 @@ class _ProgramDetails extends StatelessWidget {
               ),
           ],
         );
+        if (!DeviceProfile.of(context).isHandheld) return details;
+        // At large text on a shallow handheld canvas even the fixed footer
+        // can exceed the available height. Keep the wide layout and let its
+        // information panel scroll when the footer and one line cannot fit.
+        final minimumHeight =
+            (current ? gap + 4 : 0) +
+            (playbackMessage == null
+                ? 0
+                : _lineHeight(context, metadataStyle)) +
+            _lineHeight(context, channelStyle);
+        return box.maxHeight < minimumHeight
+            ? SingleChildScrollView(
+                child: SizedBox(height: minimumHeight, child: details),
+              )
+            : details;
       },
     );
   }
