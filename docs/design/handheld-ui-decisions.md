@@ -142,6 +142,12 @@ attributed those failures to the other surfaces; that was wrong (see Review).
   - Exemptions must be named in the surface item, never implied. The expected
     ones are Guide program cells for programs shorter than ~15 minutes (item 3
     defines tap resolution) and the progress lane (item 4 defines drag).
+  - **Wide handheld windows** (clarified November 4, 2026, maintainer
+    approval, after the GPT Pro review). They keep the desktop popups and
+    dialogs (B0), and their hit regions still reach 48 dp. Where a desktop
+    container caps a control below that, the container grows (the Channels
+    row action column), or the actions move to the line below, as in the
+    narrow layout (Studio's rundown actions). Visual sizes stay as approved.
 - **1d. Text scale.** No global clamp; Android 14+ nonlinear scaling passes
   through Flutter's `TextScaler` unchanged. Layouts reflow (wrap, rows grow,
   panels scroll). A surface may clamp a fixed-geometry element (Guide cells, OSD
@@ -151,6 +157,12 @@ attributed those failures to the other surfaces; that was wrong (see Review).
     large headings inside a word. Headline and display roles (≥ 28 cu) wrap
     only at word boundaries. A single word that still cannot fit the line
     shrinks to fit, never below its text-1.0 size, instead of breaking.
+  - **A word wider than its line even at text 1.0** (amended November 4,
+    2026, maintainer approval, after the GPT Pro review) ends with an ellipsis
+    at the 1.0 size, and its full text stays in semantics, as the Guide's
+    cards already do. This covers headings, the onboarding profile names and
+    PIN title, and the Player title. B3 row text and Licenses names keep their
+    approved last-resort break.
   - Font scale above 1.3 exists only on Android 14+, where the platform scales
     large text nonlinearly (less than body text). Acceptance renders at 1.3 and
     2.0 must apply Android's nonlinear curve, not the harness's linear factor,
@@ -616,6 +628,10 @@ Wide windows keep the desktop compositions.
   - handheld adds 48 dp hit regions (1c) and hides keyboard hints ("Up/Down
     Browse · Enter Tune · Esc Close") on touch;
   - the Mini Guide stays available there.
+  - **Touch entry** (added November 4, 2026, maintainer approval): on
+    handheld, the Lineup menu lists "Mini Guide", between Player and Now
+    Playing, while the landscape Player is showing. The protected OSD is
+    unchanged.
 - **Landscape at any width** (clarified November 4, 2026). The Player uses
   the landscape layout and the protected OSD in every landscape Handheld
   window, including ones narrower than 933 cu (for example 800×360 dp). The
@@ -849,6 +865,12 @@ text 1.0, 1.3 and 2.0; stacked rows instead of desktop tables).
     scrolls; actions stack when they don't fit.
   - A dialog with a text field becomes a full-height sheet (≤ 90 %) that
     resizes above the keyboard (Move channel).
+  - **Short windows** (added November 4, 2026, maintainer approval; with the
+    keyboard open, a 915×412 phone clipped the Move sheet's search field). When
+    the space above the keyboard can't hold the handle, title, search field,
+    Cancel and a result row, the sheet drops the handle and title and puts the
+    search field and Cancel on one row. The results scroll below. The tall
+    layout is unchanged.
 - **B7. Keyboard (IME).**
   - The tab bar and mini player hide while the keyboard is open. This is an H1
     shell condition; the specimen adds it in `lineup_shell.dart`.
