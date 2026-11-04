@@ -129,6 +129,11 @@ void main() {
           await tester.tap(later);
           await tester.pumpAndSettle();
           expect(find.byKey(_sheetKey), findsOneWidget);
+          if (size == const Size(800, 1280)) {
+            final sheet = _windowRect(tester, find.byKey(_sheetKey));
+            expect(sheet.width, lessThanOrEqualTo(640));
+            expect(sheet.center.dx, closeTo(size.width / 2, .01));
+          }
           _expectNoBrokenWord(
             tester,
             find.descendant(

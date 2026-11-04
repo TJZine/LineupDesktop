@@ -416,6 +416,7 @@ extension _PortraitGuideLayout on _GuideViewState {
       useSafeArea: true,
       backgroundColor: Colors.transparent,
       constraints: BoxConstraints(
+        maxWidth: 640,
         maxHeight: MediaQuery.sizeOf(context).height * .9,
       ),
       builder: (context) {
