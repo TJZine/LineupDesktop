@@ -9,6 +9,8 @@ import '../ui/app_ui.dart';
 import '../ui/handheld_management.dart';
 import 'licenses_repository.dart';
 
+final _licenseNameBreakAfter = RegExp(r'[.:\-_/]');
+
 class LicensesView extends StatefulWidget {
   const LicensesView({
     required this.onBack,
@@ -151,6 +153,7 @@ class LicensesViewState extends State<LicensesView> {
             HandheldColumnWidth(
               child: HandheldPageBar(
                 title: item?.title ?? 'Licenses',
+                titleBreakAfter: _licenseNameBreakAfter,
                 onBack: back,
                 backTooltip: 'Back to $parent',
               ),

@@ -75,12 +75,14 @@ class _HandheldWordText extends StatelessWidget {
     required this.style,
     this.maxLines,
     this.fitOverwideWords = false,
+    this.breakAfter,
   });
 
   final String text;
   final TextStyle style;
   final int? maxLines;
   final bool fitOverwideWords;
+  final Pattern? breakAfter;
 
   double _width(
     BuildContext context,
@@ -144,10 +146,26 @@ class _HandheldWordText extends StatelessWidget {
       final spans = <InlineSpan>[];
       for (var index = 0; index < words.length; index++) {
         if (index > 0) spans.add(TextSpan(text: ' ', style: style));
+        final word = words[index];
+        var start = 0;
+        for (final match in breakAfter?.allMatches(word) ?? const <Match>[]) {
+          if (match.end <= start || match.end == word.length) continue;
+          final part = word.substring(start, match.end);
+          spans.add(
+            TextSpan(
+              text: part,
+              style: _styleForWord(context, part, constraints.maxWidth),
+            ),
+          );
+          // Keep the separator visible with its preceding text.
+          spans.add(const TextSpan(text: '\u200b'));
+          start = match.end;
+        }
+        final part = word.substring(start);
         spans.add(
           TextSpan(
-            text: words[index],
-            style: _styleForWord(context, words[index], constraints.maxWidth),
+            text: part,
+            style: _styleForWord(context, part, constraints.maxWidth),
           ),
         );
       }
@@ -174,6 +192,7 @@ class HandheldPageBar extends StatelessWidget {
     this.leading,
     this.subtitle,
     this.tabRoot = false,
+    this.titleBreakAfter,
     super.key,
   });
 
@@ -185,6 +204,9 @@ class HandheldPageBar extends StatelessWidget {
   final List<Widget> actions;
   final Widget? leading;
   final bool tabRoot;
+
+  /// Optional separators after which the visual title may wrap.
+  final Pattern? titleBreakAfter;
 
   Widget _backButton(BuildContext context) {
     final extent = _minimumTouchExtent(context, designExtent: 56);
@@ -250,6 +272,7 @@ class HandheldPageBar extends StatelessWidget {
                           style: titleStyle,
                           maxLines: 2,
                           fitOverwideWords: true,
+                          breakAfter: titleBreakAfter,
                         ),
                       ),
                       if (subtitle != null)

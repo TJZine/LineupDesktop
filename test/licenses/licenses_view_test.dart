@@ -194,6 +194,92 @@ void main() {
     }
   });
 
+  testWidgets('handheld license title wraps package names at separators', (
+    tester,
+  ) async {
+    debugDefaultTargetPlatformOverride = TargetPlatform.android;
+    const handheld = DeviceProfile(
+      host: TargetPlatform.android,
+      formFactor: FormFactor.handheld,
+    );
+    const names = [
+      'androidx.fragment:fragment',
+      'androidx.lifecycle:lifecycle-common-java8',
+      'com.squareup.okhttp3:okhttp',
+    ];
+    final semantics = tester.ensureSemantics();
+    try {
+      await show(
+        tester,
+        [
+          LicenseSource(
+            'Android packages',
+            () async => [
+              for (final (index, name) in names.indexed)
+                LicenseItem.list('android/title/$index', name, [
+                  LicenseItem.document(
+                    'notice/$index',
+                    'Notice',
+                    () async => 'License text',
+                  ),
+                ]),
+            ],
+          ),
+        ],
+        size: const Size(360, 800),
+        scale: 2,
+        profile: handheld,
+      );
+      for (final (index, name) in names.indexed) {
+        final row = find.byKey(ValueKey('license-row-android/title/$index'));
+        await tester.ensureVisible(row);
+        await tester.tap(row);
+        await tester.pumpAndSettle();
+        final title = find.byKey(const ValueKey('handheld-page-bar-title'));
+        final richText = find.descendant(
+          of: title,
+          matching: find.byType(RichText),
+        );
+        final paragraph = tester.renderObject<RenderParagraph>(richText);
+        final visual = paragraph.text.toPlainText(
+          includeSemanticsLabels: false,
+        );
+        expect(visual.replaceAll('\u200b', ''), name);
+        expect(find.bySemanticsLabel(name), findsOneWidget);
+        final parts = visual.split('\u200b');
+        final lines = <double>{};
+        var start = 0;
+        var ellipsized = false;
+        for (final (index, part) in parts.indexed) {
+          if (index < parts.length - 1) {
+            expect(RegExp(r'[.:\-_/]$').hasMatch(part), isTrue, reason: part);
+          }
+          final boxes = paragraph.getBoxesForSelection(
+            TextSelection(baseOffset: start, extentOffset: start + part.length),
+          );
+          final partLines = boxes.map((box) => box.top).toSet();
+          if (partLines.isEmpty) {
+            // B1 still uses two lines and the original title for semantics.
+            ellipsized = true;
+          } else {
+            expect(ellipsized, isFalse, reason: part);
+            expect(partLines, hasLength(1), reason: part);
+            lines.addAll(partLines);
+          }
+          start += part.length + 1;
+        }
+        expect(lines, hasLength(2), reason: name);
+        await tester.tap(find.byTooltip('Back to Licenses'));
+        await tester.pumpAndSettle();
+      }
+      expect(tester.takeException(), isNull);
+    } finally {
+      semantics.dispose();
+      await tester.pumpWidget(const SizedBox.shrink());
+      debugDefaultTargetPlatformOverride = null;
+    }
+  });
+
   testWidgets('bundled subtitle fonts expose their offline OFL documents', (
     tester,
   ) async {
