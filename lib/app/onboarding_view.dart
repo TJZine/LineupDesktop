@@ -1407,6 +1407,17 @@ class _ProfileCardState extends State<_ProfileCard> {
     super.dispose();
   }
 
+  Widget _badges() => Wrap(
+    alignment: WrapAlignment.center,
+    spacing: 4,
+    runSpacing: 4,
+    children: [
+      if (widget.user.admin) const _ProfileBadge('Admin'),
+      if (widget.user.restricted == true) const _ProfileBadge('Restricted'),
+      if (widget.active) const _ProfileBadge('Current'),
+    ],
+  );
+
   @override
   Widget build(BuildContext context) {
     final user = widget.user;
@@ -1536,38 +1547,11 @@ class _ProfileCardState extends State<_ProfileCard> {
                       Padding(
                         padding: EdgeInsets.only(top: 4),
                         child: widget.compact
-                            ? Row(
-                                mainAxisSize: MainAxisSize.min,
-                                children: [
-                                  if (user.admin)
-                                    const _CompactProfileBadge(
-                                      'Admin',
-                                      Icons.shield_outlined,
-                                    ),
-                                  if (user.restricted == true)
-                                    const _CompactProfileBadge(
-                                      'Restricted',
-                                      Icons.person_off_outlined,
-                                    ),
-                                  if (widget.active)
-                                    const _CompactProfileBadge(
-                                      'Current',
-                                      Icons.check_circle_outline,
-                                    ),
-                                ],
+                            ? MediaQuery.withClampedTextScaling(
+                                maxScaleFactor: 1.3,
+                                child: _badges(),
                               )
-                            : Wrap(
-                                alignment: WrapAlignment.center,
-                                spacing: 4,
-                                runSpacing: 4,
-                                children: [
-                                  if (user.admin) const _ProfileBadge('Admin'),
-                                  if (user.restricted == true)
-                                    const _ProfileBadge('Restricted'),
-                                  if (widget.active)
-                                    const _ProfileBadge('Current'),
-                                ],
-                              ),
+                            : _badges(),
                       ),
                   ],
                 ),
@@ -1649,26 +1633,6 @@ class _OnboardingWordText extends StatelessWidget {
       ),
     );
   }
-}
-
-class _CompactProfileBadge extends StatelessWidget {
-  const _CompactProfileBadge(this.label, this.icon);
-
-  final String label;
-  final IconData icon;
-
-  @override
-  Widget build(BuildContext context) => Semantics(
-    label: label,
-    child: Tooltip(
-      message: label,
-      excludeFromSemantics: true,
-      child: Padding(
-        padding: const EdgeInsets.symmetric(horizontal: 3),
-        child: Icon(icon, size: 18),
-      ),
-    ),
-  );
 }
 
 class _ProfileBadge extends StatelessWidget {

@@ -174,6 +174,25 @@ void main() {
           'A deliberately long synthetic profile name',
         );
         _wordsStayOnOneLine(tester, "Who's watching?");
+        final card = find.byKey(_profileAvatar);
+        final badges = find.descendant(
+          of: card,
+          matching: find.byWidgetPredicate(
+            (widget) =>
+                widget is Text &&
+                (widget.data == 'Restricted' || widget.data == 'Current'),
+          ),
+        );
+        expect(badges, findsNWidgets(2));
+        final cardRect = tester.getRect(card);
+        for (final badge in badges.evaluate()) {
+          final scale = MediaQuery.textScalerOf(badge);
+          expect(scale.scale(14), closeTo(14 * math.min(textScale, 1.3), .01));
+          expect(
+            cardRect.contains(tester.getCenter(find.byWidget(badge.widget))),
+            isTrue,
+          );
+        }
         _oneTappableNode(tester, RegExp(r'Taylor'));
         await _tap(tester, find.text('Taylor'));
         expect(tester.testTextInput.isVisible, isFalse);
@@ -301,8 +320,19 @@ class _PinController extends FixtureController {
     : super(
         scenario: const LineupScenario(
           stage: SetupStage.profiles,
+          profile: PlexHomeUser(
+            id: 'taylor',
+            name: 'Taylor',
+            protected: true,
+            restricted: true,
+          ),
           profiles: [
-            PlexHomeUser(id: 'taylor', name: 'Taylor', protected: true),
+            PlexHomeUser(
+              id: 'taylor',
+              name: 'Taylor',
+              protected: true,
+              restricted: true,
+            ),
             PlexHomeUser(id: 'guest', name: 'Guest', protected: false),
             PlexHomeUser(id: 'family', name: 'Family', protected: false),
             PlexHomeUser(
