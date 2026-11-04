@@ -504,6 +504,7 @@ class _HandheldGuideAction extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) => Semantics(
+    container: true,
     button: true,
     label: label,
     onTap: onTap,

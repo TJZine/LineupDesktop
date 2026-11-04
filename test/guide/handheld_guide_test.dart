@@ -10,6 +10,7 @@ import 'package:lineup_desktop/channels/channel.dart';
 import 'package:lineup_desktop/channels/scheduler.dart';
 import 'package:lineup_desktop/guide/guide_controller.dart';
 import 'package:lineup_desktop/guide/guide_view.dart';
+import 'package:lineup_desktop/playback/native_player.dart';
 import 'package:lineup_desktop/plex/plex_models.dart';
 import 'package:lineup_desktop/settings/lineup_settings.dart';
 import 'package:lineup_desktop/ui/app_theme.dart';
@@ -211,6 +212,35 @@ void main() {
       );
     }
   }
+
+  _testGuideWidgets('Shell exposes only the pinned picture as its tap target', (
+    tester,
+  ) async {
+    const size = Size(412, 915);
+    _configure(tester, size, 2.625, 1);
+    final fixture = _GuideFixture(channelCount: 4);
+    final player = FixturePlayer.preloaded()
+      ..emit(
+        const PlayerStatus(state: PlayerState.ready, message: 'Synthetic'),
+      );
+    final app = UiFixture(
+      profile: _handheld,
+      controller: fixture.lineup,
+      guideClock: () => fixture.now,
+      player: player,
+    );
+    await tester.pumpWidget(app.build());
+    await tester.pumpAndSettle();
+    final picture = find.byKey(const Key('guide-picture-in-picture'));
+    const label = 'Now playing picture in picture. Open full player.';
+    _expectTapTarget(tester, picture, size, expectedLabel: label);
+    final node = find.semantics
+        .byPredicate((node) => node.label == label)
+        .evaluate()
+        .single;
+    expect(node.rect.size, tester.getSize(picture));
+    await fixture.unmount(tester);
+  });
 
   _testGuideWidgets('Guide uses measured threshold for pinned thumbnail', (
     tester,
