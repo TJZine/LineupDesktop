@@ -6,6 +6,7 @@ import 'package:lineup_desktop/platform/device_profile.dart';
 
 import '../ui/app_theme.dart';
 import '../ui/app_ui.dart';
+import '../ui/handheld_management.dart';
 import 'licenses_repository.dart';
 
 class LicensesView extends StatefulWidget {
@@ -135,6 +136,7 @@ class LicensesViewState extends State<LicensesView> {
   @override
   Widget build(BuildContext context) {
     final roles = LineupTheme.of(context);
+    final stacked = handheldStacked(context);
     final page = _page;
     final item = page.item;
     page.selection.skipTraversal = DeviceProfile.of(context).isTv;
@@ -145,17 +147,31 @@ class LicensesViewState extends State<LicensesView> {
       color: roles.deepBackground,
       child: Column(
         children: [
-          LineupTopBar(
-            onOpenMenu: widget.onOpenMenu,
-            menuFocusNode: widget.menuFocusNode,
-          ),
+          if (stacked)
+            HandheldColumnWidth(
+              child: HandheldPageBar(
+                title: item?.title ?? 'Licenses',
+                onBack: back,
+                backTooltip: 'Back to $parent',
+              ),
+            )
+          else
+            LineupTopBar(
+              onOpenMenu: widget.onOpenMenu,
+              menuFocusNode: widget.menuFocusNode,
+            ),
           Expanded(
             child: Padding(
-              padding: const EdgeInsets.symmetric(horizontal: 48, vertical: 24),
+              padding: EdgeInsets.symmetric(
+                horizontal: stacked ? handheldGutter : 48,
+                vertical: 24,
+              ),
               child: Align(
                 alignment: Alignment.topCenter,
                 child: ConstrainedBox(
-                  constraints: const BoxConstraints(maxWidth: 960),
+                  constraints: BoxConstraints(
+                    maxWidth: stacked ? handheldMaxContent : 960,
+                  ),
                   child: FocusTraversalGroup(
                     child: Column(
                       crossAxisAlignment: CrossAxisAlignment.stretch,
@@ -188,23 +204,28 @@ class LicensesViewState extends State<LicensesView> {
                                           crossAxisAlignment:
                                               CrossAxisAlignment.start,
                                           children: [
-                                            LineupInlineLink(
-                                              focusNode: page.back,
-                                              onPressed: back,
-                                              child: Text('‹ Back to $parent'),
-                                            ),
-                                            Semantics(
-                                              header: true,
-                                              child: Text(
-                                                item?.title ?? 'Licenses',
-                                                style: LineupTypography
-                                                    .pageTitle
-                                                    .copyWith(
-                                                      color: roles.primaryText,
-                                                    ),
+                                            if (!stacked) ...[
+                                              LineupInlineLink(
+                                                focusNode: page.back,
+                                                onPressed: back,
+                                                child: Text(
+                                                  '‹ Back to $parent',
+                                                ),
                                               ),
-                                            ),
-                                            const SizedBox(height: 6),
+                                              Semantics(
+                                                header: true,
+                                                child: Text(
+                                                  item?.title ?? 'Licenses',
+                                                  style: LineupTypography
+                                                      .pageTitle
+                                                      .copyWith(
+                                                        color:
+                                                            roles.primaryText,
+                                                      ),
+                                                ),
+                                              ),
+                                              const SizedBox(height: 6),
+                                            ],
                                             Text(
                                               item == null
                                                   ? 'Third-party software used by this build.'

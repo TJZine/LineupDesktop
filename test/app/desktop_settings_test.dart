@@ -5,7 +5,10 @@ import 'dart:async';
 import 'dart:ui' show SemanticsAction, Tristate;
 
 import 'package:flutter/foundation.dart'
-    show TargetPlatform, debugDefaultTargetPlatformOverride;
+    show
+        TargetPlatform,
+        debugDefaultTargetPlatformOverride,
+        defaultTargetPlatform;
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:lineup_desktop/ui/lineup_canvas.dart';
@@ -150,32 +153,33 @@ void main() {
     }
   });
 
-  testWidgets('fullscreen HDR switch follows platform and TV capability', (
+  testWidgets('fullscreen HDR switch follows display matching capability', (
     tester,
   ) async {
     final controller = FixtureController();
     addTearDown(controller.dispose);
     try {
-      for (final (platform, tv, visible) in [
+      for (final (platform, tv, displayMatching) in [
         (TargetPlatform.macOS, false, false),
         (TargetPlatform.android, true, false),
-        (TargetPlatform.android, false, true),
+        (TargetPlatform.android, false, false),
+        (TargetPlatform.windows, false, true),
       ]) {
         debugDefaultTargetPlatformOverride = platform;
-        await _showSettings(tester, controller, isTv: tv);
+        await _showSettings(
+          tester,
+          controller,
+          isTv: tv,
+          displayMatching: displayMatching,
+        );
         await _openCategory(tester, SettingsCategory.playback);
         expect(
           find.text('Match display HDR in fullscreen'),
-          visible ? findsOneWidget : findsNothing,
+          displayMatching ? findsOneWidget : findsNothing,
         );
         expect(find.text('DVR playback controls'), findsOneWidget);
         expect(controller.settings.matchDisplayHdr, isTrue);
       }
-
-      debugDefaultTargetPlatformOverride = TargetPlatform.windows;
-      await _showSettings(tester, controller, isTv: false);
-      await _openCategory(tester, SettingsCategory.playback);
-      expect(find.text('Match display HDR in fullscreen'), findsOneWidget);
     } finally {
       debugDefaultTargetPlatformOverride = null;
     }
@@ -375,6 +379,7 @@ Future<void> _showSettings(
   WidgetTester tester,
   FixtureController controller, {
   bool isTv = false,
+  bool? displayMatching,
 }) async {
   await tester.pumpWidget(
     MaterialApp(
@@ -389,7 +394,14 @@ Future<void> _showSettings(
       ),
       home: RepaintBoundary(
         key: const Key('desktop-settings-render'),
-        child: Scaffold(body: SettingsView(controller: controller)),
+        child: Scaffold(
+          body: SettingsView(
+            controller: controller,
+            displayMatching:
+                displayMatching ??
+                (!isTv && defaultTargetPlatform == TargetPlatform.windows),
+          ),
+        ),
       ),
     ),
   );

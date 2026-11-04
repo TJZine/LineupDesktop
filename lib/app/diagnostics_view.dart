@@ -10,6 +10,7 @@ import '../diagnostics/diagnostics.dart';
 import '../playback/native_player.dart';
 import '../ui/app_theme.dart';
 import '../ui/app_ui.dart';
+import '../ui/handheld_management.dart';
 import 'lineup_controller.dart';
 
 class DiagnosticsView extends StatefulWidget {
@@ -151,6 +152,7 @@ class _DiagnosticsViewState extends State<DiagnosticsView> {
 
   @override
   Widget build(BuildContext context) {
+    final stacked = handheldStacked(context);
     final snapshot = _snapshot();
     final telemetry = snapshot.playback.receivedTelemetry;
     final currentEvents = widget.controller.diagnostics.entries;
@@ -164,39 +166,45 @@ class _DiagnosticsViewState extends State<DiagnosticsView> {
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.stretch,
             children: [
-              LineupTopBar(
-                menuKey: const Key('diagnostics-app-menu'),
-                menuFocusNode: widget.menuFocusNode,
-                onOpenMenu: widget.onOpenMenu,
-              ),
+              if (stacked)
+                HandheldColumnWidth(
+                  child: HandheldPageBar(
+                    title: 'Diagnostics',
+                    onBack: widget.onBack,
+                    backTooltip: 'Back to Support',
+                  ),
+                )
+              else
+                LineupTopBar(
+                  menuKey: const Key('diagnostics-app-menu'),
+                  menuFocusNode: widget.menuFocusNode,
+                  onOpenMenu: widget.onOpenMenu,
+                ),
               Expanded(
                 child: Material(
                   color: Colors.transparent,
                   child: LineupContentWidth(
                     vertical: 24,
+                    handheldContent: stacked,
                     child: ListView(
                       controller: _scroll,
                       children: [
-                        _diagnosticsIntro(context),
+                        _diagnosticsIntro(context, stacked: stacked),
                         SizedBox(height: 28),
                         _summary(context, snapshot, telemetry),
                         SizedBox(height: 32),
                         _eventsHeader(context, snapshot, currentEvents, unseen),
                         if (!snapshot.recordingEnabled)
-                          SizedBox(
-                            height: 180,
-                            child: _emptyEvents(
-                              'Diagnostic recording is off',
-                              'Enable recording in Settings > Support, then reproduce the issue.',
-                            ),
+                          _emptyEvents(
+                            'Diagnostic recording is off',
+                            'Enable recording in Settings > Support, then reproduce the issue.',
+                            grow: stacked,
                           )
                         else if (_visibleEvents.isEmpty)
-                          SizedBox(
-                            height: 180,
-                            child: _emptyEvents(
-                              'No events recorded yet',
-                              'Reproduce the issue to collect support events.',
-                            ),
+                          _emptyEvents(
+                            'No events recorded yet',
+                            'Reproduce the issue to collect support events.',
+                            grow: stacked,
                           )
                         else
                           for (final event in _visibleEvents) _eventTile(event),
@@ -229,8 +237,39 @@ class _DiagnosticsViewState extends State<DiagnosticsView> {
     );
   }
 
-  Widget _diagnosticsIntro(BuildContext context) {
+  Widget _diagnosticsIntro(BuildContext context, {required bool stacked}) {
     final roles = LineupTheme.of(context);
+    if (stacked) {
+      return Column(
+        crossAxisAlignment: CrossAxisAlignment.stretch,
+        children: [
+          Text(
+            'Playback information and recent support events.',
+            style: TextStyle(color: roles.secondaryText, fontSize: 18),
+          ),
+          const SizedBox(height: 20),
+          LineupTouchTarget(
+            onPressed: _copying ? null : _copy,
+            child: FilledButton(
+              focusNode: widget.focusNode,
+              onPressed: _copying ? null : _copy,
+              child: const Text(
+                'Copy redacted report',
+                style: TextStyle(fontSize: 18),
+              ),
+            ),
+          ),
+          const SizedBox(height: 8),
+          Semantics(
+            liveRegion: true,
+            child: Text(
+              _copyFeedback ?? '',
+              style: TextStyle(color: roles.secondaryText, fontSize: 14),
+            ),
+          ),
+        ],
+      );
+    }
     final copyAction = Column(
       crossAxisAlignment: CrossAxisAlignment.end,
       children: [
@@ -730,23 +769,31 @@ class _DiagnosticsViewState extends State<DiagnosticsView> {
     );
   }
 
-  Widget _emptyEvents(String title, String message) => Center(
-    child: Column(
-      mainAxisSize: MainAxisSize.min,
-      children: [
-        Text(
-          title,
-          style: TextStyle(fontSize: 20, fontWeight: FontWeight.w500),
-        ),
-        SizedBox(height: 8),
-        Text(
-          message,
-          textAlign: TextAlign.center,
-          style: TextStyle(fontSize: 18),
-        ),
-      ],
-    ),
-  );
+  Widget _emptyEvents(String title, String message, {required bool grow}) {
+    final content = Center(
+      child: Column(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          Text(
+            title,
+            style: TextStyle(fontSize: 20, fontWeight: FontWeight.w500),
+          ),
+          SizedBox(height: 8),
+          Text(
+            message,
+            textAlign: TextAlign.center,
+            style: TextStyle(fontSize: 18),
+          ),
+        ],
+      ),
+    );
+    return grow
+        ? ConstrainedBox(
+            constraints: const BoxConstraints(minHeight: 180),
+            child: content,
+          )
+        : SizedBox(height: 180, child: content);
+  }
 
   String _eventTime(DateTime time) {
     final local = time.toLocal();

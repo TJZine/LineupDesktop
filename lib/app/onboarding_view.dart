@@ -9,6 +9,7 @@ import 'package:lineup_desktop/platform/device_profile.dart';
 import '../plex/plex_models.dart';
 import '../ui/app_theme.dart';
 import '../ui/app_ui.dart';
+import '../ui/lineup_canvas.dart';
 import 'lineup_controller.dart';
 import 'navigation_shortcuts.dart';
 import 'plex_link_launcher.dart';
@@ -367,6 +368,8 @@ class UpstreamOnboardingViewState extends State<UpstreamOnboardingView>
   @override
   Widget build(BuildContext context) {
     final roles = LineupTheme.of(context);
+    final handheldPin =
+        _pinUser != null && DeviceProfile.of(context).isHandheld;
     final refinedStage = switch (widget.controller.stage) {
       SetupStage.linking || SetupStage.profiles || SetupStage.servers => true,
       _ => false,
@@ -430,8 +433,8 @@ class UpstreamOnboardingViewState extends State<UpstreamOnboardingView>
                     Expanded(
                       child: Center(
                         child: SingleChildScrollView(
-                          padding: const EdgeInsets.symmetric(
-                            horizontal: 48,
+                          padding: EdgeInsets.symmetric(
+                            horizontal: handheldPin ? 18 : 48,
                             vertical: 24,
                           ),
                           child: ConstrainedBox(
@@ -576,6 +579,10 @@ class UpstreamOnboardingViewState extends State<UpstreamOnboardingView>
         '${seconds ~/ 60}:${(seconds % 60).toString().padLeft(2, '0')}';
     final roles = LineupTheme.of(context);
     final textScaler = MediaQuery.textScalerOf(context);
+    final display = View.of(context).display;
+    final hideQr =
+        DeviceProfile.of(context).isHandheld &&
+        (display.size / display.devicePixelRatio).shortestSide < 600;
     final narrow = contentWidth <= 720 || textScaler.scale(1) >= 1.6;
     final theme = Theme.of(context);
     final bodyStyle = theme.textTheme.bodyMedium?.copyWith(
@@ -594,7 +601,7 @@ class UpstreamOnboardingViewState extends State<UpstreamOnboardingView>
     }
 
     const qrColumnWidth = 232.0;
-    final deviceWidth = narrow
+    final deviceWidth = narrow || hideQr
         ? contentWidth
         : contentWidth - qrColumnWidth - 40;
     final instructionsHeight = math.max(
@@ -844,7 +851,9 @@ class UpstreamOnboardingViewState extends State<UpstreamOnboardingView>
         crossAxisAlignment: CrossAxisAlignment.stretch,
         mainAxisSize: MainAxisSize.min,
         children: [
-          narrow
+          hideQr
+              ? deviceColumn
+              : narrow
               ? Column(
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [deviceColumn, const SizedBox(height: 24), qr],
@@ -915,7 +924,16 @@ class UpstreamOnboardingViewState extends State<UpstreamOnboardingView>
                 ? constraints.maxWidth
                 : 1080.0;
             final double gap = 16;
-            final itemWidth = 200 * textScale;
+            final compact = DeviceProfile.of(context).isHandheld;
+            final compactColumns =
+                LineupCanvas.windowSizeOf(context).width < 600 ? 2 : 3;
+            final itemWidth = compact
+                ? math.min(
+                    220.0,
+                    (availableWidth - (compactColumns - 1) * gap) /
+                        compactColumns,
+                  )
+                : 200 * textScale;
             final count = widget.controller.profiles.length;
             final targetColumns = count <= 3
                 ? count.clamp(1, 3)
@@ -923,7 +941,7 @@ class UpstreamOnboardingViewState extends State<UpstreamOnboardingView>
             final fittingColumns = ((availableWidth + gap) / (itemWidth + gap))
                 .floor()
                 .clamp(1, targetColumns);
-            final columns = fittingColumns.toInt();
+            final columns = compact ? compactColumns : fittingColumns.toInt();
             final rows = <Widget>[];
             for (var start = 0; start < count; start += columns) {
               final rowCount = (count - start).clamp(0, columns).toInt();
@@ -953,6 +971,7 @@ class UpstreamOnboardingViewState extends State<UpstreamOnboardingView>
                                   key: ValueKey(
                                     'profile-card-${widget.controller.profiles[start + column].id}',
                                   ),
+                                  compactWidth: compact ? itemWidth : null,
                                   user: widget
                                       .controller
                                       .profiles[start + column],
@@ -1273,11 +1292,13 @@ class _HeroContent extends StatelessWidget {
         if (leading != null) ...[leading!, SizedBox(height: compact ? 20 : 28)],
         Semantics(
           header: true,
-          child: Text(
-            title,
-            textAlign: centered ? TextAlign.center : TextAlign.left,
-            style: LineupTypography.pageTitle,
-          ),
+          child: centered && DeviceProfile.of(context).isHandheld
+              ? _OnboardingWordText(title, style: LineupTypography.pageTitle)
+              : Text(
+                  title,
+                  textAlign: centered ? TextAlign.center : TextAlign.left,
+                  style: LineupTypography.pageTitle,
+                ),
         ),
         SizedBox(height: 10),
         Text(
@@ -1308,10 +1329,13 @@ class _ProfileCard extends StatefulWidget {
     required this.autofocus,
     required this.onPressed,
     this.focusNode,
+    this.compactWidth,
     super.key,
   });
   final PlexHomeUser user;
   final bool active;
+  final double? compactWidth;
+  bool get compact => compactWidth != null;
   final bool autofocus;
   final VoidCallback? onPressed;
   final FocusNode? focusNode;
@@ -1354,7 +1378,7 @@ class _ProfileCardState extends State<_ProfileCard> {
 
   void _focusChanged() {
     final next = _focusNode.hasFocus;
-    if (next == _focused || !mounted) return;
+    if (widget.compact || next == _focused || !mounted) return;
     setState(() => _focused = next);
     if (DeviceProfile.of(context).isTv) {
       _nameOverlay.hide();
@@ -1400,16 +1424,23 @@ class _ProfileCardState extends State<_ProfileCard> {
               focusNode: _focusNode,
               autofocus: widget.autofocus,
               onPressed: widget.onPressed,
-              style: TextButton.styleFrom(alignment: Alignment.topCenter),
+              style: TextButton.styleFrom(
+                alignment: Alignment.topCenter,
+                padding: widget.compact ? EdgeInsets.zero : null,
+              ),
               child: Padding(
-                padding: EdgeInsets.fromLTRB(12, 16, 12, 16),
+                padding: widget.compact
+                    ? const EdgeInsets.fromLTRB(6, 14, 6, 12)
+                    : const EdgeInsets.fromLTRB(12, 16, 12, 16),
                 child: Column(
                   mainAxisSize: MainAxisSize.min,
                   children: [
                     LineupProfileAvatar(
                       name: user.name,
                       identity: user.id,
-                      size: 120,
+                      size: widget.compact
+                          ? 88 / LineupCanvas.scaleOf(context)
+                          : 120,
                       locked: user.protected,
                       photo: user.thumb?.isAbsolute == true
                           ? NetworkImage(user.thumb.toString())
@@ -1425,6 +1456,13 @@ class _ProfileCardState extends State<_ProfileCard> {
                             color: roles.primaryText,
                             fontWeight: FontWeight.w600,
                           );
+                          if (widget.compact) {
+                            return _OnboardingWordText(
+                              user.name,
+                              style: nameStyle,
+                              maxWidth: widget.compactWidth! - 12,
+                            );
+                          }
                           return OverlayPortal(
                             controller: _nameOverlay,
                             overlayChildBuilder: (_) =>
@@ -1497,17 +1535,39 @@ class _ProfileCardState extends State<_ProfileCard> {
                         widget.active)
                       Padding(
                         padding: EdgeInsets.only(top: 4),
-                        child: Wrap(
-                          alignment: WrapAlignment.center,
-                          spacing: 4,
-                          runSpacing: 4,
-                          children: [
-                            if (user.admin) const _ProfileBadge('Admin'),
-                            if (user.restricted == true)
-                              const _ProfileBadge('Restricted'),
-                            if (widget.active) const _ProfileBadge('Current'),
-                          ],
-                        ),
+                        child: widget.compact
+                            ? Row(
+                                mainAxisSize: MainAxisSize.min,
+                                children: [
+                                  if (user.admin)
+                                    const _CompactProfileBadge(
+                                      'Admin',
+                                      Icons.shield_outlined,
+                                    ),
+                                  if (user.restricted == true)
+                                    const _CompactProfileBadge(
+                                      'Restricted',
+                                      Icons.person_off_outlined,
+                                    ),
+                                  if (widget.active)
+                                    const _CompactProfileBadge(
+                                      'Current',
+                                      Icons.check_circle_outline,
+                                    ),
+                                ],
+                              )
+                            : Wrap(
+                                alignment: WrapAlignment.center,
+                                spacing: 4,
+                                runSpacing: 4,
+                                children: [
+                                  if (user.admin) const _ProfileBadge('Admin'),
+                                  if (user.restricted == true)
+                                    const _ProfileBadge('Restricted'),
+                                  if (widget.active)
+                                    const _ProfileBadge('Current'),
+                                ],
+                              ),
                       ),
                   ],
                 ),
@@ -1518,6 +1578,97 @@ class _ProfileCardState extends State<_ProfileCard> {
       ),
     );
   }
+}
+
+/// Keeps a single overwide word intact while all other text uses the
+/// platform scaler. The smaller role never goes below its unscaled size.
+class _OnboardingWordText extends StatelessWidget {
+  const _OnboardingWordText(this.value, {required this.style, this.maxWidth});
+
+  final String value;
+  final TextStyle style;
+  final double? maxWidth;
+
+  @override
+  Widget build(BuildContext context) {
+    if (maxWidth case final width?) return _fitWords(context, width);
+    return LayoutBuilder(
+      builder: (context, constraints) =>
+          _fitWords(context, constraints.maxWidth),
+    );
+  }
+
+  Widget _fitWords(BuildContext context, double availableWidth) {
+    final resolvedStyle = DefaultTextStyle.of(context).style.merge(style);
+    final scaler = MediaQuery.textScalerOf(context);
+    final fontSize = style.fontSize!;
+    final painter = TextPainter(
+      text: TextSpan(text: value, style: resolvedStyle),
+      textDirection: Directionality.of(context),
+      textScaler: scaler,
+      textAlign: TextAlign.center,
+    )..layout(maxWidth: availableWidth);
+    final words = RegExp(r'\S+').allMatches(value).toList();
+    final breaksWord = words.any((word) {
+      final boxes = painter.getBoxesForSelection(
+        TextSelection(baseOffset: word.start, extentOffset: word.end),
+      );
+      return boxes.map((box) => box.top).toSet().length > 1;
+    });
+    if (!breaksWord && scaler.scale(fontSize) <= fontSize) {
+      painter.dispose();
+      return Text(value, style: style, textAlign: TextAlign.center);
+    }
+
+    painter.textScaler = TextScaler.noScaling;
+    final wordWidgets = <Widget>[];
+    for (final match in words) {
+      final word = match.group(0)!;
+      painter
+        ..text = TextSpan(text: word, style: resolvedStyle)
+        ..layout();
+      final text = Text(word, style: style, softWrap: false);
+      wordWidgets.add(
+        painter.width <= availableWidth
+            ? FittedBox(fit: BoxFit.scaleDown, child: text)
+            : SingleChildScrollView(
+                scrollDirection: Axis.horizontal,
+                child: text,
+              ),
+      );
+    }
+    painter.dispose();
+    return Semantics(
+      label: value,
+      excludeSemantics: true,
+      child: Wrap(
+        alignment: WrapAlignment.center,
+        crossAxisAlignment: WrapCrossAlignment.center,
+        spacing: scaler.scale(fontSize) / 4,
+        children: wordWidgets,
+      ),
+    );
+  }
+}
+
+class _CompactProfileBadge extends StatelessWidget {
+  const _CompactProfileBadge(this.label, this.icon);
+
+  final String label;
+  final IconData icon;
+
+  @override
+  Widget build(BuildContext context) => Semantics(
+    label: label,
+    child: Tooltip(
+      message: label,
+      excludeFromSemantics: true,
+      child: Padding(
+        padding: const EdgeInsets.symmetric(horizontal: 3),
+        child: Icon(icon, size: 18),
+      ),
+    ),
+  );
 }
 
 class _ProfileBadge extends StatelessWidget {
@@ -1831,7 +1982,8 @@ class _ProfilePinStepState extends State<_ProfilePinStep> {
       return KeyEventResult.handled;
     }
     if (event.logicalKey == LogicalKeyboardKey.backspace) {
-      if (!_submitting) {
+      if (!_submitting &&
+          (_pin.isNotEmpty || !DeviceProfile.of(context).isHandheld)) {
         setState(() {
           _error = null;
           if (_pin.isNotEmpty) _pin = _pin.substring(0, _pin.length - 1);

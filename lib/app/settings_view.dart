@@ -16,6 +16,7 @@ import '../platform/device_profile.dart';
 import '../settings/lineup_settings.dart';
 import '../ui/app_theme.dart';
 import '../ui/app_ui.dart';
+import '../ui/handheld_management.dart';
 import 'lineup_controller.dart';
 
 part 'settings_subtitles.dart';
@@ -43,6 +44,7 @@ class SettingsView extends StatefulWidget {
     this.onOpenLicenses,
     this.openLicensesFocus,
     this.supportOnly = false,
+    this.displayMatching = false,
     this.focusNode,
     this.menuFocusNode,
     this.onOpenMenu,
@@ -61,6 +63,7 @@ class SettingsView extends StatefulWidget {
   final VoidCallback? onOpenLicenses;
   final FocusNode? openLicensesFocus;
   final bool supportOnly;
+  final bool displayMatching;
   final FocusNode? focusNode;
   final FocusNode? menuFocusNode;
   final LineupMenuCallback? onOpenMenu;
@@ -68,14 +71,15 @@ class SettingsView extends StatefulWidget {
   final String backLabel;
 
   @override
-  State<SettingsView> createState() => _SettingsViewState();
+  State<SettingsView> createState() => SettingsViewState();
 }
 
-class _SettingsViewState extends State<SettingsView> {
+class SettingsViewState extends State<SettingsView> {
   late SettingsCategory _localCategory;
   late LineupSettings _displaySettings;
   late LineupSettings _lastControllerSettings;
   bool _categoryFocusPlaced = false;
+  late bool _categoryOpen;
   final List<_PendingSave> _pendingSaves = [];
   final _subtitleRailFocus = FocusNode(debugLabel: 'Subtitles category');
   final _subtitleFocus = <_SettingKey, FocusNode>{};
@@ -100,6 +104,8 @@ class _SettingsViewState extends State<SettingsView> {
   void initState() {
     super.initState();
     _localCategory = widget.category;
+    _categoryOpen =
+        widget.supportOnly || widget.category != SettingsCategory.appearance;
     _lastControllerSettings = widget.controller.settings;
     _displaySettings = _lastControllerSettings;
     widget.controller.addListener(_controllerChanged);
@@ -160,6 +166,108 @@ class _SettingsViewState extends State<SettingsView> {
     super.dispose();
   }
 
+  bool get _usesCategoryPages =>
+      DeviceProfile.of(context).isHandheld &&
+      MediaQuery.sizeOf(context).width < 900;
+
+  bool handleBack() {
+    if (!_usesCategoryPages || !_categoryOpen || widget.supportOnly) {
+      return false;
+    }
+    setState(() => _categoryOpen = false);
+    return true;
+  }
+
+  void _openCategory(SettingsCategory category) {
+    setState(() {
+      _categoryOpen = true;
+      _localCategory = category;
+      if (category != SettingsCategory.subtitles) {
+        _focusedSubtitle = null;
+        _subtitleHeadingScrollRow = null;
+        _subtitleHeadingExitToken = null;
+        _subtitleRepinningSpace = 0;
+      }
+    });
+    widget.onCategoryChanged?.call(category);
+  }
+
+  Widget _handheldSettings() {
+    final showCategory = _categoryOpen || widget.supportOnly;
+    final onBack = showCategory && !widget.supportOnly
+        ? handleBack
+        : widget.onBack;
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.stretch,
+      children: [
+        HandheldColumnWidth(
+          child: HandheldPageBar(
+            title: showCategory ? _categoryLabel(_category) : 'Settings',
+            tabRoot: !showCategory && onBack == null,
+            onBack: onBack,
+            backTooltip: showCategory && !widget.supportOnly
+                ? 'Back to Settings'
+                : widget.backLabel.replaceFirst('‹ ', ''),
+          ),
+        ),
+        Expanded(
+          child: LineupContentWidth(
+            handheldContent: true,
+            child: showCategory
+                ? _categoryDetail(context, handheldPage: true)
+                : SingleChildScrollView(
+                    key: const PageStorageKey('handheld-settings-categories'),
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.stretch,
+                      children: [
+                        for (final category in SettingsCategory.values)
+                          _handheldCategoryRow(category),
+                      ],
+                    ),
+                  ),
+          ),
+        ),
+      ],
+    );
+  }
+
+  Widget _handheldCategoryRow(SettingsCategory category) {
+    void open() => _openCategory(category);
+    final roles = LineupTheme.of(context);
+    return LineupTouchTarget(
+      onPressed: open,
+      child: TextButton(
+        onPressed: open,
+        style: TextButton.styleFrom(
+          minimumSize: const Size(0, 84),
+          padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 12),
+        ),
+        child: Row(
+          children: [
+            Expanded(
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Text(
+                    _categoryLabel(category),
+                    style: LineupTypography.control,
+                  ),
+                  const SizedBox(height: 4),
+                  Text(
+                    _categoryDescription(category),
+                    style: TextStyle(fontSize: 15, color: roles.secondaryText),
+                  ),
+                ],
+              ),
+            ),
+            const SizedBox(width: 8),
+            const Icon(Icons.chevron_right),
+          ],
+        ),
+      ),
+    );
+  }
+
   @override
   Widget build(BuildContext context) {
     final settingsTheme = LineupTheme.forName(
@@ -183,6 +291,7 @@ class _SettingsViewState extends State<SettingsView> {
               bottom: DeviceProfile.of(context).isTv,
               child: LayoutBuilder(
                 builder: (context, constraints) {
+                  if (_usesCategoryPages) return _handheldSettings();
                   final compact =
                       LineupLayout.isCompactWidth(constraints.maxWidth) ||
                       MediaQuery.textScalerOf(context).scale(1) >= 2;
@@ -346,16 +455,7 @@ class _SettingsViewState extends State<SettingsView> {
                   : null,
               autofocus: category == _category && !_categoryFocusPlaced,
               onPressed: () {
-                setState(() {
-                  _localCategory = category;
-                  if (category != SettingsCategory.subtitles) {
-                    _focusedSubtitle = null;
-                    _subtitleHeadingScrollRow = null;
-                    _subtitleHeadingExitToken = null;
-                    _subtitleRepinningSpace = 0;
-                  }
-                });
-                widget.onCategoryChanged?.call(category);
+                _openCategory(category);
                 WidgetsBinding.instance.addPostFrameCallback((_) {
                   if (mounted && category == _category) {
                     widget.focusNode?.requestFocus();
@@ -375,17 +475,18 @@ class _SettingsViewState extends State<SettingsView> {
         : ListView(children: controls);
   }
 
-  Widget _categoryDetail(BuildContext context) {
+  Widget _categoryDetail(BuildContext context, {bool handheldPage = false}) {
     if (_category == SettingsCategory.subtitles) {
-      return _subtitleDetail(context);
+      return _subtitleDetail(context, handheldPage: handheldPage);
     }
     final value = _displaySettings;
-    final isTv = DeviceProfile.of(context).isTv;
+    final profile = DeviceProfile.of(context);
+    final isTv = profile.isTv;
 
     return ListView(
       children: [
         _SettingsSection(
-          title: _categoryLabel(_category),
+          title: handheldPage ? null : _categoryLabel(_category),
           description: _categoryDescription(_category),
           children: switch (_category) {
             SettingsCategory.appearance => [
@@ -525,7 +626,7 @@ class _SettingsViewState extends State<SettingsView> {
                   onChanged: onChanged,
                 ),
               ),
-              if (defaultTargetPlatform != TargetPlatform.macOS && !isTv)
+              if (widget.displayMatching)
                 ..._settingControl<bool>(
                   _SettingKey.matchDisplayHdr,
                   (current, item) => current.copyWith(matchDisplayHdr: item),
@@ -681,7 +782,9 @@ class _SettingsViewState extends State<SettingsView> {
                   child: const Text('Open Diagnostics'),
                 ),
               ),
-              if (defaultTargetPlatform == TargetPlatform.macOS || isTv)
+              if (defaultTargetPlatform == TargetPlatform.macOS ||
+                  isTv ||
+                  profile.isHandheld)
                 _SettingsRow(
                   revealOnFocus: true,
                   label: const Text('Licenses'),
@@ -946,7 +1049,7 @@ class _SettingsSection extends StatelessWidget {
   });
 
   final double trailingGap;
-  final String title;
+  final String? title;
   final String description;
   final List<Widget> children;
 
@@ -957,18 +1060,19 @@ class _SettingsSection extends StatelessWidget {
     return Column(
       crossAxisAlignment: CrossAxisAlignment.stretch,
       children: [
-        Semantics(
-          header: true,
-          child: Text(
-            title,
-            style: theme.textTheme.headlineMedium?.copyWith(
-              color: roles.primaryText,
-              fontSize: 44,
-              fontWeight: FontWeight.w600,
-              height: 1.08,
+        if (title case final title?)
+          Semantics(
+            header: true,
+            child: Text(
+              title,
+              style: theme.textTheme.headlineMedium?.copyWith(
+                color: roles.primaryText,
+                fontSize: 44,
+                fontWeight: FontWeight.w600,
+                height: 1.08,
+              ),
             ),
           ),
-        ),
         SizedBox(height: 6),
         Text(
           description,

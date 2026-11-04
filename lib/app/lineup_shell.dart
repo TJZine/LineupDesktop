@@ -411,6 +411,11 @@ class _LineupShellState extends State<LineupShell> {
         }
         return true;
       case ShellDestination.settings:
+        if (GlobalObjectKey<SettingsViewState>(this).currentState
+                ?.handleBack() ==
+            true) {
+          return true;
+        }
         if (_settingsBackDestination == null) return false;
         _returnFromSettings();
         return true;
@@ -1245,6 +1250,7 @@ class _LineupShellState extends State<LineupShell> {
               bottom: !DeviceProfile.of(context).isTv,
               child: _settingsWithLicenses(
                 SettingsView(
+                  displayMatching: widget.player.capabilities.displayMatching,
                   controller: controller,
                   category: SettingsCategory.support,
                   onCategoryChanged: (_) {},
@@ -1281,7 +1287,8 @@ class _LineupShellState extends State<LineupShell> {
               accountOrigin: _onboardingFromAccount,
               onOpenSettings:
                   (defaultTargetPlatform == TargetPlatform.macOS ||
-                      DeviceProfile.of(context).isTv)
+                      DeviceProfile.of(context).isTv ||
+                      DeviceProfile.of(context).isHandheld)
                   ? _showOnboardingSupport
                   : null,
               onOpenMenu: onboardingMenuAvailable ? _openAppMenu : null,
@@ -1358,6 +1365,10 @@ class _LineupShellState extends State<LineupShell> {
           !guidePlaybackUnavailable,
     );
     final settingsView = SettingsView(
+      key: widget.profile.isHandheld
+          ? GlobalObjectKey<SettingsViewState>(this)
+          : null,
+      displayMatching: widget.player.capabilities.displayMatching,
       controller: controller,
       subtitleAppearance: _player.subtitleAppearance,
       focusNode: _settingsFocus,

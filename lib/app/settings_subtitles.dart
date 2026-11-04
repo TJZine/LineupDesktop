@@ -28,11 +28,11 @@ bool _subtitleUsesColumns(BuildContext context, double detailWidth) =>
   );
 }
 
-extension _SubtitleSettingsPage on _SettingsViewState {
+extension _SubtitleSettingsPage on SettingsViewState {
   FocusNode _subtitleNode(_SettingKey key) =>
       _subtitleFocus.putIfAbsent(key, () => FocusNode(debugLabel: key.name));
 
-  Widget _subtitleDetail(BuildContext context) {
+  Widget _subtitleDetail(BuildContext context, {required bool handheldPage}) {
     final style = _displaySettings.subtitleStyle;
     final android = defaultTargetPlatform == TargetPlatform.android;
     final device = android && style.useDeviceStyle;
@@ -339,9 +339,9 @@ extension _SubtitleSettingsPage on _SettingsViewState {
           final heading = KeyedSubtree(
             key: _subtitleHeadingKey,
             child: _SettingsSection(
-              title: 'Subtitles',
+              title: handheldPage ? null : 'Subtitles',
               trailingGap: 16,
-              description: _SettingsViewState._categoryDescription(
+              description: SettingsViewState._categoryDescription(
                 SettingsCategory.subtitles,
               ),
               children: const [],
