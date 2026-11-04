@@ -93,8 +93,18 @@ void main() {
           final onNow = _card('Morning Cinema, channel 1.');
           final later = _card('Documentary and Discovery, channel 1.');
           final picture = find.byKey(const Key('guide-picture-in-picture'));
-          for (final control in [filter, search, tile, onNow, later, picture]) {
-            _expectTapTarget(tester, control, size);
+          for (final (control, label) in [
+            (filter, 'Filter by library'),
+            (search, 'Search channels'),
+            (tile, 'Channel 1, Documentary Stories. Watch.'),
+            (onNow, 'Morning Cinema, channel 1. On now, 17m left. Watch.'),
+            (
+              later,
+              'Documentary and Discovery, channel 1. Starts 9:30 AM. Details.',
+            ),
+            (picture, 'Now playing picture in picture. Open full player.'),
+          ]) {
+            _expectTapTarget(tester, control, size, expectedLabel: label);
           }
           final expectedScale = LineupCanvas.scaleFor(
             size,
