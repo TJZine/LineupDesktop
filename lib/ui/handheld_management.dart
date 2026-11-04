@@ -850,6 +850,7 @@ class HandheldStackedRow extends StatelessWidget {
     this.onTap,
     this.onLongPress,
     this.removed = false,
+    this.checked,
     super.key,
   });
 
@@ -864,6 +865,7 @@ class HandheldStackedRow extends StatelessWidget {
   final VoidCallback? onTap;
   final VoidCallback? onLongPress;
   final bool removed;
+  final bool? checked;
 
   @override
   Widget build(BuildContext context) {
@@ -946,6 +948,7 @@ class HandheldStackedRow extends StatelessWidget {
     if (onTap == null && onLongPress == null) return decorated;
     return Semantics(
       container: true,
+      checked: checked,
       onTap: onTap,
       onLongPress: onLongPress,
       child: Material(

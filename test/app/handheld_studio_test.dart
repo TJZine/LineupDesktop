@@ -5,6 +5,7 @@ import 'package:flutter/rendering.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:lineup_desktop/app/channel_studio_view.dart';
 import 'package:lineup_desktop/app/lineup_controller.dart';
+import 'package:lineup_desktop/app/channels_view.dart';
 import 'package:lineup_desktop/channels/channel.dart';
 import 'package:lineup_desktop/channels/content_resolver.dart';
 import 'package:lineup_desktop/channels/scheduler.dart';
@@ -16,6 +17,7 @@ import 'package:lineup_desktop/ui/lineup_controls.dart';
 import 'package:lineup_desktop/ui/lineup_canvas.dart';
 
 import '../support/golden_test_support.dart';
+import '../support/handheld_probe.dart';
 import '../support/ui_fixture.dart';
 
 const _handheld = DeviceProfile(
@@ -77,30 +79,32 @@ void main() {
               touch: true,
             );
 
-            if (!stacked) return;
+            if (stacked) {
+              expect(find.text('Back to Channels'), findsNothing);
+              final back = find.byTooltip('Back to Channels').last;
+              expect(back, findsOneWidget);
+              expect(find.text('Edit custom channel · Saved'), findsOneWidget);
+              _checkWords(tester);
 
-            expect(find.text('Back to Channels'), findsNothing);
-            final back = find.byTooltip('Back to Channels').last;
-            expect(back, findsOneWidget);
-            expect(find.text('Edit custom channel · Saved'), findsOneWidget);
-            _checkWords(tester);
+              final identity = find.byKey(const Key('studio-identity'));
+              expect(identity, findsOneWidget);
+              final identityStacks =
+                  tester.getSize(identity).width / textScale < 420;
+              final nameLabel = find.text('Channel name');
+              final numberLabel = find.text('Number');
+              expect(nameLabel, findsOneWidget);
+              expect(numberLabel, findsOneWidget);
+              final numberTop = tester.getTopLeft(numberLabel).dy;
+              final nameBottom = tester.getBottomLeft(nameLabel).dy;
+              expect(
+                numberTop,
+                identityStacks
+                    ? greaterThan(nameBottom)
+                    : lessThanOrEqualTo(nameBottom),
+              );
 
-            final identity = find.byKey(const Key('studio-identity'));
-            expect(identity, findsOneWidget);
-            final identityStacks =
-                tester.getSize(identity).width / textScale < 420;
-            final nameLabel = find.text('Channel name');
-            final numberLabel = find.text('Number');
-            expect(nameLabel, findsOneWidget);
-            expect(numberLabel, findsOneWidget);
-            final numberTop = tester.getTopLeft(numberLabel).dy;
-            final nameBottom = tester.getBottomLeft(nameLabel).dy;
-            expect(
-              numberTop,
-              identityStacks
-                  ? greaterThan(nameBottom)
-                  : lessThanOrEqualTo(nameBottom),
-            );
+              expect(tester.takeException(), isNull);
+            }
 
             await tester.ensureVisible(find.textContaining('Channel programs'));
             expect(find.text('Move to…'), findsWidgets);
@@ -126,7 +130,6 @@ void main() {
               touch: true,
               scrollStudio: true,
             );
-            expect(tester.takeException(), isNull);
           } finally {
             await tester.pumpWidget(const SizedBox.shrink());
             debugDefaultTargetPlatformOverride = null;
@@ -136,38 +139,81 @@ void main() {
     }
   }
 
-  testWidgets('Studio handheld page-bar Back uses the existing leave path', (
-    tester,
-  ) async {
-    debugDefaultTargetPlatformOverride = TargetPlatform.android;
-    try {
-      _window(tester, const Size(412, 915), 2.625);
-      await tester.runAsync(loadPinnedTestFonts);
-      var backCalls = 0;
-      final controller = _StudioController(scenario: _studioScenario());
-      addTearDown(controller.dispose);
-      await tester.pumpWidget(
-        _studio(controller, 1, onBack: (_) async => backCalls++),
-      );
-      await tester.pumpAndSettle();
-      final back = find.byTooltip('Back to Channels').last;
-      await _reachable(tester, back, touch: true);
-      await tester.tap(back);
-      await tester.pumpAndSettle();
-      expect(backCalls, 1);
-      expect(tester.takeException(), isNull);
-    } finally {
-      await tester.pumpWidget(const SizedBox.shrink());
-      debugDefaultTargetPlatformOverride = null;
+  for (final useArrow in [true, false]) {
+    for (final draft in ['clean', 'pending choice', 'dirty']) {
+      testWidgets('Studio ${useArrow ? 'arrow' : 'system'} Back with $draft', (
+        tester,
+      ) async {
+        debugDefaultTargetPlatformOverride = TargetPlatform.android;
+        try {
+          _window(tester, const Size(412, 915), 2.625);
+          await tester.runAsync(loadPinnedTestFonts);
+          final controller = _StudioController(scenario: _studioScenario());
+          addTearDown(controller.dispose);
+          await tester.pumpWidget(
+            UiFixture(controller: controller, profile: _handheld).build(),
+          );
+          await tester.pumpAndSettle();
+          await tester.tap(find.text('Channels'));
+          await tester.pumpAndSettle();
+          expect(find.byType(ChannelsView), findsOneWidget);
+          await tester.tap(
+            find.byKey(const ValueKey('channel-row-studio-channel')),
+          );
+          await tester.pumpAndSettle();
+          if (draft != 'clean') {
+            await tester.enterText(
+              find.byKey(const Key('studio-name')),
+              'Edited',
+            );
+            FocusManager.instance.primaryFocus?.unfocus();
+            await tester.pumpAndSettle();
+          }
+          if (draft == 'pending choice') {
+            final browse = find.byKey(const Key('studio-manual-browse-stage'));
+            await _reachable(tester, browse, scrollStudio: true);
+            await tester.tap(browse);
+            await tester.pumpAndSettle();
+            final select = find.text('Select');
+            await _reachable(tester, select, scrollStudio: true);
+            await tester.tap(select);
+            await tester.pumpAndSettle();
+            expect(find.text('Show selected'), findsOneWidget);
+          }
+
+          if (useArrow) {
+            final back = find.byTooltip('Back to Channels').last;
+            await _reachable(tester, back, touch: true);
+            await tester.tap(back);
+          } else {
+            await tester.binding.handlePopRoute();
+          }
+          await tester.pumpAndSettle();
+          if (draft == 'clean') {
+            expect(find.byType(ChannelStudioView), findsNothing);
+            expect(
+              find.byKey(const ValueKey('channel-row-studio-channel')),
+              findsOneWidget,
+            );
+          } else {
+            expect(find.byType(ChannelStudioView), findsOneWidget);
+            expect(find.text('Show selected'), findsNothing);
+            expect(
+              find.text('Discard changes?'),
+              draft == 'dirty' ? findsOneWidget : findsNothing,
+            );
+          }
+          expect(tester.takeException(), isNull);
+        } finally {
+          await tester.pumpWidget(const SizedBox.shrink());
+          debugDefaultTargetPlatformOverride = null;
+        }
+      });
     }
-  });
+  }
 }
 
-Widget _studio(
-  _StudioController controller,
-  double textScale, {
-  Future<void> Function(String? focusChannelId)? onBack,
-}) => MaterialApp(
+Widget _studio(_StudioController controller, double textScale) => MaterialApp(
   theme: LineupTheme.forName(
     LineupThemeName.emberSteel,
     formFactor: FormFactor.handheld,
@@ -187,7 +233,7 @@ Widget _studio(
       controller: controller,
       mode: ChannelStudioMode.editCustom,
       channel: controller.channels.single,
-      onBack: onBack ?? (_) async {},
+      onBack: (_) async {},
       onSaved: (_) {},
       onDuplicate: (_) {},
       onOpenGenerateLineup: () async {},
@@ -218,6 +264,7 @@ LineupScenario _studioScenario() {
     shuffleSeed: 7,
   );
   return LineupScenario(
+    stage: SetupStage.ready,
     channels: [channel],
     availableMedia: [
       PlexMediaItem(
@@ -279,45 +326,7 @@ Future<void> _reachable(
     }
   }
   await tester.pumpAndSettle();
-  final box = tester.renderObject<RenderBox>(control);
-  final bounds = MatrixUtils.transformRect(
-    box.getTransformTo(null),
-    Offset.zero & box.size,
-  );
-  if (touch) {
-    expect(bounds.width, greaterThanOrEqualTo(48 - .01), reason: '$control');
-    expect(bounds.height, greaterThanOrEqualTo(48 - .01), reason: '$control');
-  }
-  final dpr = tester.view.devicePixelRatio;
-  final window = tester.view.physicalSize / dpr;
-  expect(bounds.left, greaterThanOrEqualTo(-.5), reason: '$control $bounds');
-  expect(bounds.top, greaterThanOrEqualTo(-.5), reason: '$control $bounds');
-  expect(
-    bounds.right,
-    lessThanOrEqualTo(window.width + .5),
-    reason: '$control $bounds',
-  );
-  expect(
-    bounds.bottom,
-    lessThanOrEqualTo(window.height + .5),
-    reason: '$control $bounds',
-  );
-  final hits = HitTestResult();
-  tester.binding.hitTestInView(hits, bounds.center, tester.view.viewId);
-  final centerHit = tester.widget(control) is LineupTouchTarget
-      ? control.hitTestable().evaluate().isNotEmpty
-      : hits.path.any((hit) {
-          for (
-            var node = hit.target;
-            node is RenderObject;
-            node = node.parent!
-          ) {
-            if (identical(node, box)) return true;
-            if (node.parent == null) break;
-          }
-          return false;
-        });
-  expect(centerHit, isTrue, reason: '$control center is covered');
+  expectHandheldTarget(tester, control, touch: touch);
 }
 
 void _window(WidgetTester tester, Size size, double dpr) {
@@ -345,17 +354,5 @@ void _checkWords(WidgetTester tester) {
       ...tester.renderObjectList<RenderParagraph>(finder),
   ];
 
-  for (final paragraph in paragraphs) {
-    final content = paragraph.text.toPlainText();
-    for (final word in RegExp(r'[^\s-]+').allMatches(content)) {
-      final boxes = paragraph.getBoxesForSelection(
-        TextSelection(baseOffset: word.start, extentOffset: word.end),
-      );
-      expect(
-        boxes.map((box) => box.bottom).toSet(),
-        hasLength(1),
-        reason: '${word.group(0)} in $content',
-      );
-    }
-  }
+  expectHandheldWords(paragraphs);
 }

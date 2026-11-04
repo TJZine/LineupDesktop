@@ -709,8 +709,9 @@ class _StudioManualEditorState extends State<_StudioManualEditor>
     final tile = LayoutBuilder(
       builder: (context, constraints) {
         final wrapActions =
+            DeviceProfile.of(context).isHandheld ||
             constraints.maxWidth / MediaQuery.textScalerOf(context).scale(1) <
-            640;
+                640;
         return ListTile(
           key: entry.occurrence == 1 ? Key('studio-rundown-${entry.id}') : null,
           title: Text(

@@ -1,3 +1,5 @@
+import 'dart:ui' show CheckedState, SemanticsAction;
+
 import 'package:flutter/foundation.dart';
 import 'package:flutter/gestures.dart';
 import 'package:flutter/material.dart';
@@ -15,6 +17,7 @@ import 'package:lineup_desktop/ui/handheld_management.dart';
 import 'package:lineup_desktop/ui/lineup_canvas.dart';
 
 import '../support/golden_test_support.dart';
+import '../support/handheld_probe.dart';
 import '../support/ui_fixture.dart';
 
 const _handheld = DeviceProfile(
@@ -65,14 +68,66 @@ void main() {
           await _dismissIme(tester);
         }
         if (!stacked) {
-          await _reachable(tester, find.text('Add a custom channel'));
+          await expectHandheldReachable(
+            tester,
+            find.text('Add a custom channel'),
+          );
+          await _tap(
+            tester,
+            find.byTooltip('Actions for Documentaries'),
+            touch: true,
+          );
+          for (final label in ['Duplicate as custom', 'Delete…']) {
+            final item = find.ancestor(
+              of: find.text(label),
+              matching: find.byWidgetPredicate(
+                (widget) => widget is PopupMenuItem,
+              ),
+            );
+            await expectHandheldReachable(tester, item, touch: true);
+          }
+          await _tap(tester, find.text('Delete…'));
+          for (final label in ['Cancel', 'Delete channel']) {
+            await expectHandheldReachable(
+              tester,
+              find
+                  .ancestor(
+                    of: find.text(label).last,
+                    matching: find.byType(LineupTouchTarget),
+                  )
+                  .last,
+              touch: true,
+            );
+          }
+          await _tap(tester, find.widgetWithText(TextButton, 'Cancel'));
           await _tap(tester, find.text('Reorder channels'));
-          await _reachable(tester, find.text('Cancel'));
+          await _tap(
+            tester,
+            find.widgetWithText(TextButton, 'Move to…').first,
+            touch: true,
+          );
+          await expectHandheldReachable(
+            tester,
+            find.widgetWithText(TextField, 'Search channels'),
+          );
+          Finder moveAction(String label) => find.descendant(
+            of: find.byType(AlertDialog),
+            matching: find.widgetWithText(TextButton, label),
+          );
+          for (final label in ['Before', 'After', 'Cancel']) {
+            await expectHandheldReachable(
+              tester,
+              moveAction(label).first,
+              touch: true,
+            );
+          }
+          await _tap(tester, moveAction('Cancel'));
+          await expectHandheldReachable(tester, find.text('Cancel'));
           expect(tester.takeException(), isNull);
           return;
         }
         _checkWords(tester);
-        await _reachable(
+        await expectHandheldReachable(
           tester,
           find.byTooltip('Add a custom channel'),
           touch: true,
@@ -85,7 +140,7 @@ void main() {
         );
         expect(find.text('Duplicate as custom'), findsOneWidget);
         await _back(tester);
-        await _reachable(tester, first);
+        await expectHandheldReachable(tester, first);
         await tester.longPress(first);
         await tester.pumpAndSettle();
         expect(find.text('1 selected'), findsOneWidget);
@@ -98,7 +153,7 @@ void main() {
         );
         expect(find.text('3 selected'), findsOneWidget);
         await _tap(tester, find.byTooltip('Delete selected'), touch: true);
-        await _reachable(
+        await expectHandheldReachable(
           tester,
           find.ancestor(
             of: find.widgetWithText(FilledButton, 'Delete 3 channels'),
@@ -114,7 +169,7 @@ void main() {
         );
         await _startReorder(tester);
         _checkWords(tester);
-        await _reachable(tester, _drag, touch: true);
+        await expectHandheldReachable(tester, _drag, touch: true);
         await _tap(tester, _move, touch: true);
         await _tap(tester, find.text('Move down'));
         final semantics = tester.ensureSemantics();
@@ -123,7 +178,7 @@ void main() {
           findsOneWidget,
         );
         semantics.dispose();
-        await _reachable(
+        await expectHandheldReachable(
           tester,
           find.widgetWithText(FilledButton, 'Save'),
           touch: true,
@@ -145,6 +200,98 @@ void main() {
     }
   }
 
+  _handheldTest('selection row exposes one labeled checked action', (
+    tester,
+  ) async {
+    _window(tester, const Size(412, 915), 2.625);
+    final semantics = tester.ensureSemantics();
+    try {
+      await _DirectoryFixture().pump(tester, 1);
+      final row = _key('channel-row-channel-1');
+      await tester.longPress(row);
+      await tester.pumpAndSettle();
+      final node = tester.getSemantics(row);
+      expect(node.label, contains('Documentaries'));
+      expect(node.getSemanticsData().hasAction(SemanticsAction.tap), isTrue);
+      final childActions = <SemanticsNode>[];
+      void inspect(SemanticsNode parent) {
+        parent.visitChildren((child) {
+          if (child.getSemanticsData().hasAction(SemanticsAction.tap)) {
+            childActions.add(child);
+          }
+          inspect(child);
+          return true;
+        });
+      }
+
+      inspect(node);
+      expect(childActions, isEmpty);
+      expect(
+        node.getSemanticsData().flagsCollection.isChecked,
+        CheckedState.isTrue,
+      );
+      node.owner!.performAction(node.id, SemanticsAction.tap);
+      await tester.pumpAndSettle();
+      expect(
+        tester.getSemantics(row).getSemanticsData().flagsCollection.isChecked,
+        CheckedState.isFalse,
+      );
+    } finally {
+      semantics.dispose();
+    }
+  });
+
+  for (final scale in [1.0, 1.3]) {
+    for (final keyboard in [200.0, 300.0]) {
+      _handheldTest('short Move sheet at text $scale with $keyboard dp IME', (
+        tester,
+      ) async {
+        _window(tester, const Size(915, 412), 2.625);
+        await tester.runAsync(loadPinnedTestFonts);
+        await _DirectoryFixture().pump(tester, scale);
+        await _startReorder(tester);
+        await _tap(tester, _move);
+        await _tap(tester, find.text('Move to…'));
+        tester.view.viewInsets = FakeViewPadding(
+          bottom: keyboard * tester.view.devicePixelRatio,
+        );
+        await tester.pumpAndSettle();
+        expect(tester.takeException(), isNull);
+        expectHandheldTarget(tester, _moveSearch);
+        final cancel = find.widgetWithText(TextButton, 'Cancel');
+        expectHandheldTarget(tester, cancel, touch: true);
+        expect(
+          tester.getCenter(cancel).dy,
+          closeTo(tester.getCenter(_moveSearch).dy, 1),
+        );
+        expect(
+          find.text('Late Night News', findRichText: true).hitTestable(),
+          findsOneWidget,
+        );
+        await tester.tap(_moveSearch);
+        await tester.pumpAndSettle();
+        expect(
+          tester
+              .widget<EditableText>(
+                find.descendant(
+                  of: _moveSearch,
+                  matching: find.byType(EditableText),
+                ),
+              )
+              .focusNode
+              .hasFocus,
+          isTrue,
+        );
+        await tester.tap(cancel);
+        await tester.pumpAndSettle();
+        expect(_moveSearch, findsNothing);
+        expect(tester.takeException(), isNull);
+        tester.view.resetViewInsets();
+        await tester.pumpAndSettle();
+      });
+    }
+  }
+
   _handheldTest(
     'touch drag, Move up/down/to and confirmed delete reach the controller',
     (tester) async {
@@ -153,7 +300,7 @@ void main() {
       final fixture = _DirectoryFixture();
       await fixture.pump(tester, 1);
       await _startReorder(tester);
-      await _reachable(tester, _drag);
+      await expectHandheldReachable(tester, _drag);
       final third = _key('reorder-channel-3');
       final gesture = await tester.startGesture(
         tester.getCenter(_drag),
@@ -267,6 +414,60 @@ void main() {
     await _back(tester);
     expect(_search, findsNothing);
     expect(tester.takeException(), isNull);
+  });
+
+  _handheldTest('directory restores its anchor after a resize in Studio', (
+    tester,
+  ) async {
+    _window(tester, const Size(360, 800), 2);
+    await tester.runAsync(loadPinnedTestFonts);
+    await _DirectoryFixture(count: 70).pump(tester, 1);
+    final position = tester
+        .state<ScrollableState>(
+          find.descendant(of: _directory, matching: find.byType(Scrollable)),
+        )
+        .position;
+    position.jumpTo(2400);
+    await tester.pumpAndSettle();
+    final anchor = _topRow(tester, _directory, 'channel-row-');
+    final next = _key(
+      'channel-row-channel-${int.parse(anchor.split('-').last) + 1}',
+    );
+    await tester.tap(next);
+    await tester.pumpAndSettle();
+    tester.view.physicalSize = const Size(800, 360) * 2;
+    await tester.pumpAndSettle();
+    await _tap(tester, find.byTooltip('Back to Channels').last);
+    expect(_topRow(tester, _directory, 'channel-row-'), anchor);
+  });
+
+  _handheldTest('Wide directory separator anchors the next row', (
+    tester,
+  ) async {
+    _window(tester, const Size(1280, 800), 2);
+    await tester.runAsync(loadPinnedTestFonts);
+    final fixture = _DirectoryFixture(count: 70);
+    await fixture.pump(tester, 1);
+    final position = tester
+        .state<ScrollableState>(
+          find.descendant(of: _directory, matching: find.byType(Scrollable)),
+        )
+        .position;
+    final row = tester.renderObject<RenderBox>(_key('channel-row-channel-4'));
+    final start = RenderAbstractViewport.of(row)
+        .getOffsetToReveal(row, 0)
+        .offset;
+    position.jumpTo(start + row.size.height + .5);
+    await tester.pumpAndSettle();
+    expect(
+      _topRow(tester, _directory, 'channel-row-'),
+      'channel-row-channel-5',
+    );
+    await fixture.pump(tester, 2);
+    expect(
+      _topRow(tester, _directory, 'channel-row-'),
+      'channel-row-channel-5',
+    );
   });
 
   _handheldTest('selection, filter, search, reorder and anchor survive B0', (
@@ -411,68 +612,13 @@ Widget _host(double scale, Widget child) => MaterialApp(
   home: child,
 );
 
-Future<void> _reachable(
-  WidgetTester tester,
-  Finder control, {
-  bool touch = false,
-}) async {
-  expect(control, findsOneWidget);
-  await tester.ensureVisible(control);
-  await tester.pumpAndSettle();
-  final box = tester.renderObject<RenderBox>(control);
-  final bounds = MatrixUtils.transformRect(
-    box.getTransformTo(null),
-    Offset.zero & box.size,
-  );
-  if (touch) {
-    expect(bounds.width, greaterThanOrEqualTo(48 - .01), reason: '$control');
-    expect(bounds.height, greaterThanOrEqualTo(48 - .01), reason: '$control');
-  }
-  final dpr = tester.view.devicePixelRatio;
-  final window = tester.view.physicalSize / dpr;
-  final keyboard = tester.view.viewInsets.bottom / dpr;
-  expect(
-    bounds.left,
-    greaterThanOrEqualTo(-.5),
-    reason: '$control bounds $bounds',
-  );
-  expect(
-    bounds.top,
-    greaterThanOrEqualTo(-.5),
-    reason: '$control bounds $bounds',
-  );
-  expect(
-    bounds.right,
-    lessThanOrEqualTo(window.width + .5),
-    reason: '$control bounds $bounds',
-  );
-  expect(
-    bounds.bottom,
-    lessThanOrEqualTo(window.height - keyboard + .5),
-    reason: '$control bounds $bounds',
-  );
-  final hits = HitTestResult();
-  tester.binding.hitTestInView(hits, bounds.center, tester.view.viewId);
-  expect(
-    hits.path.any((hit) {
-      for (var node = hit.target; node is RenderObject; node = node.parent!) {
-        if (identical(node, box)) return true;
-        if (node.parent == null) break;
-      }
-      return false;
-    }),
-    isTrue,
-    reason: '$control center is covered',
-  );
-}
-
 Future<void> _tap(
   WidgetTester tester,
   Finder control, {
   bool touch = false,
   Finder? target,
 }) async {
-  await _reachable(tester, target ?? control, touch: touch);
+  await expectHandheldReachable(tester, target ?? control, touch: touch);
   await tester.tap(control);
   await tester.pumpAndSettle();
 }
@@ -482,7 +628,7 @@ Future<void> _imeTap(WidgetTester tester, Finder field) async {
     bottom: 300 * tester.view.devicePixelRatio,
   );
   await tester.pumpAndSettle();
-  await _reachable(tester, field);
+  await expectHandheldReachable(tester, field);
   FocusManager.instance.primaryFocus?.unfocus();
   await tester.pump();
   await tester.tapAt(tester.getCenter(field));
@@ -502,23 +648,12 @@ void _checkWords(WidgetTester tester) {
         return key is ValueKey<String> && key.value.startsWith(prefix);
       }),
   ];
-  for (final control in controls) {
-    for (final paragraph in tester.renderObjectList<RenderParagraph>(
-      find.descendant(of: control, matching: find.byType(RichText)),
-    )) {
-      final content = paragraph.text.toPlainText();
-      for (final word in RegExp(r'[^\s-]+').allMatches(content)) {
-        final boxes = paragraph.getBoxesForSelection(
-          TextSelection(baseOffset: word.start, extentOffset: word.end),
-        );
-        expect(
-          boxes.map((box) => box.bottom).toSet(),
-          hasLength(1),
-          reason: '${word.group(0)} in $content',
-        );
-      }
-    }
-  }
+  expectHandheldWords([
+    for (final control in controls)
+      ...tester.renderObjectList<RenderParagraph>(
+        find.descendant(of: control, matching: find.byType(RichText)),
+      ),
+  ]);
 }
 
 String _topRow(WidgetTester tester, Finder list, String prefix) {

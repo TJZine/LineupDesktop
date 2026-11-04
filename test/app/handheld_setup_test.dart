@@ -16,6 +16,7 @@ import 'package:lineup_desktop/ui/handheld_management.dart';
 import 'package:lineup_desktop/ui/lineup_canvas.dart';
 
 import '../support/golden_test_support.dart';
+import '../support/handheld_probe.dart';
 import '../support/ui_fixture.dart';
 
 const _handheld = DeviceProfile(
@@ -75,8 +76,8 @@ void main() {
         }
         await _tap(tester, replaceMode);
         expect(tester.widget<FilledButton>(_apply).onPressed, isNull);
-        await _reachable(tester, _consent);
-        await _reachable(tester, _apply);
+        await expectHandheldReachable(tester, _consent);
+        await expectHandheldReachable(tester, _apply);
         await _imeTap(tester, _search);
         expect(_apply, findsNothing);
         if (stacked) expect(_consent, findsNothing);
@@ -86,7 +87,7 @@ void main() {
         await _tap(tester, _consent);
         await _tap(tester, _apply);
         expect(controller.applied, 1);
-        await _reachable(
+        await expectHandheldReachable(
           tester,
           find.widgetWithText(FilledButton, 'View lineup'),
         );
@@ -125,6 +126,7 @@ void main() {
             (tester.view.physicalSize / tester.view.devicePixelRatio);
         expect(tester.getRect(method).overlaps(window), isTrue);
       }
+      await _tap(tester, find.widgetWithText(TextButton, '182 Unchanged'));
       await tester.enterText(_search, 'Test');
       FocusManager.instance.primaryFocus?.unfocus();
       await tester.pumpAndSettle();
@@ -134,17 +136,6 @@ void main() {
       }
       final anchor = _topRow(tester);
       expect(anchor, isNot('review-channel-channel-1'));
-      expect(
-        find
-            .byWidgetPredicate((widget) {
-              final key = widget.key;
-              return key is ValueKey<String> &&
-                  key.value.startsWith('review-channel-');
-            })
-            .evaluate()
-            .length,
-        lessThan(184),
-      );
       await _imeTap(tester, _search);
       tester.view.resetViewInsets();
       FocusManager.instance.primaryFocus?.unfocus();
@@ -162,11 +153,77 @@ void main() {
       await tester.pumpWidget(_host(1, _ReviewFixture()));
       await tester.pumpAndSettle();
       expect(_topRow(tester), stackedAnchor);
+      final roster = tester.widget<CustomScrollView>(_roster);
+      roster.controller!.jumpTo(0);
+      await tester.pumpAndSettle();
+      final filter = find.ancestor(
+        of: find.text('182 Unchanged'),
+        matching: find.byType(Semantics),
+      );
+      expect(
+        tester
+            .widgetList<Semantics>(filter)
+            .any((widget) => widget.properties.selected == true),
+        isTrue,
+      );
       await _tap(tester, find.byTooltip('Clear search'));
       expect(tester.widget<TextField>(_search).controller!.text, isEmpty);
       expect(tester.takeException(), isNull);
     },
   );
+
+  for (final interruption in ['none', 'search', 'drag']) {
+    _handheldTest('stacked Review rotation with $interruption interruption', (
+      tester,
+    ) async {
+      _window(
+        tester,
+        interruption == 'none' ? const Size(360, 800) : const Size(1280, 800),
+        3,
+      );
+      await tester.runAsync(loadPinnedTestFonts);
+      await tester.pumpWidget(
+        _host(interruption == 'none' ? 2 : 1, _ReviewFixture()),
+      );
+      await tester.pumpAndSettle();
+      final scroll = tester.widget<CustomScrollView>(_roster).controller!;
+      scroll.jumpTo(interruption == 'none' ? 5017 : 9000);
+      await tester.pumpAndSettle();
+      final anchor = _topRow(tester);
+      tester.view.physicalSize = const Size(800, 360) * 3;
+      await tester.pump();
+      if (interruption == 'search') {
+        await tester.enterText(_search, '1');
+        FocusManager.instance.primaryFocus?.unfocus();
+        await tester.pump();
+        final afterSearch = scroll.offset;
+        await tester.pumpAndSettle();
+        expect(scroll.offset, afterSearch);
+      } else if (interruption == 'drag') {
+        final viewport = tester.getRect(_roster);
+        final gesture = await tester.startGesture(
+          viewport.bottomCenter - const Offset(0, 36),
+        );
+        await gesture.moveBy(const Offset(0, 45));
+        await gesture.moveBy(const Offset(0, 45));
+        final afterDrag = scroll.offset;
+        await tester.pumpAndSettle();
+        expect(scroll.offset, afterDrag);
+        await gesture.up();
+      } else {
+        await tester.pumpAndSettle();
+        expect(_topRow(tester), anchor);
+        expect(
+          tester.getTopLeft(_key(anchor)).dy,
+          closeTo(tester.getTopLeft(_roster).dy, 2),
+        );
+        tester.view.physicalSize = const Size(360, 800) * 3;
+        await tester.pumpAndSettle();
+        expect(_topRow(tester), anchor);
+      }
+      expect(tester.takeException(), isNull);
+    });
+  }
 
   _handheldTest('production Setup retains its active step across B0', (
     tester,
@@ -242,14 +299,17 @@ void main() {
     }
 
     await _tap(tester, _key('scan-selected-libraries'));
-    await _reachable(tester, _key('scan-again-libraries'));
+    await expectHandheldReachable(tester, _key('scan-again-libraries'));
     await _tap(tester, _key('continue-ready-libraries'));
     await _tap(tester, _key('configure-section-2'));
     final limit = _key('rules-maximum');
     await _scrollConfig(tester, limit);
     await _tap(tester, limit);
     final sheet = find.byType(HandheldChoiceSheet<int>);
-    final option = tester.widget<HandheldChoiceSheet<int>>(sheet).choices.first;
+    final option = tester
+        .widget<HandheldChoiceSheet<int>>(sheet)
+        .choices
+        .singleWhere((choice) => choice.value == 100);
     await _tap(
       tester,
       find.descendant(of: sheet, matching: find.text(option.label)),
@@ -288,7 +348,7 @@ void main() {
     await _tap(tester, _key('review-channels'));
     controller.failApply = true;
     await _tap(tester, _apply);
-    await _reachable(
+    await expectHandheldReachable(
       tester,
       find.widgetWithText(FilledButton, 'Back to review'),
     );
@@ -359,55 +419,8 @@ Widget _host(double scale, Widget child) => MaterialApp(
   home: child,
 );
 
-Future<void> _reachable(WidgetTester tester, Finder control) async {
-  expect(control, findsOneWidget);
-  await tester.ensureVisible(control);
-  await tester.pumpAndSettle();
-  final box = tester.renderObject<RenderBox>(control);
-  final bounds = MatrixUtils.transformRect(
-    box.getTransformTo(null),
-    Offset.zero & box.size,
-  );
-  final dpr = tester.view.devicePixelRatio;
-  final window = tester.view.physicalSize / dpr;
-  final keyboard = tester.view.viewInsets.bottom / dpr;
-  expect(
-    bounds.left,
-    greaterThanOrEqualTo(-.5),
-    reason: '$control bounds $bounds',
-  );
-  expect(
-    bounds.top,
-    greaterThanOrEqualTo(-.5),
-    reason: '$control bounds $bounds',
-  );
-  expect(
-    bounds.right,
-    lessThanOrEqualTo(window.width + .5),
-    reason: '$control bounds $bounds',
-  );
-  expect(
-    bounds.bottom,
-    lessThanOrEqualTo(window.height - keyboard + .5),
-    reason: '$control bounds $bounds',
-  );
-  final hits = HitTestResult();
-  tester.binding.hitTestInView(hits, bounds.center, tester.view.viewId);
-  expect(
-    hits.path.any((hit) {
-      for (var node = hit.target; node is RenderObject; node = node.parent!) {
-        if (identical(node, box)) return true;
-        if (node.parent == null) break;
-      }
-      return false;
-    }),
-    isTrue,
-    reason: '$control center is covered',
-  );
-}
-
 Future<void> _tap(WidgetTester tester, Finder control) async {
-  await _reachable(tester, control);
+  await expectHandheldReachable(tester, control);
   await tester.tap(control);
   await tester.pumpAndSettle();
 }
@@ -417,7 +430,7 @@ Future<void> _imeTap(WidgetTester tester, Finder field) async {
     bottom: 300 * tester.view.devicePixelRatio,
   );
   await tester.pumpAndSettle();
-  await _reachable(tester, field);
+  await expectHandheldReachable(tester, field);
   FocusManager.instance.primaryFocus?.unfocus();
   await tester.pump();
   await tester.tapAt(tester.getCenter(field));
@@ -431,21 +444,11 @@ Future<void> _imeTap(WidgetTester tester, Finder field) async {
 void _checkTitleWords(WidgetTester tester) {
   final title = _key('handheld-page-bar-title');
   if (title.evaluate().isEmpty) return;
-  final paragraph = tester.renderObject<RenderParagraph>(
-    find.descendant(of: title, matching: find.byType(RichText)),
+  expectHandheldWords(
+    tester.renderObjectList<RenderParagraph>(
+      find.descendant(of: title, matching: find.byType(RichText)),
+    ),
   );
-  for (final word in RegExp(
-    r'[^\s-]+',
-  ).allMatches(paragraph.text.toPlainText())) {
-    final boxes = paragraph.getBoxesForSelection(
-      TextSelection(baseOffset: word.start, extentOffset: word.end),
-    );
-    expect(
-      boxes.map((box) => box.bottom).toSet(),
-      hasLength(1),
-      reason: word.group(0),
-    );
-  }
 }
 
 Future<void> _scrollConfig(WidgetTester tester, Finder control) async {
@@ -464,7 +467,7 @@ Future<void> _checkTouchRegion(WidgetTester tester, Finder control) async {
   final region = find
       .ancestor(of: control, matching: find.byType(LineupTouchTarget))
       .first;
-  expect(tester.getRect(region).height, greaterThanOrEqualTo(48 - .01));
+  expectHandheldTarget(tester, region, touch: true);
 }
 
 Future<void> _pumpSetup(

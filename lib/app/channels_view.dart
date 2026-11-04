@@ -13,6 +13,7 @@ import '../ui/app_ui.dart';
 import '../ui/handheld_management.dart';
 import '../ui/lineup_canvas.dart';
 import 'channel_health_monitor.dart';
+import 'channel_setup/review_step.dart' show HandheldRosterAnchor;
 import 'channel_studio_view.dart';
 import 'lineup_controller.dart';
 import 'navigation_shortcuts.dart';
@@ -31,6 +32,21 @@ typedef _MoveDestination = ({String id, bool after});
 
 double _channelTouchExtent(BuildContext context) =>
     math.max(56, LineupCanvas.minimumTouchExtentOf(context) + .001);
+
+ButtonStyle? _channelMoveButtonStyle(BuildContext context) =>
+    DeviceProfile.of(context).isHandheld
+    ? TextButton.styleFrom(
+        minimumSize: Size.square(_channelTouchExtent(context)),
+      )
+    : null;
+
+double _moveKeyboardInset(BuildContext context) {
+  // Observe inset changes and use the raw view value because a parent can
+  // already have consumed the inset in its MediaQuery.
+  MediaQuery.viewInsetsOf(context);
+  return View.of(context).viewInsets.bottom /
+      LineupCanvas.physicalPixelRatioOf(context);
+}
 
 class ChannelsView extends StatefulWidget {
   const ChannelsView({
@@ -69,10 +85,10 @@ class ChannelsViewState extends State<ChannelsView> {
   Channel? _studioChannel;
   String? _returnFocusId;
   final _handheldScroll = ScrollController();
-  ({bool stacked, Size size, TextScaler scaler})? _directoryGeometry;
-  List<String> _laidOutRowIds = const [];
-  _DirectoryMode? _laidOutMode;
-  int _anchorGeneration = 0;
+  late final _anchor = HandheldRosterAnchor(
+    _handheldScroll,
+    () => _directoryRows,
+  );
   final _search = TextEditingController();
   final _searchFocus = FocusNode(debugLabel: 'Search channels');
   _DirectoryFilter _filter = _DirectoryFilter.all;
@@ -167,10 +183,7 @@ class ChannelsViewState extends State<ChannelsView> {
   bool handleBack() {
     if (_saving || _leaveRequest != null) return true;
     if (_studioOpen) {
-      final studio = _studio;
-      if (studio == null || studio.saving) return true;
-      if (studio.cancelPendingChoice()) return true;
-      unawaited(closeStudio());
+      unawaited(_handleStudioBack());
       return true;
     }
     if (_showSelected && !handheldStacked(context)) {
@@ -245,6 +258,14 @@ class ChannelsViewState extends State<ChannelsView> {
     await requestLeave(focusId);
   }
 
+  Future<void> _handleStudioBack([String? focusId]) async {
+    final studio = _studio;
+    if (_saving || _leaveRequest != null || studio == null || studio.saving) {
+      return;
+    }
+    if (!studio.cancelPendingChoice()) await closeStudio(focusId);
+  }
+
   Future<void> _openGenerateLineupFromStudio() =>
       _generateLineupEntry ??= _enterGenerateLineupFromStudio().whenComplete(
         () => _generateLineupEntry = null,
@@ -311,7 +332,9 @@ class ChannelsViewState extends State<ChannelsView> {
 
   @override
   Widget build(BuildContext context) {
+    final profile = DeviceProfile.of(context);
     if (_studioMode case final mode?) {
+      if (profile.isHandheld) _anchor.captureBeforeDetach();
       return PopScope(
         canPop: AndroidBackScope.claims(context),
         onPopInvokedWithResult: (didPop, _) {
@@ -332,7 +355,7 @@ class ChannelsViewState extends State<ChannelsView> {
             controller: widget.controller,
             mode: mode,
             channel: _studioChannel,
-            onBack: closeStudio,
+            onBack: profile.isHandheld ? _handleStudioBack : closeStudio,
             onOpenMenu: widget.showNavigationMenu ? widget.onOpenMenu : null,
             menuFocusNode: widget.menuFocusNode,
             onSaved: (id) {
@@ -374,10 +397,28 @@ class ChannelsViewState extends State<ChannelsView> {
     _lastChannelOrder = channels
         .map((channel) => channel.id)
         .toList(growable: false);
-    final handheld = DeviceProfile.of(context).isHandheld;
+    final handheld = profile.isHandheld;
     final stacked = handheldStacked(context);
-    if (handheld) _trackDirectoryGeometry(stacked, visible);
-    if (stacked) return _stackedDirectory(channels, matching, visible);
+    if (handheld) {
+      final reordering = _mode == _DirectoryMode.reorder;
+      _anchor.update(
+        context,
+        stacked,
+        reordering
+            ? List.of(_reorderIds)
+            : [for (final channel in visible) channel.id],
+        separated: !stacked && !reordering,
+      );
+    }
+    if (stacked) {
+      final directory = _stackedDirectory(channels, matching, visible);
+      return NotificationListener<ScrollNotification>(
+        onNotification: _anchor.cancelOnDrag,
+        child: _mode == _DirectoryMode.reorder
+            ? _layoutReorderPage(directory)
+            : directory,
+      );
+    }
     final headingStyle = LineupTypography.pageTitle.copyWith(
       color: LineupTheme.of(context).primaryText,
     );
@@ -682,6 +723,15 @@ class ChannelsViewState extends State<ChannelsView> {
                                                   'Actions for ${channel.name}',
                                             ),
                                             menuPadding: EdgeInsets.zero,
+                                            style: handheld
+                                                ? IconButton.styleFrom(
+                                                    minimumSize: Size.square(
+                                                      _channelTouchExtent(
+                                                        context,
+                                                      ),
+                                                    ),
+                                                  )
+                                                : null,
                                             onSelected: (action) =>
                                                 switch (action) {
                                                   _RowAction.duplicate =>
@@ -694,7 +744,11 @@ class ChannelsViewState extends State<ChannelsView> {
                                               if (channel.builderKey != null)
                                                 PopupMenuItem(
                                                   value: _RowAction.duplicate,
-                                                  height: 48,
+                                                  height: handheld
+                                                      ? _channelTouchExtent(
+                                                          context,
+                                                        )
+                                                      : 48,
                                                   padding: EdgeInsets.zero,
                                                   child: LineupDropdownMenuRow(
                                                     menuTheme: menuTheme,
@@ -706,7 +760,11 @@ class ChannelsViewState extends State<ChannelsView> {
                                                 ),
                                               PopupMenuItem(
                                                 value: _RowAction.delete,
-                                                height: 48,
+                                                height: handheld
+                                                    ? _channelTouchExtent(
+                                                        context,
+                                                      )
+                                                    : 48,
                                                 padding: EdgeInsets.zero,
                                                 child: LineupDropdownMenuRow(
                                                   menuTheme: menuTheme,
@@ -737,9 +795,32 @@ class ChannelsViewState extends State<ChannelsView> {
         }
         return KeyEventResult.ignored;
       },
-      child: page,
+      child: handheld
+          ? NotificationListener<ScrollNotification>(
+              onNotification: _anchor.cancelOnDrag,
+              child: page,
+            )
+          : page,
     );
   }
+
+  // Reorder has no text fields. The Move sheet handles keyboard clearance
+  // while the covered reorder page keeps its normal layout.
+  Widget _layoutReorderPage(Widget directory) => LayoutBuilder(
+    builder: (context, constraints) {
+      final keyboard = _moveKeyboardInset(context);
+      final height = constraints.maxHeight + keyboard;
+      return ClipRect(
+        clipBehavior: keyboard > 0 ? Clip.hardEdge : Clip.none,
+        child: OverflowBox(
+          alignment: Alignment.topCenter,
+          minHeight: height,
+          maxHeight: height,
+          child: directory,
+        ),
+      );
+    },
+  );
 
   Widget _stackedDirectory(
     List<Channel> channels,
@@ -1022,16 +1103,18 @@ class ChannelsViewState extends State<ChannelsView> {
         onLongPress: _saving || selecting
             ? null
             : () => _beginSelection(channel.id),
+        checked: selecting ? _selectedIds.contains(channel.id) : null,
         leading: selecting
-            ? SizedBox.square(
-                dimension: extent,
-                child: Checkbox(
-                  semanticLabel: 'Select ${channel.name}',
-                  materialTapTargetSize: MaterialTapTargetSize.padded,
-                  value: _selectedIds.contains(channel.id),
-                  onChanged: _saving
-                      ? null
-                      : (_) => _toggleSelected(channel.id),
+            ? ExcludeSemantics(
+                child: SizedBox.square(
+                  dimension: extent,
+                  child: Checkbox(
+                    materialTapTargetSize: MaterialTapTargetSize.padded,
+                    value: _selectedIds.contains(channel.id),
+                    onChanged: _saving
+                        ? null
+                        : (_) => _toggleSelected(channel.id),
+                  ),
                 ),
               )
             : null,
@@ -1195,95 +1278,6 @@ class ChannelsViewState extends State<ChannelsView> {
         ?.findRenderObject();
     if (root != null) visit(root);
     return rows;
-  }
-
-  void _trackDirectoryGeometry(bool stacked, List<Channel> visible) {
-    final geometry = (
-      stacked: stacked,
-      size: MediaQuery.sizeOf(context),
-      scaler: MediaQuery.textScalerOf(context),
-    );
-    final previous = _directoryGeometry;
-    final sameList =
-        (_laidOutMode == _DirectoryMode.reorder) ==
-        (_mode == _DirectoryMode.reorder);
-    if (previous != null && previous != geometry && sameList) {
-      final generation = ++_anchorGeneration;
-      final rows = _directoryRows;
-      if (rows != null && rows.geometry != null) {
-        final top = rows.constraints.scrollOffset;
-        if (top <= 0) {
-          // The reorder hint can precede the rows.
-          unawaited(_restoreDirectoryAnchor(null, generation));
-        } else {
-          for (
-            var row = rows.firstChild;
-            row != null;
-            row = rows.childAfter(row)
-          ) {
-            if (rows.childScrollOffset(row)! + row.size.height <= top) continue;
-            final index = _directoryRowIndex(rows.indexOf(row));
-            if (index < _laidOutRowIds.length) {
-              unawaited(
-                _restoreDirectoryAnchor(_laidOutRowIds[index], generation),
-              );
-            }
-            break;
-          }
-        }
-      }
-    } else if (!sameList) {
-      _anchorGeneration++;
-    }
-    _directoryGeometry = geometry;
-    _laidOutMode = _mode;
-    _laidOutRowIds = _mode == _DirectoryMode.reorder
-        ? List.of(_reorderIds)
-        : visible.map((channel) => channel.id).toList(growable: false);
-  }
-
-  int _directoryRowIndex(int sliverIndex) =>
-      _directoryGeometry?.stacked == false &&
-          _laidOutMode != _DirectoryMode.reorder
-      ? sliverIndex ~/ 2
-      : sliverIndex;
-
-  Future<void> _restoreDirectoryAnchor(String? id, int generation) async {
-    // Row heights change with composition and text scale. Seek by viewport
-    // until the same ID is laid out, then align using its actual geometry.
-    for (var attempt = 0; attempt <= _laidOutRowIds.length; attempt++) {
-      await WidgetsBinding.instance.endOfFrame;
-      if (!mounted ||
-          generation != _anchorGeneration ||
-          !_handheldScroll.hasClients) {
-        return;
-      }
-      if (id == null) {
-        _handheldScroll.jumpTo(0);
-        return;
-      }
-      final target = _laidOutRowIds.indexOf(id);
-      final rows = _directoryRows;
-      if (target < 0 || rows == null) return;
-      final position = _handheldScroll.position;
-      for (var row = rows.firstChild; row != null; row = rows.childAfter(row)) {
-        if (_directoryRowIndex(rows.indexOf(row)) != target) continue;
-        final offset = RenderAbstractViewport.of(row)
-            .getOffsetToReveal(row, 0)
-            .offset;
-        position.jumpTo(offset.clamp(0.0, position.maxScrollExtent));
-        return;
-      }
-      final first = rows.firstChild;
-      final forward =
-          first == null || target > _directoryRowIndex(rows.indexOf(first));
-      final next =
-          (position.pixels +
-                  (forward ? 1 : -1) * position.viewportDimension * .8)
-              .clamp(0.0, position.maxScrollExtent);
-      if (next == position.pixels) return;
-      position.jumpTo(next);
-    }
   }
 
   List<Channel> _sortedChannels() =>
@@ -1450,7 +1444,12 @@ class ChannelsViewState extends State<ChannelsView> {
             SizedBox(width: 16),
             Expanded(child: type),
             SizedBox(width: 16),
-            SizedBox(width: 44, child: action),
+            SizedBox(
+              width: DeviceProfile.of(context).isHandheld
+                  ? _channelTouchExtent(context)
+                  : 44,
+              child: action,
+            ),
           ],
         ),
       ),
@@ -1786,7 +1785,7 @@ class ChannelsViewState extends State<ChannelsView> {
     List<Channel> channels,
     String confirmLabel,
   ) async {
-    final expandActions = handheldStacked(context);
+    final expandActions = DeviceProfile.of(context).isHandheld;
     return await showDialog<bool>(
           context: context,
           builder: (context) => _ChannelDeletionDialog(
@@ -1918,6 +1917,7 @@ class ChannelsViewState extends State<ChannelsView> {
               icon: Icons.arrow_downward,
             ),
             TextButton(
+              style: _channelMoveButtonStyle(context),
               onPressed: _saving ? null : () => _moveTo(index, byId),
               child: const Text('Move to…'),
             ),
@@ -2205,6 +2205,7 @@ class _MoveChannelDialogState extends State<_MoveChannelDialog> {
         .toDouble();
 
     final searchDecoration = InputDecoration(hintText: 'Search channels');
+    final buttonStyle = _channelMoveButtonStyle(context);
     final dialog = AlertDialog(
       insetPadding: EdgeInsets.symmetric(horizontal: 40, vertical: 24),
       titlePadding: EdgeInsets.only(left: 24, top: 24, right: 24),
@@ -2245,6 +2246,7 @@ class _MoveChannelDialogState extends State<_MoveChannelDialog> {
                     trailing: Wrap(
                       children: [
                         TextButton(
+                          style: buttonStyle,
                           onPressed: () => Navigator.pop(context, (
                             id: channel.id,
                             after: false,
@@ -2252,6 +2254,7 @@ class _MoveChannelDialogState extends State<_MoveChannelDialog> {
                           child: const Text('Before'),
                         ),
                         TextButton(
+                          style: buttonStyle,
                           onPressed: () => Navigator.pop(context, (
                             id: channel.id,
                             after: true,
@@ -2269,6 +2272,7 @@ class _MoveChannelDialogState extends State<_MoveChannelDialog> {
       ),
       actions: [
         TextButton(
+          style: buttonStyle,
           onPressed: () => Navigator.pop(context),
           child: const Text('Cancel'),
         ),
@@ -2283,13 +2287,37 @@ class _MoveChannelDialogState extends State<_MoveChannelDialog> {
     List<Channel> channels,
   ) {
     final size = MediaQuery.sizeOf(context);
-    // Subscribe to inset changes, but use the view's unconsumed IME height.
-    MediaQuery.viewInsetsOf(context);
-    final view = View.of(context);
-    final keyboard =
-        view.viewInsets.bottom / LineupCanvas.physicalPixelRatioOf(context);
+    final keyboard = _moveKeyboardInset(context);
     final height = math.max(0.0, size.height - keyboard) * .9;
     final roles = LineupTheme.of(context);
+    final handleHeight = 43 / LineupCanvas.scaleOf(context);
+    final touchExtent = _channelTouchExtent(context);
+    final textScaler = MediaQuery.textScalerOf(context);
+    // Budget the tall header, field and one destination (label and buttons)
+    // using the same canvas units as the sheet.
+    final searchHeight = math.max(touchExtent, textScaler.scale(16) + 32);
+    final resultHeight = math.max(touchExtent, textScaler.scale(18) * 1.4 + 24);
+    final compact =
+        height - MediaQuery.paddingOf(context).bottom <
+        handleHeight + 72 + searchHeight + 8 + resultHeight + touchExtent + 16;
+    final search = ConstrainedBox(
+      constraints: BoxConstraints(minHeight: touchExtent),
+      child: TextField(
+        key: const Key('channels-move-search'),
+        controller: _search,
+        focusNode: _searchFocus,
+        decoration: const InputDecoration(
+          prefixIcon: Icon(Icons.search),
+          hintText: 'Search channels',
+        ),
+        onChanged: (_) => setState(() {}),
+      ),
+    );
+    final cancel = TextButton(
+      style: compact ? _channelMoveButtonStyle(context) : null,
+      onPressed: () => Navigator.pop(context),
+      child: const Text('Cancel'),
+    );
     return Padding(
       padding: EdgeInsets.only(bottom: keyboard),
       child: Material(
@@ -2304,50 +2332,40 @@ class _MoveChannelDialogState extends State<_MoveChannelDialog> {
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.stretch,
                 children: [
-                  SizedBox(
-                    height: 43 / LineupCanvas.scaleOf(context),
-                    child: Center(
-                      child: DecoratedBox(
-                        decoration: ShapeDecoration(
-                          color: roles.mutedText,
-                          shape: const StadiumBorder(),
+                  if (compact)
+                    Row(
+                      children: [
+                        Expanded(child: search),
+                        const SizedBox(width: 8),
+                        cancel,
+                      ],
+                    )
+                  else ...[
+                    SizedBox(
+                      height: handleHeight,
+                      child: Center(
+                        child: DecoratedBox(
+                          decoration: ShapeDecoration(
+                            color: roles.mutedText,
+                            shape: const StadiumBorder(),
+                          ),
+                          child: const SizedBox(width: 36, height: 4),
                         ),
-                        child: const SizedBox(width: 36, height: 4),
                       ),
                     ),
-                  ),
-                  HandheldPageBar(
-                    title: 'Move $name',
-                    actions: [
-                      TextButton(
-                        onPressed: () => Navigator.pop(context),
-                        child: const Text('Cancel'),
-                      ),
-                    ],
-                  ),
-                  ConstrainedBox(
-                    constraints: BoxConstraints(
-                      minHeight: _channelTouchExtent(context),
-                    ),
-                    child: TextField(
-                      key: const Key('channels-move-search'),
-                      controller: _search,
-                      focusNode: _searchFocus,
-                      decoration: const InputDecoration(
-                        prefixIcon: Icon(Icons.search),
-                        hintText: 'Search channels',
-                      ),
-                      onChanged: (_) => setState(() {}),
-                    ),
-                  ),
-                  const SizedBox(height: 8),
+                    HandheldPageBar(title: 'Move $name', actions: [cancel]),
+                    search,
+                    const SizedBox(height: 8),
+                  ],
                   Expanded(
                     child: ListView.builder(
                       itemCount: channels.length,
                       itemBuilder: (context, index) {
                         final channel = channels[index];
                         return Padding(
-                          padding: const EdgeInsets.symmetric(vertical: 8),
+                          padding: EdgeInsets.symmetric(
+                            vertical: compact ? 0 : 8,
+                          ),
                           child: Column(
                             crossAxisAlignment: CrossAxisAlignment.start,
                             children: [

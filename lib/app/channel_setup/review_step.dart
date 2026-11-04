@@ -1,6 +1,7 @@
 import 'dart:async';
 import 'dart:math' as math;
 
+import 'package:flutter/foundation.dart' show listEquals;
 import 'package:flutter/material.dart';
 import 'package:flutter/rendering.dart';
 import 'package:flutter/services.dart';
@@ -16,6 +17,125 @@ import '../setup_review.dart';
 import 'step_scaffold.dart';
 
 enum SetupReviewFilter { all, unchanged, updated, added, removed }
+
+/// Keeps a visible row stable when a handheld roster changes geometry.
+class HandheldRosterAnchor {
+  HandheldRosterAnchor(this.scroll, this.rows);
+
+  final ScrollController scroll;
+  final RenderSliverMultiBoxAdaptor? Function() rows;
+
+  ({bool stacked, Size size, TextScaler scaler})? _geometry;
+  List<String> _ids = const [];
+  bool _separated = false;
+  int _generation = 0;
+  ({String? id})? _detachedAnchor;
+
+  // Call before replacing the roster with a leaf that shares its route.
+  void captureBeforeDetach() {
+    _detachedAnchor ??= _capture();
+    _generation++;
+  }
+
+  void update(
+    BuildContext context,
+    bool stacked,
+    List<String> ids, {
+    bool separated = false,
+  }) {
+    final geometry = (
+      stacked: stacked,
+      size: LineupCanvas.windowSizeOf(context),
+      scaler: MediaQuery.textScalerOf(context),
+    );
+    final sameProjection = listEquals(_ids, ids);
+    if (!sameProjection) _generation++;
+    if (_geometry != null && _geometry != geometry && sameProjection) {
+      final anchor = _detachedAnchor ?? _capture();
+      if (anchor == null) return;
+      unawaited(_restore(anchor.id, ++_generation));
+    }
+    _detachedAnchor = null;
+    _geometry = geometry;
+    _ids = ids;
+    _separated = separated;
+  }
+
+  bool cancelOnDrag(ScrollNotification notification) {
+    if (notification.depth == 0 &&
+        (notification is ScrollStartNotification &&
+                notification.dragDetails != null ||
+            notification is ScrollUpdateNotification &&
+                notification.dragDetails != null)) {
+      _generation++;
+    }
+    return false;
+  }
+
+  ({String? id})? _capture() {
+    if (!scroll.hasClients) return null;
+    final sliver = rows();
+    if (sliver == null || sliver.geometry == null) return null;
+    final top = sliver.constraints.scrollOffset;
+    if (top <= 0) return (id: null);
+
+    for (
+      var row = sliver.firstChild;
+      row != null;
+      row = sliver.childAfter(row)
+    ) {
+      final index = sliver.indexOf(row);
+      if (_separated && index.isOdd) continue;
+      if (sliver.childScrollOffset(row)! + row.size.height <= top) continue;
+      final rowIndex = _rowIndex(index);
+      if (rowIndex < _ids.length) return (id: _ids[rowIndex]);
+      break;
+    }
+    return null;
+  }
+
+  int _rowIndex(int sliverIndex) => _separated ? sliverIndex ~/ 2 : sliverIndex;
+
+  Future<void> _restore(String? id, int generation) async {
+    // Seek through the lazy list, then use the actual row bounds to align it.
+    for (var attempt = 0; attempt <= _ids.length; attempt++) {
+      await WidgetsBinding.instance.endOfFrame;
+      if (generation != _generation || !scroll.hasClients) return;
+      final position = scroll.position;
+      if (id == null) {
+        position.jumpTo(0);
+        return;
+      }
+      final target = _ids.indexOf(id);
+      final sliver = rows();
+      if (target < 0 || sliver == null) return;
+      final childIndex = _separated ? target * 2 : target;
+      for (
+        var row = sliver.firstChild;
+        row != null;
+        row = sliver.childAfter(row)
+      ) {
+        if (sliver.indexOf(row) != childIndex) continue;
+        final offset = RenderAbstractViewport.of(row)
+            .getOffsetToReveal(row, 0)
+            .offset;
+        position.jumpTo(offset.clamp(0.0, position.maxScrollExtent));
+        return;
+      }
+      final first = sliver.firstChild;
+      final direction = first == null || childIndex > sliver.indexOf(first)
+          ? 1
+          : -1;
+      final next =
+          (position.pixels + direction * position.viewportDimension * .8).clamp(
+            0.0,
+            position.maxScrollExtent,
+          );
+      if (next == position.pixels) return;
+      position.jumpTo(next);
+    }
+  }
+}
 
 class SetupReviewStep extends StatefulWidget {
   const SetupReviewStep({
@@ -75,92 +195,11 @@ class _SetupReviewStepState extends State<SetupReviewStep> {
   int _revealGeneration = 0;
 
   final _handheldRowsKey = GlobalKey();
-  List<SetupReviewEntry> _laidOutEntries = const [];
-  bool? _stackedLayout;
-  int _anchorGeneration = 0;
+  late final _anchor = HandheldRosterAnchor(_rosterScroll, () => _handheldRows);
 
   RenderSliverMultiBoxAdaptor? get _handheldRows =>
       _handheldRowsKey.currentContext?.findRenderObject()
           as RenderSliverMultiBoxAdaptor?;
-
-  void _trackHandheldLayout(bool stacked) {
-    final previous = _stackedLayout;
-    _stackedLayout = stacked;
-    final entries = _visibleEntries;
-    if (previous != null && stacked != previous && _rosterScroll.hasClients) {
-      final generation = ++_anchorGeneration;
-      final rows = _handheldRows;
-      if (rows != null && rows.geometry != null) {
-        final top = rows.constraints.scrollOffset;
-        if (top <= 0) {
-          // The overview and method can still be above the first roster row.
-          unawaited(_restoreHandheldAnchor(null, generation));
-        } else {
-          for (
-            var row = rows.firstChild;
-            row != null;
-            row = rows.childAfter(row)
-          ) {
-            final offset = rows.childScrollOffset(row)!;
-            if (offset > top || offset + row.size.height <= top) continue;
-            final index = rows.indexOf(row);
-            if (index < _laidOutEntries.length) {
-              final id = _laidOutEntries[index].channel.id;
-              unawaited(_restoreHandheldAnchor(id, generation));
-            }
-            break;
-          }
-        }
-      }
-    }
-    _laidOutEntries = entries;
-  }
-
-  Future<void> _restoreHandheldAnchor(String? id, int generation) async {
-    final entries = _visibleEntries;
-    final target = id == null
-        ? null
-        : entries.indexWhere((entry) => entry.channel.id == id);
-    if (target == -1) return;
-    // The new layout has different row extents. Advance by viewports until
-    // the sliver has built the same ID, then align it using its real extent.
-    for (var attempt = 0; attempt <= entries.length; attempt++) {
-      await WidgetsBinding.instance.endOfFrame;
-      if (!mounted ||
-          generation != _anchorGeneration ||
-          !_rosterScroll.hasClients) {
-        return;
-      }
-      if (target == null) {
-        _rosterScroll.jumpTo(0);
-        return;
-      }
-      final rows = _handheldRows;
-      if (rows == null) return;
-      for (var row = rows.firstChild; row != null; row = rows.childAfter(row)) {
-        if (rows.indexOf(row) == target) {
-          final viewport = RenderAbstractViewport.of(row);
-          final position = _rosterScroll.position;
-          position.jumpTo(
-            viewport
-                .getOffsetToReveal(row, 0)
-                .offset
-                .clamp(0.0, position.maxScrollExtent),
-          );
-          return;
-        }
-      }
-      final position = _rosterScroll.position;
-      final first = rows.firstChild;
-      final forward = first == null || target > rows.indexOf(first);
-      final next =
-          (position.pixels +
-                  (forward ? 1 : -1) * position.viewportDimension * .8)
-              .clamp(0.0, position.maxScrollExtent);
-      if (next == position.pixels) return;
-      position.jumpTo(next);
-    }
-  }
 
   List<SetupReviewEntry> get _visibleEntries {
     final query = _search.text.trim().toLowerCase();
@@ -379,8 +418,11 @@ class _SetupReviewStepState extends State<SetupReviewStep> {
   Widget build(BuildContext context) {
     final review = widget.review;
     final noChanges = !review.counts.hasChanges;
-    if (DeviceProfile.of(context).isHandheld) {
-      _trackHandheldLayout(handheldStacked(context));
+    final profile = DeviceProfile.of(context);
+    if (profile.isHandheld) {
+      _anchor.update(context, handheldStacked(context), [
+        for (final entry in _visibleEntries) entry.channel.id,
+      ]);
     }
     final body = SetupStage(
       footer: Focus(
@@ -489,7 +531,13 @@ class _SetupReviewStepState extends State<SetupReviewStep> {
         },
       ),
     );
-    return DeviceProfile.of(context).isTv
+    if (profile.isHandheld) {
+      return NotificationListener<ScrollNotification>(
+        onNotification: _anchor.cancelOnDrag,
+        child: body,
+      );
+    }
+    return profile.isTv
         ? FocusTraversalGroup(
             policy: SetupVerticalTraversalPolicy(),
             child: body,
