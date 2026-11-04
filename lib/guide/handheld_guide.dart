@@ -359,7 +359,7 @@ extension _PortraitGuideLayout on _GuideViewState {
               onProgramTap: (channel, program) =>
                   _handleHandheldProgramTap(context, channel, program),
               onProgramDetails: (channel, program) =>
-                  _showHandheldProgram(context, channel, program),
+                  unawaited(_showHandheldProgram(context, channel, program)),
             );
           },
         ),
@@ -379,15 +379,15 @@ extension _PortraitGuideLayout on _GuideViewState {
       controller.selectProgram(program);
       unawaited(widget.onTune(channel.id));
     } else {
-      _showHandheldProgram(context, channel, program);
+      unawaited(_showHandheldProgram(context, channel, program));
     }
   }
 
-  void _showHandheldProgram(
+  Future<void> _showHandheldProgram(
     BuildContext context,
     Channel channel,
     GuideProgram program,
-  ) {
+  ) async {
     final controller = widget.controller;
     controller.focusProgram(program);
     final generation = controller.lineup.contentGeneration;
@@ -395,54 +395,63 @@ extension _PortraitGuideLayout on _GuideViewState {
     final color = poster.then(
       (bytes) => bytes == null ? null : _artworkColor(bytes),
     );
-    unawaited(
-      showModalBottomSheet<void>(
-        context: context,
-        isScrollControlled: true,
-        useSafeArea: true,
-        backgroundColor: Colors.transparent,
-        constraints: BoxConstraints(
-          maxHeight: MediaQuery.sizeOf(context).height * .9,
-        ),
-        builder: (context) => ListenableBuilder(
-          listenable: Listenable.merge([controller, _presentationClock]),
-          builder: (context, _) {
-            final now = controller.now;
-            final current = controller.currentProgram(channel.id, now);
-            final canWatch =
-                generation == controller.lineup.contentGeneration &&
-                current != null &&
-                program.scheduled.end.isAfter(now);
-            return _HandheldProgramSheet(
-              channel: channel,
-              program: program,
-              now: now,
-              poster: poster,
-              color: color,
-              onWatch: !canWatch
-                  ? null
-                  : () {
-                      final pressedAt = controller.now;
-                      if (generation != controller.lineup.contentGeneration ||
-                          !program.scheduled.end.isAfter(pressedAt)) {
-                        return;
-                      }
-                      final airing = controller.currentProgram(
-                        channel.id,
-                        pressedAt,
-                      );
-                      if (airing == null || !airing.isCurrentAt(pressedAt)) {
-                        return;
-                      }
-                      Navigator.of(context).pop();
-                      controller.selectProgram(airing);
-                      unawaited(widget.onTune(channel.id));
-                    },
-            );
-          },
-        ),
+    final sheetChanges = Listenable.merge([controller, _presentationClock]);
+
+    GuideProgram? airingToWatch() {
+      if (!mounted ||
+          !identical(widget.controller, controller) ||
+          generation != controller.lineup.contentGeneration) {
+        return null;
+      }
+      final now = controller.now;
+      if (!program.scheduled.end.isAfter(now)) return null;
+      final airing = controller.currentProgram(channel.id, now);
+      return airing?.isCurrentAt(now) == true ? airing : null;
+    }
+
+    Future<Object?>? closingTransition;
+    final watch = await showModalBottomSheet<bool>(
+      context: context,
+      isScrollControlled: true,
+      useSafeArea: true,
+      backgroundColor: Colors.transparent,
+      constraints: BoxConstraints(
+        maxHeight: MediaQuery.sizeOf(context).height * .9,
       ),
+      builder: (context) {
+        if (!mounted || !identical(widget.controller, controller)) {
+          return const SizedBox.shrink();
+        }
+        return ListenableBuilder(
+          listenable: sheetChanges,
+          builder: (context, _) => _HandheldProgramSheet(
+            channel: channel,
+            program: program,
+            now: controller.now,
+            poster: poster,
+            color: color,
+            onWatch: airingToWatch() == null
+                ? null
+                : () {
+                    if (airingToWatch() == null) return;
+                    final route = ModalRoute.of(context);
+                    if (route == null || !route.isCurrent) return;
+                    closingTransition = route.completed;
+                    Navigator.of(context).pop(true);
+                  },
+          ),
+        );
+      },
     );
+    final transition = closingTransition;
+    if (watch != true || transition == null) return;
+    // Tuning replaces Guide. The reversing sheet can still rebuild for Android
+    // metrics changes and must finish before Guide disposes its clock.
+    await transition;
+    final airing = airingToWatch();
+    if (airing == null) return;
+    controller.selectProgram(airing);
+    await widget.onTune(channel.id);
   }
 }
 
