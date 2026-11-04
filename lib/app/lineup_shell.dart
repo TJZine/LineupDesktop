@@ -97,6 +97,7 @@ class _LineupShellState extends State<LineupShell> {
   static const _appMenuChannel = MethodChannel('lineup/app_menu');
   bool _onboardingFromAccount = false;
   SettingsCategory _settingsCategory = SettingsCategory.appearance;
+  bool _settingsCategoryPageOpen = false;
   Object? _lastPlayerFacts;
   late SetupStage _lastStage;
   @override
@@ -420,7 +421,7 @@ class _LineupShellState extends State<LineupShell> {
         _returnFromSettings();
         return true;
       case ShellDestination.diagnostics:
-        _settingsCategory = SettingsCategory.support;
+        _showSettingsCategory(SettingsCategory.support);
         unawaited(_select(ShellDestination.settings));
         return true;
       case ShellDestination.player:
@@ -482,7 +483,7 @@ class _LineupShellState extends State<LineupShell> {
         _returnTv(origin);
         return true;
       case _TvDiagnostics(:final settings):
-        _settingsCategory = SettingsCategory.support;
+        _showSettingsCategory(SettingsCategory.support);
         _returnTv(settings);
         return true;
     }
@@ -741,7 +742,7 @@ class _LineupShellState extends State<LineupShell> {
     setState(() {
       _licensesOpen = false;
       _onboardingSupport = true;
-      _settingsCategory = SettingsCategory.support;
+      _showSettingsCategory(SettingsCategory.support);
     });
   }
 
@@ -783,8 +784,13 @@ class _LineupShellState extends State<LineupShell> {
         ],
       );
 
+  void _showSettingsCategory(SettingsCategory category) {
+    _settingsCategory = category;
+    _settingsCategoryPageOpen = true;
+  }
+
   Future<void> _openAccount() async {
-    _settingsCategory = SettingsCategory.account;
+    _showSettingsCategory(SettingsCategory.account);
     await _select(ShellDestination.settings);
   }
 
@@ -860,7 +866,7 @@ class _LineupShellState extends State<LineupShell> {
         (event.logicalKey == LogicalKeyboardKey.escape ||
             event.logicalKey == LogicalKeyboardKey.backspace ||
             event.logicalKey == LogicalKeyboardKey.goBack)) {
-      _settingsCategory = SettingsCategory.support;
+      _showSettingsCategory(SettingsCategory.support);
       unawaited(_select(ShellDestination.settings));
       return KeyEventResult.handled;
     }
@@ -1384,9 +1390,11 @@ class _LineupShellState extends State<LineupShell> {
           ? null
           : _returnFromSettings,
       category: _settingsCategory,
-      onCategoryChanged: (category) => setState(() {
-        _settingsCategory = category;
-      }),
+      categoryPageOpen: _settingsCategoryPageOpen,
+      onCategoryChanged: (category) =>
+          setState(() => _showSettingsCategory(category)),
+      onCloseCategoryPage: () =>
+          setState(() => _settingsCategoryPageOpen = false),
       onSwitchProfile: _openProfilePickerFromAccount,
       onSwitchServer: _openServerPickerFromAccount,
       onSignOut: _requestLogout,
@@ -1436,7 +1444,7 @@ class _LineupShellState extends State<LineupShell> {
         controller: controller,
         playback: _player.diagnosticPlaybackSnapshot,
         onRecordingSettings: () {
-          _settingsCategory = SettingsCategory.support;
+          _showSettingsCategory(SettingsCategory.support);
           widget.profile.isTv
               ? _returnTv(_tvSettings)
               : unawaited(_select(ShellDestination.settings));
@@ -1445,7 +1453,7 @@ class _LineupShellState extends State<LineupShell> {
         menuFocusNode: _diagnosticsMenuFocus,
         onOpenMenu: _openAppMenu,
         onBack: () {
-          _settingsCategory = SettingsCategory.support;
+          _showSettingsCategory(SettingsCategory.support);
           widget.profile.isTv
               ? _returnTv(_tvSettings)
               : unawaited(_select(ShellDestination.settings));

@@ -208,6 +208,47 @@ void main() {
     }
   }
 
+  _h4Test('Settings tab restores the last list or category page', (
+    tester,
+  ) async {
+    _window(tester, const Size(412, 915), 1, 1);
+    await _pump(
+      tester,
+      UiFixture(
+        profile: _handheld,
+        scenario: const LineupScenario(stage: SetupStage.ready),
+      ),
+    );
+    await _openSettings(tester);
+    Future<void> roundTrip() async {
+      await _tap(tester, find.byKey(const ValueKey('handheld-tab-guide')));
+      expect(find.byType(SettingsView), findsNothing);
+      await _openSettings(tester);
+    }
+
+    await _tap(tester, find.text('Playback'));
+    await tester.binding.handlePopRoute();
+    await tester.pumpAndSettle();
+    await roundTrip();
+    expect(find.text('Playback'), findsOneWidget);
+    expect(find.text('DVR playback controls'), findsNothing);
+
+    await _tap(tester, find.text('Appearance'));
+    await roundTrip();
+    expect(find.byTooltip('Back to Settings'), findsOneWidget);
+    expect(find.text('Theme'), findsOneWidget);
+    await _tap(tester, find.byTooltip('Back to Settings'));
+    await roundTrip();
+    expect(find.text('Playback'), findsOneWidget);
+    expect(find.text('Theme'), findsNothing);
+
+    await _tap(tester, find.text('Support').first);
+    await _tap(tester, find.text('Open Diagnostics'));
+    await _tap(tester, find.byTooltip('Back to Support'));
+    expect(find.byTooltip('Back to Settings'), findsOneWidget);
+    expect(find.text('Open Diagnostics'), findsOneWidget);
+  });
+
   _h4Test(
     'category and list top survive the width flip, then Back returns to Guide',
     (tester) async {

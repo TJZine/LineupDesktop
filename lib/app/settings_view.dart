@@ -37,6 +37,8 @@ class SettingsView extends StatefulWidget {
     this.subtitleAppearance,
     this.category = SettingsCategory.appearance,
     this.onCategoryChanged,
+    this.categoryPageOpen,
+    this.onCloseCategoryPage,
     this.onSwitchProfile,
     this.onSwitchServer,
     this.onSignOut,
@@ -56,6 +58,8 @@ class SettingsView extends StatefulWidget {
   final SubtitleAppearanceSource? subtitleAppearance;
   final SettingsCategory category;
   final ValueChanged<SettingsCategory>? onCategoryChanged;
+  final bool? categoryPageOpen;
+  final VoidCallback? onCloseCategoryPage;
   final VoidCallback? onSwitchProfile;
   final VoidCallback? onSwitchServer;
   final Future<void> Function()? onSignOut;
@@ -79,7 +83,9 @@ class SettingsViewState extends State<SettingsView> {
   late LineupSettings _displaySettings;
   late LineupSettings _lastControllerSettings;
   bool _categoryFocusPlaced = false;
-  late bool _categoryOpen;
+  bool _localCategoryPageOpen = false;
+
+  bool get _categoryOpen => widget.categoryPageOpen ?? _localCategoryPageOpen;
   final List<_PendingSave> _pendingSaves = [];
   final _subtitleRailFocus = FocusNode(debugLabel: 'Subtitles category');
   final _subtitleFocus = <_SettingKey, FocusNode>{};
@@ -104,8 +110,6 @@ class SettingsViewState extends State<SettingsView> {
   void initState() {
     super.initState();
     _localCategory = widget.category;
-    _categoryOpen =
-        widget.supportOnly || widget.category != SettingsCategory.appearance;
     _lastControllerSettings = widget.controller.settings;
     _displaySettings = _lastControllerSettings;
     widget.controller.addListener(_controllerChanged);
@@ -174,13 +178,17 @@ class SettingsViewState extends State<SettingsView> {
     if (!_usesCategoryPages || !_categoryOpen || widget.supportOnly) {
       return false;
     }
-    setState(() => _categoryOpen = false);
+    if (widget.onCloseCategoryPage case final close?) {
+      close();
+    } else {
+      setState(() => _localCategoryPageOpen = false);
+    }
     return true;
   }
 
   void _openCategory(SettingsCategory category) {
     setState(() {
-      _categoryOpen = true;
+      _localCategoryPageOpen = true;
       _localCategory = category;
       if (category != SettingsCategory.subtitles) {
         _focusedSubtitle = null;
