@@ -44,6 +44,7 @@ class _HandheldGuideTimeline extends StatelessWidget {
   @override
   Widget build(BuildContext context) => LayoutBuilder(
     builder: (context, box) {
+      final visibleRulerHeight = math.min(rulerHeight, box.maxHeight);
       final timelineLeft = railWidth + _tileGap;
       final width = math.max(0.0, box.maxWidth - timelineLeft);
       final perMinute = phone ? width * .55 / 30 : width / 75;
@@ -98,7 +99,7 @@ class _HandheldGuideTimeline extends StatelessWidget {
                         child: _HandheldGuideRuler(
                           geometry: geometry,
                           timelineLeft: timelineLeft,
-                          height: rulerHeight,
+                          height: visibleRulerHeight,
                         ),
                       ),
                       Expanded(
@@ -154,7 +155,7 @@ class _HandheldGuideTimeline extends StatelessWidget {
                     ),
                   if (allFailed)
                     Positioned.fill(
-                      top: rulerHeight,
+                      top: visibleRulerHeight,
                       child: ColoredBox(
                         color: LineupTheme.of(context).deepBackground,
                         child: Center(

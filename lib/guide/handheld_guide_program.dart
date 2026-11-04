@@ -109,8 +109,11 @@ class _HandheldNowStripState extends State<_HandheldNowStrip> {
       builder: (context, constraints) {
         final physicalRatio = LineupCanvas.physicalPixelRatioOf(context);
         final bucket = CoverResizeImage.bucket;
+        // Full and compact layouts share this image. Measuring the strip at
+        // both widths must not oscillate between two artwork requests.
         final width =
-            (constraints.maxWidth * physicalRatio / bucket).ceil() * bucket;
+            (MediaQuery.sizeOf(context).width * physicalRatio / bucket).ceil() *
+            bucket;
         final height = (180 * physicalRatio / bucket).ceil() * bucket;
         final identity = (
           controller,

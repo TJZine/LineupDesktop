@@ -286,7 +286,7 @@ extension _PortraitGuideLayout on _GuideViewState {
     final rulerHeight = 32 * rowScale;
     return _HandheldGuideFrame(
       reservedScheduleHeight: rulerHeight + 2 * rowHeight,
-      minimumPictureHeight: LineupCanvas.minimumTouchExtentOf(context),
+      rulerHeight: rulerHeight,
       header: ColoredBox(
         color: LineupTheme.of(context).deepBackground,
         child: ValueListenableBuilder<TextEditingValue>(
@@ -451,7 +451,7 @@ extension _PortraitGuideLayout on _GuideViewState {
 class _HandheldGuideFrame extends MultiChildRenderObjectWidget {
   _HandheldGuideFrame({
     required this.reservedScheduleHeight,
-    required this.minimumPictureHeight,
+    required this.rulerHeight,
     required Widget header,
     required Widget? picture,
     required Widget? strip,
@@ -459,18 +459,18 @@ class _HandheldGuideFrame extends MultiChildRenderObjectWidget {
   }) : super(children: [header, ?picture, ?strip, schedule]);
 
   final double reservedScheduleHeight;
-  final double minimumPictureHeight;
+  final double rulerHeight;
 
   @override
   _HandheldGuideFrameRender createRenderObject(BuildContext context) =>
-      _HandheldGuideFrameRender(reservedScheduleHeight, minimumPictureHeight);
+      _HandheldGuideFrameRender(reservedScheduleHeight, rulerHeight);
 
   @override
   void updateRenderObject(
     BuildContext context,
     _HandheldGuideFrameRender renderObject,
   ) {
-    renderObject.update(reservedScheduleHeight, minimumPictureHeight);
+    renderObject.update(reservedScheduleHeight, rulerHeight);
   }
 }
 
@@ -483,21 +483,18 @@ class _HandheldGuideFrameRender extends RenderBox
           RenderBox,
           _HandheldGuideFrameParentData
         > {
-  _HandheldGuideFrameRender(
-    this._reservedScheduleHeight,
-    this._minimumPictureHeight,
-  );
+  _HandheldGuideFrameRender(this._reservedScheduleHeight, this._rulerHeight);
 
   double _reservedScheduleHeight;
-  double _minimumPictureHeight;
+  double _rulerHeight;
 
-  void update(double reservedScheduleHeight, double minimumPictureHeight) {
+  void update(double reservedScheduleHeight, double rulerHeight) {
     if (_reservedScheduleHeight == reservedScheduleHeight &&
-        _minimumPictureHeight == minimumPictureHeight) {
+        _rulerHeight == rulerHeight) {
       return;
     }
     _reservedScheduleHeight = reservedScheduleHeight;
-    _minimumPictureHeight = minimumPictureHeight;
+    _rulerHeight = rulerHeight;
     markNeedsLayout();
   }
 
@@ -541,15 +538,14 @@ class _HandheldGuideFrameRender extends RenderBox
         _place(strip, 0, top + fullHeight);
         top += fullHeight + stripHeight;
       } else {
+        // The two-row threshold selects the thumbnail. Once compact, keep
+        // the strip's natural height whenever the window can show the ruler.
         final compactHeight = math.max(
           0.0,
           math.min(
+            stripHeight,
             math.min(
-              stripHeight,
-              math.max(_minimumPictureHeight, heightForStripAndPicture),
-            ),
-            math.min(
-              (size.height - top),
+              size.height - top - _rulerHeight,
               width / (2 * _guidePictureAspectRatio),
             ),
           ),

@@ -261,6 +261,28 @@ void main() {
     await fixture.unmount(tester);
   });
 
+  _testGuideWidgets(
+    'Short Guide keeps the natural strip height beside the picture',
+    (tester) async {
+      _configure(tester, const Size(800, 1280), 3, 1.3);
+      final fixture = _GuideFixture();
+      await fixture.mount(tester, picture: true, tabBarHeight: 78);
+      final strip = find.byKey(const Key('handheld-guide-now-strip'));
+      final picture = find.byKey(const Key('guide-picture-in-picture'));
+      final naturalHeight = _windowRect(tester, strip).height;
+      tester.view.physicalSize = const Size(800, 360) * 3;
+      await tester.pumpAndSettle();
+      expect(_windowRect(tester, picture).height, closeTo(naturalHeight, .01));
+      expect(_windowRect(tester, strip).height, closeTo(naturalHeight, .01));
+      expect(
+        find.byKey(const Key('guide-program-progress')).hitTestable(),
+        findsOneWidget,
+      );
+      expect(tester.takeException(), isNull);
+      await fixture.unmount(tester);
+    },
+  );
+
   _testGuideWidgets('Narrow Guide cards own their interval and long press', (
     tester,
   ) async {
@@ -638,7 +660,11 @@ class _GuideFixture {
   final failed = <String>{};
   final pending = <String, Completer<ScheduleIndex>>{};
 
-  Future<void> mount(WidgetTester tester, {bool picture = false}) async {
+  Future<void> mount(
+    WidgetTester tester, {
+    bool picture = false,
+    double tabBarHeight = 0,
+  }) async {
     await tester.pumpWidget(
       MaterialApp(
         theme: LineupTheme.forName(LineupThemeName.emberSteel),
@@ -646,15 +672,22 @@ class _GuideFixture {
           profile: _handheld,
           child: LineupCanvas(child: child!),
         ),
-        home: GuideView(
-          controller: guide,
-          watchingChannelId: picture ? 'ch-0' : null,
-          pictureInPicture: picture
-              ? const ColoredBox(color: Colors.blue)
-              : null,
-          onOpenPlayer: picture ? () => openPlayerCalls++ : null,
-          onClose: (_, _) {},
-          onTune: (id) async => tunes.add(id),
+        home: Column(
+          children: [
+            Expanded(
+              child: GuideView(
+                controller: guide,
+                watchingChannelId: picture ? 'ch-0' : null,
+                pictureInPicture: picture
+                    ? const ColoredBox(color: Colors.blue)
+                    : null,
+                onOpenPlayer: picture ? () => openPlayerCalls++ : null,
+                onClose: (_, _) {},
+                onTune: (id) async => tunes.add(id),
+              ),
+            ),
+            SizedBox(height: tabBarHeight),
+          ],
         ),
       ),
     );
