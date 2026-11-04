@@ -440,7 +440,11 @@ class LicensesViewState extends State<LicensesView> {
           onPressed: () => _open(item),
           child: Row(
             children: [
-              Expanded(child: Text(item.title)),
+              Expanded(
+                child: DeviceProfile.of(context).isHandheld
+                    ? _LicenseIndexName(item.title)
+                    : Text(item.title),
+              ),
               const Icon(Icons.chevron_right),
             ],
           ),
@@ -538,5 +542,61 @@ class LicensesViewState extends State<LicensesView> {
       OutlinedButton(onPressed: retry, child: const Text('Retry')),
       const SizedBox(height: 16),
     ],
+  );
+}
+
+// Keep separators visible and attached to the preceding part. The visual
+// fragments are replaced by the unchanged name in the row's semantics.
+class _LicenseIndexName extends StatelessWidget {
+  const _LicenseIndexName(this.name);
+
+  final String name;
+
+  static final _parts = RegExp(
+    r'[^\s.:\-_/]*[.:\-_/]|[^\s.:\-_/]+(?:\s+|$)|\s+',
+  );
+
+  @override
+  Widget build(BuildContext context) => Semantics(
+    label: name,
+    excludeSemantics: true,
+    child: LayoutBuilder(
+      builder: (context, constraints) {
+        final style = DefaultTextStyle.of(context).style;
+        final scaler = MediaQuery.textScalerOf(context);
+        final painter = TextPainter(
+          textDirection: Directionality.of(context),
+          locale: Localizations.maybeLocaleOf(context),
+          maxLines: 1,
+        );
+
+        Widget part(String value) {
+          painter
+            ..text = TextSpan(text: value, style: style)
+            ..textScaler = scaler
+            ..layout();
+          if (painter.width <= constraints.maxWidth) {
+            return Text(value, softWrap: false);
+          }
+          painter
+            ..textScaler = TextScaler.noScaling
+            ..layout();
+          if (painter.width > constraints.maxWidth) return Text(value);
+          return FittedBox(
+            fit: BoxFit.scaleDown,
+            child: Text(value, softWrap: false),
+          );
+        }
+
+        final children = [
+          for (final match in _parts.allMatches(name)) part(match.group(0)!),
+        ];
+        painter.dispose();
+        return Wrap(
+          crossAxisAlignment: WrapCrossAlignment.center,
+          children: children,
+        );
+      },
+    ),
   );
 }

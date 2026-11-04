@@ -37,7 +37,9 @@ void main() {
     VoidCallback? back,
     LineupThemeName theme = LineupThemeName.emberSteel,
     bool isTv = false,
+    DeviceProfile? profile,
   }) async {
+    final device = profile ?? profileFor(isTv);
     tester.view.physicalSize = size;
     tester.view.devicePixelRatio = 1;
     addTearDown(tester.view.resetPhysicalSize);
@@ -47,7 +49,7 @@ void main() {
         theme: LineupTheme.forName(
           theme,
           largeFocusIndicators: true,
-          formFactor: profileFor(isTv).formFactor,
+          formFactor: device.formFactor,
         ),
         builder: (context, child) => MediaQuery(
           data: MediaQuery.of(context).copyWith(
@@ -55,7 +57,7 @@ void main() {
             disableAnimations: true,
           ),
           child: DeviceProfileScope(
-            profile: profileFor(isTv),
+            profile: device,
             child: LineupCanvas(child: child!),
           ),
         ),
@@ -81,6 +83,116 @@ void main() {
     await tester.pump();
     await tester.pump();
   }
+
+  testWidgets('handheld license names wrap at separators and speak intact', (
+    tester,
+  ) async {
+    debugDefaultTargetPlatformOverride = TargetPlatform.android;
+    const handheld = DeviceProfile(
+      host: TargetPlatform.android,
+      formFactor: FormFactor.handheld,
+    );
+    // Observed in the Android package index and bundled runtime notices.
+    const fragment = 'androidx.fragment:fragment';
+    const okhttp =
+        'com.squareup.okhttp3:okhttp:4.12.0 · '
+        'okhttp3__internal__publicsuffix__NOTICE.txt';
+    const fitted = 'androidx/multiplatformregistration-notice';
+    const overwide =
+        'multiplatformregistrationmultiplatformregistrationmultiplatformregistration';
+    final names = [fragment, okhttp, fitted, overwide];
+    final semantics = tester.ensureSemantics();
+    try {
+      await show(
+        tester,
+        [
+          LicenseSource(
+            'Android packages',
+            () async => [
+              for (final (index, name) in names.indexed)
+                LicenseItem.document(
+                  'android/$index',
+                  name,
+                  () async => 'Notice',
+                ),
+            ],
+          ),
+        ],
+        size: const Size(360, 800),
+        scale: 2,
+        profile: handheld,
+      );
+      final scroll = find.byType(Scrollable).first;
+      for (final (index, name) in names.indexed) {
+        final row = find.byKey(ValueKey('license-row-android/$index'));
+        await tester.scrollUntilVisible(row, 150, scrollable: scroll);
+        final parts = find.descendant(of: row, matching: find.byType(Text));
+        expect(
+          tester.widgetList<Text>(parts).map((text) => text.data).join(),
+          name,
+        );
+        final nodes = find.semantics
+            .byAction(ui.SemanticsAction.tap)
+            .evaluate();
+        expect(
+          nodes.where(
+            (node) =>
+                !node.isInvisible &&
+                !node.isMergedIntoParent &&
+                node.getSemanticsData().label == name,
+          ),
+          hasLength(1),
+        );
+        for (final part in parts.evaluate()) {
+          final richText = find.descendant(
+            of: find.byWidget(part.widget),
+            matching: find.byType(RichText),
+          );
+          final paragraph = tester.renderObject<RenderParagraph>(richText);
+          final text = (part.widget as Text).data!;
+          final boxes = paragraph.getBoxesForSelection(
+            TextSelection(baseOffset: 0, extentOffset: text.length),
+          );
+          final lines = boxes.map((box) => box.top).toSet();
+          expect(
+            lines.length,
+            text == overwide ? greaterThan(1) : 1,
+            reason: text,
+          );
+          if (text != overwide) {
+            expect(
+              boxes.every((box) => box.right <= paragraph.size.width + 1),
+              isTrue,
+              reason: text,
+            );
+          }
+        }
+        if (name == okhttp) {
+          expect(
+            tester.getTopLeft(parts.last).dy,
+            greaterThan(tester.getTopLeft(parts.first).dy),
+          );
+        }
+        if (name == fitted) {
+          final token = find.descendant(
+            of: row,
+            matching: find.text('multiplatformregistration-'),
+          );
+          final natural = tester.getSize(token).width;
+          final drawn =
+              tester.getRect(token).width /
+              LineupCanvas.scaleOf(tester.element(token));
+          expect(drawn, lessThan(natural));
+          expect(drawn, greaterThanOrEqualTo(natural / 2));
+        }
+      }
+      expect(tester.takeException(), isNull);
+    } finally {
+      semantics.dispose();
+      await tester.pumpWidget(const SizedBox.shrink());
+      debugDefaultTargetPlatformOverride = null;
+    }
+  });
 
   testWidgets('bundled subtitle fonts expose their offline OFL documents', (
     tester,
