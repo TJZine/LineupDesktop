@@ -215,6 +215,69 @@ void main() {
   });
 
   androidWidgetTest(
+    'touch-expanded buttons each expose one tappable semantics node',
+    (tester) async {
+      final semantics = tester.ensureSemantics();
+      await tester.pumpWidget(
+        _app(
+          profile: _handheld,
+          child: Scaffold(
+            body: Column(
+              children: [
+                HandheldPageBar(
+                  title: 'Review',
+                  backTooltip: 'Back to configure',
+                  onBack: () {},
+                ),
+                LineupTouchTarget(
+                  onPressed: () {},
+                  child: IconButton(
+                    tooltip: 'Remove item',
+                    onPressed: () {},
+                    icon: const Icon(Icons.close),
+                  ),
+                ),
+              ],
+            ),
+          ),
+        ),
+      );
+
+      for (final label in ['Back to configure', 'Remove item']) {
+        final nodes = find.semantics
+            .byPredicate(
+              (node) =>
+                  !node.isInvisible &&
+                  !node.isMergedIntoParent &&
+                  (node.label == label ||
+                      node.getSemanticsData().tooltip == label),
+            )
+            .evaluate();
+        expect(nodes, hasLength(1), reason: label);
+        final node = nodes.single;
+        expect(
+          node.getSemanticsData().hasAction(SemanticsAction.tap),
+          isTrue,
+          reason: label,
+        );
+        var rect = node.rect;
+        for (
+          SemanticsNode? current = node;
+          current != null;
+          current = current.parent
+        ) {
+          if (current.transform case final transform?) {
+            rect = MatrixUtils.transformRect(transform, rect);
+          }
+        }
+        expect(rect.width, greaterThanOrEqualTo(48 - 1e-6), reason: label);
+        expect(rect.height, greaterThanOrEqualTo(48 - 1e-6), reason: label);
+      }
+      semantics.dispose();
+    },
+  );
+
+  androidWidgetTest(
     'choice sheet and select field activate with selection semantics',
     (tester) async {
       tester.view

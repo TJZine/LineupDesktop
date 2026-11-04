@@ -9,6 +9,8 @@ import 'lineup_canvas.dart';
 /// Reserves symmetric, nonoverlapping touch space around an unchanged visual.
 /// The layout reservation matters: painting a larger hit box outside a tight
 /// parent would neither receive hits reliably nor separate neighboring targets.
+/// Wrap exactly one control. The child supplies semantics and activation.
+/// [MergeSemantics] gives that single node the reserved touch bounds.
 class LineupTouchTarget extends StatelessWidget {
   const LineupTouchTarget({
     required this.child,
@@ -25,19 +27,16 @@ class LineupTouchTarget extends StatelessWidget {
     final extent = LineupCanvas.minimumTouchExtentOf(context);
     return LayoutBuilder(
       builder: (context, constraints) => MergeSemantics(
-        child: Semantics(
+        child: GestureDetector(
+          behavior: HitTestBehavior.opaque,
+          excludeFromSemantics: true,
           onTap: onPressed,
-          child: GestureDetector(
-            behavior: HitTestBehavior.opaque,
-            excludeFromSemantics: true,
-            onTap: onPressed,
-            child: ConstrainedBox(
-              constraints: BoxConstraints(minWidth: extent, minHeight: extent),
-              child: Center(
-                widthFactor: 1,
-                heightFactor: 1,
-                child: ConstrainedBox(constraints: constraints, child: child),
-              ),
+          child: ConstrainedBox(
+            constraints: BoxConstraints(minWidth: extent, minHeight: extent),
+            child: Center(
+              widthFactor: 1,
+              heightFactor: 1,
+              child: ConstrainedBox(constraints: constraints, child: child),
             ),
           ),
         ),

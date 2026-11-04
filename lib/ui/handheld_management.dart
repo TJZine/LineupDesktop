@@ -188,17 +188,14 @@ class HandheldPageBar extends StatelessWidget {
 
   Widget _backButton(BuildContext context) {
     final extent = _minimumTouchExtent(context, designExtent: 56);
-    return Tooltip(
-      message: backTooltip,
-      child: LineupTouchTarget(
+    return LineupTouchTarget(
+      onPressed: onBack,
+      child: IconButton(
+        tooltip: backTooltip,
         onPressed: onBack,
-        child: IconButton(
-          tooltip: backTooltip,
-          onPressed: onBack,
-          padding: EdgeInsets.zero,
-          constraints: BoxConstraints(minWidth: extent, minHeight: extent),
-          icon: Icon(backIcon, color: LineupTheme.of(context).primaryText),
-        ),
+        padding: EdgeInsets.zero,
+        constraints: BoxConstraints(minWidth: extent, minHeight: extent),
+        icon: Icon(backIcon, color: LineupTheme.of(context).primaryText),
       ),
     );
   }
