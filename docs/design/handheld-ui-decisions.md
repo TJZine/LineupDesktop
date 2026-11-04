@@ -550,6 +550,33 @@ Wide windows keep the desktop compositions.
   - with no channels, the existing "No channels yet" / "Set up channels"
     state shows.
 - **Not changed:** the controller, the window model, the scheduling.
+- **Short windows** (amended November 4, 2026, maintainer approval; H2 found
+  the full-width picture overflowing an 800×360 dp window). The pinned picture
+  stays full width only when at least two full rows remain visible below the
+  ruler. Otherwise it shrinks into the now-strip:
+  - a 16:9 thumbnail at the strip's height on its left, with the strip text,
+    bleed and progress line beside it;
+  - tapping either opens the Player.
+
+  Phones, portrait tablets and the fold keep the full picture. Phones reach
+  this only in split-screen or freeform windows, because the Guide is
+  portrait-locked there (4R-a). Rendered: `sheets/h2-short-window.png`;
+  specimen `harness/h2-short-window-specimen.patch`.
+- **Filter and search sheets** (approved November 4, 2026, as rendered in
+  `evidence/h2-guide-2026-11-04/renders/early-captures/`):
+  - "Filter by library" is a B5 choice sheet: single choice, with a check on
+    the current library;
+  - "Search channels" is a sheet with the field, a clear (✕) suffix and Done.
+    It rises above the keyboard (B7) and filters live.
+- **Active state** (added November 4, 2026, maintainer approval). While a
+  library filter or a search is active, its header icon sits in the
+  selected-tab pill (64×32 cu, selected-surface color). Its label includes the
+  value, for example "Filter by library: Movies" or "Search channels: Action".
+- **Tap resolution for narrow cards** (rule 1c's named Guide exemption;
+  clarified November 4, 2026). A program card narrower than 48 dp (a program
+  under about 8 minutes on a phone) keeps exactly its own interval as its hit
+  region and never takes a neighbor's. A long press opens the program sheet as
+  usual, and TalkBack reaches each card as its own node.
 
 ### Item 4: Player
 
@@ -589,6 +616,15 @@ Wide windows keep the desktop compositions.
   - handheld adds 48 dp hit regions (1c) and hides keyboard hints ("Up/Down
     Browse · Enter Tune · Esc Close") on touch;
   - the Mini Guide stays available there.
+- **Landscape at any width** (clarified November 4, 2026). The Player uses
+  the landscape layout and the protected OSD in every landscape Handheld
+  window, including ones narrower than 933 cu (for example 800×360 dp). The
+  portrait composition is for portrait windows only.
+- **Back order in the Player (2b; clarified November 4, 2026):**
+  1. an open sheet (tracks, sleep, program info);
+  2. the Mini Guide or Now Playing;
+  3. full screen, when it is observed on;
+  4. back to the Guide.
 
 ### Item 5: Onboarding
 
@@ -606,6 +642,13 @@ Wide windows keep the desktop compositions.
   - tiles have an 88 dp avatar, the name underneath, and badges that fit on
     one line;
   - H4 renders this for review before merging.
+- **Profile grid approved** (November 4, 2026, as rendered in
+  `evidence/h4-settings-2026-11-04/renders/captures/*/profiles--selection.png`),
+  with one change: badges are the existing text pills (Admin, Restricted,
+  Current), not glyphs.
+  - They keep a named clamp at text 1.3.
+  - They sit on one line where they fit and wrap to a second line rather than
+    clipping.
 
 ### Item 6: Settings
 
@@ -919,6 +962,12 @@ text 1.0, 1.3 and 2.0; stacked rows instead of desktop tables).
   in-scroll back link and the 44 cu title are removed; the subtitle stays. The
   gutter is 18 cu (was 48). The reader is otherwise unchanged.
 - Rendered: the same sheet as item 5.
+- **Index names** (amended November 4, 2026, maintainer approval; Phone35 at
+  text 2.0 broke "androidx.fragment:fragment" mid-word). In the Licenses index,
+  a line may break after `.`, `:`, `-`, `_` or `/` in a package name. A part
+  that still doesn't fit follows the B3 large-text fallback: it shrinks to
+  fit, never below text 1.0, and only a part wider than the full line at text
+  1.0 may break. The spoken label is the unchanged name.
 
 ### Item 7. Dialogs, menus, text fields and IME
 
