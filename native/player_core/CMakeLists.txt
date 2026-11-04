@@ -24,9 +24,10 @@ if(NOT DEFINED LINEUP_MPV_INCLUDE_DIR)
   set(LINEUP_MPV_INCLUDE_DIR "/opt/homebrew/include" CACHE PATH
     "Directory that contains mpv/client.h")
 endif()
-if(NOT EXISTS "${LINEUP_MPV_INCLUDE_DIR}/mpv/client.h")
+if(NOT EXISTS "${LINEUP_MPV_INCLUDE_DIR}/mpv/client.h" OR
+   NOT EXISTS "${LINEUP_MPV_INCLUDE_DIR}/mpv/stream_cb.h")
   message(FATAL_ERROR
-    "LINEUP_MPV_INCLUDE_DIR (${LINEUP_MPV_INCLUDE_DIR}) does not contain mpv/client.h.")
+    "LINEUP_MPV_INCLUDE_DIR (${LINEUP_MPV_INCLUDE_DIR}) does not contain mpv/client.h and mpv/stream_cb.h.")
 endif()
 
 find_package(Threads REQUIRED)
@@ -50,6 +51,7 @@ function(lineup_player_core_settings TARGET)
 endfunction()
 
 add_library(lineup_player_core STATIC
+  "session_playlist.cpp"
   "platform_arguments.cpp"
   "player_core.cpp"
   "subtitle_cues.cpp"
@@ -59,6 +61,9 @@ lineup_player_core_settings(lineup_player_core)
 target_include_directories(lineup_player_core PUBLIC
   "${LINEUP_NATIVE_DIR}" "${LINEUP_MPV_INCLUDE_DIR}")
 target_link_libraries(lineup_player_core PUBLIC Threads::Threads)
+if(WIN32)
+  target_link_libraries(lineup_player_core PUBLIC bcrypt)
+endif()
 
 # Binds MpvOperations to the real libmpv. The consumer links libmpv itself.
 add_library(lineup_player_core_libmpv STATIC
@@ -95,6 +100,11 @@ target_link_libraries(player_core_contract_test PRIVATE lineup_player_core)
 add_test(NAME player_core_contract COMMAND player_core_contract_test)
 set_tests_properties(player_core_contract PROPERTIES TIMEOUT 45)
 
+add_executable(session_playlist_test ${LINEUP_PLAYER_CORE_TEST_OPTIONS} "session_playlist_test.cpp")
+lineup_player_core_settings(session_playlist_test)
+target_link_libraries(session_playlist_test PRIVATE lineup_player_core)
+add_test(NAME session_playlist COMMAND session_playlist_test)
+set_tests_properties(session_playlist PROPERTIES TIMEOUT 15)
 add_executable(subtitle_cues_test ${LINEUP_PLAYER_CORE_TEST_OPTIONS}
   "subtitle_cues_test.cpp"
 )

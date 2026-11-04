@@ -55,6 +55,91 @@ load-ID rule. Native command admission also has a capacity of 64 queued
 commands and a combined URI/header budget of 128 KiB; rejection uses
 `command_queue_full`.
 
+### Plex session loads and media capabilities
+
+`load` additionally accepts `kind: "direct" | "plexSession"`; omission means
+`direct`. Unknown values are `invalid_argument`. Direct loads retain the
+existing command, reference restrictions and authenticated header behavior.
+A `plexSession` load forbids a non-null `plexToken` and requires HTTPS with a
+nonempty authority, no userinfo and no `X-Plex-Token` query key (case
+insensitive, including percent-encoded keys). Both Dart and native reject an
+unsafe session with `invalid_argument` before loading it. A session also
+rejects any non-null Dart `startPosition` or present wire `startSeconds`,
+including zero or explicit null: its live offset belongs to the server session,
+so a player start would apply it twice.
+
+Desktop session loads additionally require the private `sessionPlaylist` payload:
+`{text: <whole validated UTF-8 variant>, offsetMicroseconds: <non-negative int64>}`.
+The text is limited to 1 MiB. The shared core independently validates the entire
+original variant, including references before the chosen containing segment,
+before deriving a trimmed finite view. Direct loads reject this payload. The
+optional Dart `NativeSessionPlaylist` transfer does not parse HLS or change the
+public HTTPS descriptor; Android URI-only session loads remain valid. Session
+wire `startPosition` is also rejected by presence, including null.
+Android URI-only session loads are specified for T3; Android implementation is
+not in this tree yet.
+
+The desktop core accepts only the bounded reference/lexical/tag scope: one finite
+media playlist, sequence zero, one MAP, no encryption/master/rendition/range or
+unknown URI-bearing tags. Relative flat references resolve against the verified
+HTTPS session namespace; originally absolute references retain their resource
+identity. The trimmed view begins at the EXTINF-containing segment, renders
+absolute MAP/media targets, keeps EXTINF and media bytes unchanged, removes
+EXT-X-START and retains ENDLIST. No native or desktop alignment seek is added.
+
+One registered `lineup-session` stream callback serves a random 128-bit per-load
+opaque URI ending in `.m3u8`. It never exposes the manifest as a filename.
+libmpv has no unregister operation: stop/replacement revokes the capability and
+wipes its payload immediately, open cookies become inert, and registration
+state remains valid until client destruction returns. Callbacks never call
+libmpv. Registration cleanup occurs at destruction, not through a nonexistent
+per-load unregister API.
+
+The session node-map has these per-file options, with no token, start or hr-seek:
+
+```text
+access-references=yes
+curl-max-redirects=0
+demuxer=lavf
+demuxer-lavf-o=format_whitelist=%7%hls,mov,protocol_whitelist=%13%https,tls,tcp
+```
+
+The dictionary uses mpv's byte-count quoting for embedded commas. The lavf
+selector prevents failed HLS opens falling back to mpv's generic playlist parser;
+HLS probing itself still uses the private `.m3u8` name. No global format forcing
+is used. Unlike an HTTPS stream, a callback stream has UNSAFE origin in pinned
+libmpv. Containment therefore comes from whole-original closed-grammar validation,
+absolute same-origin HTTPS targets, zero redirects, per-file protocol/format
+lists and the HLS child-context I/O blocker; it does not inherit NET-origin
+sandboxing. Unexpected private playlist redirects fail closed. Direct-load
+global reference defaults remain unchanged.
+
+The core emits fresh finite or null `demuxer-start-time` seconds through the
+ordinary load-correlated property path, clearing it for a new load and rereading
+it at correlated FILE_LOADED rather than relabeling an old notification payload.
+Dart retains nullable signed finite `PlayerTelemetry.demuxerStartTime`; zero is
+valid, unavailable/invalid values clear it, and existing load/lifetime resets
+apply. `P + D - 10 s` mapping and schedule policy wait for T4. Manifest text and
+child references are never forwarded through logs, properties, errors or
+Diagnostics; internal libmpv errors are classified into fixed failures.
+Bounded typed subtitle cues are authored media content, so their URL-like text
+and literals remain renderable. Only the native cue publisher marks that value
+as content; generic properties/platform events retain private-text redaction.
+
+Android additionally implements `mediaCapabilities` with no arguments:
+`{videoDecoders: [...], audioDecoders: [...], audioPassthrough: [...], containers: [...]}`.
+There are at most 64 video decoder records, 64 decoded audio codecs, 16 audio
+passthrough codecs and 32 containers. Video records have a required Plex
+`codec` name and optional `profiles`, `maxLevel`, positive `maxWidth`,
+`maxHeight`, `maxBitrateKbps`, `hdr` and `dolbyVisionProfiles` facts. Codec
+names use Plex spelling. Android queries these at call time on the application
+looper and truncates lists deterministically. Dart caches the parsed result
+for one second; malformed, oversized or failed replies become
+`MediaCapabilities.unknown`, requiring a server decision. Desktop Dart uses
+`MediaCapabilities.desktop` and never sends this native query.
+Android `mediaCapabilities` is specified for T3; Android implementation is not
+in this tree yet.
+
 ### Command error mapping in Dart
 
 For a `PlatformException`, the transport preserves these native command codes:
@@ -493,6 +578,16 @@ cannot borrow old audio/video exposure after a nonzero indexed seek. Ordinary
 nonfragmented sample seeks retain facts without treating sample bytes as boxes.
 Genuine audio-only/video-only and supported alternative tracks remain
 valid. Subtitles alone never cause an audio/video unsupported-type failure.
+
+For `plexSession`, Media3 selects `HlsMediaSource` over a per-load OkHttp
+client with `OriginPin` before `OriginPolicy` and no default request headers.
+Every playlist, init and media request must retain the load's HTTPS scheme,
+host and port and contain neither userinfo nor a token query. Pin rejection
+maps to `network_error`; manifest parsing maps to `container_error`; child
+HTTP failures retain `http_error` and their bounded status. The following
+original-load restrictions apply to `direct` loads.
+This Android session HLS path is specified for T3; Android implementation is
+not in this tree yet.
 
 Only `ProgressiveMediaSource` and an HTTP-only OkHttp data source are installed;
 there is no manifest, file, nested-reference or external-subtitle resolver.

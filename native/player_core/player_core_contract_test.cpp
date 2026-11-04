@@ -8,6 +8,7 @@
 #include <algorithm>
 #include <atomic>
 #include <chrono>
+#include <cmath>
 #include <cstddef>
 #include <cstdlib>
 #include <cstring>
@@ -127,6 +128,8 @@ struct FakeMpv {
   std::vector<std::string> seek_flags;
   std::vector<std::string> seek_targets;
   std::atomic<double> seek_position{0};
+  std::atomic<double> demuxer_start{0};
+  std::atomic<bool> demuxer_start_available{false};
   std::atomic<bool> seeking{false};
   std::atomic<bool> paused{false};
   std::atomic<bool> reject_volume{false};
@@ -143,6 +146,7 @@ struct FakeMpv {
   std::optional<int64_t> playlist_id;
   bool reject_stop = false;
   bool fail_create = false;
+  bool fail_stream_registration = false;
   int64_t selected_track = -1;
   int track_status = 0;
   std::atomic<int> created{0};
@@ -202,6 +206,11 @@ int FakeObserveProperty(mpv_handle*, uint64_t, const char* name, mpv_format) {
 }
 
 int FakeGetProperty(mpv_handle*, const char* name, mpv_format format, void* data) {
+  if (std::strcmp(name, "demuxer-start-time") == 0 && format == MPV_FORMAT_DOUBLE) {
+    if (!fake->demuxer_start_available) return MPV_ERROR_PROPERTY_UNAVAILABLE;
+    *static_cast<double*>(data) = fake->demuxer_start.load();
+    return 0;
+  }
   if (std::strcmp(name, "playlist/0/id") == 0) {
     if (fake->controlled_load) {
       RequireLoadFixture(fake->controlled_load->command_calls == 1 &&
@@ -335,6 +344,10 @@ unsigned long FakeClientApiVersion() { return MPV_CLIENT_API_VERSION; }
 
 MpvOperations FakeOperations() {
   MpvOperations operations;
+  operations.stream_cb_add_ro = [](mpv_handle*, const char* protocol, void*, mpv_stream_cb_open_ro_fn open) {
+    Check(std::string(protocol) == "lineup-session" && open, "private protocol registered once per client");
+    return fake->fail_stream_registration ? MPV_ERROR_INVALID_PARAMETER : 0;
+  };
   operations.create = FakeCreate;
   operations.initialize = FakeInitialize;
   operations.set_option = FakeSetOption;
@@ -1457,6 +1470,255 @@ void Validation(PlayerCore& core) {
   CloseWorkerless(core);
 }
 
+bool ContainsPrivate(const Value& value) {
+  if (const auto* text = std::get_if<std::string>(&value)) return text->find("https://") != std::string::npos || text->find("#EXTM3U") != std::string::npos;
+  if (const auto* list = std::get_if<lineup::player::ValueList>(&value)) { for (const auto& v : *list) if (ContainsPrivate(v)) return true; }
+  if (const auto* map = std::get_if<ValueMap>(&value)) { for (const auto& v : *map) if (ContainsPrivate(v.second)) return true; }
+  return false;
+}
+void SessionMetadataPrivacy(PlayerCore& core) {
+  OpenWorkerless(core);
+  std::ostringstream diagnostics; auto* previous = std::cerr.rdbuf(diagnostics.rdbuf());
+  const std::vector<std::string> canaries{"https://private.invalid/session/capability/1.m4s", "#EXTM3U\n#EXTINF:10,private\nhttps://private.invalid/child"};
+  for (const auto& canary : canaries) {
+    for (const auto& observation : std::vector<std::pair<uint64_t, const char*>>{{5,"video-format"},{6,"video-codec"},{7,"current-vo"},{8,"hwdec-current"}}) {
+      char* raw = const_cast<char*>(canary.c_str()); mpv_event_property property{observation.second, MPV_FORMAT_STRING, &raw};
+      mpv_event event{}; event.event_id = MPV_EVENT_PROPERTY_CHANGE; event.reply_userdata = observation.first; event.data = &property;
+      PlayerCoreTestAccess::Event(core, event);
+    }
+    char* keys[] = {const_cast<char*>("id"), const_cast<char*>("type"),const_cast<char*>("selected"),const_cast<char*>("title"),const_cast<char*>("lang"),const_cast<char*>("codec"),const_cast<char*>("demux-channels")};
+    mpv_node values[7]{};
+    values[0].format = MPV_FORMAT_INT64; values[0].u.int64 = 1;
+    values[1].format = MPV_FORMAT_STRING; values[1].u.string = const_cast<char*>("audio");
+    values[2].format = MPV_FORMAT_FLAG; values[2].u.flag = 1;
+    for (size_t i = 3; i < 7; ++i) { values[i].format = MPV_FORMAT_STRING; values[i].u.string = const_cast<char*>(canary.c_str()); }
+    mpv_node_list map{7, values, keys}; mpv_node entry{}; entry.format = MPV_FORMAT_NODE_MAP; entry.u.list = &map;
+    mpv_node_list array{1, &entry, nullptr}; mpv_node node{}; node.format = MPV_FORMAT_NODE_ARRAY; node.u.list = &array;
+    mpv_event_property tracks{"track-list", MPV_FORMAT_NODE, &node}; mpv_event event{}; event.event_id = MPV_EVENT_PROPERTY_CHANGE; event.reply_userdata = 4; event.data = &tracks;
+    PlayerCoreTestAccess::Event(core, event);
+    char* parameter_keys[] = {const_cast<char*>("w"), const_cast<char*>("h"), const_cast<char*>("pixelformat"), const_cast<char*>("hw-pixelformat"), const_cast<char*>("primaries"), const_cast<char*>("gamma"), const_cast<char*>("colormatrix"), const_cast<char*>("sig-peak")};
+    mpv_node parameter_values[8]{};
+    for (auto& value : parameter_values) { value.format = MPV_FORMAT_STRING; value.u.string = const_cast<char*>(canary.c_str()); }
+    mpv_node_list parameter_map{8, parameter_values, parameter_keys}; node.format = MPV_FORMAT_NODE_MAP; node.u.list = &parameter_map;
+    for (const auto& parameters : std::vector<std::pair<uint64_t,const char*>>{{9,"video-params"},{10,"video-target-params"}}) {
+      mpv_event_property property{parameters.second, MPV_FORMAT_NODE, &node}; event.event_id = MPV_EVENT_PROPERTY_CHANGE; event.reply_userdata = parameters.first; event.data = &property;
+      PlayerCoreTestAccess::Event(core, event);
+    }
+    // A generic producer cannot bypass redaction by naming a subtitle property.
+    core.QueuePlatformEvent({{"type", Value("property")}, {"name", Value("subtitle-cues")},
+                             {"loadId", Value(1)}, {"value", Value(ValueList{Value(canary)})}});
+    mpv_event_log_message log{canary.c_str(), "error", canary.c_str(), MPV_LOG_LEVEL_ERROR}; event.event_id = MPV_EVENT_LOG_MESSAGE; event.data = &log;
+    PlayerCoreTestAccess::Event(core, event);
+  }
+  Events events; PlayerCoreTestAccess::Drain(core, events.Sink());
+  std::cerr.rdbuf(previous);
+  Check(!events.received.empty() && diagnostics.str().find("https://") == std::string::npos && diagnostics.str().find("#EXTM3U") == std::string::npos, "stderr/log capture cannot disclose private strings");
+  for (const auto& event : events.received) Check(!ContainsPrivate(Value(event)), "all emitted metadata string paths redact capability and wholemanifest canaries");
+  CloseWorkerless(core);
+}
+
+void SessionLoads(PlayerCore& core) {
+  OpenWorkerless(core);
+  const auto request = [](const std::string& uri) {
+    return ValueMap{{"uri", Value(uri)}, {"loadId", Value(int64_t{501})},
+                    {"kind", Value("plexSession")}};
+  };
+  for (const auto* uri : {"http://media.invalid/index.m3u8", "https:///index.m3u8",
+                          "https://user@media.invalid/index.m3u8",
+                          "https://:443/index.m3u8",
+                          "https://media.invalid/index.m3u8?X-PLEX-TOKEN=synthetic",
+                          "https://media.invalid/index.m3u8?%58-Plex-Token=synthetic"}) {
+    Reply reply;
+    Call(core, "load", reply, request(uri));
+    Check(reply.errors == 1 && reply.error == "invalid_argument",
+          "unsafe session URI rejected before queueing");
+  }
+  auto arguments = request("https://media.invalid/index.m3u8");
+  arguments["plexToken"] = Value("synthetic-session-token");
+  Reply token;
+  Record(token, *core.HandleCommand("load", &arguments));
+  const auto& scrubbed = std::get<std::string>(arguments["plexToken"]);
+  Check(token.errors == 1 && token.error == "invalid_argument" &&
+        std::all_of(scrubbed.begin(), scrubbed.end(), [](char byte) { return byte == 0; }),
+        "session token forbidden and converted buffer wiped");
+  for (const auto& invalid : {Value("unknown"), Value(), Value(true)}) {
+    auto bad = request("https://media.invalid/index.m3u8");
+    bad["kind"] = invalid;
+    Reply reply;
+    Call(core, "load", reply, bad);
+    Check(reply.errors == 1 && reply.error == "invalid_argument", "unknown load kind rejected");
+  }
+  for (const auto& start : {Value(0.0), Value(600.0), Value()}) {
+    auto positioned = request("https://media.invalid/index.m3u8");
+    positioned["startSeconds"] = start;
+    Reply reply;
+    Call(core, "load", reply, positioned);
+    Check(reply.errors == 1 && reply.error == "invalid_argument",
+          "session startSeconds is forbidden even when zero or null");
+  }
+  const std::string variant = "https://media.invalid/video/:/transcode/universal/session/opaque/base/index.m3u8";
+  const std::string base = variant.substr(0, variant.rfind('/') + 1);
+  const std::string text = "#EXTM3U\n#EXT-X-TARGETDURATION:10\n#EXT-X-MEDIA-SEQUENCE:0\n#EXT-X-MAP:URI=\"" + base + "init.mp4\"\n#EXTINF:10,private-title\n" + base + "0.m4s\n#EXT-X-ENDLIST\n";
+  auto valid = request(variant);
+  valid["sessionPlaylist"] = ValueMap{{"text", Value(text)}, {"offsetMicroseconds", Value(int64_t{0})}};
+  for (const auto& start : {Value(0.0), Value(600.0), Value()}) {
+    auto positioned = valid; positioned["startPosition"] = start;
+    Reply reply; Call(core, "load", reply, positioned);
+    Check(reply.errors == 1 && reply.error == "invalid_argument", "session startPosition is forbidden including zero/null");
+  }
+  Reply absent; Call(core, "load", absent, request(variant));
+  Check(absent.error == "invalid_argument", "session requires complete validated playlist");
+  auto direct_payload = valid; direct_payload["kind"] = "direct";
+  Reply invalid_direct; Call(core, "load", invalid_direct, direct_payload);
+  Check(invalid_direct.error == "invalid_argument", "direct cannot carry private playlist");
+  auto noninteger = valid; std::get<ValueMap>(noninteger["sessionPlaylist"])["offsetMicroseconds"] = 0.0;
+  Reply bad_offset; Call(core, "load", bad_offset, noninteger);
+  Check(bad_offset.error == "invalid_argument", "private offset is integral microseconds");
+  Reply session;
+  Record(session, *core.HandleCommand("load", &valid));
+  const auto& cleared = std::get<std::string>(std::get<ValueMap>(valid["sessionPlaylist"])["text"]);
+  Check(std::all_of(cleared.begin(), cleared.end(), [](char c) { return c == 0; }), "private converted body wiped after successful admission");
+  PlayerCoreTestAccess::RunQueuedCommands(core);
+  Check(session.successes == 1 && fake->load_options ==
+        std::map<std::string, std::string>{{"access-references", "yes"}, {"curl-max-redirects", "0"},
+          {"demuxer", "lavf"}, {"demuxer-lavf-o", "format_whitelist=%7%hls,mov,protocol_whitelist=%13%https,tls,tcp"}},
+        "session load uses token-free reference and redirect map");
+  const std::string opaque = fake->authenticated_uri;
+  Check(opaque.find("lineup-session://") == 0 && opaque.find("media.invalid") == std::string::npos, "loadfile sees only opaque capability");
+  mpv_stream_cb_info open{};
+  Check(PlayerCoreTestAccess::OpenSession(core, opaque, &open) == 0, "core retains callback body after load command");
+  std::string manifest(static_cast<size_t>(open.size_fn(open.cookie)), '\0');
+  Check(open.read_fn(open.cookie, manifest.data(), manifest.size()) == static_cast<int64_t>(manifest.size()) && manifest.find(base) != std::string::npos, "callback serves validated manifest privately");
+  Reply forbidden_cap; auto public_cap = request(opaque); public_cap["kind"] = "direct";
+  Call(core, "load", forbidden_cap, public_cap);
+  Check(forbidden_cap.error == "invalid_argument", "public caller cannot reopen private capability");
+  Reply direct;
+  auto ordinary = request("https://media.invalid/direct.mp4");
+  ordinary["kind"] = Value("direct");
+  Call(core, "load", direct, ordinary);
+  PlayerCoreTestAccess::RunQueuedCommands(core);
+  Check(direct.successes == 1 && fake->commands.back() == "loadfile",
+        "direct without options retains original load command");
+  char byte;
+  Check(open.read_fn(open.cookie, &byte, 1) < 0 && open.size_fn(open.cookie) < 0, "replacement retires open cookie payload");
+  open.close_fn(open.cookie);
+  CloseWorkerless(core);
+  OpenWorkerless(core);
+  auto failed = request(variant);
+  failed["sessionPlaylist"] = ValueMap{{"text",text},{"offsetMicroseconds",int64_t{0}}};
+  fake->node_load_status = MPV_ERROR_LOADING_FAILED;
+  Reply failed_load; Record(failed_load,*core.HandleCommand("load",&failed));
+  PlayerCoreTestAccess::RunQueuedCommands(core); fake->node_load_status = 0;
+  mpv_stream_cb_info failed_open{};
+  Check(failed_load.successes == 1 && PlayerCoreTestAccess::OpenSession(core,fake->authenticated_uri,&failed_open) < 0,
+        "failed native load command revokes its private capability");
+  CloseWorkerless(core);
+  OpenWorkerless(core);
+  for (int64_t i = 0; i < 1024; ++i) {
+    Check(PlayerCoreTestAccess::State(core).AcceptLoad(i + 1, i + 1), "fill correlation fixture capacity");
+  }
+  fake->playlist_id = 20000;
+  auto saturated = request(variant);
+  saturated["sessionPlaylist"] = ValueMap{{"text",text},{"offsetMicroseconds",int64_t{0}}};
+  Reply saturation; Record(saturation,*core.HandleCommand("load",&saturated));
+  PlayerCoreTestAccess::RunQueuedCommands(core);
+  mpv_stream_cb_info refused{};
+  Check(saturation.successes == 1 && fake->commands.back() == "stop" &&
+        PlayerCoreTestAccess::OpenSession(core,fake->authenticated_uri,&refused) < 0,
+        "correlation saturation revokes private capability and stops untrackable playback");
+  CloseWorkerless(core);
+  OpenWorkerless(core);
+  fake->playlist_id = 30000;
+  auto redirecting = request(variant);
+  redirecting["sessionPlaylist"] = ValueMap{{"text",text},{"offsetMicroseconds",int64_t{0}}};
+  Reply redirect_load; Record(redirect_load,*core.HandleCommand("load",&redirecting));
+  PlayerCoreTestAccess::RunQueuedCommands(core); Start(core,30000);
+  mpv_event_end_file redirect{}; redirect.playlist_entry_id = 30000;
+  redirect.reason = MPV_END_FILE_REASON_REDIRECT; redirect.playlist_insert_id = 30001;
+  redirect.playlist_insert_num_entries = 1;
+  mpv_event redirect_event{}; redirect_event.event_id = MPV_EVENT_END_FILE; redirect_event.data = &redirect;
+  PlayerCoreTestAccess::Event(core,redirect_event);
+  Check(fake->commands.back() == "stop" && PlayerCoreTestAccess::OpenSession(core,fake->authenticated_uri,&refused) < 0,
+        "private playlist redirect fails closed, revokes reader and stops instead of expanding ordinary playlist");
+  CloseWorkerless(core);
+  OpenWorkerless(core);
+  const std::string large = text.substr(0, text.find("private-title")) + std::string(800 * 1024, 'x') + text.substr(text.find("private-title") + 13);
+  const auto large_request = [&] { auto value = request(variant); value["sessionPlaylist"] = ValueMap{{"text", large}, {"offsetMicroseconds", int64_t{0}}}; return value; };
+  Reply first_large, second_large, third_large;
+  Call(core, "load", first_large, large_request()); Call(core, "load", second_large, large_request()); Call(core, "load", third_large, large_request());
+  Check(first_large.successes == 1 && second_large.successes == 1 && third_large.error == "command_queue_full" &&
+        PlayerCoreTestAccess::QueuedPlaylistBytes(core) <= 2 * 1024 * 1024, "one MiB bodies supported with separate two MiB aggregate reservation");
+  CloseWorkerless(core);
+  auto rejected = request(variant); rejected["sessionPlaylist"] = ValueMap{{"text", text}, {"offsetMicroseconds", int64_t{0}}};
+  Reply not_ready; Record(not_ready, *core.HandleCommand("load", &rejected));
+  const auto& wiped = std::get<std::string>(std::get<ValueMap>(rejected["sessionPlaylist"])["text"]);
+  Check(not_ready.error == "not_initialized" && std::all_of(wiped.begin(), wiped.end(), [](char c) { return c == 0; }), "private converted body wiped before not_initialized return");
+}
+
+void FreshSessionClock(PlayerCore& core) {
+  OpenWorkerless(core);
+  const std::string uri = "https://clock.invalid/video/:/transcode/universal/session/opaque/base/index.m3u8";
+  const std::string text = "#EXTM3U\n#EXT-X-TARGETDURATION:10\n#EXT-X-MEDIA-SEQUENCE:0\n#EXT-X-MAP:URI=\"init.mp4\"\n#EXTINF:10,\n0.m4s\n#EXT-X-ENDLIST\n";
+  const auto load = [&](int64_t id) {
+    fake->playlist_id = id;
+    ValueMap arguments{{"uri",uri},{"kind","plexSession"},{"loadId",id},
+                       {"sessionPlaylist",ValueMap{{"text",text},{"offsetMicroseconds",int64_t{0}}}}};
+    Reply reply; Record(reply, *core.HandleCommand("load", &arguments));
+    Check(reply.successes == 1, "clock fixture session load accepted");
+    PlayerCoreTestAccess::RunQueuedCommands(core);
+  };
+  const auto changed = [&](double stale) {
+    mpv_event_property property{"demuxer-start-time",MPV_FORMAT_DOUBLE,&stale};
+    mpv_event event{}; event.event_id = MPV_EVENT_PROPERTY_CHANGE; event.reply_userdata = 11; event.data = &property;
+    PlayerCoreTestAccess::Event(core,event);
+  };
+  const auto ready = [&](int64_t id) {
+    Start(core,id); mpv_event event{}; event.event_id = MPV_EVENT_FILE_LOADED; PlayerCoreTestAccess::Event(core,event);
+  };
+  Events events;
+  PlayerCoreTestAccess::Drain(core, events.Sink()); events.received.clear();
+  fake->demuxer_start_available = true; fake->demuxer_start = 12.5;
+  for (int64_t id : {int64_t{701}, int64_t{702}}) {
+    load(id);
+    if (id == 702) {
+      mpv_event stale{}; stale.event_id = MPV_EVENT_FILE_LOADED;
+      PlayerCoreTestAccess::Event(core,stale);
+    }
+    changed(-999);
+    PlayerCoreTestAccess::Drain(core,events.Sink());
+    std::vector<ValueMap> clocks;
+    for (const auto& event : events.received) if (Has(event,"name",Value("demuxer-start-time"))) clocks.push_back(event);
+    Check(clocks.size() == 2 && Has(clocks[0],"value",Value()) &&
+          Has(clocks[1],"value",Value()) && Has(clocks[0],"loadId",Value(id)),
+          "replacement clears D and pre-ready notifications cannot relabel prior clock");
+    events.received.clear(); ready(id);
+    PlayerCoreTestAccess::Drain(core,events.Sink());
+    const auto numeric = std::find_if(events.received.begin(),events.received.end(),[](const auto& e){return Has(e,"name",Value("demuxer-start-time"));});
+    Check(numeric != events.received.end() && Has(*numeric,"value",Value(12.5)) && Has(*numeric,"loadId",Value(id)),
+          "FILE_LOADED samples fresh D even when identical across sessions and no observer notification");
+    events.received.clear(); changed(-999);
+    PlayerCoreTestAccess::Drain(core,events.Sink());
+    Check(events.received.size() == 1 && Has(events.received[0],"value",Value(12.5)),
+          "stale queued property payload ignored in favor of current property read");
+    events.received.clear();
+  }
+  for (double value : {-2.25,std::numeric_limits<double>::infinity(),std::numeric_limits<double>::quiet_NaN()}) {
+    fake->demuxer_start = value; changed(99); PlayerCoreTestAccess::Drain(core,events.Sink());
+    Check(events.received.size() == 1 && Has(events.received[0],"value",std::isfinite(value) ? Value(value) : Value()),
+          "D is signed finite numeric or unknown"); events.received.clear();
+  }
+  fake->demuxer_start_available = false; changed(99); PlayerCoreTestAccess::Drain(core,events.Sink());
+  Check(events.received.size() == 1 && Has(events.received[0],"value",Value()), "unavailable D is unknown");
+  events.received.clear(); Reply stopped; Call(core,"stop",stopped,{{"stopId",int64_t{703}}});
+  PlayerCoreTestAccess::RunQueuedCommands(core); PlayerCoreTestAccess::Drain(core,events.Sink());
+  Check(events.received.size() == 1 && Has(events.received[0],"value",Value()), "stop retires the clock to unknown");
+  events.received.clear(); fake->demuxer_start_available = true; fake->demuxer_start = 77; changed(77);
+  PlayerCoreTestAccess::Drain(core,events.Sink());
+  Check(events.received.empty(), "post-stop property notifications cannot resurrect D");
+  fake->demuxer_start_available = false;
+  CloseWorkerless(core);
+}
+
 void InitializeFailures() {
   fake->created = 0;
   fake->destroyed = 0;
@@ -1531,6 +1793,14 @@ void InitializeFailures() {
     Check(reply.error == "initialize_failed" && host.cancelled == 1 &&
           fake->destroyed == destroyed_before + 1 && !core.initialized(),
           "observation failure stops initialization");
+  }
+  {
+    const int destroyed_before = fake->destroyed.load();
+    FakeHost host; fake->fail_stream_registration = true;
+    PlayerCore core(FakeOperations(), host); Reply reply; Call(core, "initialize", reply);
+    fake->fail_stream_registration = false;
+    Check(reply.error == "initialize_failed" && fake->destroyed == destroyed_before + 1 &&
+          host.cancelled == 1 && !core.initialized(), "callback registration failure destroys client before releasing owner");
   }
   const std::pair<const char*, const char*> subtitle_options[] = {
       {"sub-color", "#00FFFFFF"},
@@ -1630,7 +1900,7 @@ void Lifecycle() {
       "sub-back-color=#00000000", "sub-border-style=outline-and-shadow", "sub-ass-override=scale", "vo=gpu-next", "gpu-api=d3d11", "gpu-context=d3d11",
       "hwdec=auto"};
   const std::vector<std::string> expected_observations{
-      "pause", "time-pos", "duration", "track-list", "video-format", "video-codec",
+      "pause", "time-pos", "demuxer-start-time", "duration", "track-list", "video-format", "video-codec",
       "current-vo", "hwdec-current", "video-params", "video-target-params",
       "current-tracks/sub/codec", "sub-text/ass"};
   {
@@ -2062,6 +2332,11 @@ void SubtitleContract() {
   Check(last_cues().empty(), "unknown codec cannot publish text");
   property("current-tracks/sub/codec", "subrip");
   Check(last_cues().size() == 1, "codec reclassifies cached text");
+  for (const char* authored : {"Visit https://example.com", "#EXTM3U"}) {
+    property("sub-text/ass", authored);
+    Check(last_cues() == lineup::player::ParseSubtitleCues(authored, false),
+          "authored subtitle URLs and playlist-looking literals survive the content path");
+  }
   Check(state.subtitle_properties.back() == std::make_pair(std::string("sub-visibility"), 0.0), "text suppressed");
   property("current-tracks/sub/codec", "hdmv_pgs_subtitle");
   Check(last_cues().empty(), "PGS clears Flutter cues");
@@ -2185,6 +2460,9 @@ int main() {
     InitialJoinObservation(core);
     ReadinessPauseSnapshot(core);
     Validation(core);
+    SessionLoads(core);
+    SessionMetadataPrivacy(core);
+    FreshSessionClock(core);
   }
   InitializeFailures();
   Lifecycle();

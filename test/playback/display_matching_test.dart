@@ -496,6 +496,9 @@ class _Fixture {
 
 class _Player implements NativePlayer {
   @override
+  Future<MediaCapabilities> mediaCapabilities() async =>
+      MediaCapabilities.desktop;
+  @override
   final subtitleCues = ValueNotifier<SubtitleCues>(const SubtitleCues.empty());
   @override
   Future<void> setSubtitlePresentation({

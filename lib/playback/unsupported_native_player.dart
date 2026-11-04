@@ -60,6 +60,10 @@ class UnsupportedNativePlayer implements NativePlayer {
   Stream<bool> get fullscreenChanges => const Stream.empty();
 
   @override
+  Future<MediaCapabilities> mediaCapabilities() async =>
+      MediaCapabilities.unknown;
+
+  @override
   Future<void> initialize() async {}
 
   Never _unavailable() => throw PlayerUnavailable(platformFailureMessage);
@@ -71,6 +75,8 @@ class UnsupportedNativePlayer implements NativePlayer {
     int? generation,
     bool startPaused = false,
     Duration? startPosition,
+    LoadKind kind = LoadKind.direct,
+    NativeSessionPlaylist? sessionPlaylist,
   }) async => _unavailable();
 
   @override

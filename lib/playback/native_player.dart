@@ -2,6 +2,9 @@ import 'dart:async';
 
 import 'package:flutter/foundation.dart';
 
+import '../plex/plex_transcode.dart';
+
+export '../plex/plex_transcode.dart' show MediaCapabilities;
 import 'subtitle_cues.dart';
 export 'subtitle_cues.dart';
 
@@ -48,6 +51,9 @@ abstract interface class NativePlayer {
 
   Future<void> initialize();
 
+  /// Current decoder and output facts; malformed or unavailable facts are unknown.
+  Future<MediaCapabilities> mediaCapabilities();
+
   /// Loads [media] for the caller's optional [generation].
   ///
   /// [generation] identifies the current load and may be projected on emitted
@@ -65,12 +71,20 @@ abstract interface class NativePlayer {
   /// it to [media]. Backends must also prevent media from implicitly loading
   /// nested or external references unless the target and its credential scope
   /// have been explicitly validated by the owning playback policy.
+  /// [LoadKind.plexSession] requires a token-free HTTPS URI without userinfo
+  /// or a token query, and forbids [startPosition] because the session owns its
+  /// offset. Only this kind enables per-file nested references.
+  /// [sessionPlaylist] transfers the owning policy's whole variant to desktop
+  /// backends, which independently validate its scope. It is optional at this
+  /// shared boundary because Android session loads use the URI alone.
   Future<void> load(
     Uri media, {
     String? plexToken,
     int? generation,
     bool startPaused = false,
     Duration? startPosition,
+    LoadKind kind = LoadKind.direct,
+    NativeSessionPlaylist? sessionPlaylist,
   });
   Future<void> setDisplayMatching(DisplayMatchingRequest request);
   Future<void> play();
@@ -143,6 +157,26 @@ final class PlayerCapabilities {
 /// Keyframe seeks use mpv's backward preference, including its beginning-of-file
 /// fallback when no preceding keyframe exists. Exact is for explicit user seeks.
 enum SeekMode { exact, keyframes }
+
+enum LoadKind { direct, plexSession }
+
+/// Private transfer of a policy-validated session variant, not a playlist parser.
+///
+/// The text can contain capability references and must not enter diagnostics.
+/// Native desktop backends independently validate the whole variant and offset.
+@immutable
+final class NativeSessionPlaylist {
+  const NativeSessionPlaylist({
+    required this.text,
+    required this.offsetMicroseconds,
+  });
+
+  /// Whole variant text; the transport permits at most 1 MiB when UTF-8 encoded.
+  final String text;
+
+  /// Non-negative signed-64-bit session offset, independent of player start.
+  final int offsetMicroseconds;
+}
 
 enum DisplayMatchingState { hdr, sdr, unknown }
 
@@ -496,6 +530,7 @@ class PlayerTrack {
 
 class PlayerTelemetry {
   const PlayerTelemetry({
+    this.demuxerStartTime,
     this.videoOutput,
     this.hardwareDecoder,
     this.videoCodec,
@@ -513,6 +548,8 @@ class PlayerTelemetry {
     this.signalPeak,
   });
 
+  /// Raw signed demuxer start time in seconds; null means unknown.
+  final double? demuxerStartTime;
   final String? videoOutput;
   final String? hardwareDecoder;
   final String? videoCodec;
@@ -537,6 +574,7 @@ class PlayerTelemetry {
   @override
   bool operator ==(Object other) =>
       other is PlayerTelemetry &&
+      demuxerStartTime == other.demuxerStartTime &&
       videoOutput == other.videoOutput &&
       hardwareDecoder == other.hardwareDecoder &&
       videoCodec == other.videoCodec &&
@@ -555,6 +593,7 @@ class PlayerTelemetry {
 
   @override
   int get hashCode => Object.hash(
+    demuxerStartTime,
     videoOutput,
     hardwareDecoder,
     videoCodec,

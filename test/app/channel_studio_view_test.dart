@@ -6395,6 +6395,8 @@ class _AgreementPlayer extends FixturePlayer {
     int? generation,
     bool startPaused = false,
     Duration? startPosition,
+    LoadKind kind = LoadKind.direct,
+    NativeSessionPlaylist? sessionPlaylist,
   }) async {
     loaded = media;
     await super.load(media, plexToken: plexToken, generation: generation);
@@ -6661,6 +6663,8 @@ class _DelayedStudioPlayer extends FixturePlayer {
     int? generation,
     bool startPaused = false,
     Duration? startPosition,
+    LoadKind kind = LoadKind.direct,
+    NativeSessionPlaylist? sessionPlaylist,
   }) async {
     await super.load(media, plexToken: plexToken, generation: generation);
     started.complete();

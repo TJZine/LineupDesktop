@@ -154,7 +154,7 @@ def outcomes(result, case):
         raise HarnessOutcomeError(result, case, "malformed_fields") from None
     required = {"runtime_bound", "messenger_contract", "initialized", "progressed", "rejected", "timed_out",
                 "start_configured", "landing_confirmed", "initial_paused", "play_released",
-                "delay_exercised", "ignored_start"}
+                "delay_exercised", "ignored_start", "playing", "policy_checked", "policy_restored"}
     missing = sorted(required - fields.keys())
     invalid_values = sum(value not in ("0", "1") for value in fields.values())
     if missing or invalid_values:
@@ -167,6 +167,7 @@ def outcomes(result, case):
 def media_pass(result, fields, audit, positive):
     return (result.returncode == 0 and fields["runtime_bound"] == "1" and
             fields["messenger_contract"] == "1" and fields["initialized"] == "1" and
+            fields["policy_checked"] == "1" and fields["policy_restored"] == "1" and
             fields["timed_out"] == "0" and audit["A_token"] and not audit["B_token"] and
             not audit["secondary_A_token"] and not audit["token_in_url"] and
             not audit["server_error"] and
@@ -290,6 +291,22 @@ def atom(name, body):
     return struct.pack(">I", len(body) + 8) + name.encode("ascii") + body
 
 
+def configure_session_fixture(root, server):
+    """Supply the same original fMP4 playlist to the production memory callback."""
+    prefix = "/video/:/transcode/universal/session/synthetic-reference/base"
+    playlist = (root / "session.m3u8").read_bytes()
+    for path in root.iterdir():
+        if path.name.startswith("session-") and path.suffix in (".mp4", ".m4s"):
+            server.files[prefix + "/" + path.name] = (path.read_bytes(), "application/octet-stream")
+    # Keeping the original URI served makes an accidental HTTP fallback visible
+    # to the audit; the positive classifier below requires zero variant GETs.
+    variant = prefix + "/index.m3u8"
+    server.files[variant] = (playlist, "application/vnd.apple.mpegurl")
+    payload_path = root / "session-input.m3u8"
+    payload_path.write_bytes(playlist)
+    return variant, payload_path, prefix
+
+
 def matrix(args, harness, nonzero_start):
     records = []
     profile = "nonzero-start" if nonzero_start else "omitted-start"
@@ -321,6 +338,11 @@ def matrix(args, harness, nonzero_start):
         run([args.ffmpeg, "-v", "error", "-i", str(mp4), "-c", "copy", str(root / "media.mkv")])
         run([args.ffmpeg, "-v", "error", "-i", str(mp4), "-c", "copy", "-f", "mpegts", str(root / "segment.ts")])
         run([args.ffmpeg, "-v", "error", "-i", str(mp4), "-c", "copy", "-f", "dash", str(root / "media.mpd")])
+        if not nonzero_start:
+            run([args.ffmpeg, "-v", "error", "-i", str(mp4), "-c", "copy", "-f", "hls",
+                 "-hls_segment_type", "fmp4", "-hls_time", "1", "-hls_list_size", "0",
+                 "-hls_fmp4_init_filename", "session-init.mp4",
+                 "-hls_segment_filename", str(root / "session-%d.m4s"), str(root / "session.m3u8")])
         servers = []
         threads = []
         try:
@@ -390,17 +412,19 @@ def matrix(args, harness, nonzero_start):
                             "token_in_url": any(url for server in servers for _, _, url in server.requests),
                             "server_error": any(server.failed for server in servers)}
 
-            def invoke(name, path, ca="ca.pem", mode=None):
+            def invoke(name, path, ca="ca.pem", mode=None, origin=None, session_playlist=None):
                 for server in servers:
                     with server.lock:
                         server.requests.clear()
                         server.range_requests = 0
                         server.partial_responses = 0
-                command = [str(harness), str(root / ca), origin_a + path]
+                command = [str(harness), str(root / ca), (origin or origin_a) + path]
                 if mode:
                     command.append(mode)
                 if nonzero_start:
                     command.append("--nonzero-start")
+                if session_playlist is not None:
+                    command.append("--session-playlist=" + str(session_playlist))
                 result = captured(command, timeout=22, label=profile + "-" + name)
                 fields = outcomes(result, name)
                 if fields["start_configured"] != str(int(nonzero_start)):
@@ -441,6 +465,27 @@ def matrix(args, harness, nonzero_start):
                               observed["B_token"] and not media_pass(result, fields, observed, False))
                     record("control-http-token", passed, fields, observed,
                            scope="plaintext-token-detected")
+
+            if not nonzero_start:
+                # Use the same real adapter/core and TLS fixture host, but supply
+                # a token-free session load. All playlist/init/media requests are
+                # audited; ordinary authenticated-reference cases remain intact.
+                variant, payload, prefix = configure_session_fixture(root, b)
+                result, fields, observed = invoke("session-fmp4", variant,
+                                                   mode="session", origin=origin_b, session_playlist=payload)
+                requested = {path for path, _, _ in b.requests}
+                passed = (result.returncode == 0 and fields["runtime_bound"] == "1" and
+                          fields["messenger_contract"] == "1" and fields["initialized"] == "1" and
+                          fields["policy_checked"] == "1" and fields["policy_restored"] == "1" and
+                          fields["playing"] == "1" and fields["progressed"] == "1" and
+                          fields["rejected"] == "0" and fields["timed_out"] == "0" and
+                          fields["initial_paused"] == "1" and fields["play_released"] == "1" and
+                          variant not in requested and prefix + "/session-init.mp4" in requested and
+                          any(path.endswith(".m4s") for path in requested) and
+                          observed["A_requests"] == 0 and not observed["B_token"] and
+                          not observed["token_in_url"] and not observed["server_error"])
+                record("session-fmp4", passed, fields, observed,
+                       scope="token-free-session-adapter-smoke")
 
             for option in ("access-references", "autoload-files"):
                 result, fields, observed = invoke("reject-option-" + option, "/media.mp4", mode=option)
@@ -508,7 +553,9 @@ def matrix(args, harness, nonzero_start):
         "untrusted-ca", "control-late-error", "control-disable-tls", "control-allow-references"}
     if nonzero_start:
         expected |= {"control-delayed-start", "control-ignore-start-delayed"}
-    if len(records) != (28 if nonzero_start else 26) or {row["case"] for row in records} != expected:
+    else:
+        expected.add("session-fmp4")
+    if len(records) != (28 if nonzero_start else 27) or {row["case"] for row in records} != expected:
         raise RuntimeError("incomplete_profile_matrix")
     return records
 
@@ -544,7 +591,7 @@ def main():
                        "FoundationValueConversion.mm", "VideoGeometry.h", "VideoGeometry.mm")],
                     *(REPO / "native/player_core").glob("*.h"),
                     *[REPO / "native/player_core" / name for name in
-                      ("player_core.cpp", "subtitle_cues.cpp", "libmpv_operations.cpp", "platform_arguments.cpp", "track_list_encoder.cpp")]]
+                      ("player_core.cpp", "session_playlist.cpp", "subtitle_cues.cpp", "libmpv_operations.cpp", "platform_arguments.cpp", "track_list_encoder.cpp")]]
     source_hashes = {str(path.relative_to(REPO)): sha(path) for path in source_paths if path.is_file()}
     metadata = {"runtime": identity, "source_files": source_hashes,
                 "source_head": run(["git", "-C", str(REPO), "rev-parse", "HEAD"], label="source-head").decode().strip()}
@@ -565,7 +612,7 @@ def main():
     records = [row for nonzero_start in (False, True)
                for row in matrix(args, harness, nonzero_start)]
     # Empty, partial, or accidentally narrowed test selections cannot pass.
-    passed = len(records) == 54 and all(row["pass"] for row in records)
+    passed = len(records) == 55 and all(row["pass"] for row in records)
     report = {"pass": passed, "cases": records, "runtime": identity,
               "harness_sha256": metadata["harness_sha256"], "source_head": metadata["source_head"]}
     (OUTPUT / "report.json").write_text(json.dumps(report, indent=2) + "\n")

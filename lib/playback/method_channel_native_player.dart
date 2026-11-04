@@ -1,4 +1,5 @@
 import 'dart:async';
+import 'dart:convert';
 
 import 'package:flutter/services.dart';
 import 'package:flutter/foundation.dart';
@@ -92,6 +93,9 @@ class MethodChannelNativePlayer implements NativePlayer {
   final Duration _loadTimeout;
   final Duration _stopTimeout;
   final Duration _trackTimeout;
+  MediaCapabilities? _mediaCapabilities;
+  DateTime? _mediaCapabilitiesAt;
+  Future<MediaCapabilities>? _mediaCapabilitiesPending;
   int _nextStopId = 0;
   int _nextTrackRequestId = 0;
   (int, Completer<void>)? _pendingStop;
@@ -197,13 +201,80 @@ class MethodChannelNativePlayer implements NativePlayer {
   });
 
   @override
+  Future<MediaCapabilities> mediaCapabilities() async {
+    if (defaultTargetPlatform != TargetPlatform.android) {
+      return MediaCapabilities.desktop;
+    }
+    final now = DateTime.now();
+    if (_mediaCapabilities != null &&
+        _mediaCapabilitiesAt != null &&
+        now.difference(_mediaCapabilitiesAt!) < const Duration(seconds: 1)) {
+      return _mediaCapabilities!;
+    }
+    if (_mediaCapabilitiesPending != null) return _mediaCapabilitiesPending!;
+    final epoch = _nativeEventEpoch;
+    final pending = () async {
+      MediaCapabilities capabilities;
+      try {
+        capabilities = MediaCapabilities.fromWire(
+          await _invokeNative<Object?>('mediaCapabilities')
+              .timeout(const Duration(seconds: 5)),
+        );
+      } catch (_) {
+        capabilities = MediaCapabilities.unknown;
+      }
+      if (epoch != _nativeEventEpoch) return MediaCapabilities.unknown;
+      _mediaCapabilities = capabilities;
+      _mediaCapabilitiesAt = DateTime.now();
+      return capabilities;
+    }();
+    _mediaCapabilitiesPending = pending;
+    try {
+      return await pending;
+    } finally {
+      if (identical(_mediaCapabilitiesPending, pending)) {
+        _mediaCapabilitiesPending = null;
+      }
+    }
+  }
+
+  @override
   Future<void> load(
     Uri media, {
     String? plexToken,
     int? generation,
     bool startPaused = false,
     Duration? startPosition,
+    LoadKind kind = LoadKind.direct,
+    NativeSessionPlaylist? sessionPlaylist,
   }) async {
+    const maxPlaylistBytes = 1024 * 1024;
+    if (sessionPlaylist != null &&
+        (kind != LoadKind.plexSession ||
+            sessionPlaylist.offsetMicroseconds < 0 ||
+            sessionPlaylist.offsetMicroseconds > 0x7fffffffffffffff ||
+            sessionPlaylist.text.length > maxPlaylistBytes ||
+            utf8.encode(sessionPlaylist.text).length > maxPlaylistBytes)) {
+      throw const PlayerUnavailable(
+        'The Plex session playlist is invalid.',
+        failureCode: 'invalid_argument',
+      );
+    }
+    if (kind == LoadKind.plexSession &&
+        (plexToken != null ||
+            startPosition != null ||
+            media.scheme.toLowerCase() != 'https' ||
+            !media.hasAuthority ||
+            media.host.isEmpty ||
+            media.userInfo.isNotEmpty ||
+            media.queryParametersAll.keys.any(
+              (key) => key.toLowerCase() == 'x-plex-token',
+            ))) {
+      throw const PlayerUnavailable(
+        'The Plex session load is invalid.',
+        failureCode: 'invalid_argument',
+      );
+    }
     if (startPosition != null && startPosition < Duration.zero) {
       throw const PlayerUnavailable(
         'The initial playback position must be non-negative.',
@@ -252,6 +323,12 @@ class MethodChannelNativePlayer implements NativePlayer {
         'plexToken': plexToken,
         'loadId': loadId,
         'startPaused': startPaused,
+        'kind': kind.name,
+        if (sessionPlaylist != null)
+          'sessionPlaylist': {
+            'text': sessionPlaylist.text,
+            'offsetMicroseconds': sessionPlaylist.offsetMicroseconds,
+          },
         if (startPosition != null)
           'startSeconds':
               startPosition.inMicroseconds / Duration.microsecondsPerSecond,
@@ -461,6 +538,9 @@ class MethodChannelNativePlayer implements NativePlayer {
       _capabilities = const PlayerCapabilities.unavailable();
       _fullscreen = false;
       ++_nativeEventEpoch;
+      _mediaCapabilities = null;
+      _mediaCapabilitiesAt = null;
+      _mediaCapabilitiesPending = null;
       final stop = _pendingStop;
       if (stop != null && !stop.$2.isCompleted) {
         stop.$2.completeError(
@@ -769,6 +849,8 @@ class MethodChannelNativePlayer implements NativePlayer {
         _position = _durationFromSeconds(value);
       case 'duration':
         _duration = _durationFromSeconds(value);
+      case 'demuxer-start-time':
+        _telemetry = _copyTelemetry(demuxerStartTime: value);
       case 'track-list':
         _tracks = List.unmodifiable(_decodeTracks(value));
         final selectedSubtitle = _tracks
@@ -957,6 +1039,7 @@ class MethodChannelNativePlayer implements NativePlayer {
   }
 
   PlayerTelemetry _copyTelemetry({
+    Object? demuxerStartTime = _unchanged,
     Object? videoOutput = _unchanged,
     Object? hardwareDecoder = _unchanged,
     Object? videoCodec = _unchanged,
@@ -999,6 +1082,11 @@ class MethodChannelNativePlayer implements NativePlayer {
       return _telemetry;
     }
     return PlayerTelemetry(
+      demuxerStartTime: demuxerStartTime == _unchanged
+          ? _telemetry.demuxerStartTime
+          : demuxerStartTime is num && demuxerStartTime.isFinite
+          ? demuxerStartTime.toDouble()
+          : null,
       videoOutput: videoOutput == _unchanged
           ? _telemetry.videoOutput
           : videoOutput is String
