@@ -1615,10 +1615,7 @@ class _OnboardingWordText extends StatelessWidget {
       wordWidgets.add(
         painter.width <= availableWidth
             ? FittedBox(fit: BoxFit.scaleDown, child: text)
-            : SingleChildScrollView(
-                scrollDirection: Axis.horizontal,
-                child: text,
-              ),
+            : Text(word, style: style),
       );
     }
     painter.dispose();

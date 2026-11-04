@@ -26,6 +26,8 @@ const _handheld = DeviceProfile(
 );
 const _settingsTab = ValueKey('handheld-tab-settings');
 const _profileAvatar = ValueKey('profile-card-taylor');
+const _overwideProfileName =
+    'Multiplatformregistrationmultiplatformregistrationmultiplatformregistration';
 
 void main() {
   setUpAll(loadPinnedTestFonts);
@@ -208,6 +210,31 @@ void main() {
     }
   }
 
+  _h4Test('a profile word wider than the unscaled line breaks in place', (
+    tester,
+  ) async {
+    _window(tester, const Size(360, 800), 1, 2);
+    await _pump(
+      tester,
+      UiFixture(profile: _handheld, controller: _PinController()),
+    );
+    final word = find.text(_overwideProfileName);
+    await tester.ensureVisible(word);
+    await tester.pumpAndSettle();
+    final richText = find.descendant(of: word, matching: find.byType(RichText));
+    final paragraph = tester.renderObject<RenderParagraph>(richText);
+    final boxes = paragraph.getBoxesForSelection(
+      const TextSelection(
+        baseOffset: 0,
+        extentOffset: _overwideProfileName.length,
+      ),
+    );
+    expect(boxes.map((box) => box.top).toSet(), hasLength(greaterThan(1)));
+    final card = find.byKey(const ValueKey('profile-card-overwide'));
+    expect(tester.getRect(word).width, lessThan(tester.getRect(card).width));
+    expect(tester.takeException(), isNull);
+  });
+
   _h4Test('Settings tab restores the last list or category page', (
     tester,
   ) async {
@@ -376,6 +403,11 @@ class _PinController extends FixtureController {
             ),
             PlexHomeUser(id: 'guest', name: 'Guest', protected: false),
             PlexHomeUser(id: 'family', name: 'Family', protected: false),
+            PlexHomeUser(
+              id: 'overwide',
+              name: _overwideProfileName,
+              protected: false,
+            ),
             PlexHomeUser(
               id: 'long',
               name: 'A deliberately long synthetic profile name',
