@@ -1271,7 +1271,6 @@ void main() {
     for (final sample in [
       (delay: 4999, observed: 30000, seek: false),
       (delay: 5000, observed: 30000, seek: true),
-      (delay: 13000, observed: 30000, seek: true),
       (delay: 13000, observed: 43000, seek: false),
       (delay: 13000, observed: 50000, seek: false),
     ]) {
@@ -1305,7 +1304,7 @@ void main() {
       });
     }
 
-    for (final intent in ['none', 'pause', 'explicit seek']) {
+    for (final intent in ['none', 'pause']) {
       test(
         '$intent while corrective seek is pending cannot repeat catchup',
         () async {
@@ -1327,30 +1326,75 @@ void main() {
           await p.firstSeekStarted.future;
           expect(p.seeks, [const Duration(seconds: 43)]);
           f.now = f.now.add(const Duration(seconds: 10));
-          final control = switch (intent) {
-            'pause' => f.coordinator.pause(),
-            'explicit seek' => f.coordinator.seekTo(
-              const Duration(seconds: 90),
-            ),
-            _ => null,
-          };
+          final control = intent == 'pause' ? f.coordinator.pause() : null;
           p.releaseFirstSeek.complete();
           expect(await tune, isTrue);
           if (control != null) await control;
-          expect(
-            p.seeks,
-            intent == 'explicit seek'
-                ? [const Duration(seconds: 43), const Duration(seconds: 90)]
-                : [const Duration(seconds: 43)],
-          );
-          expect(
-            p.seekModes,
-            intent == 'explicit seek'
-                ? [SeekMode.keyframes, SeekMode.exact]
-                : [SeekMode.keyframes],
-          );
+          expect(p.seeks, [const Duration(seconds: 43)]);
+          expect(p.seekModes, [SeekMode.keyframes]);
           expect(p.plays, 0);
           expect(f.coordinator.position, const Duration(seconds: 30));
+        },
+      );
+    }
+
+    for (final duringCorrection in [false, true]) {
+      test(
+        'explicit cross-part seek wins during ${duringCorrection ? 'corrective seek' : 'initial readiness'}',
+        () async {
+          final p = _BlockingLiveJoinSeekPlayer();
+          final f = _ContinuationFixture(
+            player: p,
+            parts: _parts(
+              first: const Duration(seconds: 60),
+              second: const Duration(seconds: 60),
+            ),
+          );
+          addTearDown(f.close);
+          f.now = f.now.add(const Duration(seconds: 30));
+          bool? settled;
+          final tune = f.coordinator.tune('channel-b').then((result) {
+            settled = result;
+            return result;
+          });
+          await p.firstLoadStarted.future;
+          f.now = f.now.add(const Duration(seconds: 13));
+          p.position = const Duration(seconds: 30);
+          p.emitStatus(
+            PlayerState.playing,
+            generation: p.loadGenerations.last,
+            positionUpdated: true,
+          );
+          await pumpEventQueue();
+          if (duringCorrection) {
+            p.releaseFirstLoad.complete();
+            await p.firstSeekStarted.future;
+          }
+          final seek = f.coordinator.seekTo(const Duration(seconds: 90));
+          if (!duringCorrection) {
+            await p.firstSeekStarted.future;
+            p.releaseFirstSeek.complete();
+          }
+          await seek;
+          await pumpEventQueue();
+          final resultBeforeObsoleteWorkReturns = settled;
+          if (duringCorrection) {
+            p.releaseFirstSeek.complete();
+          } else {
+            p.releaseFirstLoad.complete();
+          }
+          expect(await tune, isTrue);
+          expect(resultBeforeObsoleteWorkReturns, isTrue);
+          await pumpEventQueue();
+          expect(p.loads.last.path, '/part-2.mkv');
+          expect(p.seeks, [
+            if (duringCorrection) const Duration(seconds: 43),
+            const Duration(seconds: 30),
+          ]);
+          expect(p.seekModes.last, SeekMode.exact);
+          expect(p.stops, 0);
+          expect(f.coordinator.error, isNull);
+          expect(f.coordinator.currentProgram!.scheduled.item.id, 'short-0');
         },
       );
     }
@@ -1477,43 +1521,58 @@ void main() {
     }
 
     for (final retire in ['tune', 'stop', 'sleep', 'dispose', 'scope']) {
-      test('$retire retires delayed join ownership', () async {
-        final p = _BlockingEventPlayer();
-        final f = _ContinuationFixture(player: p);
-        addTearDown(f.close);
-        f.now = f.now.add(const Duration(seconds: 30));
-        final tune = f.coordinator.tune('channel-b');
-        await p.firstLoadStarted.future;
-        p.position = const Duration(seconds: 30);
-        p.emitStatus(
-          PlayerState.playing,
-          generation: p.loadGenerations.last,
-          positionUpdated: true,
-        );
-        await pumpEventQueue();
-        Future<bool>? nextTune;
-        Future<void>? stopping;
-        switch (retire) {
-          case 'tune':
-            nextTune = f.coordinator.tune('channel-0');
-          case 'stop':
-            stopping = f.coordinator.stop();
-          case 'sleep':
-            f.coordinator.setSleepTimer(const Duration(seconds: 5));
-          case 'dispose':
-            f.coordinator.dispose();
-            f.disposed = true;
-          case 'scope':
-            f.lineup.changeContentScope();
-        }
-        f.now = f.now.add(const Duration(seconds: 13));
-        p.releaseFirstLoad.complete();
-        expect(await tune, isFalse);
-        if (stopping != null) await stopping;
-        if (nextTune != null) expect(await nextTune, isTrue);
-        expect(p.seeks, isEmpty);
-        expect(p.plays, 0);
-      });
+      final sleep = retire == 'sleep';
+      test(
+        sleep
+            ? 'sleep retires delayed join ownership'
+            : '$retire while corrective seek is pending retires join ownership',
+        () async {
+          final p = _BlockingLiveJoinSeekPlayer();
+          final f = _ContinuationFixture(player: p);
+          addTearDown(f.close);
+          f.now = f.now.add(const Duration(seconds: 30));
+          final tune = f.coordinator.tune('channel-b');
+          await p.firstLoadStarted.future;
+          p.position = const Duration(seconds: 30);
+          p.emitStatus(
+            PlayerState.playing,
+            generation: p.loadGenerations.last,
+            positionUpdated: true,
+          );
+          await pumpEventQueue();
+          if (!sleep) {
+            f.now = f.now.add(const Duration(seconds: 13));
+            p.releaseFirstLoad.complete();
+            await p.firstSeekStarted.future;
+          }
+          Future<bool>? nextTune;
+          Future<void>? stopping;
+          switch (retire) {
+            case 'tune':
+              nextTune = f.coordinator.tune('channel-0');
+            case 'stop':
+              stopping = f.coordinator.stop();
+            case 'sleep':
+              f.coordinator.setSleepTimer(const Duration(seconds: 5));
+            case 'dispose':
+              f.coordinator.dispose();
+              f.disposed = true;
+            case 'scope':
+              f.lineup.changeContentScope();
+          }
+          if (sleep) {
+            f.now = f.now.add(const Duration(seconds: 13));
+            p.releaseFirstLoad.complete();
+          } else {
+            p.releaseFirstSeek.complete();
+          }
+          expect(await tune, isFalse);
+          if (stopping != null) await stopping;
+          if (nextTune != null) expect(await nextTune, isTrue);
+          expect(p.seeks, [if (!sleep) const Duration(seconds: 43)]);
+          expect(p.plays, 0);
+        },
+      );
     }
 
     for (final explicit in [false, true]) {
@@ -1565,6 +1624,32 @@ void main() {
 
   group('handheld transient pauses', () {
     for (final dvr in [false, true]) {
+      test(
+        'transient pause, then explicit Pause, then Play (DVR=$dvr)',
+        () async {
+          final player = _EventPlayer(sync: true);
+          final fixture = _ContinuationFixture(
+            player: player,
+            isHandheld: true,
+            lineupController: _TestLineup(
+              scenario: LineupScenario(
+                settings: LineupSettings(dvrControlsEnabled: dvr),
+              ),
+            ),
+          );
+          addTearDown(fixture.close);
+          final coordinator = fixture.coordinator;
+          expect(await coordinator.tune('channel-0'), isTrue);
+          final generation = player.loadGenerations.single;
+          player.emitStatus(PlayerState.playing, generation: generation);
+          player.emitStatus(PlayerState.paused, generation: generation);
+          await coordinator.pause();
+          await coordinator.play();
+          expect(player.loads, hasLength(1));
+          expect(player.plays, 1);
+        },
+      );
+
       for (final userPause in [false, true]) {
         test('resume with DVR $dvr and user pause $userPause', () async {
           final player = _EventPlayer(sync: true);
@@ -1632,12 +1717,44 @@ void main() {
       },
     );
 
+    test('repeated fullscreen exit stays exited after observation', () async {
+      final player = _PendingFullscreenPlayer()
+        ..fullscreen = true
+        ..capabilities = const PlayerCapabilities(
+          displayMatching: false,
+          fullscreen: PlayerFullscreenMode.systemBars,
+        );
+      final lineup = _TestLineup();
+      final guide = _ContinuationGuide(lineup: lineup, clock: DateTime.now);
+      final coordinator = PlayerCoordinator(
+        player: player,
+        lineup: lineup,
+        guide: guide,
+      );
+      addTearDown(() async {
+        coordinator.dispose();
+        guide.dispose();
+        lineup.dispose();
+        await player.dispose();
+      });
+      final first = coordinator.exitFullscreen();
+      await player.started.future;
+      final second = coordinator.exitFullscreen();
+      player.emitFullscreen(false);
+      player.reply.complete();
+      await Future.wait([first, second]);
+      expect(player.fullscreenValues, isNotEmpty);
+      expect(player.fullscreenValues, everyElement(isFalse));
+      expect(coordinator.fullscreen, isFalse);
+    });
+
     test('fixed fullscreen capability suppresses a command', () async {
       final player = _EventPlayer()
         ..capabilities = const PlayerCapabilities.unavailable();
       final fixture = _ContinuationFixture(player: player);
       addTearDown(fixture.close);
       await fixture.coordinator.toggleFullscreen();
+      await fixture.coordinator.exitFullscreen();
       expect(player.fullscreenValues, isEmpty);
     });
   });
@@ -7727,6 +7844,8 @@ void main() {
           player: player,
           lineup: lineup,
           guide: guide,
+          suspendInBackground: domainFailure,
+          resumeOnInactive: domainFailure,
         );
         addTearDown(player.close);
         addTearDown(lineup.dispose);
@@ -7734,6 +7853,9 @@ void main() {
         addTearDown(coordinator.dispose);
 
         await coordinator.tune('channel-b');
+        if (domainFailure) {
+          coordinator.didChangeAppLifecycleState(AppLifecycleState.inactive);
+        }
         player.emitError(
           recoverable: true,
           generation: player.loadGenerations.single,
@@ -7758,6 +7880,13 @@ void main() {
             _supportReport(lineup, coordinator),
             contains('code=authorization-unavailable'),
           );
+          final requests = lineup.playbackRequests;
+          coordinator.didChangeAppLifecycleState(AppLifecycleState.hidden);
+          await pumpEventQueue();
+          coordinator.didChangeAppLifecycleState(AppLifecycleState.inactive);
+          await pumpEventQueue();
+          expect(lineup.playbackRequests, requests);
+          expect(player.loads, hasLength(1));
         }
       },
     );

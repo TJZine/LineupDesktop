@@ -210,6 +210,7 @@ class PlayerCoordinator extends ChangeNotifier with WidgetsBindingObserver {
   bool? _resumeAfterBackground;
   final DateTime Function() _clock;
   GuideProgram? _resolvingProgram;
+  _TuneLoad? _preparingTuneLoad;
   late PlayerStatus _status;
   late Duration _position;
   late Duration _duration;
@@ -772,6 +773,7 @@ class PlayerCoordinator extends ChangeNotifier with WidgetsBindingObserver {
         'videoOutput': event.telemetry.videoOutput,
         'hardwareDecoder': event.telemetry.hardwareDecoder,
       });
+      _resumeAfterBackground = false;
       unawaited(_stopQuietly());
       _invalidateAuthorizationRecovery();
       _error = 'Playback failed. Retry or choose another channel.';
@@ -1166,7 +1168,10 @@ class PlayerCoordinator extends ChangeNotifier with WidgetsBindingObserver {
         generation == _tuneGeneration &&
         contentGeneration == lineup.contentGeneration;
     final previousChannelId = lineup.currentChannelId;
+    final tuneLoad = _preparingTuneLoad = _TuneLoad(generation);
     Future<bool> fail(Object error) async {
+      if (!ownsTune()) return false;
+      _resumeAfterBackground = false;
       _invalidateAuthorizationRecovery();
       if (active != null && identical(_active, active)) _releaseActive();
       if (request != null) _releaseActive(ifRequest: request);
@@ -1186,6 +1191,7 @@ class PlayerCoordinator extends ChangeNotifier with WidgetsBindingObserver {
       replaced = _active?.request;
       final elapsed = _clock().difference(program.scheduled.start);
       request = await _loadPlayback(
+        tuneLoad,
         request,
         initialPosition: !fromBeginning && elapsed > const Duration(seconds: 2)
             ? elapsed
@@ -1196,6 +1202,7 @@ class PlayerCoordinator extends ChangeNotifier with WidgetsBindingObserver {
           channelId,
           program,
           request,
+          tuneLoad,
           eligible: () =>
               ownsTune() &&
               joinSeekGeneration == _seekGeneration &&
@@ -1205,13 +1212,19 @@ class PlayerCoordinator extends ChangeNotifier with WidgetsBindingObserver {
         program = joined.$1;
         request = joined.$2;
       }
+      // A seek can replace the load in the gap between preparation and commit.
+      // Keep the schedule context, and settle the latest explicit operation.
+      while (ownsTune()) {
+        final replacement = tuneLoad.replacement;
+        if (replacement == null) break;
+        request = await tuneLoad.waitFor(replacement);
+        if (identical(replacement, tuneLoad.replacement)) break;
+      }
+      _preparingTuneLoad = null;
+      if (!ownsTune()) return false;
       _invalidateAuthorizationRecovery();
       if (replaced != null) _releaseActive(ifRequest: replaced);
-      if (generation != _tuneGeneration) {
-        if (_supersededByTune) await _stopQuietly();
-        return false;
-      }
-      active = _commitActive(request, program, channelId);
+      active = _commitActive(request!, program, channelId);
       await lineup.setCurrentChannel(channelId);
       if (!ownsTune()) {
         if (identical(_active, active)) _releaseActive();
@@ -1256,6 +1269,7 @@ class PlayerCoordinator extends ChangeNotifier with WidgetsBindingObserver {
       }
       return await fail(error);
     } finally {
+      if (identical(_preparingTuneLoad, tuneLoad)) _preparingTuneLoad = null;
       if (generation == _tuneGeneration) _resolvingProgram = null;
     }
   }
@@ -1266,7 +1280,8 @@ class PlayerCoordinator extends ChangeNotifier with WidgetsBindingObserver {
   Future<(GuideProgram, LineupPlaybackRequest)> _reconcileLiveJoin(
     String channelId,
     GuideProgram program,
-    LineupPlaybackRequest request, {
+    LineupPlaybackRequest request,
+    _TuneLoad tuneLoad, {
     required bool Function() eligible,
   }) async {
     var replacedBoundary = false;
@@ -1304,18 +1319,19 @@ class PlayerCoordinator extends ChangeNotifier with WidgetsBindingObserver {
           program = current;
           _resolvingProgram = current;
           request = await _loadPlayback(
+            tuneLoad,
             lineup.playbackFor(current.scheduled.item.id),
             initialPosition: elapsed,
           );
         } else {
-          final next = await _loadPartAtPosition(
-            request,
-            part!.$1,
-            part.$2,
-            seekMode: SeekMode.keyframes,
+          request = await tuneLoad.waitFor(
+            _loadPartAtPosition(
+              request,
+              part!.$1,
+              part.$2,
+              seekMode: SeekMode.keyframes,
+            ),
           );
-          if (next == null) throw const _PlaybackSuperseded();
-          request = next;
         }
         continue;
       }
@@ -1366,9 +1382,7 @@ class PlayerCoordinator extends ChangeNotifier with WidgetsBindingObserver {
         },
       );
       load.operation = operation;
-      final next = await operation;
-      if (next == null) throw const _PlaybackSuperseded();
-      request = next;
+      request = await tuneLoad.waitFor(operation);
       // Authorization replacement has its own observed landing and load identity.
       // Recheck program/part ownership before commit, without repeating this seek.
     }
@@ -1480,6 +1494,7 @@ class PlayerCoordinator extends ChangeNotifier with WidgetsBindingObserver {
   }
 
   Future<LineupPlaybackRequest> _loadPlayback(
+    _TuneLoad tuneLoad,
     LineupPlaybackRequest request, {
     Duration? initialPosition,
   }) async {
@@ -1493,16 +1508,14 @@ class PlayerCoordinator extends ChangeNotifier with WidgetsBindingObserver {
     final target = initialPosition == null
         ? null
         : _partForPosition(request, initialPosition);
-    final loaded = await _loadPartAtPosition(
-      request,
-      target?.$1 ?? 0,
-      target?.$2,
-      seekMode: SeekMode.keyframes,
+    return tuneLoad.waitFor(
+      _loadPartAtPosition(
+        request,
+        target?.$1 ?? 0,
+        target?.$2,
+        seekMode: SeekMode.keyframes,
+      ),
     );
-    if (loaded == null) {
-      throw const PlayerUnavailable('Playback load was superseded.');
-    }
-    return loaded;
   }
 
   Future<LineupPlaybackRequest?> _loadPartAtPosition(
@@ -1824,6 +1837,8 @@ class PlayerCoordinator extends ChangeNotifier with WidgetsBindingObserver {
   }
 
   Future<void> _failTransition(Object error, int tuneGeneration) async {
+    if (_disposed || tuneGeneration != _tuneGeneration) return;
+    _resumeAfterBackground = false;
     final nativeStop = _beginNativeStop();
     _invalidateAuthorizationRecovery();
     if (nativeStop != null) {
@@ -1976,10 +1991,14 @@ class PlayerCoordinator extends ChangeNotifier with WidgetsBindingObserver {
       if (playback != null && target != null && load != null) {
         load.seekMode = SeekMode.exact;
         if (target.$1 != load.partIndex) {
-          if (await _loadPartAtPosition(playback, target.$1, target.$2) ==
-              null) {
-            return;
+          final operation = _loadPartAtPosition(playback, target.$1, target.$2);
+          final tuneLoad = _preparingTuneLoad;
+          if (tuneLoad != null &&
+              tuneLoad.generation == tuneGeneration &&
+              _ownsSeek(seekGeneration, tuneGeneration)) {
+            tuneLoad.adopt(operation);
           }
+          if (await operation == null) return;
         } else if (load.pending || _authorizationRecovery != null) {
           load.target = target.$2;
           final recovery = _authorizationRecovery;
@@ -2132,7 +2151,11 @@ class PlayerCoordinator extends ChangeNotifier with WidgetsBindingObserver {
     notifyListeners();
   }
 
-  Future<void> toggleFullscreen() {
+  Future<void> toggleFullscreen() => _queueFullscreen();
+
+  Future<void> exitFullscreen() => _queueFullscreen(exitOnly: true);
+
+  Future<void> _queueFullscreen({bool exitOnly = false}) {
     final mode = player.capabilities.fullscreen;
     if (mode == PlayerFullscreenMode.fixed) return Future.value();
     final controlGeneration = ++_controlGeneration;
@@ -2140,7 +2163,8 @@ class PlayerCoordinator extends ChangeNotifier with WidgetsBindingObserver {
     final epoch = _fullscreenEpoch;
     final operation = _fullscreenOperations.then((_) async {
       if (_disposed || epoch != _fullscreenEpoch) return;
-      final next = !_fullscreen;
+      if (exitOnly && !_fullscreen) return;
+      final next = exitOnly ? false : !_fullscreen;
       final observation = _fullscreenObservationRevision;
       try {
         await player.setFullscreen(next);
@@ -2174,6 +2198,7 @@ class PlayerCoordinator extends ChangeNotifier with WidgetsBindingObserver {
     final awaitingTuneLoad = _awaitingTuneLoad;
     _userPaused = paused;
     if (paused) {
+      if (load != null && _ownsLoad(load)) load.transientPause = false;
       ++_pauseIntentRevision;
       _displayMatching.userPause();
     } else {
@@ -2890,6 +2915,41 @@ final class _TrackConfirmation {
   final int? id;
   final String? error;
   Timer? timer;
+}
+
+/// The scheduled tune still owns the program when an explicit cross-part seek
+/// takes over its native load. The old readiness or seek may still be pending.
+class _TuneLoad {
+  _TuneLoad(this.generation);
+
+  final int generation;
+  Future<LineupPlaybackRequest?>? replacement;
+  Completer<void> _changed = Completer<void>();
+
+  void adopt(Future<LineupPlaybackRequest?> operation) {
+    replacement = operation;
+    _changed.complete();
+    _changed = Completer<void>();
+  }
+
+  Future<LineupPlaybackRequest> waitFor(
+    Future<LineupPlaybackRequest?> scheduled,
+  ) async {
+    while (true) {
+      final current = replacement;
+      try {
+        final request = await Future.any([
+          current ?? scheduled,
+          _changed.future.then<LineupPlaybackRequest?>((_) => null),
+        ]);
+        if (!identical(current, replacement)) continue;
+        if (request == null) throw const _PlaybackSuperseded();
+        return request;
+      } catch (_) {
+        if (identical(current, replacement)) rethrow;
+      }
+    }
+  }
 }
 
 class _PlaybackLoad {
