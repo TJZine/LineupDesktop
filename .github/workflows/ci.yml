@@ -71,6 +71,7 @@ jobs:
         run: |
           python3 tool/android/check-manifest.py android/app/src/main/AndroidManifest.xml
           python3 -m unittest discover -s tool/android -p '*_test.py'
+          python3 tool/android/test-session-clock-public.py
       - name: Build ARM debug APK with the CI debug key
         env:
           LINEUP_ANDROID_SIGNING: debug-key

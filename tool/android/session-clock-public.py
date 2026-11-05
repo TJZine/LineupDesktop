@@ -28,6 +28,8 @@ PACKAGE = "com.tjzine.lineup"
 PORT = 18443
 STATUS = "cache/session-hls-clock-public-v1.json"
 MAX_STATUS = 64 * 1024
+# Matches publicClockEventLimit in fixtures/session_clock_contract.dart.
+MAX_EVENTS = 1000
 MAX_BODY = 2 * 1024 * 1024
 MAX_BYTES = 16 * 1024 * 1024
 
@@ -463,7 +465,7 @@ def validate_status(data, case, nonce):
         raise Failure("status_schema")
     if (
         type(value["eventCount"]) is not int
-        or not 0 <= value["eventCount"] <= 200
+        or not 0 <= value["eventCount"] <= MAX_EVENTS
         or len(value["samples"]) > 40
         or len(value["clocks"]) > 20
     ):

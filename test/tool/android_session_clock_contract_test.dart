@@ -241,13 +241,33 @@ void main() {
     }
   });
 
+  test('30 seconds of periodic events leave room to qualify readiness', () {
+    final recorder = PublicClockRecorder('zero', '0123456789abcdef');
+    for (var tick = 0; tick < 120; tick++) {
+      recorder.receive(property('time-pos', tick / 4));
+      recorder.receive(property('duration', 40.0));
+    }
+    expect(recorder.eventCount, 240);
+    expect(recorder.qualified, isFalse);
+    recorder.receive({'type': 'state', 'state': 'playing', 'loadId': 1});
+    recorder.receive(property('video-params', {'w': 1920, 'h': 1080}));
+    recorder.receive(
+      property('session-clock', {'state': 'ready', 'adjustmentUs': -10500000}),
+    );
+    expect(recorder.qualified, isTrue);
+    expect(recorder.failure, isNull);
+  });
+
   test('event/sample bounds are enforced without raw diagnostic retention', () {
-    final recorder = ready('zero');
-    for (var i = 0; i < 201; i++) {
+    final recorder = PublicClockRecorder('zero', '0123456789abcdef');
+    for (var i = 0; i < publicClockEventLimit; i++) {
       recorder.receive(property('ignored', 'not retained'));
     }
+    expect(recorder.failure, isNull);
+    expect(recorder.eventCount, publicClockEventLimit);
+    recorder.receive(property('ignored', 'not retained'));
     expect(recorder.failure, 'event_bound');
-    expect(recorder.eventCount, 200);
+    expect(recorder.eventCount, publicClockEventLimit);
     expect(
       recorder.status('failed').toString(),
       isNot(contains('not retained')),

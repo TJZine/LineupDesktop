@@ -10,6 +10,8 @@ import 'package:path_provider/path_provider.dart';
 
 const sessionClockCases = {'zero', 'offset21', 'discontinuity'};
 const sessionClockStatusName = 'session-hls-clock-public-v1.json';
+// Zero's 95.5 s lifecycle × 8 periodic events/s = 764, plus about 30% headroom.
+const publicClockEventLimit = 1000;
 const _channel = MethodChannel('lineup/native_player');
 
 class PublicClockFailure implements Exception {
@@ -109,7 +111,9 @@ class PublicClockRecorder {
     }
     if (failure != null) return;
     try {
-      if (eventCount == 200) throw const PublicClockFailure('event_bound');
+      if (eventCount == publicClockEventLimit) {
+        throw const PublicClockFailure('event_bound');
+      }
       eventCount++;
       if (value is! Map) throw const PublicClockFailure('event_schema');
       final type = value['type'];

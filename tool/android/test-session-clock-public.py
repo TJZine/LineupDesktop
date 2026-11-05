@@ -3,6 +3,7 @@
 import importlib.util
 import json
 from pathlib import Path
+import shutil
 import socket
 import ssl
 import subprocess
@@ -18,7 +19,6 @@ SPEC = importlib.util.spec_from_file_location(
 )
 m = importlib.util.module_from_spec(SPEC)
 SPEC.loader.exec_module(m)
-TLS = Path.home() / ".config/lineup-android/fixture-ca"
 
 
 def status(case, *, a1=-10500000):
@@ -98,6 +98,11 @@ class StatusTests(unittest.TestCase):
             with self.subTest(case=case):
                 self.assertEqual(self.check(status(case), case)["status"], "complete")
 
+    def test_event_count_accepts_exact_limit(self):
+        value = status("zero")
+        value["eventCount"] = m.MAX_EVENTS
+        self.assertEqual(self.check(value)["eventCount"], m.MAX_EVENTS)
+
     def test_stale_nonce_is_ignored(self):
         value = status("zero")
         value["nonce"] = "fedcba9876543210"
@@ -116,7 +121,7 @@ class StatusTests(unittest.TestCase):
         for mutate in (
             lambda v: v.update(uri="forbidden"),
             lambda v: v.update(accountOrPlexAccess=True),
-            lambda v: v.update(eventCount=201),
+            lambda v: v.update(eventCount=m.MAX_EVENTS + 1),
             lambda v: v["samples"][0].update(positionSeconds=float("nan")),
             lambda v: v["clocks"][1].update(adjustmentUs=True),
             lambda v: v.update(failure="arbitrary diagnostic"),
@@ -210,13 +215,76 @@ class StatusTests(unittest.TestCase):
 
 
 class ServerTests(unittest.TestCase):
+    @classmethod
+    def setUpClass(cls):
+        executable = shutil.which("openssl")
+        if executable is None:
+            raise RuntimeError("openssl is required for the public clock TLS tests")
+        cls.tls_directory = tempfile.TemporaryDirectory(prefix="public-clock-tls-")
+        cls.tls = Path(cls.tls_directory.name)
+        cls.tls.chmod(0o700)
+
+        def openssl(*arguments):
+            subprocess.run(
+                [executable, *arguments],
+                cwd=cls.tls,
+                check=True,
+                capture_output=True,
+                text=True,
+                timeout=30,
+            )
+
+        try:
+            (cls.tls / "ca.cnf").write_text(
+                "[req]\n"
+                "distinguished_name=dn\n"
+                "x509_extensions=ca\n"
+                "prompt=no\n"
+                "[dn]\n"
+                "CN=Lineup public clock test CA\n"
+                "[ca]\n"
+                "basicConstraints=critical,CA:TRUE\n"
+                "keyUsage=critical,keyCertSign,cRLSign\n"
+                "subjectKeyIdentifier=hash\n"
+                "authorityKeyIdentifier=keyid:always\n"
+            )
+            openssl(
+                "req", "-x509", "-newkey", "rsa:2048", "-nodes",
+                "-keyout", "ca.key", "-out", "ca.crt",
+                "-days", "1", "-config", "ca.cnf",
+            )
+            openssl(
+                "req", "-newkey", "rsa:2048", "-nodes",
+                "-keyout", "localhost.key", "-out", "localhost.csr",
+                "-subj", "/CN=localhost",
+            )
+            (cls.tls / "leaf.ext").write_text(
+                "subjectAltName=DNS:localhost,IP:127.0.0.1\n"
+                "extendedKeyUsage=serverAuth\n"
+                "keyUsage=critical,digitalSignature,keyEncipherment\n"
+                "authorityKeyIdentifier=keyid,issuer\n"
+                "subjectKeyIdentifier=hash\n"
+            )
+            openssl(
+                "x509", "-req", "-in", "localhost.csr",
+                "-CA", "ca.crt", "-CAkey", "ca.key", "-CAcreateserial",
+                "-out", "localhost.crt", "-days", "1", "-extfile", "leaf.ext",
+            )
+        except Exception:
+            cls.tls_directory.cleanup()
+            raise
+
+    @classmethod
+    def tearDownClass(cls):
+        cls.tls_directory.cleanup()
+
     def setUp(self):
         self.temp = tempfile.TemporaryDirectory()
         folder = Path(self.temp.name)
         for name in ("init.mp4", "0.m4s", "1.m4s", "2.m4s", "3.m4s"):
             (folder / name).write_bytes(b"public fixture" * 100)
         self.server = m.PublicServer(
-            folder, TLS / "localhost.crt", TLS / "localhost.key", port=0
+            folder, self.tls / "localhost.crt", self.tls / "localhost.key", port=0
         )
         self.server.start()
         self.server.begin("zero")
@@ -229,7 +297,7 @@ class ServerTests(unittest.TestCase):
         self.temp.cleanup()
 
     def connection(self):
-        context = ssl.create_default_context(cafile=str(TLS / "localhost.crt"))
+        context = ssl.create_default_context(cafile=str(self.tls / "ca.crt"))
         return http.client.HTTPSConnection(
             "localhost", self.port, context=context, timeout=2
         )
