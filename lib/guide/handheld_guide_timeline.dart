@@ -378,7 +378,7 @@ class _HandheldGuideRow extends StatelessWidget {
                         90,
                       ).copyWith(color: roles.primaryText),
                     ),
-                    _GuideWordText(
+                    HandheldWordText(
                       channel.name,
                       maxLines: 2,
                       style: LineupTypography.small.copyWith(

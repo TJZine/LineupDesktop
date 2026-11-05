@@ -189,14 +189,14 @@ class _HandheldNowStripState extends State<_HandheldNowStrip> {
                     child: Column(
                       crossAxisAlignment: CrossAxisAlignment.stretch,
                       children: [
-                        _GuideWordText(
+                        HandheldWordText(
                           channelLabel,
                           style: LineupTypography.small.copyWith(
                             color: roles.secondaryText,
                           ),
                         ),
                         const SizedBox(height: 4),
-                        _GuideWordText(
+                        HandheldWordText(
                           title,
                           style: LineupTypography.title(
                             24,
@@ -334,7 +334,7 @@ class _HandheldProgramSheet extends StatelessWidget {
                         child: Column(
                           crossAxisAlignment: CrossAxisAlignment.start,
                           children: [
-                            _GuideWordText(
+                            HandheldWordText(
                               '${channel.number} · ${channel.name}',
                               style: LineupTypography.small.copyWith(
                                 color: roles.secondaryText,
@@ -343,7 +343,7 @@ class _HandheldProgramSheet extends StatelessWidget {
                             const SizedBox(height: 6),
                             Semantics(
                               header: true,
-                              child: _GuideWordText(
+                              child: HandheldWordText(
                                 item.showTitle ?? item.title,
                                 style: LineupTypography.title(
                                   30,
@@ -353,7 +353,7 @@ class _HandheldProgramSheet extends StatelessWidget {
                             ),
                             if (episode.isNotEmpty) ...[
                               const SizedBox(height: 4),
-                              _GuideWordText(episode, style: secondary),
+                              HandheldWordText(episode, style: secondary),
                             ],
                             const SizedBox(height: 6),
                             Text(
@@ -380,7 +380,7 @@ class _HandheldProgramSheet extends StatelessWidget {
                   ],
                   if (item.summary?.trim().isNotEmpty == true) ...[
                     const SizedBox(height: 14),
-                    _GuideWordText(
+                    HandheldWordText(
                       item.summary!,
                       maxLines: 6,
                       style: LineupTypography.body.copyWith(
@@ -393,7 +393,7 @@ class _HandheldProgramSheet extends StatelessWidget {
                   if (program.scheduled.start.isAfter(now))
                     Padding(
                       padding: const EdgeInsets.only(bottom: 10),
-                      child: _GuideWordText(
+                      child: HandheldWordText(
                         'Airs at $start. Watching tunes channel ${channel.number} now.',
                         style: LineupTypography.body.copyWith(
                           fontSize: 15,
@@ -428,100 +428,4 @@ class _HandheldProgramSheet extends StatelessWidget {
       ),
     );
   }
-}
-
-/// Keeps line breaks between words. The requested scaler still determines
-/// every normal word, including when Android supplies a nonlinear scaler.
-class _GuideWordText extends StatelessWidget {
-  const _GuideWordText(this.text, {required this.style, this.maxLines});
-
-  final String text;
-  final TextStyle style;
-  final int? maxLines;
-
-  @override
-  Widget build(BuildContext context) => LayoutBuilder(
-    builder: (context, constraints) {
-      final requested = MediaQuery.textScalerOf(context);
-      final direction = Directionality.of(context);
-      final words = text.trim().split(RegExp(r'\s+'));
-      final size = style.fontSize!;
-      final merged = DefaultTextStyle.of(context).style.merge(style);
-
-      InlineSpan fit(String word) {
-        double width(double candidate) {
-          final painter = TextPainter(
-            text: TextSpan(
-              text: word,
-              style: merged.copyWith(fontSize: candidate),
-            ),
-            textDirection: direction,
-            textScaler: TextScaler.noScaling,
-          )..layout();
-          final measured = painter.width;
-          painter.dispose();
-          return measured;
-        }
-
-        final available = constraints.maxWidth;
-        final scaled = requested.scale(size);
-        if (width(scaled) <= available) return TextSpan(text: word);
-        if (width(size) > available) {
-          return WidgetSpan(
-            alignment: PlaceholderAlignment.baseline,
-            baseline: TextBaseline.alphabetic,
-            child: Text(
-              word,
-              style: style,
-              textScaler: TextScaler.noScaling,
-              maxLines: 1,
-              overflow: TextOverflow.ellipsis,
-            ),
-          );
-        }
-
-        var low = size;
-        var high = scaled;
-        for (var step = 0; step < 12; step++) {
-          final middle = (low + high) / 2;
-          if (width(middle) <= available - 1) {
-            low = middle;
-          } else {
-            high = middle;
-          }
-        }
-        // Text.rich applies the original (possibly nonlinear) scaler after
-        // layout. Convert the measured effective size back to its input.
-        var lowerInput = 0.0;
-        var upperInput = size;
-        for (var step = 0; step < 14; step++) {
-          final middle = (lowerInput + upperInput) / 2;
-          if (requested.scale(middle) <= low) {
-            lowerInput = middle;
-          } else {
-            upperInput = middle;
-          }
-        }
-        return TextSpan(
-          text: word,
-          style: TextStyle(fontSize: upperInput),
-        );
-      }
-
-      return Text.rich(
-        TextSpan(
-          children: [
-            for (var index = 0; index < words.length; index++) ...[
-              if (index > 0) const TextSpan(text: ' '),
-              fit(words[index]),
-            ],
-          ],
-        ),
-        style: style,
-        semanticsLabel: text,
-        maxLines: maxLines,
-        overflow: maxLines == null ? null : TextOverflow.ellipsis,
-      );
-    },
-  );
 }
