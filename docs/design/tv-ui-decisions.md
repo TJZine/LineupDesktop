@@ -12,7 +12,8 @@ The maintainer adopted the October 26 reconciliation (local evidence, not tracke
 - **4. Menu/details: M1 is approved, with no chevron.**
   - Menu always opens the Lineup menu.
   - Select or Down from hidden opens the compact OSD. Down again expands.
-  - Info, the menu's Now Playing row, and returns from More info and the track drawers still expand directly.
+  - Info, the menu's Now Playing row, and return from More info still expand directly.
+  - A track drawer returns to where it was opened: the compact OSD or expanded details, with its invoking action focused (clarified November 5, 2026).
   - The chevron can be revisited after the couch check.
 - **5. Review footer: R1 is approved.**
   - Right from a read row or disclosure header goes to the footer. Up returns to the remembered row.
@@ -272,8 +273,8 @@ Resulting rail widths at 1920:
 - The intentional expanded entries stay as they are:
   - the Lineup menu's **Now Playing** row;
   - Info;
-  - return from More info;
-  - track-drawer return.
+  - return from More info.
+- **Track-drawer return** (clarified November 5, 2026, maintainer decision, replacing "track-drawer return" in the list above): closing a drawer returns to the presentation it was opened from, with its invoking action focused. A drawer opened from the compact OSD returns compact, which keeps an explicit minimize; one opened from expanded details returns expanded.
 - **Discoverability:** the Lineup menu already lists Now Playing. Optionally, a quiet "▾ Details" chevron on the compact OSD's bottom edge.
   - The chevron is a **change to the protected OSD layout**, so it would need its own render and approval. It is not in M1 by default.
 - Menu → Lineup menu is consistent with Guide (UX-B) and replaces UX-A's Player Menu → Now Playing.
