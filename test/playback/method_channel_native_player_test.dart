@@ -2159,7 +2159,12 @@ void main() {
         queries++;
         return {
           'videoDecoders': [
-            {'codec': 'h264', 'maxWidth': 1920, 'maxHeight': 1080},
+            {
+              'codec': 'h264',
+              'profiles': ['high', 'high 4:2:2', 'high 4:4:4 predictive'],
+              'maxWidth': 1920,
+              'maxHeight': 1080,
+            },
           ],
           'audioDecoders': ['aac'],
           'audioPassthrough': <String>[],
@@ -2171,6 +2176,11 @@ void main() {
       final capabilities = await player.mediaCapabilities();
       expect(capabilities.known, isTrue);
       expect(capabilities.videoDecoders.single.codec, 'h264');
+      expect(capabilities.videoDecoders.single.profiles, [
+        'high',
+        'high 4:2:2',
+        'high 4:4:4 predictive',
+      ]);
       expect(await player.mediaCapabilities(), same(capabilities));
       expect(queries, 1);
       await Future<void>.delayed(const Duration(milliseconds: 1050));
@@ -2215,6 +2225,17 @@ void main() {
   for (final reply in [
     null,
     {'videoDecoders': 'bad'},
+    {
+      'videoDecoders': [
+        {
+          'codec': 'h264',
+          'profiles': ['high|main'],
+        },
+      ],
+      'audioDecoders': ['aac'],
+      'audioPassthrough': <String>[],
+      'containers': ['mp4'],
+    },
     {
       'videoDecoders': List.generate(65, (_) => {'codec': 'h264'}),
       'audioDecoders': ['aac'],

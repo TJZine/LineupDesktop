@@ -29,6 +29,33 @@ validation, bounded queues, correlation and lifecycle fencing. A fresh
 `Media3Engine` belongs to each load. See the [Android protocol details](native-player-protocol.md#android-backend)
 for failure mapping, telemetry, bounded initial joins (up to 5 seconds early,
 otherwise exact) and display limitations.
+
+`plexSession` loads use the HLS module at the same Media3 version, with a
+per-load origin pin before the existing redirect policy. Playlists, keys,
+initialization files and segments must stay on the load's HTTPS scheme, host
+and port, without userinfo or a token query. Session requests have no Plex
+header or explicit player start position; a provided `startSeconds` is rejected,
+including zero. HLS uses the playlist's own start. Direct Play retains the
+guarded progressive source and existing start handling. `mediaCapabilities`
+reads current decoder profiles, display HDR and Media3 audio-output capabilities
+on the application looper; Dart owns eligibility and conversion policy.
+
+`SessionHlsExtractors` decorates the pinned stock HLS factory for session loads.
+It reads the actual initialized timestamp adjustment after the first loaded
+fMP4 video sample; it does not add a renderer observer, custom HTTP client,
+second playlist parser or sample timestamp rewrite. The per-load `SessionHlsClock`
+publishes `pending`, `ready(adjustmentUs)` or terminal `unavailable(reason)` through
+the ordinary generation/load-correlated native property channel. A normal seek
+may replace the adjuster: pending is published before real initialized video
+qualifies the new A1. A changed A is usable, with `clock_rebased` when the change
+exceeds one actual video frame; unknown frame duration defers that diagnostic.
+Replaced callbacks are ignored, while simultaneous live bases, invalid clocks,
+HLS discontinuity and period/timeline mismatch become terminal unavailable with
+`clock_unavailable`, not a Player error. Unsupported fMP4/video preconditions
+stay pending. `time-pos` stays raw; Dart consumption and schedule alignment wait
+for T4. T4 aligns on first ready only; post-seek A1 updates position only.
+See the [clock wire contract](native-player-protocol.md#session-hls-adjustment-fact).
+
 There is one authoritative Dart application; no Android Plex, schedule,
 persistence or navigation implementation exists beside it. Windows/macOS keep
 their existing libmpv adapters and transport contracts.
@@ -181,6 +208,16 @@ adb -s emulator-5554 exec-out screencap -p > /tmp/lineup-android.png
 
 Raw logcat and dumps are private evidence. Never commit credentials, tokens,
 server addresses, account names or media titles.
+
+## Synthetic session checks
+
+The alternate [fixture entrypoint](../tool/android/fixtures/README.md#synthetic-session-hls-contract)
+has a debug-only synthetic HLS case using the ordinary production transport and
+adapter. It accepts no private capability input. The completed E6 observer and
+live delivery tools are excluded from the merge candidate; historical results
+remain tied to the preserved `54caf2e1` source and frozen APKs. Removing those
+measurement tools does not establish new emulator, Fire TV, HDR or audio
+acceptance for the production candidate.
 
 ## Storage and backup
 

@@ -13,7 +13,11 @@ import androidx.media3.exoplayer.ExoPlayer
 import androidx.media3.exoplayer.ExoTimeoutException
 import androidx.media3.exoplayer.SeekParameters
 import androidx.media3.exoplayer.analytics.AnalyticsListener
+import androidx.media3.exoplayer.hls.HlsMediaSource
+import androidx.media3.exoplayer.hls.HlsManifest
+import androidx.media3.exoplayer.source.MediaSource
 import androidx.media3.exoplayer.source.ProgressiveMediaSource
+import androidx.media3.extractor.ExtractorsFactory
 import androidx.media3.ui.SubtitleView
 import okhttp3.HttpUrl.Companion.toHttpUrlOrNull
 import okhttp3.OkHttpClient
@@ -51,9 +55,9 @@ internal class Media3Engine(
     private fun observedPaused() = !player.playWhenReady ||
         player.playbackSuppressionReason == Player.PLAYBACK_SUPPRESSION_REASON_TRANSIENT_AUDIO_FOCUS_LOSS
     private val playbackThread = player.playbackLooper.thread
+    private var releaseReturned = false
     private var releasingPlayer = false
     private var releaseTimedOut = false
-    private var releaseReturned = false
 
     init {
         player.addListener(
@@ -82,6 +86,7 @@ internal class Media3Engine(
     private var closed = false
     private var released = false
     private var observer: PlayerEngine.Listener? = null
+    private var sessionClock: SessionHlsClock? = null
     private var lastCues: List<Cue> = emptyList()
     private var subtitleFormat: Format? = null
     private val ssaParsers = SsaDialogueParser.Factory(debug) {
@@ -132,6 +137,7 @@ internal class Media3Engine(
         object : Runnable {
             override fun run() {
                 if (closed) return
+                publishSessionClock()
                 val p = player.currentPosition
                 observer?.property("time-pos", p.coerceAtLeast(0) / 1000.0)
                 val d = player.duration
@@ -140,17 +146,33 @@ internal class Media3Engine(
             }
         }
 
+    // Always read current sticky state on the application looper. No queued
+    // loader callback captures a ready value that could outlive invalidation.
+    private fun publishSessionClock() {
+        if (closed) return
+        val clock = sessionClock ?: return
+        val manifest = player.currentManifest as? HlsManifest
+        manifest?.multivariantPlaylist?.let(clock::renditions)
+        clock.scope(player.currentTimeline, player.currentPeriodIndex, manifest?.mediaPlaylist)
+        if (player.playbackState == Player.STATE_READY &&
+            !player.currentTracks.containsType(C.TRACK_TYPE_VIDEO)) clock.unsupportedScope()
+        clock.publication()?.let { observer?.sessionClock(it) }
+    }
+
     override fun load(media: MediaLoad, listener: PlayerEngine.Listener) {
         check(observer == null && !closed)
         observer = listener
+        sessionClock = if (media.kind == LoadKind.plexSession) SessionHlsClock() else null
         if (media.uri.toHttpUrlOrNull()?.isHttps != true) {
             listener.failure("source_open_error")
             return
         }
-        val network = MediaHttp.forLoad()
+        val network = MediaHttp.forLoad(
+            if (media.kind == LoadKind.plexSession) media.uri.toHttpUrlOrNull() else null,
+        )
         client = network
         val source = OkHttpDataSource.Factory(network)
-        if (media.token != null)
+        if (media.kind == LoadKind.direct && media.token != null)
             source.setDefaultRequestProperties(mapOf("X-Plex-Token" to media.token))
         http = source
         if (debug) {
@@ -168,7 +190,10 @@ internal class Media3Engine(
                 override fun onPlaybackStateChanged(state: Int) {
                     if (closed) return
                     when (state) {
-                        Player.STATE_READY -> listener.ready(observedPaused())
+                        Player.STATE_READY -> {
+                            publishSessionClock()
+                            listener.ready(observedPaused())
+                        }
                         Player.STATE_ENDED -> listener.ended()
                     }
                 }
@@ -180,6 +205,16 @@ internal class Media3Engine(
                         )) {
                         listener.property("pause", observedPaused())
                     }
+                }
+
+                override fun onTimelineChanged(timeline: Timeline, reason: Int) {
+                    publishSessionClock()
+                }
+
+                override fun onPositionDiscontinuity(oldPosition: Player.PositionInfo,
+                    newPosition: Player.PositionInfo, reason: Int) {
+                    // An ordinary same-period seek is not itself a clock discontinuity.
+                    publishSessionClock()
                 }
 
                 override fun onIsPlayingChanged(isPlaying: Boolean) {
@@ -201,6 +236,7 @@ internal class Media3Engine(
                         return
                     }
                     subtitleTracksChanged(value)
+                    publishSessionClock()
                     listener.property("track-list", tracks.encode(value))
                 }
 
@@ -209,7 +245,9 @@ internal class Media3Engine(
                 }
 
                 override fun onVideoSizeChanged(size: VideoSize) {
-                    if (!closed) sizeChanged(size)
+                    if (!closed) {
+                        sizeChanged(size)
+                    }
                 }
 
                 override fun onPlayerError(error: PlaybackException) {
@@ -253,6 +291,7 @@ internal class Media3Engine(
                     listener.property("video-format", Media3Tracks.bounded(format.sampleMimeType))
                     listener.property("video-params", Media3Tracks.videoParams(format))
                 }
+
             }
         )
         listener.property("current-vo", null)
@@ -262,29 +301,29 @@ internal class Media3Engine(
             mapOf("gamma" to null, "primaries" to null, "pixelformat" to null),
         )
         player.setSeekParameters(SeekParameters.EXACT)
-        player.setMediaSource(
-            ProgressiveMediaSource.Factory(
-                    DataSource.Factory { BufferedProgressiveDataSource(source.createDataSource()) },
-                    GuardedExtractorsFactory { fact ->
-                        if (debug && fact["phase"] == "fragment-seek") {
-                            val position = fact["position"] as Long
-                            handler.post { if (!closed) listener.fragmentSeek(position) }
-                        }
-                        if (debug && fact["phase"] == "validate") {
-                            val revision = fact["revision"] as Int
-                            val accepted =
-                                (fact["declaredVideo"] != true || fact["video"] == true) &&
-                                    (fact["declaredAudio"] != true || fact["audio"] == true)
-                            handler.post {
-                                if (!closed) listener.sourceInitialization(revision, accepted)
-                            }
-                        }
-                    }.apply { setSubtitleParserFactory(ssaParsers) },
-                )
-                .createMediaSource(MediaItem.fromUri(media.uri))
-                .let { InitialJoinMediaSource(it).also { source -> initialJoinSource = source } },
-            milliseconds(media.startSeconds),
+        val mediaSource = createSource(
+            media,
+            source,
+            GuardedExtractorsFactory { fact ->
+                if (debug && fact["phase"] == "fragment-seek") {
+                    val position = fact["position"] as Long
+                    handler.post { if (!closed) listener.fragmentSeek(position) }
+                }
+                if (debug && fact["phase"] == "validate") {
+                    val revision = fact["revision"] as Int
+                    val accepted =
+                        (fact["declaredVideo"] != true || fact["video"] == true) &&
+                            (fact["declaredAudio"] != true || fact["audio"] == true)
+                    handler.post {
+                        if (!closed) listener.sourceInitialization(revision, accepted)
+                    }
+                }
+            }.apply { setSubtitleParserFactory(ssaParsers) },
+            sessionClock,
         )
+        initialJoinSource = mediaSource as? InitialJoinMediaSource
+        if (media.kind == LoadKind.plexSession) player.setMediaSource(mediaSource)
+        else player.setMediaSource(mediaSource, milliseconds(media.startSeconds))
         player.playWhenReady = !media.paused
         listener.property("pause", media.paused)
         player.prepare()
@@ -301,6 +340,7 @@ internal class Media3Engine(
 
     override fun seek(seconds: Double, exact: Boolean) {
         initialJoinSource?.cancelInitialJoin()
+        sessionClock?.seeking()
         player.setSeekParameters(if (exact) SeekParameters.EXACT else SeekParameters.PREVIOUS_SYNC)
         player.seekTo(milliseconds(seconds))
     }
@@ -336,6 +376,8 @@ internal class Media3Engine(
         }
         val firstAttempt = !closed
         closed = true
+        sessionClock?.retire()
+        sessionClock = null
         observer = null
         lastCues = emptyList()
         subtitleFormat = null
@@ -399,6 +441,23 @@ internal class Media3Engine(
     }
 
     companion object {
+        internal fun createSource(
+            media: MediaLoad,
+            source: DataSource.Factory,
+            extractors: ExtractorsFactory,
+            clock: SessionHlsClock? = null,
+        ): MediaSource =
+            if (media.kind == LoadKind.plexSession)
+                HlsMediaSource.Factory(source).apply {
+                    if (clock != null) setExtractorFactory(SessionHlsExtractors(clock))
+                }.createMediaSource(MediaItem.fromUri(media.uri))
+            else InitialJoinMediaSource(
+                ProgressiveMediaSource.Factory(
+                    DataSource.Factory { BufferedProgressiveDataSource(source.createDataSource()) },
+                    extractors,
+                ).createMediaSource(MediaItem.fromUri(media.uri)),
+            )
+
         private val cleanupExecutor =
             java.util.concurrent.Executors.newSingleThreadExecutor { task ->
                 Thread(task, "LineupMediaCleanup").apply { isDaemon = true }

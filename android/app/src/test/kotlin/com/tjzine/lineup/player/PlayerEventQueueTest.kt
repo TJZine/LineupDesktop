@@ -101,6 +101,46 @@ class PlayerEventQueueTest {
         assertFalse(queue.consumeOverflow())
     }
 
+    @Test fun clockTransitionsSurvivePropertyPressureAndRetainOrder() {
+        val queue = PlayerEventQueue()
+        queue.add(QueuedEvent(1, 1, mapOf("type" to "property", "id" to "pending"), true))
+        repeat(255) { queue.add(event(it, "property")) }
+        queue.add(QueuedEvent(1, 1, mapOf("type" to "property", "id" to "ready"), true))
+        repeat(300) { queue.add(event(it, "property")) }
+        val rows = generateSequence { queue.take() }.map { it.value["id"] }.toList()
+        assertEquals(listOf("pending", "ready"), rows.filterIsInstance<String>())
+        assertFalse(queue.consumeOverflow())
+        repeat(255) { queue.add(QueuedEvent(1, 1, mapOf("type" to "property"), true)) }
+        queue.add(QueuedEvent(1, 1, mapOf("type" to "property"), true))
+        assertEquals(255, queue.size)
+        assertTrue(queue.consumeOverflow()) // Exhausted critical capacity still fails closed.
+    }
+
+    @Test
+    fun fullQueueRetainsClockAndReplacesCueWhileEvictingOrdinaryProperty() {
+        val queue = PlayerEventQueue()
+        val clock = QueuedEvent(1, 1, mapOf(
+            "type" to "property", "name" to "session-clock", "value" to mapOf("state" to "pending"),
+        ), protectedTransition = true)
+        val latestCue = cues(listOf("latest"))
+        val retainedProperty = event(1000, "property")
+        queue.add(clock)
+        queue.add(cues(listOf("old")))
+        queue.add(event(999, "property"))
+        repeat(253) { queue.add(event(it, "trackResult")) }
+        assertEquals(256, queue.size)
+
+        queue.add(latestCue)
+        queue.add(retainedProperty)
+
+        assertEquals(256, queue.size)
+        assertEquals(
+            listOf(clock, latestCue) + (0 until 253).map { event(it, "trackResult") } + retainedProperty,
+            generateSequence { queue.take() }.toList(),
+        )
+        assertFalse(queue.consumeOverflow())
+    }
+
     @Test
     fun essentialOverflowEvictsOldestAndSignalsOnce() {
         val queue = PlayerEventQueue()

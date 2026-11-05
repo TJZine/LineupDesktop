@@ -31,6 +31,10 @@ internal object Media3Failure {
         causes.filterIsInstance<HttpDataSource.InvalidResponseCodeException>().firstOrNull()?.let {
             return "http_error" to it.responseCode.takeIf { code -> code in 400..599 }
         }
+        if (causes.any { it is java.io.IOException && it.message == "unsafe_session_origin" })
+            return "network_error" to null
+        if (causes.any { it is androidx.media3.common.ParserException })
+            return "container_error" to null
         if (causes.any { it is HttpDataSource.HttpDataSourceException })
             return "network_error" to null
         if (

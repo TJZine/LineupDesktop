@@ -109,9 +109,10 @@ flutter {
     source = "../.."
 }
 
-// Progressive HTTP only: no HLS/DASH/RTSP modules or external-reference loader.
+// Session HLS is explicit; Direct Play keeps its progressive-only source.
 dependencies {
     implementation("androidx.media3:media3-exoplayer:1.11.1")
+    implementation("androidx.media3:media3-exoplayer-hls:1.11.1")
     implementation("androidx.media3:media3-datasource-okhttp:1.11.1")
     implementation("androidx.media3:media3-ui:1.11.1")
     implementation("com.squareup.okhttp3:okhttp:4.12.0")

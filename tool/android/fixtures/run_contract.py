@@ -8,7 +8,7 @@ import time
 
 parser = argparse.ArgumentParser()
 parser.add_argument('--serial', required=True)
-parser.add_argument('--case', choices=['contract', 'negative', 'lifetime', 'background', 'release-isolation', 'formats', 'seek-lifetime'], required=True)
+parser.add_argument('--case', choices=['contract', 'negative', 'lifetime', 'background', 'release-isolation', 'formats', 'seek-lifetime', 'session-hls'], required=True)
 parser.add_argument('--evidence', type=pathlib.Path, required=True)
 args = parser.parse_args()
 args.evidence.mkdir(parents=True, exist_ok=True)

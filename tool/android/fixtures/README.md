@@ -162,8 +162,8 @@ the last PlayResY/Style rows; the real-parser JVM test checks authored fractiona
 size and color so a fallback-style render cannot stand in for ASS fidelity.
 
 `subtitle-ass-dialogue.mkv` adds concurrent ordinary dialogue with inline
-italic/bold/underline, p0/an8 dialogue, a sign at7s and a drawing at13s. Dialogue
-records restart at12.1s so a direct-start13s check reads the concurrent records
+italic/bold/underline, p0/an8 dialogue, a sign at 7 s and a drawing at 13 s. Dialogue
+records restart at 12.1 s so a direct-start 13 s check reads the concurrent records
 in the same Matroska cluster; stock Media3 otherwise omits long-lived early cue
 packets on that seek. This is a fixture control, not a production seek fix.
 `subtitle-ass-fallback.mkv` deliberately contains a literal reserved-marker
@@ -174,3 +174,27 @@ JVM resources include a tiny synthetic SSA-only Matroska derived from the
 original authored source and the shared desktop tag cases. Tests run the real
 extractor/parser/cue codec on API28/34, compare stock/native fields, spans and
 timing, and verify inline toggles, overlap, literal collisions and track fallback.
+
+## Synthetic session HLS contract
+
+`player_contract.dart --case=session-hls` loads the fixed synthetic
+`/session/index.m3u8` fixture as `plexSession` through the production Dart
+transport and Android adapter. It sends no token and no player start position.
+The existing collector accepts `--case session-hls`; its assigned-device,
+ordinary fixture server and reverse-port prerequisites still apply. Build this
+alternate entrypoint with the pinned toolchain:
+
+```sh
+LINEUP_ANDROID_SIGNING=debug-key flutter build apk --debug --no-pub --target-platform android-arm,android-arm64 --target tool/android/fixtures/player_contract.dart
+```
+
+`session-ready` and `session-sample` contain elapsed milliseconds, observed
+position/duration, state and the fixed offset label 0. A pass requires readiness,
+at least 400 ms of progress during 8 seconds, and no stopped/error/ended state.
+These facts measure the backend timeline; they do not establish HDR appearance,
+decoded audio fidelity or production schedule positioning.
+
+The completed E6 observation harness and live capability delivery entrypoint are
+excluded from the merge candidate. Their historical source and accepted evidence
+remain tied to the preserved `54caf2e1` lineage and frozen artifacts; the current
+fixture accepts no private capability input.

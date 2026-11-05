@@ -76,8 +76,6 @@ before deriving a trimmed finite view. Direct loads reject this payload. The
 optional Dart `NativeSessionPlaylist` transfer does not parse HLS or change the
 public HTTPS descriptor; Android URI-only session loads remain valid. Session
 wire `startPosition` is also rejected by presence, including null.
-Android URI-only session loads are specified for T3; Android implementation is
-not in this tree yet.
 
 The desktop core accepts only the bounded reference/lexical/tag scope: one finite
 media playlist, sequence zero, one MAP, no encryption/master/rendition/range or
@@ -132,13 +130,13 @@ There are at most 64 video decoder records, 64 decoded audio codecs, 16 audio
 passthrough codecs and 32 containers. Video records have a required Plex
 `codec` name and optional `profiles`, `maxLevel`, positive `maxWidth`,
 `maxHeight`, `maxBitrateKbps`, `hdr` and `dolbyVisionProfiles` facts. Codec
-names use Plex spelling. Android queries these at call time on the application
+names use Plex spelling. Each name is 1–64 characters of letters, digits, space,
+`_`, `.`, `:` or `-`; H.264 profiles include `high 4:2:2` and
+`high 4:4:4 predictive`. Android queries these at call time on the application
 looper and truncates lists deterministically. Dart caches the parsed result
 for one second; malformed, oversized or failed replies become
 `MediaCapabilities.unknown`, requiring a server decision. Desktop Dart uses
 `MediaCapabilities.desktop` and never sends this native query.
-Android `mediaCapabilities` is specified for T3; Android implementation is not
-in this tree yet.
 
 ### Command error mapping in Dart
 
@@ -555,6 +553,64 @@ Channel layouts, pixel formats, output color and signal peak stay null when
 unavailable. Source BT.2020/PQ/HLG facts describe source metadata, not display
 appearance; `hwdec-current` is the observed decoder name and `current-vo` is null.
 
+### Session HLS adjustment fact
+
+Android `plexSession` engines additionally publish the optional `session-clock`
+property, correlated by the ordinary adapter-generation fence and outer `loadId`:
+
+```text
+{state: "pending"}
+{state: "ready", adjustmentUs: <signed integral microseconds>}
+{state: "unavailable", reason: <fixed reason>, diagnosticCode: "clock_unavailable"}
+```
+
+One clock belongs to one engine/load. A normal seek that resets Media3's
+adjuster returns `ready(A0)` to `pending`; initialized real video metadata from
+the newly loaded segment establishes `ready(A1)`. A buffered seek that retains
+its existing adjuster keeps its qualified basis. Same-object adjustment resets
+also require fresh initialized video metadata. An initialized zero is valid;
+`TIME_UNSET` is not zero. There is no wire revision or paired position field.
+`adjustmentUs` is the actual `TimestampAdjuster.timestampOffsetUs`, not raw PTS.
+Stock extraction remains authoritative: sample bytes, formats, flags, timestamps
+and extractor reuse/recreation are unchanged. Init data, empty pre-start media
+and audio samples cannot qualify readiness.
+
+A ready value may additionally contain `diagnosticCode: "clock_rebased"` when
+A1 differs from the prior qualified A by more than one video frame. A1 remains
+usable. The threshold uses actual video `Format.frameRate` when available;
+otherwise it uses the minimum positive spacing observed between accepted video
+sample PTS values of the replacement basis. With no frame-duration evidence,
+classification is deferred; no default FPS or playlist duration is substituted.
+The diagnostic remains present for the load once established.
+
+The supported precondition is full fMP4/MAP VOD at media sequence 0, one
+window/period at origin 0, with no alternate renditions/variants. Media3's public
+sniffer establishes the actual container, and its parsed manifest/timeline
+establishes scope. Unsupported container, missing MAP/video, non-VOD or alternate
+renditions stay pending without a guessed adjustment. HLS discontinuity,
+period/timeline mismatch (including gaps or partial/interstitial timing), invalid
+timestamps or simultaneous ambiguous adjusters are terminal unavailable.
+Fixed reasons are `discontinuity`, `period_mismatch`, `invalid_timestamp` and
+`ambiguous_adjuster`. Reasons carry no URI, exception or media identifier.
+
+The engine arms one serial replacement before `Player.seekTo`. A new binding
+without that permission, or while the prior binding is actively extracting,
+is ambiguous. Replaced extractor callbacks are ignored by their retired internal
+binding token. Load generation and retirement fences are unchanged. A replacement
+holds a pending publication barrier before fresh readiness. State transitions
+are protected from ordinary property eviction in the bounded native event queue;
+periodic repeats remain droppable. Exhausting critical queue capacity preserves
+the existing fail-closed overflow behavior.
+
+Clock unavailability is a diagnostic, **not a Player error**; native performs no
+seek, retry or fallback. `time-pos` remains raw Media3 position. T4 consumption
+and alignment policy are not implemented here: the alignment decision uses the
+first ready only, the alignment seek is the only in-session seek, and user seeks
+restart sessions. Post-seek ready(A1) updates position mapping only and must not
+trigger a second alignment seek.
+
+### Android engine failure mapping
+
 | Media3 observation | Native failure code |
 | --- | --- |
 | HTTP response failure | `http_error`, with a 4xx/5xx status when available |
@@ -586,11 +642,9 @@ host and port and contain neither userinfo nor a token query. Pin rejection
 maps to `network_error`; manifest parsing maps to `container_error`; child
 HTTP failures retain `http_error` and their bounded status. The following
 original-load restrictions apply to `direct` loads.
-This Android session HLS path is specified for T3; Android implementation is
-not in this tree yet.
 
-Only `ProgressiveMediaSource` and an HTTP-only OkHttp data source are installed;
-there is no manifest, file, nested-reference or external-subtitle resolver.
+Direct loads use `ProgressiveMediaSource` and an HTTP-only OkHttp data source,
+with no manifest, file, nested-reference or external-subtitle resolver.
 OkHttp automatic redirects are disabled. Each manual redirect must retain the
 original HTTPS scheme, normalized host and effective port, with a bounded hop
 count and no userinfo or token query parameter. Credentials are header-only;
@@ -603,7 +657,10 @@ Initial positions allow a sync point up to 5 seconds before the scheduled target
 never after it; if none fits, preparation keeps the exact target. The progressive
 source applies this tolerance only at its first track selection, since Media3
 1.11 does not apply player seek parameters to initial preparation. Preparation
-itself chooses the join position, avoiding a later backward re-seek. Explicit
+itself chooses the join position, avoiding a later backward re-seek. Session
+loads reject `startSeconds`, including zero, and prepare without an explicit
+position so the HLS start applies. The direct join tolerance does not apply.
+Explicit
 `exact` and `keyframes` seeks still map to `SeekParameters.EXACT` and
 `PREVIOUS_SYNC`. This backend choice does not alter
 the coordinator's join/user-seek policy or desktop behavior.
