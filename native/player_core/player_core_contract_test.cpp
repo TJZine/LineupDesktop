@@ -74,14 +74,6 @@ void operator delete[](void* pointer, std::size_t) noexcept {
   std::free(pointer);
 }
 
-namespace lineup::player {
-struct SubtitleCoreTestAccess {
-  static void Run(PlayerCore& core) { core.RunPendingCommands(core.generation_.load()); }
-  static bool EmptySlot(PlayerCore& core) { return !core.pending_subtitle_presentation_; }
-  static void Dispose(PlayerCore& core) { core.FinishDispose(); }
-};
-}  // namespace lineup::player
-
 namespace {
 
 using lineup::player::CallError;
@@ -766,6 +758,51 @@ void CorrelationAndPressure(PlayerCore& core) {
   Events events;
   OpenWorkerless(core);
   const auto& state = PlayerCoreTestAccess::State(core);
+  // Each skipped replace used to leak one mapping, exhausting the table after
+  // 1024 iterations even though every surviving load reached EOF.
+  for (int64_t i = 1; i <= 1100; ++i) {
+    ParsedLoad(core, 2 * i, 2 * i);
+    ParsedLoad(core, 2 * i + 1, 2 * i + 1);
+    Start(core, 2 * i + 1);
+    mpv_event loaded{};
+    loaded.event_id = MPV_EVENT_FILE_LOADED;
+    PlayerCoreTestAccess::Event(core, loaded);
+    mpv_event_end_file eof{};
+    eof.playlist_entry_id = 2 * i + 1;
+    eof.reason = MPV_END_FILE_REASON_EOF;
+    mpv_event ended{};
+    ended.event_id = MPV_EVENT_END_FILE;
+    ended.data = &eof;
+    PlayerCoreTestAccess::Event(core, ended);
+    Drain(core, events);
+    Check(events.received.size() == 3 &&
+          Has(events.received[0], "state", Value("loading")) &&
+          Has(events.received[1], "state", Value("playing")) &&
+          Has(events.received[2], "state", Value("ended")) &&
+          std::all_of(events.received.begin(), events.received.end(), [&](const auto& event) {
+            return Has(event, "loadId", Value(2 * i + 1)) &&
+                   !Has(event, "failureCode", Value("correlation_error"));
+          }), "surviving loads retain lifecycle identity beyond skipped-replacement capacity");
+    events.received.clear();
+  }
+  // With no START_FILE barrier, confirmed empty idle must reclaim all skipped
+  // replacements, while leaving started predecessors for their END_FILE.
+  for (int64_t i = 1; i <= 1024; ++i) ParsedLoad(core, i, 3000 + i);
+  Reply stop;
+  Call(core, "stop", stop, {{"stopId", int64_t{901}}});
+  PlayerCoreTestAccess::RunQueuedCommands(core);
+  Check(PlayerCoreTestAccess::State(core).ObserveIdle(true, 0) == 901,
+        "confirmed empty stop completes");
+  ParsedLoad(core, 5000, 5000);
+  Start(core, 5000);
+  Drain(core, events);
+  Check(events.received.size() == 1 &&
+        Has(events.received[0], "loadId", Value(int64_t{5000})) &&
+        Has(events.received[0], "state", Value("loading")),
+        "stop and empty idle reclaim never-started correlation capacity");
+  CloseWorkerless(core);
+  OpenWorkerless(core);
+  events.received.clear();
   ParsedLoad(core, 11, 101);
   Start(core, 101);
   ParsedLoad(core, 12, 102);
@@ -1627,6 +1664,80 @@ void SessionLoads(PlayerCore& core) {
         PlayerCoreTestAccess::OpenSession(core,fake->authenticated_uri,&refused) < 0,
         "correlation saturation revokes private capability and stops untrackable playback");
   CloseWorkerless(core);
+  // START_FILE admission and terminal non-load failures must revoke both
+  // existing cookies and the capability, and clear the sampled session clock.
+  enum class SessionFailure { start_capacity, volume, overflow, overflow_before_start };
+  for (const auto failure : {SessionFailure::start_capacity, SessionFailure::volume,
+                             SessionFailure::overflow, SessionFailure::overflow_before_start}) {
+    OpenWorkerless(core);
+    fake->playlist_id.reset();
+    if (failure == SessionFailure::start_capacity) {
+      auto& playback = PlayerCoreTestAccess::State(core);
+      Check(playback.Redirect(99, 1, 1024), "retained redirect siblings fill START_FILE capacity");
+    }
+    if (failure == SessionFailure::overflow_before_start) {
+      ParsedLoad(core, 500, 1000);
+      Start(core, 1000);
+    }
+    auto terminal = request(variant);
+    terminal["sessionPlaylist"] = ValueMap{{"text", text}, {"offsetMicroseconds", int64_t{0}}};
+    Reply load;
+    Call(core, "load", load, terminal);
+    PlayerCoreTestAccess::RunQueuedCommands(core);
+    const auto capability = fake->authenticated_uri;
+    mpv_stream_cb_info cookie{};
+    Check(load.successes == 1 && PlayerCoreTestAccess::OpenSession(core, capability, &cookie) == 0 &&
+          cookie.read_fn(cookie.cookie, &byte, 1) == 1, "terminal failure fixture starts with a readable cookie");
+    Events terminal_events;
+    if (failure != SessionFailure::start_capacity && failure != SessionFailure::overflow_before_start) {
+      Start(core, 20000);
+      mpv_event ready{}; ready.event_id = MPV_EVENT_FILE_LOADED;
+      PlayerCoreTestAccess::Event(core, ready);
+      ErrorLog(core);
+      Check(cookie.read_fn(cookie.cookie, &byte, 1) == 1,
+            "classified log failure remains observational until terminal error");
+    }
+    Drain(core, terminal_events); terminal_events.received.clear();
+    const auto stops_before = std::count(fake->commands.begin(), fake->commands.end(), "stop");
+    if (failure == SessionFailure::volume) {
+      fake->reject_volume = true;
+      Reply volume;
+      Call(core, "setVolume", volume, {{"volume", 40.0}});
+      Check(volume.successes == 1, "volume failure occurs after admission");
+      PlayerCoreTestAccess::RunQueuedCommands(core);
+      fake->reject_volume = false;
+    } else if (failure == SessionFailure::start_capacity) {
+      Start(core, 20000);
+    } else {
+      mpv_event overflow{}; overflow.event_id = MPV_EVENT_QUEUE_OVERFLOW;
+      PlayerCoreTestAccess::Event(core, overflow);
+    }
+    Drain(core, terminal_events);
+    const char* code = failure == SessionFailure::start_capacity ? "correlation_error" :
+                       failure == SessionFailure::volume ? "command_error" : "event_queue_overflow";
+    const auto& received = terminal_events.received;
+    const auto failed_event = std::find_if(received.begin(), received.end(), [&](const auto& event) {
+      return Has(event, "failureCode", Value(code)) && Has(event, "loadId", Value(int64_t{501}));
+    });
+    const auto cleared_clock = std::find_if(received.begin(), received.end(), [](const auto& event) {
+      return Has(event, "name", Value("demuxer-start-time")) && Has(event, "value", Value());
+    });
+    Check(cookie.read_fn(cookie.cookie, &byte, 1) < 0 && cookie.size_fn(cookie.cookie) < 0 &&
+          PlayerCoreTestAccess::OpenSession(core, capability, &refused) < 0,
+          "terminal failure revokes open cookie and capability URI");
+    Check(std::count(fake->commands.begin(), fake->commands.end(), "stop") == stops_before + 1 &&
+          cleared_clock != received.end() && failed_event != received.end() && cleared_clock < failed_event,
+          "terminal failure stops native session and clears clock before publishing correlated error");
+    cookie.close_fn(cookie.cookie);
+    terminal_events.received.clear();
+    mpv_event_property clock{"demuxer-start-time", MPV_FORMAT_NONE, nullptr};
+    mpv_event changed{}; changed.event_id = MPV_EVENT_PROPERTY_CHANGE;
+    changed.reply_userdata = 11; changed.data = &clock;
+    PlayerCoreTestAccess::Event(core, changed);
+    Drain(core, terminal_events);
+    Check(terminal_events.received.empty(), "terminal failure cannot resurrect session clock");
+    CloseWorkerless(core);
+  }
   OpenWorkerless(core);
   fake->playlist_id = 30000;
   auto redirecting = request(variant);
@@ -1979,12 +2090,36 @@ void Lifecycle() {
   Check(std::none_of(received.begin(), received.end(), [](const ValueMap& event) {
     return Has(event, "stopId", Value(int64_t{901}));
   }), "stop result waits for idle observation");
-  fake->idle = true;
+  {
+    std::lock_guard lock(fake->mutex);
+    // The authenticated replacement accepted entry 77 but has not started in
+    // the core yet. Its lifecycle may still be queued when stop is empty idle.
+    mpv_event start_event{};
+    start_event.event_id = MPV_EVENT_START_FILE;
+    start_event.data = &start;
+    mpv_event end_event{};
+    end_event.event_id = MPV_EVENT_END_FILE;
+    end_event.data = &end;
+    fake->injected.push_back(start_event);
+    fake->injected.push_back(end_event);
+    fake->idle = true;
+  }
   PumpUntil(core, events, [&] {
     return std::any_of(received.begin(), received.end(), [](const ValueMap& event) {
       return Has(event, "stopId", Value(int64_t{901})) && Has(event, "success", Value(true));
     });
   }, "worker observes idle before stop result");
+  const auto predecessor_end = std::find_if(received.begin(), received.end(), [](const auto& event) {
+    return Has(event, "loadId", Value(int64_t{6})) && Has(event, "state", Value("ended"));
+  });
+  const auto stop_result = std::find_if(received.begin(), received.end(), [](const auto& event) {
+    return Has(event, "stopId", Value(int64_t{901}));
+  });
+  Check(std::any_of(received.begin(), received.end(), [](const auto& event) {
+          return Has(event, "loadId", Value(int64_t{6})) && Has(event, "state", Value("loading"));
+        }) && predecessor_end != received.end() && stop_result != received.end() &&
+        predecessor_end < stop_result,
+        "queued predecessor lifecycle retains identity before empty-idle stop reclamation");
 
   const int before = fake->destroyed.load();
   Reply disposed;
@@ -2305,7 +2440,7 @@ void SubtitleContract() {
   Check(invalid_latest.error == "invalid_argument", "invalid call leaves pending value intact");
   Reply load;
   Call(core, "load", load, {{"uri", Value("https://fixture.invalid/video")}, {"loadId", Value(1)}});
-  lineup::player::SubtitleCoreTestAccess::Run(core);
+  PlayerCoreTestAccess::RunQueuedCommands(core);
   Check(state.subtitle_properties.front().first == "sub-scale" && std::abs(state.subtitle_properties.front().second - 1.9) < 1e-9, "only final scale applied");
   Check(std::count_if(state.subtitle_properties.begin(), state.subtitle_properties.end(), [](auto& property) { return property.first == "sub-scale"; }) == 1, "one latest-value application");
   Check(std::find(state.execution_order.begin(), state.execution_order.end(), "sub-scale") <
@@ -2348,19 +2483,19 @@ void SubtitleContract() {
   property("sub-text/ass", "{\\pos(1,2)}Fixture sign\nFixture dialogue");
   Reply styled;
   Call(core, "setSubtitlePresentation", styled, presentation(2, .1, true));
-  lineup::player::SubtitleCoreTestAccess::Run(core);
+  PlayerCoreTestAccess::RunQueuedCommands(core);
   Check(last_cues().size() == 1, "styled opt-in reuses cached dialogue and excludes signs");
   state.rejected_subtitle_property = "sub-scale";
   Reply failing;
   Call(core, "setSubtitlePresentation", failing, presentation(3, .2, false));
-  lineup::player::SubtitleCoreTestAccess::Run(core);
+  PlayerCoreTestAccess::RunQueuedCommands(core);
   last_cues();
   Check(std::none_of(events.received.begin(), events.received.end(), [](auto& event) { return Has(event, "failureCode", Value("command_error")); }), "subtitle failure never fails playback");
   Check(state.subtitle_properties.back() == std::make_pair(std::string("sub-visibility"), 1.0), "later properties apply after scale rejection");
   const size_t applied_before_repeat = state.subtitle_properties.size();
   Reply repeated;
   Call(core, "setSubtitlePresentation", repeated, presentation(3, .2, false));
-  lineup::player::SubtitleCoreTestAccess::Run(core);
+  PlayerCoreTestAccess::RunQueuedCommands(core);
   Check(state.subtitle_properties.size() == applied_before_repeat, "rejected unchanged properties are not retried per cue/value");
   property("current-tracks/sub/codec", "ssa");
   property("sub-text/ass", "Fixture lavf SSA");
@@ -2372,21 +2507,21 @@ void SubtitleContract() {
   property("sub-text/ass", "Fixture before selection");
   Reply selected;
   Call(core, "selectTrack", selected, {{"loadId", Value(1)}, {"requestId", Value(9)}, {"type", Value("subtitle")}, {"id", Value(2)}});
-  lineup::player::SubtitleCoreTestAccess::Run(core);
+  PlayerCoreTestAccess::RunQueuedCommands(core);
   Check(last_cues().empty(), "track selection clears old text");
   property("sub-text/ass", "Fixture same codec new track");
   Check(last_cues().size() == 1, "same-codec track switch needs no repeated codec notification");
   property("sub-text/ass", "Fixture before stop");
   Reply stop;
   Call(core, "stop", stop, {{"stopId", Value(1)}});
-  lineup::player::SubtitleCoreTestAccess::Run(core);
+  PlayerCoreTestAccess::RunQueuedCommands(core);
   Check(last_cues().empty(), "stop clears cues");
   property("sub-text/ass", "Fixture stale stop cue");
   Check(last_cues().empty(), "pending stop blocks late cue");
   playback.ObserveIdle(true, 0);
   Reply next;
   Call(core, "load", next, {{"uri", Value("https://fixture.invalid/next")}, {"loadId", Value(2)}});
-  lineup::player::SubtitleCoreTestAccess::Run(core);
+  PlayerCoreTestAccess::RunQueuedCommands(core);
   Check(last_cues().empty(), "new load clears cues");
   property("current-tracks/sub/codec", "subrip");
   property("sub-text/ass", "Fixture obsolete load");
@@ -2424,10 +2559,10 @@ void SubtitleContract() {
   Reply independent;
   Call(core, "setSubtitlePresentation", independent, {{"scale", Value(4)}, {"imageRaise", Value(0)}, {"lineupDrawsStyled", Value(false)}, {"future", Value(true)}});
   Check(independent.successes == 1, "presentation accepts integers and extra keys at queue capacity");
-  lineup::player::SubtitleCoreTestAccess::Run(core);
+  PlayerCoreTestAccess::RunQueuedCommands(core);
   Reply load_after_failure;
   Call(core, "load", load_after_failure, {{"uri", Value("https://fixture.invalid/recovery")}, {"loadId", Value(3)}});
-  lineup::player::SubtitleCoreTestAccess::Run(core);
+  PlayerCoreTestAccess::RunQueuedCommands(core);
   Start(core, 3);
   mpv_event ready{};
   ready.event_id = MPV_EVENT_FILE_LOADED;
@@ -2436,8 +2571,8 @@ void SubtitleContract() {
   Check(std::any_of(events.received.begin(), events.received.end(), [](auto& event) { return Has(event, "state", Value("playing")); }), "load still plays after subtitle property rejection");
   Reply pending;
   Call(core, "setSubtitlePresentation", pending, presentation(4));
-  lineup::player::SubtitleCoreTestAccess::Dispose(core);
-  Check(lineup::player::SubtitleCoreTestAccess::EmptySlot(core), "dispose clears pending slot");
+  PlayerCoreTestAccess::Dispose(core);
+  Check(PlayerCoreTestAccess::EmptySlot(core), "dispose clears pending slot");
   PlayerCoreTestAccess::CloseWorkerlessClient(core);
   fake = nullptr;
 }

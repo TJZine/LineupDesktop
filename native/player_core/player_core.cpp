@@ -995,6 +995,7 @@ void PlayerCore::RunCommand(QueuedCommand& command, uint64_t generation) {
           return;
         }
         load_uri = std::move(*opaque);
+        session_clock_load_ = payload.load_id;
       }
       int paused = payload.start_paused ? 1 : 0;
       status =
@@ -1069,13 +1070,7 @@ void PlayerCore::RunCommand(QueuedCommand& command, uint64_t generation) {
           if (!playback_.AcceptLoad(payload.load_id,
                   has_playlist_id ? std::optional<int64_t>(playlist_entry_id)
                                   : std::nullopt)) {
-            if (payload.plex_session) {
-              // A successfully opened file without a safe event identity must
-              // not retain a private reader or continue consuming its children.
-              session_playlists_.Retire();
-              const char* stop[] = {"stop", nullptr};
-              mpv_operations_.command(mpv_, stop);
-            }
+            RetireFailedSession(payload.load_id, generation);
             QueueEvent(generation,
                 FailureStateEvent("correlation_error", std::nullopt,
                                   payload.load_id,
@@ -1182,9 +1177,9 @@ void PlayerCore::RunCommand(QueuedCommand& command, uint64_t generation) {
       std::holds_alternative<TrackCommand>(command)) return;
   if (status < 0) {
     const auto* load = std::get_if<LoadCommand>(&command);
-    if (load) session_playlists_.Retire();
     const std::optional<int64_t> error_load_id =
         load ? std::optional<int64_t>(load->load_id) : playback_.active_load();
+    RetireFailedSession(error_load_id, generation);
     // This error need not populate playback_.failure(). A later restart
     // cannot be attributed safely after the published command failure.
     seek_observation_.reset();
@@ -1312,7 +1307,15 @@ void PlayerCore::EventLoop(uint64_t generation) {
       }
     }
     RunPendingCommands(generation);
-    if (playback_.pending_stop()) {
+    const mpv_event* event = mpv_operations_.wait_event(mpv_, 0.05);
+    if (stopping_) {
+      break;
+    }
+    if (event && event->event_id != MPV_EVENT_NONE) {
+      HandleMpvEvent(*event, generation);
+    } else if (playback_.pending_stop()) {
+      // Empty idle is a reclamation barrier only after queued START/END events
+      // have drained. Polling before wait_event can discard their identities.
       int idle = 0;
       int64_t playlist_count = -1;
       if (mpv_operations_.get_property(mpv_, "idle-active", MPV_FORMAT_FLAG,
@@ -1323,13 +1326,6 @@ void PlayerCore::EventLoop(uint64_t generation) {
           QueueStopResult(generation, *stop, true);
         }
       }
-    }
-    const mpv_event* event = mpv_operations_.wait_event(mpv_, 0.05);
-    if (stopping_) {
-      break;
-    }
-    if (event && event->event_id != MPV_EVENT_NONE) {
-      HandleMpvEvent(*event, generation);
     }
   }
   session_playlists_.Retire();
@@ -1355,6 +1351,15 @@ void PlayerCore::ClearSessionClock(uint64_t generation) {
   PublishSessionClock(generation, false);
   session_clock_load_.reset();
   session_clock_ready_ = false;
+}
+
+void PlayerCore::RetireFailedSession(std::optional<int64_t> load_id,
+                                    uint64_t generation) {
+  if (!load_id || session_clock_load_ != load_id) return;
+  session_playlists_.Retire();
+  ClearSessionClock(generation);
+  const char* stop[] = {"stop", nullptr};
+  mpv_operations_.command(mpv_, stop);
 }
 
 void PlayerCore::ResetSeekObservation() {
@@ -1438,6 +1443,7 @@ void PlayerCore::HandleMpvEvent(const mpv_event& event, uint64_t generation) {
         }
       }
       if (!transition.within_capacity) {
+        RetireFailedSession(transition.rejected_load, generation);
         QueueEvent(generation,
             FailureStateEvent("correlation_error", std::nullopt,
                               transition.rejected_load,
@@ -1515,10 +1521,7 @@ void PlayerCore::HandleMpvEvent(const mpv_event& event, uint64_t generation) {
       }
       if (end && end->reason == MPV_END_FILE_REASON_REDIRECT) {
         if (session_clock_load_ && load_id == session_clock_load_) {
-          session_playlists_.Retire();
-          ClearSessionClock(generation);
-          const char* stop[] = {"stop", nullptr};
-          mpv_operations_.command(mpv_, stop);
+          RetireFailedSession(load_id, generation);
           QueueEvent(generation, FailureStateEvent("source_open_error", std::nullopt,
               load_id, "The private session playlist could not be opened."));
           playback_.RetireLoad(load_id);
@@ -1588,13 +1591,14 @@ void PlayerCore::HandleMpvEvent(const mpv_event& event, uint64_t generation) {
       }
       break;
     case MPV_EVENT_QUEUE_OVERFLOW:
-      ClearSubtitleCues(generation, playback_.event_load());
+      RetireFailedSession(playback_.active_load(), generation);
+      ClearSubtitleCues(generation, playback_.active_load());
       subtitle_retired_load_ = playback_.active_load();
       seek_observation_.reset();
       seek_observation_ambiguous_ = true;
       QueueEvent(generation,
                  FailureStateEvent("event_queue_overflow", std::nullopt,
-                                   playback_.event_load(),
+                                   playback_.active_load(),
                                    "The libmpv event queue overflowed"));
       break;
     case MPV_EVENT_PROPERTY_CHANGE: {

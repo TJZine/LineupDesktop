@@ -218,7 +218,6 @@ class PlayerCore {
                                      VolumeCommand>;
 
   friend struct PlayerCoreTestAccess;
-  friend struct SubtitleCoreTestAccess;
 
   CallResult HandleLoad(ValueMap* arguments);
   std::optional<TrackCommand> ParseTrack(const ValueMap& arguments);
@@ -240,6 +239,7 @@ class PlayerCore {
   void ResetSeekObservation();
   void PublishSessionClock(uint64_t generation, bool sample);
   void ClearSessionClock(uint64_t generation);
+  void RetireFailedSession(std::optional<int64_t> load_id, uint64_t generation);
   // Only the bounded subtitle publisher marks authored media content. Generic
   // properties and platform events always retain private-text redaction.
   void QueueEvent(uint64_t generation, ValueMap value,

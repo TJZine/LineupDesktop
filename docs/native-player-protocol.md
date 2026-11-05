@@ -87,11 +87,18 @@ EXT-X-START and retains ENDLIST. No native or desktop alignment seek is added.
 
 One registered `lineup-session` stream callback serves a random 128-bit per-load
 opaque URI ending in `.m3u8`. It never exposes the manifest as a filename.
-libmpv has no unregister operation: stop/replacement revokes the capability and
-wipes its payload immediately, open cookies become inert, and registration
-state remains valid until client destruction returns. Callbacks never call
+libmpv has no unregister operation: stop/replacement or a terminal failure
+revokes the capability and wipes its payload immediately, open cookies become
+inert, and registration state remains valid until client destruction returns. Callbacks never call
 libmpv. Registration cleanup occurs at destruction, not through a nonexistent
 per-load unregister API.
+
+For a failed session load, correlation-capacity rejection, terminal command
+failure, or mpv event-queue overflow, the worker revokes the reader,
+clears the session clock and issues a native stop before publishing the error.
+Overflow fails the accepted active load even when its START_FILE has not yet
+been observed. Classified raw-log errors remain observational until a terminal
+failure occurs.
 
 The session node-map has these per-file options, with no token, start or hr-seek:
 
@@ -325,6 +332,14 @@ state arrives. A matching error, timeout, explicit stop, or replacement settles
 the pending load and retires its active ID. The caller's product generation is
 kept in Dart and projected onto `PlayerEvent`; it is not sent as a native
 argument.
+
+Native playlist mappings remain bounded. On START_FILE, a lower-ID replace
+entry that never started is reclaimed; already-started entries remain mapped
+for queued predecessor events. Redirect siblings are exempt from that barrier
+because allocation order need not match playback order. Stop completion
+reclaims all never-started mappings and pending fallback identities only after
+the mpv event queue has drained and idle with an empty playlist is confirmed.
+Command acceptance alone never reclaims a predecessor's event identity.
 
 ### Seeks
 
