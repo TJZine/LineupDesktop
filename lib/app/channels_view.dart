@@ -2164,6 +2164,7 @@ class _MoveChannelDialog extends StatefulWidget {
 class _MoveChannelDialogState extends State<_MoveChannelDialog> {
   final _search = TextEditingController();
   final _searchFocus = FocusNode(debugLabel: 'Move channel search');
+  final _sheetSearch = GlobalKey();
   bool _autofocusRequested = false;
 
   @override
@@ -2300,7 +2301,9 @@ class _MoveChannelDialogState extends State<_MoveChannelDialog> {
     final compact =
         height - MediaQuery.paddingOf(context).bottom <
         handleHeight + 72 + searchHeight + 8 + resultHeight + touchExtent + 16;
+    // The IME can switch header layouts while this field is editing.
     final search = ConstrainedBox(
+      key: _sheetSearch,
       constraints: BoxConstraints(minHeight: touchExtent),
       child: TextField(
         key: const Key('channels-move-search'),

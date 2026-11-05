@@ -252,11 +252,20 @@ void main() {
         await _startReorder(tester);
         await _tap(tester, _move);
         await _tap(tester, find.text('Move to…'));
+        final editable = find.descendant(
+          of: _moveSearch,
+          matching: find.byType(EditableText),
+        );
+        await tester.showKeyboard(_moveSearch);
+        final editing = tester.state<EditableTextState>(editable);
+        expect(tester.testTextInput.isVisible, isTrue);
         tester.view.viewInsets = FakeViewPadding(
           bottom: keyboard * tester.view.devicePixelRatio,
         );
         await tester.pumpAndSettle();
         expect(tester.takeException(), isNull);
+        expect(tester.state<EditableTextState>(editable), same(editing));
+        expect(tester.testTextInput.isVisible, isTrue);
         expectHandheldTarget(tester, _moveSearch);
         final cancel = find.widgetWithText(TextButton, 'Cancel');
         expectHandheldTarget(tester, cancel, touch: true);
