@@ -441,6 +441,27 @@ class PlayerViewState extends State<PlayerView> with WidgetsBindingObserver {
     if (reveal) widget.controller.handlePointerActivity();
   }
 
+  bool handleSystemBack() {
+    final controller = widget.controller;
+    if (controller.sleepPickerOpen) return handleBack();
+    switch (controller.overlay) {
+      case PlayerOverlay.audioTracks ||
+          PlayerOverlay.subtitleTracks ||
+          PlayerOverlay.programInfo:
+        controller.closeOverlay();
+        return true;
+      case PlayerOverlay.miniGuide || PlayerOverlay.nowPlaying:
+        controller.showOsd();
+        return true;
+      default:
+        if (controller.canToggleFullscreen && controller.fullscreen) {
+          unawaited(controller.exitFullscreen());
+          return true;
+        }
+        return false;
+    }
+  }
+
   bool handleBack() {
     final controller = widget.controller;
     if (controller.sleepPickerOpen) {
@@ -825,12 +846,15 @@ class PlayerViewState extends State<PlayerView> with WidgetsBindingObserver {
           onKeyEvent: _key,
           child: Listener(
             onPointerDown: (_) => _trackPointerInput(reveal: false),
-            child: _HandheldPortraitPlayer(
-              controller: controller,
-              trackDisplays: _trackDisplays,
-              surface: surface,
-              scrollStorage: _portraitScrollStorage,
-              onMinimize: _openFullGuide,
+            child: ListenableBuilder(
+              listenable: controller.guide,
+              builder: (context, _) => _HandheldPortraitPlayer(
+                controller: controller,
+                trackDisplays: _trackDisplays,
+                surface: surface,
+                scrollStorage: _portraitScrollStorage,
+                onMinimize: _openFullGuide,
+              ),
             ),
           ),
         ),
@@ -3622,6 +3646,7 @@ class _SleepTimerPicker extends StatelessWidget {
                                     ),
                                   ),
                                   TextButton(
+                                    style: _overlayCloseStyle(context),
                                     onPressed: () {
                                       controller.closeOverlay();
                                       restoreFocus();
@@ -3770,6 +3795,7 @@ class _TracksState extends State<_Tracks> {
                 ),
               ),
               TextButton(
+                style: _overlayCloseStyle(context),
                 focusNode: _closeFocus,
                 autofocus:
                     tracks.isEmpty && widget.type != PlayerTrackType.subtitle,
@@ -4143,6 +4169,7 @@ class _NowPlayingInfoState extends State<_NowPlayingInfo> {
                   ),
                   TextButton(
                     key: const Key('player-more-info-close'),
+                    style: _overlayCloseStyle(context),
                     focusNode: _close,
                     onPressed: widget.controller.closeOverlay,
                     child: const _OverlayCloseLabel(),
@@ -4967,6 +4994,12 @@ class _OverlayTextTheme extends StatelessWidget {
       child: child,
     );
   }
+}
+
+ButtonStyle? _overlayCloseStyle(BuildContext context) {
+  final extent = LineupCanvas.minimumTouchExtentOf(context);
+  if (extent == 0) return null;
+  return TextButton.styleFrom(minimumSize: Size(math.max(64, extent), extent));
 }
 
 class _OverlayCloseLabel extends StatelessWidget {

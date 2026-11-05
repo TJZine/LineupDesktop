@@ -425,19 +425,7 @@ class _LineupShellState extends State<LineupShell> {
         unawaited(_select(ShellDestination.settings));
         return true;
       case ShellDestination.player:
-        if (_player.sleepPickerOpen ||
-            _player.overlay == PlayerOverlay.audioTracks ||
-            _player.overlay == PlayerOverlay.subtitleTracks ||
-            _player.overlay == PlayerOverlay.programInfo) {
-          return _playerKey.currentState?.handleBack() ?? true;
-        }
-        if (_player.overlay == PlayerOverlay.miniGuide ||
-            _player.overlay == PlayerOverlay.nowPlaying) {
-          _player.showOsd();
-        } else if (_player.canToggleFullscreen && _player.fullscreen) {
-          unawaited(_player.toggleFullscreen());
-        } else {
-          // OS Back never dismisses the OSD as an intermediate state.
+        if (_playerKey.currentState?.handleSystemBack() != true) {
           unawaited(_select(ShellDestination.guide));
         }
         return true;
@@ -995,6 +983,10 @@ class _LineupShellState extends State<LineupShell> {
   Widget _immersiveAppMenu(bool hasPlaybackSurface) {
     final anchor = _appMenu?.anchor;
     if (anchor == null) return const SizedBox.shrink();
+    final window = LineupCanvas.windowSizeOf(context);
+    final portraitPlayer =
+        window.height > window.width &&
+        LineupCanvas.usesPortraitCompositionOf(context);
     final roles = LineupTheme.of(context);
     final textTheme = Theme.of(context).textTheme;
     final detailStyle = textTheme.bodyMedium?.copyWith(
@@ -1067,6 +1059,17 @@ class _LineupShellState extends State<LineupShell> {
                             : 'Choose a channel in Guide',
                         detailStyle: detailStyle,
                       ),
+                      if (widget.profile.isHandheld &&
+                          _destination == ShellDestination.player &&
+                          !portraitPlayer)
+                        LineupNavigationRow(
+                          selected: false,
+                          onPressed: () {
+                            _closeAppMenu(restoreInvoker: false);
+                            _player.showMiniGuide();
+                          },
+                          child: const Text('Mini Guide'),
+                        ),
                       if (_canShowNowPlaying)
                         LineupNavigationRow(
                           key: const Key('app-menu-now-playing'),

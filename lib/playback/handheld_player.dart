@@ -95,115 +95,139 @@ class _HandheldPortraitPlayer extends StatelessWidget {
                     color: roles.deepBackground,
                     child: PageStorage(
                       bucket: scrollStorage,
-                      child: ListView.builder(
+                      child: ListView.custom(
                         key: const PageStorageKey('handheld-player-content'),
+                        scrollCacheExtent: const ScrollCacheExtent.pixels(0),
                         padding: EdgeInsets.fromLTRB(
                           insets.left,
                           18,
                           insets.right,
                           24 + insets.bottom,
                         ),
-                        itemCount: channels.length + 1,
-                        itemBuilder: (context, index) {
-                          if (index != 0) {
-                            final row = channels[index - 1];
-                            return _HandheldPlayerChannelRow(
-                              channel: row,
-                              program: controller.guide.currentProgram(
-                                row.id,
-                                now,
-                              ),
-                              now: now,
-                              watching: controller.watchingChannelId == row.id,
-                              onTune: () => unawaited(controller.tune(row.id)),
+                        childrenDelegate: _PortraitPlayerRows(
+                          childCount: channels.length + 1,
+                          onLayout: (first, last) {
+                            if (last == 0) return;
+                            // Row zero is the program detail header.
+                            final visible = channels.getRange(
+                              math.max(0, first - 1),
+                              last,
                             );
-                          }
-                          return Padding(
-                            padding: const EdgeInsets.symmetric(horizontal: 20),
-                            child: Column(
-                              crossAxisAlignment: CrossAxisAlignment.start,
-                              children: [
-                                if (channel != null)
-                                  Text(
-                                    '${channel.number} · ${channel.name}',
-                                    style: LineupTypography.small.copyWith(
-                                      color: roles.secondaryText,
-                                    ),
-                                  ),
-                                const SizedBox(height: 6),
-                                _HandheldPlayerTitle(
-                                  item?.showTitle ??
-                                      item?.title ??
-                                      'Nothing playing',
-                                  style: LineupTypography.title(
-                                    30,
-                                    90,
-                                  ).copyWith(color: roles.primaryText),
+                            WidgetsBinding.instance.addPostFrameCallback((_) {
+                              if (context.mounted &&
+                                  identical(
+                                    channels,
+                                    controller.lineup.channels,
+                                  )) {
+                                controller.guide.requestChannels(visible);
+                              }
+                            });
+                          },
+                          (context, index) {
+                            if (index != 0) {
+                              final row = channels[index - 1];
+                              return _HandheldPlayerChannelRow(
+                                channel: row,
+                                program: controller.guide.currentProgram(
+                                  row.id,
+                                  now,
                                 ),
-                                if (item != null)
-                                  _HandheldPlayerEpisodeFacts(item: item),
-                                if (program != null)
-                                  _HandheldPlayerTiming(
-                                    controller: controller,
-                                    program: program,
-                                    now: now,
+                                now: now,
+                                watching:
+                                    controller.watchingChannelId == row.id,
+                                onTune: () =>
+                                    unawaited(controller.tune(row.id)),
+                              );
+                            }
+                            return Padding(
+                              padding: const EdgeInsets.symmetric(
+                                horizontal: 20,
+                              ),
+                              child: Column(
+                                crossAxisAlignment: CrossAxisAlignment.start,
+                                children: [
+                                  if (channel != null)
+                                    Text(
+                                      '${channel.number} · ${channel.name}',
+                                      style: LineupTypography.small.copyWith(
+                                        color: roles.secondaryText,
+                                      ),
+                                    ),
+                                  const SizedBox(height: 6),
+                                  HandheldWordText(
+                                    item?.showTitle ??
+                                        item?.title ??
+                                        'Nothing playing',
+                                    style: LineupTypography.title(
+                                      30,
+                                      90,
+                                    ).copyWith(color: roles.primaryText),
                                   ),
-                                if (stopped) ...[
+                                  if (item != null)
+                                    _HandheldPlayerEpisodeFacts(item: item),
+                                  if (program != null)
+                                    _HandheldPlayerTiming(
+                                      controller: controller,
+                                      program: program,
+                                      now: now,
+                                    ),
+                                  if (stopped) ...[
+                                    const SizedBox(height: 16),
+                                    Wrap(
+                                      spacing: 12,
+                                      runSpacing: 8,
+                                      crossAxisAlignment:
+                                          WrapCrossAlignment.center,
+                                      children: [
+                                        if (controller.canRetry)
+                                          FilledButton(
+                                            style: FilledButton.styleFrom(
+                                              minimumSize: const Size(56, 54),
+                                            ),
+                                            onPressed: controller.retry,
+                                            child: const Text('Retry'),
+                                          ),
+                                        Text(
+                                          'Or choose another channel below.',
+                                          style: LineupTypography.body.copyWith(
+                                            color: roles.secondaryText,
+                                          ),
+                                        ),
+                                      ],
+                                    ),
+                                  ],
                                   const SizedBox(height: 16),
                                   Wrap(
-                                    spacing: 12,
+                                    spacing: 8,
                                     runSpacing: 8,
-                                    crossAxisAlignment:
-                                        WrapCrossAlignment.center,
                                     children: [
-                                      if (controller.canRetry)
-                                        FilledButton(
-                                          style: FilledButton.styleFrom(
-                                            minimumSize: const Size(56, 54),
-                                          ),
-                                          onPressed: controller.retry,
-                                          child: const Text('Retry'),
-                                        ),
-                                      Text(
-                                        'Or choose another channel below.',
-                                        style: LineupTypography.body.copyWith(
-                                          color: roles.secondaryText,
-                                        ),
+                                      _trackChip(PlayerTrackType.subtitle),
+                                      _trackChip(PlayerTrackType.audio),
+                                      _chip(
+                                        Icons.bedtime_outlined,
+                                        switch (controller.sleepRemaining) {
+                                          final remaining? =>
+                                            'Sleep · ${(remaining.inSeconds / 60).ceil()}m',
+                                          null => 'Sleep',
+                                        },
+                                        controller.showSleepTimer,
                                       ),
                                     ],
                                   ),
-                                ],
-                                const SizedBox(height: 16),
-                                Wrap(
-                                  spacing: 8,
-                                  runSpacing: 8,
-                                  children: [
-                                    _trackChip(PlayerTrackType.subtitle),
-                                    _trackChip(PlayerTrackType.audio),
-                                    _chip(
-                                      Icons.bedtime_outlined,
-                                      switch (controller.sleepRemaining) {
-                                        final remaining? =>
-                                          'Sleep · ${(remaining.inSeconds / 60).ceil()}m',
-                                        null => 'Sleep',
-                                      },
-                                      controller.showSleepTimer,
+                                  const SizedBox(height: 26),
+                                  Text(
+                                    'CHANNELS',
+                                    style: LineupTypography.small.copyWith(
+                                      color: roles.mutedText,
+                                      letterSpacing: 1.2,
                                     ),
-                                  ],
-                                ),
-                                const SizedBox(height: 26),
-                                Text(
-                                  'CHANNELS',
-                                  style: LineupTypography.small.copyWith(
-                                    color: roles.mutedText,
-                                    letterSpacing: 1.2,
                                   ),
-                                ),
-                                const SizedBox(height: 8),
-                              ],
-                            ),
-                          );
-                        },
+                                  const SizedBox(height: 8),
+                                ],
+                              ),
+                            );
+                          },
+                        ),
                       ),
                     ),
                   ),
@@ -257,67 +281,19 @@ class _HandheldPortraitPlayer extends StatelessWidget {
       );
 }
 
-class _HandheldPlayerTitle extends StatelessWidget {
-  const _HandheldPlayerTitle(this.title, {required this.style, this.textAlign});
+/// Reports the visible range because the portrait list lays out no cache area.
+class _PortraitPlayerRows extends SliverChildBuilderDelegate {
+  _PortraitPlayerRows(
+    super.builder, {
+    required int super.childCount,
+    required this.onLayout,
+  });
 
-  final String title;
-  final TextStyle style;
-  final TextAlign? textAlign;
+  final void Function(int first, int last) onLayout;
 
   @override
-  Widget build(BuildContext context) {
-    final scaler = MediaQuery.textScalerOf(context);
-    final fontSize = style.fontSize!;
-    if (scaler.scale(fontSize) <= fontSize) {
-      return Text(title, style: style, textAlign: textAlign);
-    }
-    return LayoutBuilder(
-      builder: (context, constraints) {
-        final available = constraints.maxWidth;
-
-        TextStyle? fitWord(String word) {
-          if (_textWidth(context, word, style) <= available ||
-              _textWidth(context, word, style, scaler: TextScaler.noScaling) >
-                  available) {
-            return null;
-          }
-          // Find the smallest font that the active scaler maps to text 1.0.
-          var low = 0.0;
-          var high = fontSize;
-          for (var step = 0; step < 16; step++) {
-            final mid = (low + high) / 2;
-            if (scaler.scale(mid) < fontSize) {
-              low = mid;
-            } else {
-              high = mid;
-            }
-          }
-          low = high;
-          high = fontSize;
-          for (var step = 0; step < 16; step++) {
-            final mid = (low + high) / 2;
-            if (_textWidth(context, word, style.copyWith(fontSize: mid)) <=
-                available - 0.5) {
-              low = mid;
-            } else {
-              high = mid;
-            }
-          }
-          return TextStyle(fontSize: low);
-        }
-
-        return Text.rich(
-          TextSpan(
-            children: [
-              for (final part in RegExp(r'\s+|\S+').allMatches(title))
-                TextSpan(text: part.group(0), style: fitWord(part.group(0)!)),
-            ],
-          ),
-          style: style,
-          textAlign: textAlign,
-        );
-      },
-    );
+  void didFinishLayout(int firstIndex, int lastIndex) {
+    onLayout(firstIndex, lastIndex);
   }
 }
 
@@ -352,15 +328,12 @@ class _HandheldPlayerEpisodeFacts extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final facts = [
-      ?_osdEpisodeFacts(item),
-      if (item.showTitle != null) item.title,
-    ];
-    if (facts.isEmpty) return const SizedBox.shrink();
+    final facts = _osdEpisodeFacts(item);
+    if (facts == null) return const SizedBox.shrink();
     return Padding(
       padding: const EdgeInsets.only(top: 4),
       child: Text(
-        facts.join(' · '),
+        facts,
         style: LineupTypography.body.copyWith(
           color: LineupTheme.of(context).secondaryText,
         ),
@@ -383,10 +356,7 @@ class _HandheldPlayerTiming extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final scheduled = program.scheduled;
-    final next = controller.guide
-        .nextProgram(program.channelId)
-        ?.scheduled
-        .item;
+    final next = controller.nextProgram?.scheduled.item;
     return Padding(
       padding: const EdgeInsets.only(top: 4),
       child: Text(
@@ -574,7 +544,7 @@ class _HandheldStoppedVideo extends StatelessWidget {
             child: Column(
               mainAxisSize: MainAxisSize.min,
               children: [
-                _HandheldPlayerTitle(
+                HandheldWordText(
                   _stoppedTitle(controller),
                   textAlign: TextAlign.center,
                   style: LineupTypography.title(
@@ -660,7 +630,7 @@ class _HandheldPlayerPicker extends StatelessWidget {
                       child: Row(
                         children: [
                           Expanded(
-                            child: _HandheldPlayerTitle(
+                            child: HandheldWordText(
                               title,
                               style: LineupTypography.title(
                                 26,
