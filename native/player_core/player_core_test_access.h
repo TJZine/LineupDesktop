@@ -65,14 +65,10 @@ struct PlayerCoreTestAccess {
     return client;
   }
   static void RunQueuedCommands(PlayerCore& core) {
-    while (!core.commands_.empty()) {
-      auto command = std::move(core.commands_.front());
-      core.commands_.pop_front();
-      core.RunCommand(command, core.generation_.load());
-    }
-    core.queued_command_bytes_ = 0;
-    core.queued_playlist_bytes_ = 0;
+    core.RunPendingCommands(core.generation_.load());
   }
+  static bool EmptySlot(PlayerCore& core) { return !core.pending_subtitle_presentation_; }
+  static void Dispose(PlayerCore& core) { core.FinishDispose(); }
 };
 
 }  // namespace lineup::player

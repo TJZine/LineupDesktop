@@ -173,10 +173,10 @@ class HarnessLoggingPlayer implements NativePlayer {
   @override
   Stream<DisplayMatchingReport> get displayReports => _player.displayReports;
 
-  final _initialized = Completer<void>();
+  final _initialized = Completer<bool>();
 
-  /// Completes when the real player's initialize call succeeds.
-  Future<void> get initialized => _initialized.future;
+  /// Settles the first initialization outcome, including a native failure.
+  Future<bool> get initialized => _initialized.future;
 
   @override
   Future<MediaCapabilities> mediaCapabilities() async =>
@@ -184,8 +184,13 @@ class HarnessLoggingPlayer implements NativePlayer {
 
   @override
   Future<void> initialize() async {
-    await _call('initialize', _player.initialize);
-    if (!_initialized.isCompleted) _initialized.complete();
+    try {
+      await _call('initialize', _player.initialize);
+      if (!_initialized.isCompleted) _initialized.complete(true);
+    } catch (_) {
+      if (!_initialized.isCompleted) _initialized.complete(false);
+      rethrow;
+    }
   }
 
   @override
@@ -266,7 +271,14 @@ Future<void> _exercise(HarnessLoggingPlayer player, List<Uri> media) async {
   Future<void> pause(int seconds) =>
       Future<void>.delayed(Duration(seconds: seconds));
 
-  await step('initialize', () => player.initialized);
+  final initialized = await player.initialized.timeout(
+    const Duration(seconds: 30),
+    onTimeout: () => false,
+  );
+  if (!initialized) {
+    _log('exercise failed: initialization failed or startup timed out');
+    return;
+  }
   await pause(2);
   await step(
     'video rect',
