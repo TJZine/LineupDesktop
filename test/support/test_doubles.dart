@@ -1,6 +1,7 @@
 import 'dart:async';
 
 import 'package:flutter/foundation.dart';
+
 import 'package:http/testing.dart';
 import 'package:lineup_desktop/persistence/app_store.dart';
 import 'package:lineup_desktop/playback/native_player.dart';
@@ -64,6 +65,28 @@ class MemoryCredentialStore implements CredentialStore {
 }
 
 class FakeNativePlayer implements NativePlayer {
+  @override
+  final ValueNotifier<SubtitleCues> subtitleCues = ValueNotifier<SubtitleCues>(
+    const SubtitleCues.empty(),
+  );
+  final subtitlePresentations =
+      <({double scale, double imageRaise, bool lineupDrawsStyled})>[];
+  final subtitleCommandOrder = <String>[];
+  void emitSubtitleCues(SubtitleCues cues) => subtitleCues.value = cues;
+  @override
+  Future<void> setSubtitlePresentation({
+    required double scale,
+    required double imageRaise,
+    required bool lineupDrawsStyled,
+  }) async {
+    subtitleCommandOrder.add("presentation");
+    subtitlePresentations.add((
+      scale: scale,
+      imageRaise: imageRaise,
+      lineupDrawsStyled: lineupDrawsStyled,
+    ));
+  }
+
   FakeNativePlayer({
     PlayerCapabilities? capabilities,
     PlayerStatus? initialStatus,
@@ -161,6 +184,10 @@ class FakeNativePlayer implements NativePlayer {
   Stream<DisplayMatchingReport> get displayReports => _displayReports.stream;
 
   @override
+  Future<MediaCapabilities> mediaCapabilities() async =>
+      MediaCapabilities.desktop;
+
+  @override
   Future<void> initialize() async {}
 
   @override
@@ -170,7 +197,11 @@ class FakeNativePlayer implements NativePlayer {
     int? generation,
     bool startPaused = false,
     Duration? startPosition,
+    LoadKind kind = LoadKind.direct,
+    NativeSessionPlaylist? sessionPlaylist,
   }) async {
+    subtitleCommandOrder.add("load");
+    subtitleCues.value = const SubtitleCues.empty();
     loads.add(media);
     loadPlexTokens.add(plexToken);
     final nextGeneration = generation ?? this.generation + 1;

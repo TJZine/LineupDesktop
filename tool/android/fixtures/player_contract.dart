@@ -379,11 +379,18 @@ Future<void> _run(List<String> args) async {
     }
     phase = 'paused-initial-join';
     await load('h264.mp4', paused: true, start: 13.25);
-    await _wait(() => player.position >= const Duration(seconds: 13));
-    if (player.status.state != PlayerState.paused) {
-      throw StateError('paused_ready');
+    // The synthetic clip has a sync point at 12 s, within the direct join
+    // tolerance before the requested 13.25 s position.
+    await _wait(
+      () =>
+          player.position > Duration.zero &&
+          player.status.state == PlayerState.paused,
+    );
+    final joinMs = player.position.inMilliseconds;
+    if ((joinMs - 12000).abs() >= 150) {
+      throw StateError('initial_join_position');
     }
-    _fact(phase, {'positionMs': player.position.inMilliseconds});
+    _fact(phase, {'positionMs': joinMs});
     phase = 'play-pause';
     await player.play();
     await _wait(() => player.position > const Duration(seconds: 14));

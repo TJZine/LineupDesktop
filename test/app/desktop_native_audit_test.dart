@@ -257,6 +257,8 @@ class _CountingPlayer extends FixturePlayer {
     int? generation,
     bool startPaused = false,
     Duration? startPosition,
+    LoadKind kind = LoadKind.direct,
+    NativeSessionPlaylist? sessionPlaylist,
   }) async {
     commands.add('load');
     await super.load(media, plexToken: plexToken, generation: generation);

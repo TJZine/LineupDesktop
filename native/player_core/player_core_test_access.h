@@ -38,6 +38,10 @@ struct PlayerCoreTestAccess {
     return !core.event_thread_.joinable() && core.worker_finished_.load();
   }
   static mpv_handle* Client(PlayerCore& core) { return core.mpv_; }
+  static size_t QueuedPlaylistBytes(PlayerCore& core) { return core.queued_playlist_bytes_; }
+  static int OpenSession(PlayerCore& core, std::string uri, mpv_stream_cb_info* info) {
+    return SessionPlaylistRegistry::Open(&core.session_playlists_, uri.data(), info);
+  }
   static bool AcceptingCommands(PlayerCore& core) { return core.accepting_commands_; }
 
   // Installs a client and accepts commands without starting the worker, so a
@@ -51,9 +55,13 @@ struct PlayerCoreTestAccess {
     core.accepting_commands_ = false;
     core.commands_.clear();
     core.queued_command_bytes_ = 0;
+    core.queued_playlist_bytes_ = 0;
     mpv_handle* client = core.mpv_;
     core.mpv_ = nullptr;
     core.playback_.Reset();
+    core.session_clock_load_.reset();
+    core.session_clock_ready_ = false;
+    core.session_playlists_.Retire();
     return client;
   }
   static void RunQueuedCommands(PlayerCore& core) {
@@ -63,6 +71,7 @@ struct PlayerCoreTestAccess {
       core.RunCommand(command, core.generation_.load());
     }
     core.queued_command_bytes_ = 0;
+    core.queued_playlist_bytes_ = 0;
   }
 };
 

@@ -94,6 +94,15 @@ class HarnessController extends LineupController {
 
 class HarnessPlayer implements NativePlayer {
   @override
+  final subtitleCues = ValueNotifier<SubtitleCues>(const SubtitleCues.empty());
+  @override
+  Future<void> setSubtitlePresentation({
+    required double scale,
+    required double imageRaise,
+    required bool lineupDrawsStyled,
+  }) async {}
+
+  @override
   bool fullscreen = false;
   @override
   PlayerCapabilities get capabilities => const PlayerCapabilities.unavailable();
@@ -142,6 +151,10 @@ class HarnessPlayer implements NativePlayer {
   Stream<DisplayMatchingReport> get displayReports => const Stream.empty();
 
   @override
+  Future<MediaCapabilities> mediaCapabilities() async =>
+      MediaCapabilities.desktop;
+
+  @override
   Future<void> initialize() async {}
   @override
   Future<void> load(
@@ -150,6 +163,8 @@ class HarnessPlayer implements NativePlayer {
     int? generation,
     bool startPaused = false,
     Duration? startPosition,
+    LoadKind kind = LoadKind.direct,
+    NativeSessionPlaylist? sessionPlaylist,
   }) async {
     if (_disposed) return;
     final operation = ++_loadEpoch;

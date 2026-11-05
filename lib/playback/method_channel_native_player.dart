@@ -1,7 +1,8 @@
 import 'dart:async';
+import 'dart:convert';
 
-import 'package:flutter/foundation.dart';
 import 'package:flutter/services.dart';
+import 'package:flutter/foundation.dart';
 
 import 'native_player.dart';
 
@@ -41,16 +42,60 @@ class MethodChannelNativePlayer implements NativePlayer {
        _stopTimeout = stopTimeout ?? const Duration(seconds: 10),
        _trackTimeout = trackTimeout ?? const Duration(seconds: 5);
 
+  final _subtitleCues = ValueNotifier<SubtitleCues>(const SubtitleCues.empty());
+  @override
+  ValueListenable<SubtitleCues> get subtitleCues => _subtitleCues;
+
+  @override
+  Future<void> setSubtitlePresentation({
+    required double scale,
+    required double imageRaise,
+    required bool lineupDrawsStyled,
+  }) {
+    if (!scale.isFinite ||
+        scale < 0.25 ||
+        scale > 4 ||
+        !imageRaise.isFinite ||
+        imageRaise < 0 ||
+        imageRaise > 0.25) {
+      return Future.error(
+        const PlayerUnavailable(
+          "Invalid subtitle presentation.",
+          failureCode: "invalid_argument",
+        ),
+      );
+    }
+    return _invoke("setSubtitlePresentation", {
+      "scale": scale,
+      "imageRaise": imageRaise,
+      "lineupDrawsStyled": lineupDrawsStyled,
+    });
+  }
+
   final _events = StreamController<PlayerEvent>.broadcast(sync: true);
   final _displayReports = StreamController<DisplayMatchingReport>.broadcast(
     sync: true,
   );
   final _fullscreenChanges = StreamController<bool>.broadcast(sync: true);
   bool _fullscreen = false;
+  // Lifecycle, observed selection and requested Off are separate facts. Until
+  // the first track snapshot, a valid current cue can establish display content.
+  bool _subtitleCuesActive = false;
+  bool _subtitleTracksObserved = false;
+  int? _subtitleTrackId;
+  // Only pre-request retained content has a rollback baseline. Fresh native
+  // snapshots have no track ID on the wire and may precede track observation.
+  int? _subtitleRetainedFromTrackId;
+  bool _subtitleOffRequested = false;
+  int _subtitleSelectionRevision = 0;
+  SubtitleCues _latestSubtitleCues = const SubtitleCues.empty();
   int _nativeEventEpoch = 0;
   final Duration _loadTimeout;
   final Duration _stopTimeout;
   final Duration _trackTimeout;
+  MediaCapabilities? _mediaCapabilities;
+  DateTime? _mediaCapabilitiesAt;
+  Future<MediaCapabilities>? _mediaCapabilitiesPending;
   int _nextStopId = 0;
   int _nextTrackRequestId = 0;
   (int, Completer<void>)? _pendingStop;
@@ -156,13 +201,80 @@ class MethodChannelNativePlayer implements NativePlayer {
   });
 
   @override
+  Future<MediaCapabilities> mediaCapabilities() async {
+    if (defaultTargetPlatform != TargetPlatform.android) {
+      return MediaCapabilities.desktop;
+    }
+    final now = DateTime.now();
+    if (_mediaCapabilities != null &&
+        _mediaCapabilitiesAt != null &&
+        now.difference(_mediaCapabilitiesAt!) < const Duration(seconds: 1)) {
+      return _mediaCapabilities!;
+    }
+    if (_mediaCapabilitiesPending != null) return _mediaCapabilitiesPending!;
+    final epoch = _nativeEventEpoch;
+    final pending = () async {
+      MediaCapabilities capabilities;
+      try {
+        capabilities = MediaCapabilities.fromWire(
+          await _invokeNative<Object?>('mediaCapabilities')
+              .timeout(const Duration(seconds: 5)),
+        );
+      } catch (_) {
+        capabilities = MediaCapabilities.unknown;
+      }
+      if (epoch != _nativeEventEpoch) return MediaCapabilities.unknown;
+      _mediaCapabilities = capabilities;
+      _mediaCapabilitiesAt = DateTime.now();
+      return capabilities;
+    }();
+    _mediaCapabilitiesPending = pending;
+    try {
+      return await pending;
+    } finally {
+      if (identical(_mediaCapabilitiesPending, pending)) {
+        _mediaCapabilitiesPending = null;
+      }
+    }
+  }
+
+  @override
   Future<void> load(
     Uri media, {
     String? plexToken,
     int? generation,
     bool startPaused = false,
     Duration? startPosition,
+    LoadKind kind = LoadKind.direct,
+    NativeSessionPlaylist? sessionPlaylist,
   }) async {
+    const maxPlaylistBytes = 1024 * 1024;
+    if (sessionPlaylist != null &&
+        (kind != LoadKind.plexSession ||
+            sessionPlaylist.offsetMicroseconds < 0 ||
+            sessionPlaylist.offsetMicroseconds > 0x7fffffffffffffff ||
+            sessionPlaylist.text.length > maxPlaylistBytes ||
+            utf8.encode(sessionPlaylist.text).length > maxPlaylistBytes)) {
+      throw const PlayerUnavailable(
+        'The Plex session playlist is invalid.',
+        failureCode: 'invalid_argument',
+      );
+    }
+    if (kind == LoadKind.plexSession &&
+        (plexToken != null ||
+            startPosition != null ||
+            media.scheme.toLowerCase() != 'https' ||
+            !media.hasAuthority ||
+            media.host.isEmpty ||
+            media.userInfo.isNotEmpty ||
+            media.queryParametersAll.keys.any(
+              (key) => key.toLowerCase() == 'x-plex-token',
+            ))) {
+      throw const PlayerUnavailable(
+        'The Plex session load is invalid.',
+        failureCode: 'invalid_argument',
+      );
+    }
     if (startPosition != null && startPosition < Duration.zero) {
       throw const PlayerUnavailable(
         'The initial playback position must be non-negative.',
@@ -178,6 +290,7 @@ class MethodChannelNativePlayer implements NativePlayer {
         failureCode: 'insecure_media_uri',
       );
     }
+    _retireSubtitleCues();
     await _lifecycle;
     await _stopOperation;
     _requireInitialized();
@@ -195,6 +308,7 @@ class MethodChannelNativePlayer implements NativePlayer {
     _activeLoadId = loadId;
     _activeGeneration = generation;
     _resetMediaState(startPaused: startPaused);
+    _subtitleCuesActive = true;
     _setStatus(PlayerState.loading, 'Loading media');
     try {
       final completion = pending.future
@@ -209,6 +323,12 @@ class MethodChannelNativePlayer implements NativePlayer {
         'plexToken': plexToken,
         'loadId': loadId,
         'startPaused': startPaused,
+        'kind': kind.name,
+        if (sessionPlaylist != null)
+          'sessionPlaylist': {
+            'text': sessionPlaylist.text,
+            'offsetMicroseconds': sessionPlaylist.offsetMicroseconds,
+          },
         if (startPosition != null)
           'startSeconds':
               startPosition.inMicroseconds / Duration.microsecondsPerSecond,
@@ -285,45 +405,74 @@ class MethodChannelNativePlayer implements NativePlayer {
 
   @override
   Future<void> selectTrack(PlayerTrackType type, int? id) async {
-    await _lifecycle;
-    _requireInitialized();
-    final loadId = _activeLoadId;
-    if (loadId == null) {
-      throw const PlayerUnavailable('No active media is available.');
+    final subtitleRevision = type == PlayerTrackType.subtitle
+        ? ++_subtitleSelectionRevision
+        : null;
+    final requestedLoad = _activeLoadId;
+    if (subtitleRevision != null) {
+      _subtitleOffRequested = id == null;
+      _subtitleRetainedFromTrackId = _latestSubtitleCues.isEmpty
+          ? null
+          : _subtitleTrackId;
+      // Retain pre-request content only while its observed baseline stays valid.
+      _hideSubtitleCues();
     }
-    final requestId = ++_nextTrackRequestId;
-    final pending = Completer<void>();
-    _pendingTrackSelections[requestId] = (loadId, pending);
-    final completion = pending.future
-        .timeout(
-          _trackTimeout,
-          onTimeout: () => throw const PlayerUnavailable(
-            'Native track selection did not complete in time.',
-            failureCode: 'wait_timeout',
-          ),
-        )
-        .then<(Object, StackTrace)?>(
-          (_) => null,
-          onError: (Object error, StackTrace stackTrace) => (error, stackTrace),
-        );
     try {
-      await _invokeNative<void>('selectTrack', {
-        'type': type.name,
-        'id': id,
-        'loadId': loadId,
-        'requestId': requestId,
-      });
-      final failure = await completion;
-      if (failure != null) {
-        Error.throwWithStackTrace(failure.$1, failure.$2);
+      await _lifecycle;
+      _requireInitialized();
+      final loadId = _activeLoadId;
+      if (loadId == null) {
+        throw const PlayerUnavailable('No active media is available.');
       }
-    } catch (error, stackTrace) {
-      if (!pending.isCompleted) pending.completeError(error, stackTrace);
+      final requestId = ++_nextTrackRequestId;
+      final pending = Completer<void>();
+      _pendingTrackSelections[requestId] = (loadId, pending);
+      final completion = pending.future
+          .timeout(
+            _trackTimeout,
+            onTimeout: () => throw const PlayerUnavailable(
+              'Native track selection did not complete in time.',
+              failureCode: 'wait_timeout',
+            ),
+          )
+          .then<(Object, StackTrace)?>(
+            (_) => null,
+            onError: (Object error, StackTrace stackTrace) =>
+                (error, stackTrace),
+          );
+      try {
+        await _invokeNative<void>('selectTrack', {
+          'type': type.name,
+          'id': id,
+          'loadId': loadId,
+          'requestId': requestId,
+        });
+        final failure = await completion;
+        if (failure != null) {
+          Error.throwWithStackTrace(failure.$1, failure.$2);
+        }
+        if (subtitleRevision == _subtitleSelectionRevision && id == null) {
+          _clearSubtitleCues();
+        }
+      } catch (error, stackTrace) {
+        if (!pending.isCompleted) pending.completeError(error, stackTrace);
+        rethrow;
+      } finally {
+        if (identical(_pendingTrackSelections[requestId]?.$2, pending)) {
+          _pendingTrackSelections.remove(requestId);
+        }
+      }
+    } catch (_) {
+      if (subtitleRevision != null &&
+          subtitleRevision == _subtitleSelectionRevision &&
+          requestedLoad == _activeLoadId &&
+          _subtitleCuesActive) {
+        // Rejection did not change the observed selection. A later subtitle
+        // request or retired load owns its own fence and cannot be undone here.
+        _subtitleOffRequested = false;
+        _reconcileSubtitleCues();
+      }
       rethrow;
-    } finally {
-      if (identical(_pendingTrackSelections[requestId]?.$2, pending)) {
-        _pendingTrackSelections.remove(requestId);
-      }
     }
   }
 
@@ -333,6 +482,7 @@ class MethodChannelNativePlayer implements NativePlayer {
 
   @override
   Future<void> stop() {
+    _retireSubtitleCues();
     final existing = _stopOperation;
     if (existing != null) return existing;
     final stopId = ++_nextStopId;
@@ -382,39 +532,45 @@ class MethodChannelNativePlayer implements NativePlayer {
   }
 
   @override
-  Future<void> dispose() => _serializeLifecycle(() async {
-    _capabilities = const PlayerCapabilities.unavailable();
-    _fullscreen = false;
-    ++_nativeEventEpoch;
-    final stop = _pendingStop;
-    if (stop != null && !stop.$2.isCompleted) {
-      stop.$2.completeError(
+  Future<void> dispose() {
+    _retireSubtitleCues();
+    return _serializeLifecycle(() async {
+      _capabilities = const PlayerCapabilities.unavailable();
+      _fullscreen = false;
+      ++_nativeEventEpoch;
+      _mediaCapabilities = null;
+      _mediaCapabilitiesAt = null;
+      _mediaCapabilitiesPending = null;
+      final stop = _pendingStop;
+      if (stop != null && !stop.$2.isCompleted) {
+        stop.$2.completeError(
+          const PlayerUnavailable('The native player was disposed.'),
+        );
+      }
+      _pendingStop = null;
+      _completePendingLoadError(
         const PlayerUnavailable('The native player was disposed.'),
       );
-    }
-    _pendingStop = null;
-    _completePendingLoadError(
-      const PlayerUnavailable('The native player was disposed.'),
-    );
-    _completePendingTrackSelectionErrors(
-      const PlayerUnavailable('The native player was disposed.'),
-    );
-    _pendingLoad = null;
-    _activeLoadId = null;
-    _activeGeneration = null;
-    if (!_initialized) return;
-    _initialized = false;
-    try {
-      await _invokeNative<void>('dispose');
-    } finally {
-      if (identical(_handlerOwner, this)) {
-        _channel.setMethodCallHandler(null);
-        _handlerOwner = null;
+      _completePendingTrackSelectionErrors(
+        const PlayerUnavailable('The native player was disposed.'),
+      );
+      _pendingLoad = null;
+      _activeLoadId = null;
+      _activeGeneration = null;
+      if (!_initialized) return;
+      _initialized = false;
+      try {
+        await _invokeNative<void>('dispose');
+      } finally {
+        if (identical(_handlerOwner, this)) {
+          _channel.setMethodCallHandler(null);
+          _handlerOwner = null;
+        }
+        _resetMediaState();
+        _setStatus(PlayerState.stopped, 'Native player disposed');
       }
-      _resetMediaState();
-      _setStatus(PlayerState.stopped, 'Native player disposed');
-    }
-  });
+    });
+  }
 
   Future<void> _serializeLifecycle(Future<void> Function() operation) {
     final next = _lifecycle.then((_) => operation());
@@ -555,6 +711,26 @@ class MethodChannelNativePlayer implements NativePlayer {
       if (!_displayReports.isClosed) _displayReports.add(report);
       return;
     }
+    if (event["type"] == "property" && event["name"] == "subtitle-cues") {
+      if (!_isCurrentLoadEvent(event)) {
+        _clearSubtitleCues();
+        return;
+      }
+      if (!_subtitleCuesActive) return;
+      final cues = SubtitleCues.tryParse(event["value"]);
+      if (cues == null) {
+        debugPrint("Malformed subtitle cues dropped.");
+      } else {
+        // Queue coalescing may deliver a current cue before the selected track
+        // snapshot. Retain only this bounded latest value until reconciliation.
+        _latestSubtitleCues = cues;
+        // Receipt supersedes retained pre-request content independently of
+        // command execution and the order of selected-track observations.
+        _subtitleRetainedFromTrackId = null;
+        _reconcileSubtitleCues();
+      }
+      return;
+    }
     if (!_isCurrentLoadEvent(event)) return;
     switch (event['type']) {
       case 'state':
@@ -673,8 +849,25 @@ class MethodChannelNativePlayer implements NativePlayer {
         _position = _durationFromSeconds(value);
       case 'duration':
         _duration = _durationFromSeconds(value);
+      case 'demuxer-start-time':
+        _telemetry = _copyTelemetry(demuxerStartTime: value);
       case 'track-list':
         _tracks = List.unmodifiable(_decodeTracks(value));
+        final selectedSubtitle = _tracks
+            .where((t) => t.type == PlayerTrackType.subtitle && t.selected)
+            .firstOrNull;
+        _subtitleTracksObserved = true;
+        _subtitleTrackId = selectedSubtitle?.id;
+        if (_subtitleTrackId == null) {
+          _subtitleOffRequested = false;
+          _clearSubtitleCues();
+        } else if (_subtitleRetainedFromTrackId != null &&
+            _subtitleRetainedFromTrackId != _subtitleTrackId) {
+          // A pre-request cue cannot migrate to a different observed track.
+          _clearSubtitleCues();
+        } else {
+          _reconcileSubtitleCues();
+        }
       case 'video-format':
         _telemetry = _copyTelemetry(videoFormat: value);
       case 'video-codec':
@@ -846,6 +1039,7 @@ class MethodChannelNativePlayer implements NativePlayer {
   }
 
   PlayerTelemetry _copyTelemetry({
+    Object? demuxerStartTime = _unchanged,
     Object? videoOutput = _unchanged,
     Object? hardwareDecoder = _unchanged,
     Object? videoCodec = _unchanged,
@@ -888,6 +1082,11 @@ class MethodChannelNativePlayer implements NativePlayer {
       return _telemetry;
     }
     return PlayerTelemetry(
+      demuxerStartTime: demuxerStartTime == _unchanged
+          ? _telemetry.demuxerStartTime
+          : demuxerStartTime is num && demuxerStartTime.isFinite
+          ? demuxerStartTime.toDouble()
+          : null,
       videoOutput: videoOutput == _unchanged
           ? _telemetry.videoOutput
           : videoOutput is String
@@ -981,7 +1180,41 @@ class MethodChannelNativePlayer implements NativePlayer {
     }
   }
 
+  void _retireSubtitleCues() {
+    _subtitleCuesActive = false;
+    ++_subtitleSelectionRevision;
+    _subtitleOffRequested = false;
+    _subtitleTracksObserved = false;
+    _subtitleTrackId = null;
+    _clearSubtitleCues();
+  }
+
+  void _reconcileSubtitleCues() {
+    _subtitleCues.value =
+        _subtitleCuesActive &&
+            (!_subtitleTracksObserved || _subtitleTrackId != null) &&
+            !_subtitleOffRequested
+        ? _latestSubtitleCues
+        : const SubtitleCues.empty();
+  }
+
+  void _clearSubtitleCues() {
+    _latestSubtitleCues = const SubtitleCues.empty();
+    _subtitleRetainedFromTrackId = null;
+    _hideSubtitleCues();
+  }
+
+  void _hideSubtitleCues() {
+    if (!_subtitleCues.value.isEmpty) {
+      _subtitleCues.value = const SubtitleCues.empty();
+    }
+  }
+
   void _resetMediaState({bool startPaused = false}) {
+    _clearSubtitleCues();
+    _subtitleTracksObserved = false;
+    _subtitleTrackId = null;
+    _subtitleOffRequested = false;
     _paused = startPaused;
     _position = Duration.zero;
     _duration = Duration.zero;
@@ -996,6 +1229,13 @@ class MethodChannelNativePlayer implements NativePlayer {
     String? failureCode,
     int? httpStatus,
   }) {
+    if (const {
+      PlayerState.error,
+      PlayerState.ended,
+      PlayerState.stopped,
+    }.contains(state)) {
+      _retireSubtitleCues();
+    }
     _status = PlayerStatus(
       state: state,
       message: message,

@@ -25,5 +25,6 @@ internal object MediaHttp {
             .followSslRedirects(false)
             .apply { if (origin != null) addInterceptor(OriginPin(origin)) }
             .addInterceptor(OriginPolicy())
+            .addNetworkInterceptor(CancelOnAbandon())
             .build()
 }

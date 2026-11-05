@@ -13,6 +13,7 @@ import '../guide/guide_controller.dart';
 import '../plex/plex_models.dart';
 import 'native_player.dart';
 import 'display_matching.dart';
+import 'subtitle_appearance_source.dart';
 
 enum PlayerOverlay {
   none,
@@ -41,6 +42,10 @@ class PlayerCoordinator extends ChangeNotifier with WidgetsBindingObserver {
     this.suspendInBackground = false,
     DateTime Function()? clock,
   }) : _clock = clock ?? DateTime.now {
+    subtitleAppearance = SubtitleAppearanceSource(lineup: lineup);
+    _releaseSubtitleAppearance = subtitleAppearance.retain();
+    _subtitleScale = subtitleAppearance.value.scale;
+    subtitleAppearance.addListener(_subtitleAppearanceChanged);
     _indexChannels();
     _status = player.status;
     _position = player.position;
@@ -61,6 +66,7 @@ class PlayerCoordinator extends ChangeNotifier with WidgetsBindingObserver {
     _fullscreenSubscription = player.fullscreenChanges.listen(
       _observeFullscreen,
     );
+    player.subtitleCues.addListener(_receiveSubtitleCues);
     _subscription = player.events.listen(_event);
     lineup.addListener(_lineupChanged);
     guide.addListener(_guideChanged);
@@ -73,6 +79,106 @@ class PlayerCoordinator extends ChangeNotifier with WidgetsBindingObserver {
       }
     }
     notifyListeners();
+  }
+
+  late final SubtitleAppearanceSource subtitleAppearance;
+  late final VoidCallback _releaseSubtitleAppearance;
+  late double _subtitleScale;
+
+  void _subtitleAppearanceChanged() {
+    final scale = subtitleAppearance.value.scale;
+    if (_disposed || scale == _subtitleScale) return;
+    _subtitleScale = scale;
+    _sendSubtitlePresentation();
+  }
+
+  final _subtitleCues = ValueNotifier<SubtitleCues>(const SubtitleCues.empty());
+  ValueListenable<SubtitleCues> get subtitleCues => _subtitleCues;
+  ({double scale, double imageRaise, bool lineupDrawsStyled})?
+  _sentPresentation;
+  Object? _presentationOperation;
+  bool _subtitleCuesSuppressed = false;
+  int _subtitleSelectionGeneration = 0;
+
+  void _receiveSubtitleCues() {
+    if (!_disposed && !_subtitleCuesSuppressed) {
+      _subtitleCues.value = player.subtitleCues.value;
+    }
+  }
+
+  void _clearSubtitleCues() {
+    if (!_subtitleCues.value.isEmpty) {
+      _subtitleCues.value = const SubtitleCues.empty();
+    }
+  }
+
+  void _sendSubtitlePresentation({bool beforeLoad = false}) {
+    if (_disposed) return;
+    final style = lineup.settings.subtitleStyle;
+    final next = (
+      scale: subtitleAppearance.value.scale,
+      imageRaise: style.position.raise,
+      lineupDrawsStyled: style.styleStyledSubtitles,
+    );
+    if (next == _sentPresentation ||
+        (!beforeLoad && _presentationOperation != null)) {
+      return;
+    }
+    // A new load must enqueue its current presentation immediately, even if
+    // an older settings call is still awaiting acceptance. Only commit pushes
+    // wait for the previous call, so a stalled presentation cannot delay load.
+    final operation = Object();
+    _presentationOperation = operation;
+    _sentPresentation = next;
+    unawaited(
+      Future<void>.sync(
+        () => player.setSubtitlePresentation(
+          scale: next.scale,
+          imageRaise: next.imageRaise,
+          lineupDrawsStyled: next.lineupDrawsStyled,
+        ),
+      ).then(
+        (_) {
+          if (_disposed || !identical(_presentationOperation, operation)) {
+            return;
+          }
+          _presentationOperation = null;
+          _sendSubtitlePresentation();
+        },
+        onError: (Object error) {
+          if (_disposed) return;
+          final ownsOperation = identical(_presentationOperation, operation);
+          if (ownsOperation) {
+            _presentationOperation = null;
+            _sentPresentation = null;
+          }
+          final current = lineup.settings.subtitleStyle;
+          final changed =
+              next !=
+              (
+                scale: subtitleAppearance.value.scale,
+                imageRaise: current.position.raise,
+                lineupDrawsStyled: current.styleStyledSubtitles,
+              );
+          final code = switch (error) {
+            PlayerUnavailable(:final failureCode)
+                when const {
+                  'invalid_argument',
+                  'not_initialized',
+                  'native_command_error',
+                }.contains(failureCode) =>
+              failureCode,
+            MissingPluginException() => 'missing_plugin',
+            _ => 'native_command_error',
+          };
+          lineup.diagnostics.add(DiagnosticEvent.subtitlePresentationRejected, {
+            'subtitleError': code,
+          });
+          // Retry a newer committed value now; retry this value only on a later commit/load.
+          if (ownsOperation && changed) _sendSubtitlePresentation();
+        },
+      ),
+    );
   }
 
   late final DisplayMatching _displayMatching;
@@ -537,6 +643,25 @@ class PlayerCoordinator extends ChangeNotifier with WidgetsBindingObserver {
     } else {
       _position = event.position;
       _duration = event.duration;
+    }
+    if (event.tracksUpdated) {
+      _subtitleCuesSuppressed = !event.tracks.any(
+        (t) => t.type == PlayerTrackType.subtitle && t.selected,
+      );
+    }
+    if (const {
+      PlayerState.error,
+      PlayerState.ended,
+      PlayerState.stopped,
+    }.contains(event.status.state)) {
+      _subtitleCuesSuppressed = true;
+    }
+    if (_subtitleCuesSuppressed) {
+      _clearSubtitleCues();
+    } else if (event.tracksUpdated) {
+      // The transport may have reconciled a cue before this track snapshot was
+      // emitted. Re-read its current value rather than waiting for another cue.
+      _receiveSubtitleCues();
     }
     _telemetry = event.telemetry;
     _tracks = event.tracks;
@@ -1152,6 +1277,9 @@ class PlayerCoordinator extends ChangeNotifier with WidgetsBindingObserver {
     _telemetry = const PlayerTelemetry();
     _tracks = const [];
     _clearTrackSelection();
+    _clearSubtitleCues();
+    _subtitleCuesSuppressed = false;
+    _sendSubtitlePresentation(beforeLoad: true);
     load.readiness = Future<void>.sync(
       () => player.load(
         media,
@@ -1557,6 +1685,8 @@ class PlayerCoordinator extends ChangeNotifier with WidgetsBindingObserver {
   Future<void> stop() => _stop();
 
   Future<void> _stop({bool forBackground = false}) async {
+    _subtitleCuesSuppressed = true;
+    _clearSubtitleCues();
     if (!forBackground) _resumeAfterBackground = false;
     _cancelPendingChannelStep();
     if (forBackground) {
@@ -1701,6 +1831,15 @@ class PlayerCoordinator extends ChangeNotifier with WidgetsBindingObserver {
   }
 
   Future<void> selectTrack(PlayerTrackType type, int? id) async {
+    final subtitleSelection = type == PlayerTrackType.subtitle
+        ? ++_subtitleSelectionGeneration
+        : null;
+    if (subtitleSelection != null) {
+      _subtitleCuesSuppressed =
+          id == null ||
+          !_tracks.any((t) => t.type == PlayerTrackType.subtitle && t.selected);
+      _clearSubtitleCues();
+    }
     final trackSelectionGeneration = ++_trackSelectionGeneration;
     final tuneGeneration = _tuneGeneration;
     final loadGeneration = _activeLoadGeneration;
@@ -1741,6 +1880,22 @@ class PlayerCoordinator extends ChangeNotifier with WidgetsBindingObserver {
         notifyListeners();
       });
     } catch (error) {
+      if (subtitleSelection != null &&
+          subtitleSelection == _subtitleSelectionGeneration &&
+          !_disposed &&
+          tuneGeneration == _tuneGeneration &&
+          loadGeneration == _activeLoadGeneration &&
+          !const {
+            PlayerState.error,
+            PlayerState.ended,
+            PlayerState.stopped,
+          }.contains(_status.state)) {
+        _subtitleCuesSuppressed = !_tracks.any(
+          (t) => t.type == PlayerTrackType.subtitle && t.selected,
+        );
+        _receiveSubtitleCues();
+      }
+
       if (_ownsTrackSelection(
             trackSelectionGeneration,
             tuneGeneration,
@@ -2198,6 +2353,8 @@ class PlayerCoordinator extends ChangeNotifier with WidgetsBindingObserver {
   }
 
   void _lineupChanged() {
+    if (_disposed) return;
+    _sendSubtitlePresentation();
     final activeChannel = _active?.channel;
     final replacement = activeChannel == null
         ? null
@@ -2453,6 +2610,11 @@ class PlayerCoordinator extends ChangeNotifier with WidgetsBindingObserver {
     if (_disposed) return;
     final fullscreenReset = _queueFullscreenReset();
     _disposed = true;
+    subtitleAppearance.removeListener(_subtitleAppearanceChanged);
+    _releaseSubtitleAppearance();
+    subtitleAppearance.dispose();
+    player.subtitleCues.removeListener(_receiveSubtitleCues);
+    _clearSubtitleCues();
     if (suspendInBackground) WidgetsBinding.instance.removeObserver(this);
     _resumeAfterBackground = false;
     _displayMatching.dispose();

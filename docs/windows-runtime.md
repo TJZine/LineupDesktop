@@ -22,10 +22,14 @@ and corresponding sources and preserve their notices. Independent legal review
 is recommended before distribution beyond private alpha because this document
 is an engineering inventory, not legal advice.
 
-The verified archive currently remains hosted by the third-party builder.
-Before public distribution, mirror those exact bytes in an immutable
-project-controlled release, confirm the recorded archive SHA-256 is unchanged,
-and update `tool/windows/prepare-mpv.ps1` to use that release. Do not substitute
+The verified archive is mirrored in the project-controlled
+[`runtime-mpv-20261002-3186d369f9` release](https://github.com/TJZine/LineupDesktop/releases/tag/runtime-mpv-20261002-3186d369f9).
+The upstream builder retains releases for only 30 days. After its October 2
+release expired, the exact archive was recovered from
+[build artifact `11226476657`](https://github.com/zhongfly/mpv-winbuild/actions/runs/37004200613/artifacts/11226476657).
+Its archive, header and DLL SHA-256 values match the existing pins;
+`tool/windows/prepare-mpv.ps1` downloads the mirror and retains those checks.
+Keep the mirror immutable and preserve these exact bytes; do not substitute
 a rebuilt archive under the existing provenance identity.
 
 ## Other native runtime components
@@ -103,3 +107,20 @@ package excludes it.
 - exact builder and LGPL patch: <https://github.com/zhongfly/mpv-winbuild/tree/88bdc4db67bb476a7606921eb2d68b273440d59b>
 - exact successful build: <https://github.com/zhongfly/mpv-winbuild/actions/runs/37004200613>
 - Microsoft VC runtime redistribution terms: <https://learn.microsoft.com/en-us/visualstudio/releases/2022/redistribution>
+
+## Subtitle presentation
+
+The shared core classifies subtitles against the pinned mpv decoder paths (see
+[desktop subtitle protocol](native-player-protocol.md#desktop-subtitle-decoding-and-presentation)).
+Flutter draws converted text, including lavf `ssa`; libmpv draws native `ass`
+unless the viewer opts into Lineup styling, and always draws bitmap subtitles.
+Primary text suppression uses `sub-visibility=no`, with an invisible unstyled
+libass style as a backstop. Native ASS retains author styling and positioning.
+Size scales engine subtitles; Position affects images only. Large bitmap scales
+can extend beyond the frame because mpv does not clamp their geometry.
+
+Portable fake-libmpv tests establish parsing, ordering, bounds, nonfatal property
+failures and lifecycle behavior. macOS pinned-runtime suppression captures do
+not establish Windows rendering, HDR text brightness or physical playback.
+Those remain Windows CI and physical acceptance obligations for the integrated
+candidate.

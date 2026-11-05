@@ -4,11 +4,13 @@ import android.content.Context
 import android.os.Handler
 import android.view.SurfaceView
 import androidx.media3.common.*
+import androidx.media3.common.text.Cue
 import androidx.media3.common.text.CueGroup
 import androidx.media3.common.util.UnstableApi
-import androidx.media3.datasource.okhttp.OkHttpDataSource
 import androidx.media3.datasource.DataSource
+import androidx.media3.datasource.okhttp.OkHttpDataSource
 import androidx.media3.exoplayer.ExoPlayer
+import androidx.media3.exoplayer.ExoTimeoutException
 import androidx.media3.exoplayer.SeekParameters
 import androidx.media3.exoplayer.analytics.AnalyticsListener
 import androidx.media3.exoplayer.hls.HlsMediaSource
@@ -29,13 +31,15 @@ internal class Media3Engine(
     private val subtitles: SubtitleView,
     private val sizeChanged: (VideoSize) -> Unit,
     private val keepScreenOn: (Boolean) -> Unit,
-    createPlayer: ((Context) -> ExoPlayer)? = null,
+    createPlayer: (Context) -> ExoPlayer = {
+        ExoPlayer.Builder(it).setLoadControl(PlaybackMemory.loadControl(it)).build()
+    },
+    private val subtitlePresentation: () -> SubtitlePresentation = { SubtitlePresentation() },
 ) : PlayerEngine {
     // The default builder owns an exclusive playback thread. Media3 quits it only
     // after releaseInternal finishes renderer/source teardown. Keep that public
     // thread handle: release() returning (or isReleased) cannot prove completion.
-    private val player = (createPlayer?.invoke(context) ?: ExoPlayer.Builder(context)
-        .setLoadControl(PlaybackMemory.loadControl(context)).build()).also {
+    private val player = createPlayer(context).also {
         it.setAudioAttributes(
             AudioAttributes.Builder()
                 .setUsage(C.USAGE_MEDIA)
@@ -52,7 +56,28 @@ internal class Media3Engine(
         player.playbackSuppressionReason == Player.PLAYBACK_SUPPRESSION_REASON_TRANSIENT_AUDIO_FOCUS_LOSS
     private val playbackThread = player.playbackLooper.thread
     private var releaseReturned = false
+    private var releasingPlayer = false
+    private var releaseTimedOut = false
 
+    init {
+        player.addListener(
+            object : Player.Listener {
+                override fun onPlayerError(error: PlaybackException) {
+                    val timeout = error.cause as? ExoTimeoutException
+                    if (
+                        releasingPlayer &&
+                            error.errorCode == PlaybackException.ERROR_CODE_TIMEOUT &&
+                            timeout?.timeoutOperation ==
+                                ExoTimeoutException.TIMEOUT_OPERATION_RELEASE
+                    ) {
+                        releaseTimedOut = true
+                    }
+                }
+            }
+        )
+    }
+
+    private var initialJoinSource: InitialJoinMediaSource? = null
     private val tracks = Media3Tracks()
     private val debug =
         context.applicationInfo.flags and android.content.pm.ApplicationInfo.FLAG_DEBUGGABLE != 0
@@ -62,6 +87,52 @@ internal class Media3Engine(
     private var released = false
     private var observer: PlayerEngine.Listener? = null
     private var sessionClock: SessionHlsClock? = null
+    private var lastCues: List<Cue> = emptyList()
+    private var subtitleFormat: Format? = null
+    private val ssaParsers = SsaDialogueParser.Factory(debug) {
+        handler.post { if (!closed) refreshSubtitles() }
+    }
+
+    internal fun subtitleTracksChanged(value: Tracks) {
+        if (closed) return
+        try {
+            subtitleFormat = value.groups.firstNotNullOfOrNull { group ->
+                if (group.type != C.TRACK_TYPE_TEXT) null else
+                    (0 until group.length).firstOrNull { group.isTrackSelected(it) }
+                        ?.let { group.getTrackFormat(it) }
+            }
+            if (subtitleFormat == null) lastCues = emptyList()
+            subtitles.setCues(emptyList())
+            observer?.property("subtitle-cues", emptyList<Any>())
+            refreshSubtitles()
+        } catch (_: Exception) {
+            if (debug) android.util.Log.d("LineupPlayer", "Subtitle track update skipped")
+        }
+    }
+
+    internal fun subtitleCuesChanged(cues: List<Cue>) {
+        if (!closed) {
+            lastCues = cues
+            refreshSubtitles()
+        }
+    }
+
+    fun refreshSubtitles() {
+        if (closed) return
+        try {
+            val presentation = subtitlePresentation()
+            val native = SubtitleCues.engineDraws(subtitleFormat, presentation) ||
+                ssaParsers.nativeFallback(subtitleFormat, lastCues)
+            subtitles.setCues(lastCues.filter { it.bitmap != null || native }
+                .map { SubtitleCues.transform(SsaDialogueParser.nativeCue(it), presentation) })
+            observer?.property("subtitle-cues", if (native) emptyList<Any>()
+                else if (subtitleFormat == null) emptyList<Any>() else SubtitleCues.encode(
+                    if (SsaDialogueParser.isSsa(subtitleFormat)) SsaDialogueParser.lineupCues(lastCues) else lastCues))
+        } catch (_: Exception) {
+            if (debug) android.util.Log.d("LineupPlayer", "Subtitle update skipped")
+        }
+    }
+
     private val progress =
         object : Runnable {
             override fun run() {
@@ -164,12 +235,13 @@ internal class Media3Engine(
                         listener.failure(unsupported)
                         return
                     }
+                    subtitleTracksChanged(value)
                     publishSessionClock()
                     listener.property("track-list", tracks.encode(value))
                 }
 
                 override fun onCues(cueGroup: CueGroup) {
-                    if (!closed) subtitles.setCues(cueGroup.cues)
+                    subtitleCuesChanged(cueGroup.cues)
                 }
 
                 override fun onVideoSizeChanged(size: VideoSize) {
@@ -246,9 +318,10 @@ internal class Media3Engine(
                         if (!closed) listener.sourceInitialization(revision, accepted)
                     }
                 }
-            },
+            }.apply { setSubtitleParserFactory(ssaParsers) },
             sessionClock,
         )
+        initialJoinSource = mediaSource as? InitialJoinMediaSource
         if (media.kind == LoadKind.plexSession) player.setMediaSource(mediaSource)
         else player.setMediaSource(mediaSource, milliseconds(media.startSeconds))
         player.playWhenReady = !media.paused
@@ -266,6 +339,7 @@ internal class Media3Engine(
     }
 
     override fun seek(seconds: Double, exact: Boolean) {
+        initialJoinSource?.cancelInitialJoin()
         sessionClock?.seeking()
         player.setSeekParameters(if (exact) SeekParameters.EXACT else SeekParameters.PREVIOUS_SYNC)
         player.seekTo(milliseconds(seconds))
@@ -305,21 +379,29 @@ internal class Media3Engine(
         sessionClock?.retire()
         sessionClock = null
         observer = null
+        lastCues = emptyList()
+        subtitleFormat = null
+        ssaParsers.clear()
         handler.removeCallbacks(progress)
         http?.setDefaultRequestProperties(emptyMap())
         http = null
         val closingNetwork = client
         client = null
         if (firstAttempt) {
+            releasingPlayer = true
             try {
                 player.release()
                 releaseReturned = true
             } catch (_: Exception) {
                 // Retain cleanup ownership. A failed release call is not proof of teardown.
+            } finally {
+                releasingPlayer = false
             }
         }
         try {
             subtitles.setCues(emptyList())
+        } catch (_: Exception) {
+            if (debug) android.util.Log.d("LineupPlayer", "Subtitle clear skipped")
         } finally {
             keepScreenOn(false)
         }
@@ -330,6 +412,7 @@ internal class Media3Engine(
         // release can finish just afterward. Wait for the actual playback thread
         // even after that deadline, and acknowledge only once it has terminated.
         // A later retry observes the same thread; it never calls release() again.
+        val timedOutThisAttempt = firstAttempt && releaseTimedOut
         val returned = releaseReturned
         cleanupExecutor.execute {
             val decoderSuccess =
@@ -368,8 +451,12 @@ internal class Media3Engine(
                 HlsMediaSource.Factory(source).apply {
                     if (clock != null) setExtractorFactory(SessionHlsExtractors(clock))
                 }.createMediaSource(MediaItem.fromUri(media.uri))
-            else ProgressiveMediaSource.Factory(source, extractors)
-                .createMediaSource(MediaItem.fromUri(media.uri))
+            else InitialJoinMediaSource(
+                ProgressiveMediaSource.Factory(
+                    DataSource.Factory { BufferedProgressiveDataSource(source.createDataSource()) },
+                    extractors,
+                ).createMediaSource(MediaItem.fromUri(media.uri)),
+            )
 
         private val cleanupExecutor =
             java.util.concurrent.Executors.newSingleThreadExecutor { task ->

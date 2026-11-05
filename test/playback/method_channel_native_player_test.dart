@@ -5,8 +5,8 @@
 
 import 'dart:async';
 
-import 'package:flutter/foundation.dart';
 import 'package:flutter/services.dart';
+import 'package:flutter/foundation.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:lineup_desktop/playback/method_channel_native_player.dart';
 import 'package:lineup_desktop/playback/native_player.dart';
@@ -17,6 +17,375 @@ void main() {
   const channel = MethodChannel('lineup/native_player');
   final messenger =
       TestDefaultBinaryMessengerBinding.instance.defaultBinaryMessenger;
+
+  group('subtitle presentation and ephemeral cues', () {
+    late MethodChannelNativePlayer player;
+    final calls = <MethodCall>[];
+    setUp(() async {
+      calls.clear();
+      messenger.setMockMethodCallHandler(channel, (call) async {
+        calls.add(call);
+        return null;
+      });
+      player = MethodChannelNativePlayer();
+      await player.initialize();
+      addTearDown(() async {
+        await player.dispose();
+        messenger.setMockMethodCallHandler(channel, null);
+      });
+    });
+    Future<void> beginLoad() async {
+      final load = player.load(Uri.parse('file:///subtitle-fixture.mkv'));
+      await pumpEventQueue(times: 2);
+      final id = calls.lastWhere((c) => c.method == 'load').arguments['loadId'];
+      await _sendNativeEvent(messenger, {
+        'type': 'state',
+        'state': 'playing',
+        'loadId': id,
+      });
+      await load;
+    }
+
+    Future<void> cues(Object? value, {int? loadId}) =>
+        _sendNativeEvent(messenger, {
+          'type': 'property',
+          'name': 'subtitle-cues',
+          'loadId':
+              loadId ??
+              calls.lastWhere((c) => c.method == 'load').arguments['loadId'],
+          'value': value,
+        });
+    List<Object> cue(String text) => [
+      {
+        'align': 2,
+        'lines': [
+          [
+            {'text': text, 'italic': true, 'bold': true, 'underline': true},
+          ],
+        ],
+      },
+    ];
+
+    test(
+      'latest bounded pending cue reconciles only after selected observation',
+      () async {
+        await beginLoad();
+        final loadId = calls
+            .lastWhere((c) => c.method == 'load')
+            .arguments['loadId'];
+        Future<void> tracks(bool selected) => _sendNativeEvent(messenger, {
+          'type': 'property',
+          'loadId': loadId,
+          'name': 'track-list',
+          'value': [
+            {'id': 1, 'type': 'sub', 'selected': selected},
+          ],
+        });
+        await tracks(false);
+        await cues(cue('fixture replaced'));
+        await cues(cue('é' * 2048));
+        await cues(
+          cue('é' * 2049),
+        ); // malformed must not replace the bounded latest
+        expect(player.subtitleCues.value.isEmpty, isTrue);
+        await tracks(true);
+        expect(
+          player.subtitleCues.value.cues.single.lines.single.single.text,
+          'é' * 2048,
+        );
+        await tracks(false);
+        await tracks(true);
+        expect(player.subtitleCues.value.isEmpty, isTrue);
+      },
+    );
+    test(
+      'Off rejection replays latest cue received while command was pending',
+      () async {
+        await beginLoad();
+        final loadId = calls
+            .lastWhere((c) => c.method == 'load')
+            .arguments['loadId'];
+        await _sendNativeEvent(messenger, {
+          'type': 'property',
+          'loadId': loadId,
+          'name': 'track-list',
+          'value': [
+            {'id': 1, 'type': 'sub', 'selected': true},
+          ],
+        });
+        final off = player.selectTrack(PlayerTrackType.subtitle, null);
+        final rejected = expectLater(off, throwsA(isA<PlayerUnavailable>()));
+        await pumpEventQueue(times: 2);
+        final request = calls.last;
+        await cues(cue('fixture while pending'));
+        expect(player.subtitleCues.value.isEmpty, isTrue);
+        await _sendNativeEvent(messenger, {
+          'type': 'trackResult',
+          'loadId': loadId,
+          'requestId': request.arguments['requestId'],
+          'success': false,
+        });
+        await rejected;
+        expect(
+          player.subtitleCues.value.cues.single.lines.single.single.text,
+          'fixture while pending',
+        );
+      },
+    );
+    test(
+      'typed method payload, bounds, errors, and ordering during pending stop',
+      () async {
+        await beginLoad();
+        final stop = player.stop();
+        await pumpEventQueue(times: 2);
+        final presentation = player.setSubtitlePresentation(
+          scale: 1.5,
+          imageRaise: .1,
+          lineupDrawsStyled: true,
+        );
+        final load = player.load(Uri.parse('file:///subtitle-fixture.mkv'));
+        await presentation;
+        final sent = calls.last;
+        expect(sent.method, 'setSubtitlePresentation');
+        expect(sent.arguments, {
+          'scale': 1.5,
+          'imageRaise': .1,
+          'lineupDrawsStyled': true,
+        });
+        expect(calls.where((c) => c.method == 'load'), hasLength(1));
+        await _sendNativeEvent(messenger, {
+          'type': 'stopResult',
+          'stopId': calls
+              .lastWhere((c) => c.method == 'stop')
+              .arguments['stopId'],
+          'success': true,
+        });
+        await stop;
+        await pumpEventQueue(times: 2);
+        expect(calls.last.method, 'load');
+        await _sendNativeEvent(messenger, {
+          'type': 'state',
+          'state': 'playing',
+          'loadId': calls.last.arguments['loadId'],
+        });
+        await load;
+        for (final bad in [double.nan, double.infinity, .24, 4.01]) {
+          await expectLater(
+            player.setSubtitlePresentation(
+              scale: bad,
+              imageRaise: 0,
+              lineupDrawsStyled: false,
+            ),
+            throwsA(
+              isA<PlayerUnavailable>().having(
+                (e) => e.failureCode,
+                'code',
+                'invalid_argument',
+              ),
+            ),
+          );
+        }
+        for (final bad in [double.nan, double.infinity, -.01, .251]) {
+          await expectLater(
+            player.setSubtitlePresentation(
+              scale: 1,
+              imageRaise: bad,
+              lineupDrawsStyled: false,
+            ),
+            throwsA(isA<PlayerUnavailable>()),
+          );
+        }
+        for (final code in [
+          'invalid_argument',
+          'not_initialized',
+          'native_command_error',
+        ]) {
+          messenger.setMockMethodCallHandler(channel, (call) async {
+            if (call.method == 'setSubtitlePresentation') {
+              throw PlatformException(
+                code: code,
+                message: 'fixture private message',
+              );
+            }
+            return null;
+          });
+          await expectLater(
+            player.setSubtitlePresentation(
+              scale: 1,
+              imageRaise: 0,
+              lineupDrawsStyled: false,
+            ),
+            throwsA(
+              isA<PlayerUnavailable>().having(
+                (e) => e.failureCode,
+                'code',
+                code,
+              ),
+            ),
+          );
+          expect(player.status.state, PlayerState.playing);
+        }
+      },
+    );
+    test(
+      'cues bypass PlayerEvent; malformed payloads and all bounds are rejected',
+      () async {
+        await beginLoad();
+        var events = 0;
+        final sub = player.events.listen((_) => events++);
+        addTearDown(sub.cancel);
+        await cues(cue('fixture'));
+        final current = player.subtitleCues.value;
+        final segment = current.cues.single.lines.single.single;
+        expect(segment.italic && segment.bold && segment.underline, isTrue);
+        expect(current.cues.clear, throwsUnsupportedError);
+        expect(
+          () => current.cues.single.lines.single.clear(),
+          throwsUnsupportedError,
+        );
+        for (final invalid in [
+          null,
+          <String, Object?>{},
+          [null],
+          [
+            {'align': 0, 'lines': <Object?>[]},
+          ],
+          [
+            {'align': 10, 'lines': <Object?>[]},
+          ],
+          [
+            {'align': 2.0, 'lines': <Object?>[]},
+          ],
+          [
+            {'align': 2, 'lines': 'bad'},
+          ],
+          [
+            {
+              'align': 2,
+              'lines': [null],
+            },
+          ],
+          [
+            {
+              'align': 2,
+              'lines': [
+                [null],
+              ],
+            },
+          ],
+          [
+            {
+              'align': 2,
+              'lines': [
+                [
+                  {'text': 1},
+                ],
+              ],
+            },
+          ],
+          for (final flag in ['italic', 'bold', 'underline'])
+            [
+              {
+                'align': 2,
+                'lines': [
+                  [
+                    {'text': 'fixture', flag: null},
+                  ],
+                ],
+              },
+            ],
+          List.filled(9, cue('x').single),
+          [
+            {'align': 2, 'lines': List.filled(9, <Object?>[])},
+          ],
+          [
+            {
+              'align': 2,
+              'lines': [
+                List.filled(33, {'text': ''}),
+              ],
+            },
+          ],
+          cue('x' * 4097),
+          cue('é' * 2049),
+        ]) {
+          await cues(invalid);
+          expect(identical(player.subtitleCues.value, current), isTrue);
+        }
+        await cues(
+          List.filled(8, {
+            'align': 9,
+            'lines': List.filled(8, List.filled(32, {'text': 'é'})),
+          }),
+        );
+        expect(
+          player.subtitleCues.value.cues,
+          hasLength(8),
+        ); // exactly 4096 UTF-8 bytes
+        expect(events, 0);
+        await cues(cue('é' * 2048));
+        expect(player.subtitleCues.value.cues, hasLength(1));
+        await cues([]);
+        expect(player.subtitleCues.value.isEmpty, isTrue);
+      },
+    );
+    test('clears on stale rejection, track off, load, terminal states, stop and dispose', () async {
+      await beginLoad();
+      await cues(cue('fixture'));
+      await cues(cue('stale fixture'), loadId: -1);
+      expect(player.subtitleCues.value.isEmpty, isTrue);
+      await cues(cue('fixture'));
+      await _sendNativeEvent(messenger, {
+        'type': 'property',
+        'name': 'track-list',
+        'loadId': calls
+            .lastWhere((c) => c.method == 'load')
+            .arguments['loadId'],
+        'value': [],
+      });
+      expect(player.subtitleCues.value.isEmpty, isTrue);
+      for (final state in ['ended', 'error']) {
+        await beginLoad();
+        await cues(cue('fixture'));
+        await _sendNativeEvent(messenger, {
+          'type': 'state',
+          'state': state,
+          'loadId': calls
+              .lastWhere((c) => c.method == 'load')
+              .arguments['loadId'],
+        });
+        expect(player.subtitleCues.value.isEmpty, isTrue);
+        await cues(cue('late fixture'));
+        expect(player.subtitleCues.value.isEmpty, isTrue);
+      }
+      await beginLoad();
+      await cues(cue('fixture'));
+      final load = player.load(Uri.parse('file:///replacement-fixture.mkv'));
+      expect(player.subtitleCues.value.isEmpty, isTrue);
+      await pumpEventQueue(times: 2);
+      await _sendNativeEvent(messenger, {
+        'type': 'state',
+        'state': 'playing',
+        'loadId': calls.last.arguments['loadId'],
+      });
+      await load;
+      await cues(cue('fixture'));
+      final stop = player.stop();
+      expect(player.subtitleCues.value.isEmpty, isTrue);
+      await pumpEventQueue(times: 2);
+      await _sendNativeEvent(messenger, {
+        'type': 'stopResult',
+        'success': true,
+        'stopId': calls.last.arguments['stopId'],
+      });
+      await stop;
+      await beginLoad();
+      await cues(cue('fixture'));
+      final dispose = player.dispose();
+      expect(player.subtitleCues.value.isEmpty, isTrue);
+      await dispose;
+    });
+  });
 
   group('capability signal', () {
     tearDown(() => debugDefaultTargetPlatformOverride = null);
@@ -588,6 +957,7 @@ void main() {
       await Future<void>.delayed(Duration.zero);
       final loadId = calls.last.arguments!['loadId']! as int;
       expect(calls.last.arguments!['plexToken'], 'test-token');
+      expect(calls.last.arguments!['kind'], 'direct');
       expect(calls.last.arguments!['startSeconds'], 18.250001);
       expect(
         calls.last.arguments!['uri'],
@@ -1484,6 +1854,385 @@ void main() {
     },
   );
 
+  test(
+    'session loads validate before sending and serialize their kind',
+    () async {
+      debugDefaultTargetPlatformOverride = TargetPlatform.android;
+      addTearDown(() => debugDefaultTargetPlatformOverride = null);
+      final calls = <MethodCall>[];
+      messenger.setMockMethodCallHandler(channel, (call) async {
+        calls.add(call);
+        return null;
+      });
+      addTearDown(() => messenger.setMockMethodCallHandler(channel, null));
+      final player = MethodChannelNativePlayer();
+      addTearDown(player.dispose);
+      await player.initialize();
+      for (final uri in [
+        'http://media.example/index.m3u8',
+        'https:opaque',
+        'https://user@media.example/index.m3u8',
+        'https://media.example/index.m3u8?X-PLEX-TOKEN=synthetic',
+        'https://media.example/index.m3u8?%58-Plex-Token=synthetic',
+      ]) {
+        await expectLater(
+          player.load(Uri.parse(uri), kind: LoadKind.plexSession),
+          throwsA(
+            isA<PlayerUnavailable>().having(
+              (e) => e.failureCode,
+              'code',
+              'invalid_argument',
+            ),
+          ),
+        );
+      }
+      await expectLater(
+        player.load(
+          Uri.parse('https://media.example/index.m3u8'),
+          kind: LoadKind.plexSession,
+          plexToken: 'synthetic',
+          sessionPlaylist: const NativeSessionPlaylist(
+            text: '#EXTM3U\n',
+            offsetMicroseconds: 0,
+          ),
+        ),
+        throwsA(
+          isA<PlayerUnavailable>().having(
+            (e) => e.failureCode,
+            'code',
+            'invalid_argument',
+          ),
+        ),
+      );
+      for (final position in [Duration.zero, const Duration(seconds: 600)]) {
+        await expectLater(
+          player.load(
+            Uri.parse('https://media.example/index.m3u8'),
+            kind: LoadKind.plexSession,
+            startPosition: position,
+            sessionPlaylist: const NativeSessionPlaylist(
+              text: '#EXTM3U\n',
+              offsetMicroseconds: 0,
+            ),
+          ),
+          throwsA(
+            isA<PlayerUnavailable>().having(
+              (e) => e.failureCode,
+              'code',
+              'invalid_argument',
+            ),
+          ),
+        );
+      }
+      expect(calls.where((call) => call.method == 'load'), isEmpty);
+      final load = player.load(
+        Uri.parse('https://media.example/index.m3u8'),
+        kind: LoadKind.plexSession,
+      );
+      await pumpEventQueue();
+      final call = calls.last;
+      expect(call.arguments['kind'], 'plexSession');
+      expect(call.arguments.containsKey('startSeconds'), isFalse);
+      expect(call.arguments['plexToken'], isNull);
+      expect(call.arguments.containsKey('sessionPlaylist'), isFalse);
+      await _sendNativeEvent(messenger, {
+        'type': 'state',
+        'state': 'playing',
+        'loadId': call.arguments['loadId'],
+      });
+      await load;
+    },
+  );
+
+  test(
+    'session playlist transfers raw text and signed-64-bit offset',
+    () async {
+      final calls = <MethodCall>[];
+      messenger.setMockMethodCallHandler(channel, (call) async {
+        calls.add(call);
+        return null;
+      });
+      addTearDown(() => messenger.setMockMethodCallHandler(channel, null));
+      final player = MethodChannelNativePlayer();
+      addTearDown(player.dispose);
+      await player.initialize();
+      for (final playlist in [
+        const NativeSessionPlaylist(text: '#EXTM3U\n', offsetMicroseconds: 0),
+        const NativeSessionPlaylist(
+          text: '#EXTM3U\n# Public variant: é\n',
+          offsetMicroseconds: 21000000,
+        ),
+        NativeSessionPlaylist(
+          text: 'é' * (1024 * 512),
+          offsetMicroseconds: 0x7fffffffffffffff,
+        ),
+      ]) {
+        final load = player.load(
+          Uri.parse('https://media.example/index.m3u8'),
+          kind: LoadKind.plexSession,
+          sessionPlaylist: playlist,
+        );
+        await pumpEventQueue();
+        final call = calls.last;
+        expect(call.method, 'load');
+        expect(call.arguments['sessionPlaylist'], {
+          'text': playlist.text,
+          'offsetMicroseconds': playlist.offsetMicroseconds,
+        });
+        expect(call.arguments['kind'], 'plexSession');
+        expect(call.arguments['plexToken'], isNull);
+        expect(call.arguments.containsKey('startSeconds'), isFalse);
+        await _sendNativeEvent(messenger, {
+          'type': 'state',
+          'state': 'playing',
+          'loadId': call.arguments['loadId'],
+        });
+        await load;
+      }
+    },
+  );
+
+  test(
+    'session playlist rejects invalid bounds and direct loads before dispatch',
+    () async {
+      final calls = <MethodCall>[];
+      messenger.setMockMethodCallHandler(channel, (call) async {
+        calls.add(call);
+        return null;
+      });
+      addTearDown(() => messenger.setMockMethodCallHandler(channel, null));
+      final player = MethodChannelNativePlayer();
+      addTearDown(player.dispose);
+      await player.initialize();
+      for (final playlist in [
+        const NativeSessionPlaylist(text: '#EXTM3U\n', offsetMicroseconds: -1),
+        NativeSessionPlaylist(
+          text: 'a' * (1024 * 1024 + 1),
+          offsetMicroseconds: 0,
+        ),
+        NativeSessionPlaylist(
+          text: 'é' * (1024 * 512 + 1),
+          offsetMicroseconds: 0,
+        ),
+      ]) {
+        await expectLater(
+          player.load(
+            Uri.parse('https://media.example/index.m3u8'),
+            kind: LoadKind.plexSession,
+            sessionPlaylist: playlist,
+          ),
+          throwsA(
+            isA<PlayerUnavailable>().having(
+              (error) => error.failureCode,
+              'failureCode',
+              'invalid_argument',
+            ),
+          ),
+        );
+      }
+      await expectLater(
+        player.load(
+          Uri.parse('https://media.example/direct.mp4'),
+          sessionPlaylist: const NativeSessionPlaylist(
+            text: '#EXTM3U\n',
+            offsetMicroseconds: 0,
+          ),
+        ),
+        throwsA(
+          isA<PlayerUnavailable>().having(
+            (error) => error.failureCode,
+            'failureCode',
+            'invalid_argument',
+          ),
+        ),
+      );
+      expect(calls.where((call) => call.method == 'load'), isEmpty);
+    },
+  );
+
+  test(
+    'demuxer start time retains finite signed facts and fences stale loads',
+    () async {
+      final calls = <MethodCall>[];
+      final disposeReply = Completer<void>();
+      messenger.setMockMethodCallHandler(channel, (call) {
+        calls.add(call);
+        return call.method == 'dispose' ? disposeReply.future : null;
+      });
+      addTearDown(() => messenger.setMockMethodCallHandler(channel, null));
+      final player = MethodChannelNativePlayer();
+      addTearDown(player.dispose);
+      await player.initialize();
+      final first = player.load(Uri.parse('file:///first.mp4'), generation: 1);
+      await pumpEventQueue();
+      final firstId = calls.last.arguments['loadId'];
+      await _sendNativeEvent(messenger, {
+        'type': 'state',
+        'loadId': firstId,
+        'state': 'playing',
+      });
+      await first;
+      Future<void> demuxer(Object? value, {Object? loadId}) =>
+          _sendNativeEvent(messenger, {
+            'type': 'property',
+            'loadId': loadId ?? firstId,
+            'name': 'demuxer-start-time',
+            'value': value,
+          });
+      for (final value in [0, -2.75, 10.125]) {
+        await demuxer(value);
+        expect(player.telemetry.demuxerStartTime, value.toDouble());
+      }
+      await _sendNativeEvent(messenger, {
+        'type': 'property',
+        'loadId': firstId,
+        'name': 'video-codec',
+        'value': 'h264',
+      });
+      expect(player.telemetry.demuxerStartTime, 10.125);
+      for (final value in [
+        null,
+        double.nan,
+        double.infinity,
+        -double.infinity,
+        '10',
+        false,
+      ]) {
+        await demuxer(12.5);
+        await demuxer(value);
+        expect(player.telemetry.demuxerStartTime, isNull);
+      }
+      await demuxer(7.25);
+      final replacement = player.load(
+        Uri.parse('file:///second.mp4'),
+        generation: 2,
+      );
+      await pumpEventQueue();
+      final secondId = calls.last.arguments['loadId'];
+      expect(player.telemetry.demuxerStartTime, isNull);
+      await demuxer(999);
+      expect(player.telemetry.demuxerStartTime, isNull);
+      await demuxer(-0.25, loadId: secondId);
+      await _sendNativeEvent(messenger, {
+        'type': 'state',
+        'loadId': secondId,
+        'state': 'playing',
+      });
+      await replacement;
+      final disposing = player.dispose();
+      await pumpEventQueue();
+      await demuxer(999, loadId: secondId);
+      expect(player.telemetry.demuxerStartTime, -0.25);
+      disposeReply.complete();
+      await disposing;
+      expect(player.telemetry.demuxerStartTime, isNull);
+      expect(
+        const PlayerTelemetry(demuxerStartTime: 0),
+        isNot(const PlayerTelemetry()),
+      );
+    },
+  );
+
+  test('desktop capabilities never invoke the native method', () async {
+    debugDefaultTargetPlatformOverride = TargetPlatform.macOS;
+    addTearDown(() => debugDefaultTargetPlatformOverride = null);
+    final calls = <MethodCall>[];
+    messenger.setMockMethodCallHandler(channel, (call) async {
+      calls.add(call);
+      return null;
+    });
+    addTearDown(() => messenger.setMockMethodCallHandler(channel, null));
+    final player = MethodChannelNativePlayer();
+    expect(await player.mediaCapabilities(), same(MediaCapabilities.desktop));
+    expect(calls, isEmpty);
+    await player.dispose();
+  });
+
+  test(
+    'Android capabilities parse and cache one bounded reply for a second',
+    () async {
+      debugDefaultTargetPlatformOverride = TargetPlatform.android;
+      addTearDown(() => debugDefaultTargetPlatformOverride = null);
+      var queries = 0;
+      messenger.setMockMethodCallHandler(channel, (call) async {
+        if (call.method != 'mediaCapabilities') return null;
+        queries++;
+        return {
+          'videoDecoders': [
+            {'codec': 'h264', 'maxWidth': 1920, 'maxHeight': 1080},
+          ],
+          'audioDecoders': ['aac'],
+          'audioPassthrough': <String>[],
+          'containers': ['mp4'],
+        };
+      });
+      addTearDown(() => messenger.setMockMethodCallHandler(channel, null));
+      final player = MethodChannelNativePlayer();
+      final capabilities = await player.mediaCapabilities();
+      expect(capabilities.known, isTrue);
+      expect(capabilities.videoDecoders.single.codec, 'h264');
+      expect(await player.mediaCapabilities(), same(capabilities));
+      expect(queries, 1);
+      await Future<void>.delayed(const Duration(milliseconds: 1050));
+      await player.mediaCapabilities();
+      expect(queries, 2);
+      await player.dispose();
+    },
+  );
+
+  test(
+    'failed capabilities and a reply retired by dispose remain unknown',
+    () async {
+      debugDefaultTargetPlatformOverride = TargetPlatform.android;
+      addTearDown(() => debugDefaultTargetPlatformOverride = null);
+      final reply = Completer<Object?>();
+      var fail = true;
+      messenger.setMockMethodCallHandler(channel, (call) async {
+        if (call.method != 'mediaCapabilities') return null;
+        if (fail) throw PlatformException(code: 'unavailable');
+        return reply.future;
+      });
+      addTearDown(() => messenger.setMockMethodCallHandler(channel, null));
+      final player = MethodChannelNativePlayer();
+      expect(await player.mediaCapabilities(), same(MediaCapabilities.unknown));
+      await player.dispose();
+      fail = false;
+      final pending = player.mediaCapabilities();
+      await pumpEventQueue();
+      await player.dispose();
+      reply.complete({
+        'videoDecoders': [
+          {'codec': 'h264'},
+        ],
+        'audioDecoders': ['aac'],
+        'audioPassthrough': <String>[],
+        'containers': ['mp4'],
+      });
+      expect(await pending, same(MediaCapabilities.unknown));
+    },
+  );
+
+  for (final reply in [
+    null,
+    {'videoDecoders': 'bad'},
+    {
+      'videoDecoders': List.generate(65, (_) => {'codec': 'h264'}),
+      'audioDecoders': ['aac'],
+      'audioPassthrough': <String>[],
+      'containers': ['mp4'],
+    },
+  ]) {
+    test('malformed capability reply forces unknown: $reply', () async {
+      debugDefaultTargetPlatformOverride = TargetPlatform.android;
+      addTearDown(() => debugDefaultTargetPlatformOverride = null);
+      messenger.setMockMethodCallHandler(channel, (_) async => reply);
+      addTearDown(() => messenger.setMockMethodCallHandler(channel, null));
+      final player = MethodChannelNativePlayer();
+      expect(await player.mediaCapabilities(), same(MediaCapabilities.unknown));
+      await player.dispose();
+    });
+  }
+
   test('authenticated loads require an HTTPS authority in Dart', () async {
     final calls = <MethodCall>[];
     messenger.setMockMethodCallHandler(channel, (call) async {
@@ -2087,6 +2836,12 @@ void main() {
       ],
     });
 
+    await _sendNativeEvent(messenger, {
+      'type': 'property',
+      'loadId': loadId,
+      'name': 'demuxer-start-time',
+      'value': 10.125,
+    });
     var stopSettled = false;
     final stop = player.stop().whenComplete(() => stopSettled = true);
     await Future<void>.delayed(Duration.zero);
@@ -2095,6 +2850,7 @@ void main() {
     expect(stopSettled, isFalse);
     expect(player.status.state, PlayerState.loading);
     expect(player.telemetry.videoCodec, 'h264');
+    expect(player.telemetry.demuxerStartTime, 10.125);
     await _sendNativeEvent(messenger, {
       'type': 'property',
       'loadId': loadId,
@@ -2107,6 +2863,13 @@ void main() {
       'state': 'playing',
     });
     expect(player.telemetry.videoCodec, 'h264');
+    await _sendNativeEvent(messenger, {
+      'type': 'property',
+      'loadId': loadId,
+      'name': 'demuxer-start-time',
+      'value': 999,
+    });
+    expect(player.telemetry.demuxerStartTime, 10.125);
 
     stopReply.complete();
     await _sendNativeEvent(messenger, {
@@ -2124,6 +2887,7 @@ void main() {
     expect(player.position, Duration.zero);
     expect(player.duration, Duration.zero);
     expect(player.telemetry.videoCodec, isNull);
+    expect(player.telemetry.demuxerStartTime, isNull);
     expect(player.tracks, isEmpty);
   });
 

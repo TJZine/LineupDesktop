@@ -279,6 +279,19 @@ void main() {
           .singleWhere((s) => s.title == 'Fonts and engine notices')
           .load();
       expect(await notices.first.read!(), contains('SIL OPEN FONT LICENSE'));
+      for (final name in [
+        'JetBrains Mono',
+        'Source Serif 4',
+        'Courier Prime',
+        'Comic Neue',
+        'Dancing Script',
+        'Alegreya Sans SC',
+      ]) {
+        expect(
+          await notices.singleWhere((n) => n.title == name).read!(),
+          contains('SIL OPEN FONT LICENSE'),
+        );
+      }
       expect(
         await notices.last.read!(),
         contains('Windows DirectComposition patch is not applied'),

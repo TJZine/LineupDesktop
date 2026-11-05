@@ -87,6 +87,11 @@ internal class NativePlayerController(
                             if (arguments != null) throw ProtocolError("invalid_argument")
                             reply.success(mediaCapabilities())
                         }
+
+                        "setSubtitlePresentation" -> {
+                            host.subtitlePresentation(PlayerProtocol.subtitlePresentation(arguments))
+                            reply.success()
+                        }
                         "setVideoRect" -> {
                             host.rect(PlayerProtocol.rect(arguments))
                             reply.success()
@@ -431,6 +436,7 @@ internal class NativePlayerController(
             reply.success()
             return
         }
+        host.subtitlePresentation(null)
         disposing = true
         initialized = false
         generation++
@@ -477,6 +483,7 @@ internal class NativePlayerController(
     }
 
     fun close() {
+        host.subtitlePresentation(null)
         initialized = false
         generation++
         purgeCommands()
@@ -518,6 +525,7 @@ internal class NativePlayerController(
                 "selectTrack",
                 "setVolume",
                 "setVideoRect",
+                "setSubtitlePresentation",
                 "setFullscreen",
                 "setDisplayMatching",
             )

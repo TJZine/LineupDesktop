@@ -1,8 +1,19 @@
 import 'dart:async';
 
+import 'package:flutter/foundation.dart';
+
 import 'native_player.dart';
 
 class UnsupportedNativePlayer implements NativePlayer {
+  @override
+  final subtitleCues = ValueNotifier<SubtitleCues>(const SubtitleCues.empty());
+  @override
+  Future<void> setSubtitlePresentation({
+    required double scale,
+    required double imageRaise,
+    required bool lineupDrawsStyled,
+  }) async {}
+
   UnsupportedNativePlayer({required this.message});
 
   static const platformMessage = 'Playback is not implemented on this platform';
@@ -49,6 +60,10 @@ class UnsupportedNativePlayer implements NativePlayer {
   Stream<bool> get fullscreenChanges => const Stream.empty();
 
   @override
+  Future<MediaCapabilities> mediaCapabilities() async =>
+      MediaCapabilities.unknown;
+
+  @override
   Future<void> initialize() async {}
 
   Never _unavailable() => throw PlayerUnavailable(platformFailureMessage);
@@ -60,6 +75,8 @@ class UnsupportedNativePlayer implements NativePlayer {
     int? generation,
     bool startPaused = false,
     Duration? startPosition,
+    LoadKind kind = LoadKind.direct,
+    NativeSessionPlaylist? sessionPlaylist,
   }) async => _unavailable();
 
   @override

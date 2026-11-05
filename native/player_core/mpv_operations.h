@@ -2,6 +2,7 @@
 #define LINEUP_PLAYER_CORE_MPV_OPERATIONS_H_
 
 #include <mpv/client.h>
+#include <mpv/stream_cb.h>
 
 namespace lineup::player {
 
@@ -9,6 +10,7 @@ namespace lineup::player {
 // operations; production uses LibmpvOperations(). The members have no default
 // so that a fake set does not require libmpv at link time.
 struct MpvOperations {
+  decltype(&::mpv_stream_cb_add_ro) stream_cb_add_ro = nullptr;
   decltype(&::mpv_create) create = nullptr;
   decltype(&::mpv_initialize) initialize = nullptr;
   decltype(&::mpv_set_option) set_option = nullptr;

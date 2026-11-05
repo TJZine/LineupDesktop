@@ -21,6 +21,7 @@ namespace {
 constexpr size_t kMaxQueuedEvents = 256;
 constexpr size_t kMaxQueuedCommands = 64;
 constexpr size_t kMaxQueuedCommandBytes = 128 * 1024;
+constexpr size_t kMaxQueuedPlaylistBytes = 2 * 1024 * 1024;
 constexpr size_t kMaxPlexTokenBytes = 8 * 1024;
 constexpr size_t kMaxMetadataStringBytes = 4096;
 
@@ -35,6 +36,9 @@ enum PropertyId : uint64_t {
   kHardwareDecoder,
   kVideoParameters,
   kVideoTargetParameters,
+  kDemuxerStartTime,
+  kSubtitleCodec,
+  kSubtitleText,
 };
 
 CallResult QueueFullError() {
@@ -68,6 +72,55 @@ bool IsHttpsUri(std::string_view uri) {
   const size_t authority_start = separator + 3;
   const size_t authority_end = uri.find_first_of("/?#", authority_start);
   return authority_start < uri.size() && authority_end != authority_start;
+}
+
+bool IsSafeSessionUri(std::string_view uri) {
+  if (!IsHttpsUri(uri)) return false;
+  const size_t authority_start = uri.find("://") + 3;
+  const size_t authority_end = uri.find_first_of("/?#", authority_start);
+  const auto authority = uri.substr(authority_start, authority_end - authority_start);
+  if (authority.empty() || authority.find('@') != std::string_view::npos) return false;
+  const auto host_end = authority.front() == '[' ? authority.find(']') + 1
+                                                : authority.find(':');
+  const auto host = authority.substr(0, host_end);
+  if (host.empty() || host == "[]" ||
+      (authority.front() == '[' && host_end <= 2)) return false;
+  for (const unsigned char byte : uri) {
+    if (byte <= 0x20 || byte == 0x7f || byte == '\\') return false;
+  }
+  const size_t query = uri.find('?');
+  if (query == std::string_view::npos) return true;
+  const size_t fragment = uri.find('#');
+  if (fragment != std::string_view::npos && fragment < query) return true;
+  auto remaining = uri.substr(query + 1, fragment - query - 1);
+  while (!remaining.empty()) {
+    const auto end = remaining.find('&');
+    const auto parameter = remaining.substr(0, end);
+    const auto raw_key = parameter.substr(0, parameter.find('='));
+    std::string key;
+    for (size_t i = 0; i < raw_key.size(); ++i) {
+      if (raw_key[i] == '%') {
+        if (i + 2 >= raw_key.size()) return false;
+        const auto hex = [](char byte) -> int {
+          if (byte >= '0' && byte <= '9') return byte - '0';
+          if (byte >= 'a' && byte <= 'f') return byte - 'a' + 10;
+          if (byte >= 'A' && byte <= 'F') return byte - 'A' + 10;
+          return -1;
+        };
+        const int high = hex(raw_key[i + 1]);
+        const int low = hex(raw_key[i + 2]);
+        if (high < 0 || low < 0) return false;
+        key += static_cast<char>(high * 16 + low);
+        i += 2;
+      } else {
+        key += raw_key[i];
+      }
+    }
+    if (AsciiLower(key) == "x-plex-token") return false;
+    if (end == std::string_view::npos) break;
+    remaining.remove_prefix(end + 1);
+  }
+  return true;
 }
 
 bool IsValidPlexToken(std::string_view value) {
@@ -316,6 +369,22 @@ void WriteFirstOpenProbe(ProbeModule module, ProbeCause cause,
   std::cerr << line.str();
 }
 
+bool PrivateText(std::string_view text) {
+  return text.find("://") != std::string_view::npos || text.find("#EXTM3U") != std::string_view::npos;
+}
+void RedactPrivateText(Value& value) {
+  if (auto* text = std::get_if<std::string>(&value)) {
+    if (PrivateText(*text)) {
+      SecureWipe(text->data(), text->size());
+      *text = "<redacted>";
+    }
+  } else if (auto* list = std::get_if<ValueList>(&value)) {
+    for (auto& item : *list) RedactPrivateText(item);
+  } else if (auto* map = std::get_if<ValueMap>(&value)) {
+    for (auto& item : *map) RedactPrivateText(item.second);
+  }
+}
+
 bool FirstOpenProbeEnabled() {
 #ifdef _WIN32
   char* value = nullptr;
@@ -338,6 +407,17 @@ class TokenArgumentScrubber {
   ~TokenArgumentScrubber() {
     if (!arguments_) {
       return;
+    }
+    const auto playlist = arguments_->find("sessionPlaylist");
+    if (playlist != arguments_->end()) {
+      if (auto* map = std::get_if<ValueMap>(&playlist->second)) {
+        auto text = map->find("text");
+        if (text != map->end()) {
+          if (auto* bytes = std::get_if<std::string>(&text->second)) {
+            SecureWipe(bytes->data(), bytes->size());
+          }
+        }
+      }
     }
     const auto token = arguments_->find("plexToken");
     if (token == arguments_->end()) {
@@ -461,6 +541,25 @@ CallResult PlayerCore::Initialize() {
           name, value, mpv_operations_.set_option_string(mpv_, name, value));
     }
   }
+  const std::pair<const char*, const char*> subtitle_options[] = {
+      {"sub-color", "#00FFFFFF"},
+      {"sub-outline-size", "0"},
+      {"sub-shadow-offset", "0"},
+      {"sub-back-color", "#00000000"},
+      {"sub-border-style", "outline-and-shadow"},
+      {"sub-ass-override", "scale"},
+  };
+  // Subtitle failures follow E3 even before initialization. Keep their status
+  // separate so one rejection cannot skip other subtitle/output options or
+  // prevent playback. Mandatory core/security/output failures remain fatal.
+  if (option_status >= 0) {
+    for (const auto& [name, value] : subtitle_options) {
+      if (mpv_operations_.set_option_string(mpv_, name, value) < 0) {
+        std::cerr << "[lineup-player] subtitle option " << name
+                  << " rejected" << std::endl;
+      }
+    }
+  }
   for (const auto& [name, value] : output.options) {
     if (option_status >= 0) {
       option_status =
@@ -482,6 +581,15 @@ CallResult PlayerCore::Initialize() {
   }
   std::cerr << "[lineup-player] libmpv initialized client-api="
             << mpv_operations_.client_api_version() << std::endl;
+  session_playlists_.Enable();
+  if (!mpv_operations_.stream_cb_add_ro ||
+      mpv_operations_.stream_cb_add_ro(mpv_, SessionPlaylistRegistry::kProtocol,
+                                      &session_playlists_, SessionPlaylistRegistry::Open) < 0) {
+    mpv_operations_.terminate_destroy(mpv_);
+    mpv_ = nullptr;
+    host_.CancelOutput();
+    return CallResult::Failure("initialize_failed", "The private playlist reader is unavailable.");
+  }
   mpv_operations_.request_log_messages(mpv_, "error");
 
   struct Observation {
@@ -492,6 +600,7 @@ CallResult PlayerCore::Initialize() {
   const Observation observations[] = {
       {kPause, "pause", MPV_FORMAT_FLAG},
       {kTimePosition, "time-pos", MPV_FORMAT_DOUBLE},
+      {kDemuxerStartTime, "demuxer-start-time", MPV_FORMAT_DOUBLE},
       {kDuration, "duration", MPV_FORMAT_DOUBLE},
       {kTrackList, "track-list", MPV_FORMAT_NODE},
       {kVideoFormat, "video-format", MPV_FORMAT_STRING},
@@ -500,10 +609,16 @@ CallResult PlayerCore::Initialize() {
       {kHardwareDecoder, "hwdec-current", MPV_FORMAT_STRING},
       {kVideoParameters, "video-params", MPV_FORMAT_NODE},
       {kVideoTargetParameters, "video-target-params", MPV_FORMAT_NODE},
+      {kSubtitleCodec, "current-tracks/sub/codec", MPV_FORMAT_STRING},
+      {kSubtitleText, "sub-text/ass", MPV_FORMAT_STRING},
   };
   for (const auto& observation : observations) {
     const int observe_status = mpv_operations_.observe_property(
         mpv_, observation.id, observation.name, observation.format);
+    if (observe_status < 0 && (observation.id == kSubtitleCodec || observation.id == kSubtitleText)) {
+      std::cerr << "[lineup-player] subtitle observation unavailable" << std::endl;
+      continue;
+    }
     if (observe_status < 0) {
       std::string error = std::string("libmpv property observation failed for ") +
                           observation.name + ": " +
@@ -550,6 +665,7 @@ void PlayerCore::BeginDispose() {
   generation_.fetch_add(1);
   accepting_commands_ = false;
   stopping_ = true;
+  session_playlists_.Disable();
 }
 
 void PlayerCore::ProcessWakeup(const EventSink& deliver) {
@@ -597,7 +713,9 @@ void PlayerCore::FinishDispose() {
   {
     std::lock_guard lock(command_mutex_);
     commands_.clear();
+    pending_subtitle_presentation_.reset();
     queued_command_bytes_ = 0;
+    queued_playlist_bytes_ = 0;
   }
   {
     std::lock_guard lock(event_mutex_);
@@ -605,6 +723,14 @@ void PlayerCore::FinishDispose() {
     wakeup_posted_ = false;
   }
   playback_.Reset();
+  session_clock_load_.reset();
+  session_clock_ready_ = false;
+  subtitle_presentation_ = {};
+  subtitle_codec_ = SubtitleCodec::none;
+  subtitle_text_.clear();
+  subtitle_has_cues_ = false;
+  subtitle_retired_load_.reset();
+  subtitle_property_values_.clear();
   first_open_probe_ = {};
   ResetSeekObservation();
 }
@@ -617,6 +743,19 @@ std::optional<CallResult> PlayerCore::HandleCommand(std::string_view method,
   if (!accepting_commands_) {
     return CallResult::Failure("not_initialized",
                                "The native player is not initialized.");
+  }
+  if (method == "setSubtitlePresentation") {
+    const auto scale = arguments ? AsNumber(Find(*arguments, "scale")) : std::nullopt;
+    const auto raise = arguments ? AsNumber(Find(*arguments, "imageRaise")) : std::nullopt;
+    const auto* styled = FindBool(arguments, "lineupDrawsStyled");
+    if (!scale || !raise || !styled || !std::isfinite(*scale) ||
+        !std::isfinite(*raise) || *scale < 0.25 || *scale > 4 ||
+        *raise < 0 || *raise > 0.25) {
+      return CallResult::Failure("invalid_argument", "A valid subtitle presentation is required.");
+    }
+    std::lock_guard lock(command_mutex_);
+    pending_subtitle_presentation_ = SubtitlePresentation{*scale, *raise, *styled};
+    return CallResult::Success();
   }
   if (method == "load") {
     return HandleLoad(arguments);
@@ -703,14 +842,27 @@ CallResult PlayerCore::HandleLoad(ValueMap* arguments) {
     return CallResult::Failure("invalid_argument",
                                "A bounded media URI is required.");
   }
+  if (UriScheme(*uri) == SessionPlaylistRegistry::kProtocol) {
+    return CallResult::Failure("invalid_argument", "Private playlist capabilities cannot be loaded directly.");
+  }
   if (!load_id || *load_id < 0) {
     return CallResult::Failure("invalid_argument",
                                "A non-negative integer loadId is required.");
   }
+  const auto* kind_value = Find(*arguments, "kind");
+  const auto* kind = FindString(arguments, "kind");
+  if (kind_value && (!kind || (*kind != "direct" && *kind != "plexSession"))) {
+    return CallResult::Failure("invalid_argument", "The load kind is invalid.");
+  }
+  const bool plex_session = kind && *kind == "plexSession";
   const auto* token_value = Find(*arguments, "plexToken");
   const bool token_supplied =
       token_value && !std::holds_alternative<std::monostate>(*token_value);
   const auto* plex_token = FindString(arguments, "plexToken");
+  if (plex_session && (token_supplied || Find(*arguments, "startSeconds") || Find(*arguments, "startPosition") ||
+                       !IsSafeSessionUri(*uri))) {
+    return CallResult::Failure("invalid_argument", "The Plex session load is invalid.");
+  }
   if (token_supplied &&
       (!plex_token || !IsValidPlexToken(*plex_token))) {
     return CallResult::Failure("invalid_argument", "The Plex token is invalid.");
@@ -720,7 +872,21 @@ CallResult PlayerCore::HandleLoad(ValueMap* arguments) {
         "insecure_media_uri",
         "Plex authentication requires an HTTPS media URI.");
   }
-  LoadCommand command{*load_id, *uri, {}};
+  const auto* playlist_value = Find(*arguments, "sessionPlaylist");
+  std::shared_ptr<SessionPlaylist> playlist;
+  if (plex_session) {
+    const auto* map = AsMap(playlist_value);
+    const auto* text = FindString(map, "text");
+    const auto offset = map ? AsInt(Find(*map, "offsetMicroseconds")) : std::nullopt;
+    if (!map || map->size() != 2 || !text || !offset ||
+        !(playlist = SessionPlaylist::Parse(*text, *uri, *offset))) {
+      return CallResult::Failure("invalid_argument", "The Plex session playlist is invalid.");
+    }
+  } else if (playlist_value) {
+    return CallResult::Failure("invalid_argument", "A session playlist requires a Plex session load.");
+  }
+  LoadCommand command{*load_id, *uri, {}, std::move(playlist)};
+  command.plex_session = plex_session;
   if (Find(*arguments, "startPaused")) {
     const auto* paused = FindBool(arguments, "startPaused");
     if (!paused) {
@@ -795,12 +961,16 @@ bool PlayerCore::QueueCommand(QueuedCommand command) {
       return 0;
     }
   }, command);
+  const auto* load = std::get_if<LoadCommand>(&command);
+  const size_t playlist_bytes = load && load->session_playlist ? load->session_playlist->byte_size() : 0;
+  if (playlist_bytes > kMaxQueuedPlaylistBytes - queued_playlist_bytes_) return false;
   if (!accepting_commands_ || commands_.size() >= kMaxQueuedCommands ||
       queued_command_bytes_ > kMaxQueuedCommandBytes ||
       command_bytes > kMaxQueuedCommandBytes - queued_command_bytes_) {
     return false;
   }
   queued_command_bytes_ += command_bytes;
+  queued_playlist_bytes_ += playlist_bytes;
   commands_.push_back(std::move(command));
   return true;
 }
@@ -812,17 +982,31 @@ void PlayerCore::RunCommand(QueuedCommand& command, uint64_t generation) {
     if constexpr (std::is_same_v<Payload, LoadCommand>) {
       if (first_open_diagnostics_) first_open_probe_ = {};
       ResetSeekObservation();
+      ClearSubtitleCues(generation, playback_.active_load());
+      subtitle_retired_load_.reset();
+      session_playlists_.Retire();
+      session_clock_load_.reset();
+      session_clock_ready_ = false;
+      std::string load_uri = payload.uri;
+      if (payload.session_playlist) {
+        auto opaque = session_playlists_.Activate(payload.session_playlist);
+        if (!opaque) {
+          QueueEvent(generation, FailureStateEvent("source_open_error", std::nullopt, payload.load_id, "The private playlist reader is unavailable."));
+          return;
+        }
+        load_uri = std::move(*opaque);
+      }
       int paused = payload.start_paused ? 1 : 0;
       status =
           mpv_operations_.set_property(mpv_, "pause", MPV_FORMAT_FLAG, &paused);
       if (status >= 0) {
-        if (payload.plex_header.empty() && !payload.start_seconds) {
+        if (!payload.plex_session && payload.plex_header.empty() && !payload.start_seconds) {
           const char* value[] = {"loadfile", payload.uri.c_str(), "replace",
                                  nullptr};
           status = mpv_operations_.command(mpv_, value);
         } else {
           char* command_name = const_cast<char*>("loadfile");
-          char* uri = const_cast<char*>(payload.uri.c_str());
+          char* uri = const_cast<char*>(load_uri.c_str());
           char* flags = const_cast<char*>("replace");
           mpv_node values[5]{};
           values[0].format = MPV_FORMAT_STRING;
@@ -836,14 +1020,22 @@ void PlayerCore::RunCommand(QueuedCommand& command, uint64_t generation) {
           values[4].format = MPV_FORMAT_NODE_MAP;
           // String per-file options share one map. Never append options or
           // authentication material to the media URI.
-          mpv_node option_values[4]{};
-          char* option_keys[4]{};
+          mpv_node option_values[6]{};
+          char* option_keys[6]{};
           int option_count = 0;
           auto option = [&](const char* key, char* value) {
             option_keys[option_count] = const_cast<char*>(key);
             option_values[option_count].format = MPV_FORMAT_STRING;
             option_values[option_count++].u.string = value;
           };
+          if (payload.plex_session) {
+            option("access-references", const_cast<char*>("yes"));
+            // Exclude mpv's ordinary-playlist fallback, which would reopen
+            // children outside this file's security options after lavf fails.
+            option("demuxer", const_cast<char*>("lavf"));
+            option("demuxer-lavf-o", const_cast<char*>(SessionPlaylistRegistry::kLavfOptions));
+            option("curl-max-redirects", const_cast<char*>("0"));
+          }
           if (!payload.plex_header.empty()) {
             // mpv reuses custom headers on redirects; authenticated loads
             // must remain on their original HTTPS request.
@@ -877,11 +1069,24 @@ void PlayerCore::RunCommand(QueuedCommand& command, uint64_t generation) {
           if (!playback_.AcceptLoad(payload.load_id,
                   has_playlist_id ? std::optional<int64_t>(playlist_entry_id)
                                   : std::nullopt)) {
+            if (payload.plex_session) {
+              // A successfully opened file without a safe event identity must
+              // not retain a private reader or continue consuming its children.
+              session_playlists_.Retire();
+              const char* stop[] = {"stop", nullptr};
+              mpv_operations_.command(mpv_, stop);
+            }
             QueueEvent(generation,
                 FailureStateEvent("correlation_error", std::nullopt,
                                   payload.load_id,
                                   "Playback correlation exceeded native limits"));
           } else {
+            if (payload.plex_session) {
+              session_clock_load_ = payload.load_id;
+              session_clock_ready_ = false;
+              PublishSessionClock(generation, false);
+            }
+            ClearSubtitleCues(generation, payload.load_id);
             if (first_open_diagnostics_) {
               first_open_probe_ = FirstOpenProbe{payload.load_id};
               WriteFirstOpenProbe(ProbeModule::core, ProbeCause::accepted);
@@ -928,6 +1133,10 @@ void PlayerCore::RunCommand(QueuedCommand& command, uint64_t generation) {
       }
     } else if constexpr (std::is_same_v<Payload, StopCommand>) {
       ResetSeekObservation();
+      session_playlists_.Retire();
+      ClearSessionClock(generation);
+      ClearSubtitleCues(generation, playback_.active_load());
+      subtitle_retired_load_ = playback_.active_load();
       const char* value[] = {"stop", nullptr};
       status = mpv_operations_.command(mpv_, value);
       if (status < 0) {
@@ -957,6 +1166,9 @@ void PlayerCore::RunCommand(QueuedCommand& command, uint64_t generation) {
         status = mpv_operations_.set_property(
             mpv_, payload.property.c_str(), MPV_FORMAT_INT64, &id);
       }
+      if (status >= 0 && payload.property == "sid") {
+        ClearSubtitleCues(generation, payload.load_id);
+      }
       QueueTrackResult(generation, payload.load_id, payload.request_id,
                        status >= 0);
       return;
@@ -970,17 +1182,114 @@ void PlayerCore::RunCommand(QueuedCommand& command, uint64_t generation) {
       std::holds_alternative<TrackCommand>(command)) return;
   if (status < 0) {
     const auto* load = std::get_if<LoadCommand>(&command);
+    if (load) session_playlists_.Retire();
     const std::optional<int64_t> error_load_id =
         load ? std::optional<int64_t>(load->load_id) : playback_.active_load();
     // This error need not populate playback_.failure(). A later restart
     // cannot be attributed safely after the published command failure.
     seek_observation_.reset();
     seek_observation_ambiguous_ = true;
+    ClearSubtitleCues(generation, error_load_id);
+    subtitle_retired_load_ = playback_.active_load();
     QueueEvent(generation,
                FailureStateEvent("command_error", std::nullopt,
                                  error_load_id,
                                  mpv_operations_.error_string(status)));
   }
+}
+
+// Presentation and the command batch are taken atomically. Taking the slot
+// after releasing this lock could put a later accepted load ahead of its style.
+void PlayerCore::RunPendingCommands(uint64_t generation) {
+  std::deque<QueuedCommand> commands;
+  std::optional<SubtitlePresentation> presentation;
+  {
+    std::lock_guard lock(command_mutex_);
+    std::swap(commands, commands_);
+    presentation.swap(pending_subtitle_presentation_);
+    queued_command_bytes_ = 0;
+    // Playlist bytes stay reserved until each staged command retires.
+  }
+  if (presentation) ApplySubtitlePresentation(*presentation, generation);
+  for (auto& command : commands) {
+    if (stopping_) break;
+    const auto* pending_load = std::get_if<LoadCommand>(&command);
+    const size_t playlist_bytes = pending_load && pending_load->session_playlist
+        ? pending_load->session_playlist->byte_size() : 0;
+    RunCommand(command, generation);
+    {
+      std::lock_guard lock(command_mutex_);
+      queued_playlist_bytes_ -= playlist_bytes;
+    }
+    if (auto* load = std::get_if<LoadCommand>(&command)) load->plex_header.Clear();
+  }
+}
+
+void PlayerCore::SetSubtitleNumber(const char* name, double value) {
+  const auto found = subtitle_property_values_.find(name);
+  if (found != subtitle_property_values_.end() && found->second == value) return;
+  subtitle_property_values_[name] = value;
+  const int status = mpv_operations_.set_property(mpv_, name, MPV_FORMAT_DOUBLE, &value);
+  if (status < 0) {
+    std::cerr << "[lineup-player] subtitle property " << name << " rejected: "
+              << mpv_operations_.error_string(status) << std::endl;
+  }
+}
+
+void PlayerCore::SetSubtitleVisibility(bool visible) {
+  const auto found = subtitle_property_values_.find("sub-visibility");
+  if (found != subtitle_property_values_.end() && found->second == (visible ? 1 : 0)) return;
+  subtitle_property_values_["sub-visibility"] = visible ? 1 : 0;
+  int flag = visible ? 1 : 0;
+  const int status = mpv_operations_.set_property(mpv_, "sub-visibility", MPV_FORMAT_FLAG, &flag);
+  if (status < 0) {
+    std::cerr << "[lineup-player] subtitle property sub-visibility rejected: "
+              << mpv_operations_.error_string(status) << std::endl;
+  }
+}
+
+void PlayerCore::ApplySubtitlePresentation(SubtitlePresentation presentation, uint64_t generation) {
+  subtitle_presentation_ = presentation;
+  SetSubtitleNumber("sub-scale", presentation.scale);
+  UpdateSubtitleRouting(generation);
+}
+
+void PlayerCore::UpdateSubtitleRouting(uint64_t generation) {
+  SetSubtitleNumber("sub-pos", subtitle_codec_ == SubtitleCodec::image
+      ? 100 - 100 * subtitle_presentation_.image_raise : 100);
+  const bool lineup_draws = subtitle_codec_ == SubtitleCodec::text ||
+      (subtitle_codec_ == SubtitleCodec::ass && subtitle_presentation_.lineup_draws_styled);
+  SetSubtitleVisibility(!lineup_draws);
+  PublishSubtitleCues(generation);
+}
+
+void PlayerCore::ClearSubtitleCues(uint64_t generation, std::optional<int64_t> load_id) {
+  // Keep the observed codec until mpv reports a different value. Property
+  // observations suppress unchanged values, including same-codec track/load
+  // switches; clearing it here could permanently silence the next text track.
+  subtitle_text_.clear();
+  ValueMap event{{"type", Value("property")}, {"name", Value("subtitle-cues")}, {"value", Value(ValueList{})}};
+  // Dart synthesizes clears at load/stop boundaries. An explicit clear is
+  // needed only when this core has actually published text; never emit an
+  // unscoped media-content event. Retain visibility until the next observed
+  // codec so clearing cannot briefly expose the old converted subtitle.
+  if (load_id && subtitle_has_cues_) {
+    event["loadId"] = Value(*load_id);
+    QueueEvent(generation, std::move(event));
+  }
+  subtitle_has_cues_ = false;
+}
+
+void PlayerCore::PublishSubtitleCues(uint64_t generation) {
+  const auto load = playback_.event_load();
+  if (!load || load != playback_.active_load() || load == subtitle_retired_load_ || playback_.pending_stop()) return;
+  const bool lineup_draws = subtitle_codec_ == SubtitleCodec::text ||
+      (subtitle_codec_ == SubtitleCodec::ass && subtitle_presentation_.lineup_draws_styled);
+  ValueList cues = lineup_draws ? ParseSubtitleCues(subtitle_text_, subtitle_codec_ == SubtitleCodec::ass) : ValueList{};
+  subtitle_has_cues_ = !cues.empty();
+  QueueEvent(generation, {{"type", Value("property")}, {"name", Value("subtitle-cues")},
+                         {"loadId", Value(*load)}, {"value", Value(std::move(cues))}},
+             /*subtitle_content=*/true);
 }
 
 void PlayerCore::StopEventThread() {
@@ -1002,18 +1311,7 @@ void PlayerCore::EventLoop(uint64_t generation) {
         RequestWakeup();
       }
     }
-    std::deque<QueuedCommand> commands;
-    {
-      std::lock_guard lock(command_mutex_);
-      std::swap(commands, commands_);
-      queued_command_bytes_ = 0;
-    }
-    for (auto& command : commands) {
-      RunCommand(command, generation);
-      if (auto* load = std::get_if<LoadCommand>(&command)) {
-        load->plex_header.Clear();
-      }
-    }
+    RunPendingCommands(generation);
     if (playback_.pending_stop()) {
       int idle = 0;
       int64_t playlist_count = -1;
@@ -1034,12 +1332,29 @@ void PlayerCore::EventLoop(uint64_t generation) {
       HandleMpvEvent(*event, generation);
     }
   }
+  session_playlists_.Retire();
   mpv_operations_.terminate_destroy(mpv_);
   mpv_ = nullptr;
   std::cerr << "[lineup-player] libmpv shutdown complete" << std::endl;
   dispose_ready_ = true;
   host_.PostWorkerFinished();
   worker_finished_ = true;
+}
+
+void PlayerCore::PublishSessionClock(uint64_t generation, bool sample) {
+  if (!session_clock_load_) return;
+  Value clock;
+  double seconds = 0;
+  if (sample && mpv_operations_.get_property(mpv_, "demuxer-start-time", MPV_FORMAT_DOUBLE, &seconds) >= 0 &&
+      std::isfinite(seconds)) clock = seconds;
+  QueueEvent(generation, {{"type", "property"}, {"name", "demuxer-start-time"},
+                          {"value", std::move(clock)}, {"loadId", *session_clock_load_}});
+}
+
+void PlayerCore::ClearSessionClock(uint64_t generation) {
+  PublishSessionClock(generation, false);
+  session_clock_load_.reset();
+  session_clock_ready_ = false;
 }
 
 void PlayerCore::ResetSeekObservation() {
@@ -1128,6 +1443,8 @@ void PlayerCore::HandleMpvEvent(const mpv_event& event, uint64_t generation) {
                               transition.rejected_load,
                               "Playback correlation exceeded native limits"));
       }
+      if (playback_.event_load() == playback_.active_load())
+        ClearSubtitleCues(generation, playback_.event_load());
       QueueEvent(generation,
                  StateEvent("loading", "Loading media", playback_.event_load()));
       break;
@@ -1146,6 +1463,11 @@ void PlayerCore::HandleMpvEvent(const mpv_event& event, uint64_t generation) {
         observed_pause = -1;
       }
       ObserveSeekLanding(event.event_id);
+      if (session_clock_load_ && session_clock_load_ == playback_.event_load() &&
+          session_clock_load_ == playback_.active_load()) {
+        session_clock_ready_ = true;
+        PublishSessionClock(generation, true);
+      }
       auto ready = StateEvent("playing", "Playing", playback_.event_load());
       // A load hold can pause and resume before mpv emits another observed
       // property change. Publish the current flag atomically with readiness,
@@ -1192,6 +1514,16 @@ void PlayerCore::HandleMpvEvent(const mpv_event& event, uint64_t generation) {
         seek_observation_ambiguous_ = true;
       }
       if (end && end->reason == MPV_END_FILE_REASON_REDIRECT) {
+        if (session_clock_load_ && load_id == session_clock_load_) {
+          session_playlists_.Retire();
+          ClearSessionClock(generation);
+          const char* stop[] = {"stop", nullptr};
+          mpv_operations_.command(mpv_, stop);
+          QueueEvent(generation, FailureStateEvent("source_open_error", std::nullopt,
+              load_id, "The private session playlist could not be opened."));
+          playback_.RetireLoad(load_id);
+          break;
+        }
         if (!playback_.Redirect(load_id, end->playlist_insert_id,
                                 end->playlist_insert_num_entries)) {
           QueueEvent(generation,
@@ -1220,6 +1552,11 @@ void PlayerCore::HandleMpvEvent(const mpv_event& event, uint64_t generation) {
         QueueEvent(generation,
                    StateEvent("stopped", "Playback stopped", load_id));
       }
+      if (load_id && load_id == playback_.active_load()) {
+        session_playlists_.Retire();
+        ClearSessionClock(generation);
+      }
+      if (load_id == playback_.active_load()) ClearSubtitleCues(generation, load_id);
       playback_.RetireLoad(load_id);
       break;
     }
@@ -1251,6 +1588,8 @@ void PlayerCore::HandleMpvEvent(const mpv_event& event, uint64_t generation) {
       }
       break;
     case MPV_EVENT_QUEUE_OVERFLOW:
+      ClearSubtitleCues(generation, playback_.event_load());
+      subtitle_retired_load_ = playback_.active_load();
       seek_observation_.reset();
       seek_observation_ambiguous_ = true;
       QueueEvent(generation,
@@ -1261,6 +1600,30 @@ void PlayerCore::HandleMpvEvent(const mpv_event& event, uint64_t generation) {
     case MPV_EVENT_PROPERTY_CHANGE: {
       const auto* property = static_cast<mpv_event_property*>(event.data);
       if (!property || !property->name) {
+        break;
+      }
+      if (event.reply_userdata == kDemuxerStartTime) {
+        // Notifications can be coalesced or queued across replacement. Read
+        // the current property only after this session has reached readiness.
+        PublishSessionClock(generation, session_clock_ready_ &&
+            session_clock_load_ == playback_.event_load() &&
+            session_clock_load_ == playback_.active_load());
+        break;
+      }
+      // Intercept media text before any generic encoding or diagnostic path.
+      if (std::strcmp(property->name, "sub-text/ass") == 0 ||
+          std::strcmp(property->name, "current-tracks/sub/codec") == 0) {
+        if (!playback_.event_load() || playback_.event_load() != playback_.active_load() || playback_.event_load() == subtitle_retired_load_ || playback_.pending_stop()) break;
+        const char* raw = property->format == MPV_FORMAT_STRING && property->data
+            ? *static_cast<char**>(property->data) : nullptr;
+        if (std::strcmp(property->name, "sub-text/ass") == 0) {
+          subtitle_text_ = BoundedUtf8(raw, kMaxSubtitleInputBytes);
+          PublishSubtitleCues(generation);
+        } else {
+          subtitle_codec_ = ClassifySubtitleCodec(BoundedUtf8(raw, 128));
+          if (subtitle_codec_ == SubtitleCodec::none) subtitle_text_.clear();
+          UpdateSubtitleRouting(generation);
+        }
         break;
       }
       Value value;
@@ -1292,7 +1655,9 @@ void PlayerCore::HandleMpvEvent(const mpv_event& event, uint64_t generation) {
           event.reply_userdata == kHardwareDecoder) {
         const std::string fact = PropertyString(*property);
         if (!fact.empty()) {
-          std::cerr << "[lineup-player] " << property->name << '=' << fact
+          std::cerr << "[lineup-player] "
+                    << (event.reply_userdata == kCurrentVideoOutput ? "current-vo" : "hwdec-current")
+                    << '=' << (PrivateText(fact) ? "<redacted>" : fact)
                     << std::endl;
         }
       }
@@ -1342,26 +1707,51 @@ void PlayerCore::DiscardQueuedEvents(std::string_view type) {
   }), events_.end());
 }
 
-void PlayerCore::QueueEvent(uint64_t generation, ValueMap value) {
+void PlayerCore::QueueEvent(uint64_t generation, ValueMap value,
+                            bool subtitle_content) {
+  const auto* event_type = FindString(&value, "type");
+  const auto* event_name = FindString(&value, "name");
+  const bool authored_cues = subtitle_content && event_type && *event_type == "property" &&
+      event_name && *event_name == "subtitle-cues";
+  for (auto& item : value) {
+    // Authored subtitle URLs/literals are rendered content, not filenames or
+    // diagnostics. Only PublishSubtitleCues opts in for its bounded payload.
+    if (!authored_cues || item.first != "value") RedactPrivateText(item.second);
+  }
   {
     std::lock_guard lock(event_mutex_);
-    // At capacity, evict the oldest property event; otherwise drop an
-    // incoming property, or evict the oldest event to admit a non-property.
-    // This protects state, stop, track, and display completions from
-    // property telemetry pressure.
-    if (events_.size() >= kMaxQueuedEvents) {
+    const auto is_cue = [](const ValueMap& event) {
+      const auto* type = FindString(&event, "type");
+      const auto* name = FindString(&event, "name");
+      return type && *type == "property" && name && *name == "subtitle-cues";
+    };
+    const bool incoming_cue = is_cue(value);
+    const auto pending_cue = std::find_if(events_.begin(), events_.end(),
+        [&](const QueuedEvent& event) { return is_cue(event.value); });
+    if (incoming_cue && pending_cue != events_.end()) {
+      *pending_cue = QueuedEvent{generation, std::move(value)};
+      return;
+    }
+    // Reserve one of the existing slots even before the first cue arrives.
+    // Cue admission never displaces an ordinary event; ordinary pressure keeps
+    // the existing eviction policy within its own 255-event budget.
+    const size_t ordinary_count =
+        events_.size() - (pending_cue != events_.end() ? 1 : 0);
+    if (!incoming_cue && ordinary_count >= kMaxQueuedEvents - 1) {
       const auto* incoming_type_value = FindString(&value, "type");
       const auto property = std::find_if(
-          events_.begin(), events_.end(), [](const QueuedEvent& event) {
+          events_.begin(), events_.end(), [&](const QueuedEvent& event) {
             const auto* type = FindString(&event.value, "type");
-            return type && *type == "property";
+            return type && *type == "property" && !is_cue(event.value);
           });
       if (property != events_.end()) {
         events_.erase(property);
       } else if (incoming_type_value && *incoming_type_value == "property") {
         return;
       } else {
-        events_.pop_front();
+        const auto evict = std::find_if(events_.begin(), events_.end(),
+            [&](const QueuedEvent& event) { return !is_cue(event.value); });
+        if (evict != events_.end()) events_.erase(evict);
       }
     }
     events_.push_back({generation, std::move(value)});
