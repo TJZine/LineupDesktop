@@ -95,9 +95,9 @@ class GuardedMp4Test {
         }
     }
 
-    private fun guard(steps: List<Step>): Pair<GuardedMp4, ReusingExtractor> {
+    private fun guard(steps: List<Step>, fragmented: Boolean = true): Pair<GuardedMp4, ReusingExtractor> {
         val delegate = ReusingExtractor(steps)
-        val guard = GuardedMp4(delegate)
+        val guard = GuardedMp4(if (fragmented) delegate else object : Extractor by delegate {})
         guard.init(
             object : ExtractorOutput {
                 override fun track(id: Int, type: Int): TrackOutput = DiscardingTrackOutput()
@@ -154,9 +154,10 @@ class GuardedMp4Test {
     @Test
     fun ordinarySampleSeekKeepsValidatedTypes() {
         val bytes = moov()
-        val sample = ByteArray(20)
+        // A box size below its eight-byte header is invalid if parsed at a box boundary.
+        val sample = ByteBuffer.allocate(20).putInt(2).array()
         val (guard, _) =
-            guard(listOf(Step(bytes, true, true, true), Step(sample, false, false, false)))
+            guard(listOf(Step(bytes, true, true, true), Step(sample, false, false, false)), fragmented = false)
         val input = Input(bytes + sample)
         guard.read(input.value, PositionHolder())
         guard.seek(bytes.size.toLong(), 1000000)
