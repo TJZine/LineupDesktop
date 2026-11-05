@@ -7,7 +7,6 @@ plugins {
 android {
     namespace = "com.tjzine.lineup"
     compileSdk = flutter.compileSdkVersion
-    buildFeatures { buildConfig = true }
     ndkVersion = flutter.ndkVersion
 
     compileOptions {
