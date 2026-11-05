@@ -15,6 +15,8 @@ import androidx.media3.extractor.text.CuesWithTiming
 import androidx.media3.extractor.text.DefaultSubtitleParserFactory
 import androidx.media3.extractor.text.SubtitleParser
 import java.nio.ByteBuffer
+import java.nio.charset.CharacterCodingException
+import java.nio.charset.Charset
 import java.nio.charset.CodingErrorAction
 import java.util.concurrent.CopyOnWriteArrayList
 
@@ -27,11 +29,12 @@ internal object SsaDialogueParser {
     private const val PREFIX = "\uE000LN:"
     private const val END = '\uE001'
     private const val MAX_BYTES = 65536
+    private const val MAX_STOCK_BYTES = 128 * 1024
+    private const val MAX_BRACE_SCAN = 1_000_000
     private const val MAX_EVENTS = 64
     private const val MAX_STYLES = 256
-    private val blocks = Regex("\\{.*?\\}")
-    private val commands = Regex("\\\\([A-Za-z]+)\\s*([+-]?\\d+)?")
     private class DecorationFailure : Exception()
+    private data class Sample(val text: String, val charset: Charset, val start: Int, val validEncoding: Boolean)
     private class Track(val id: Int, val source: Format) {
         @Volatile var failed = false
     }
@@ -86,13 +89,20 @@ internal object SsaDialogueParser {
         override fun supportsFormat(format: Format) = stock.supportsFormat(format)
         override fun getCueReplacementBehavior(format: Format) = stock.getCueReplacementBehavior(format)
         override fun create(format: Format): SubtitleParser {
+            if (format.sampleMimeType != "text/x-ssa") return stock.create(format)
+            if (format.initializationData.sumOf { it.size.toLong() } > MAX_STOCK_BYTES) {
+                // Stock parses the initialization header in its constructor.
+                return object : SubtitleParser {
+                    override fun getCueReplacementBehavior() = stock.getCueReplacementBehavior(format)
+                    override fun parse(data: ByteArray, offset: Int, length: Int, options: SubtitleParser.OutputOptions, output: Consumer<CuesWithTiming>) = Unit
+                }
+            }
             val parser = stock.create(format)
-            if (format.sampleMimeType != "text/x-ssa") return parser
             // Only typed track state survives parse. No text, event times or cue timeline is cached here.
             val track = synchronized(tracks) {
                 if (closed || tracks.size >= 256) null
                 else Track(tracks.size, format).also(tracks::add)
-            } ?: return parser
+            }
             return Decorator(parser, format, track, ::fail)
         }
 
@@ -140,21 +150,21 @@ internal object SsaDialogueParser {
     private class Decorator(
         private val stock: SubtitleParser,
         private val format: Format,
-        private val track: Track,
+        private val track: Track?,
         private val fail: (Track) -> Unit,
     ) : SubtitleParser {
         override fun getCueReplacementBehavior() = stock.cueReplacementBehavior
         override fun reset() = stock.reset()
 
         override fun parse(data: ByteArray, offset: Int, length: Int, options: SubtitleParser.OutputOptions, output: Consumer<CuesWithTiming>) {
-            if (track.failed) {
-                stock(data, offset, length, options, output, 0)
-                releaseInput()
-                return
-            }
+            val sample = safeSample(data, offset, length) ?: return
             var delivered = 0
             try {
-                val rewritten = rewrite(data, offset, length, format)
+                if (track == null || track.failed) {
+                    stock(data, offset, length, options, output, 0)
+                    return
+                }
+                val rewritten = rewrite(data, offset, length, sample, format)
                 stock.parse(rewritten, 0, rewritten.size, options) { group ->
                     // Only the current callback is copied; no callback/timeline collection is held.
                     val cues = group.cues.map { restore(it, track.id) }
@@ -162,7 +172,7 @@ internal object SsaDialogueParser {
                     delivered++
                 }
             } catch (_: Exception) {
-                fail(track)
+                track?.let(fail)
                 // Unwind the decorated parse before replaying ORIGINAL bytes. Skip callbacks
                 // already emitted, so merge-style subtitle timelines never receive duplicates.
                 stock(data, offset, length, options, output, delivered)
@@ -176,7 +186,7 @@ internal object SsaDialogueParser {
             // rewritten scratch without another timeline or changing its header state.
             try {
                 stock.parse(byteArrayOf(), 0, 0, SubtitleParser.OutputOptions.allCues()) {}
-            } catch (_: Exception) { fail(track) }
+            } catch (_: Exception) { track?.let(fail) }
         }
 
         private fun stock(data: ByteArray, offset: Int, length: Int, options: SubtitleParser.OutputOptions, output: Consumer<CuesWithTiming>, skip: Int) {
@@ -184,13 +194,14 @@ internal object SsaDialogueParser {
             try {
                 stock.parse(data, offset, length, options) { group ->
                     if (index++ >= skip) {
-                        output.accept(CuesWithTiming(group.cues.map { markTrack(it, track.id) }, group.startTimeUs, group.durationUs))
+                        val cues = if (track == null) group.cues else group.cues.map { markTrack(it, track.id) }
+                        output.accept(CuesWithTiming(cues, group.startTimeUs, group.durationUs))
                     }
                 }
             } catch (_: Exception) {
                 // Stock cannot produce cues for malformed input either. Keep playback and
                 // already-current stock cues alive; future samples remain on the stock path.
-                fail(track)
+                track?.let(fail)
             }
         }
     }
@@ -202,14 +213,44 @@ internal object SsaDialogueParser {
         return cue.buildUpon().setText(text).build()
     }
 
-    private fun rewrite(data: ByteArray, offset: Int, length: Int, format: Format): ByteArray {
-        if (length > MAX_BYTES) throw DecorationFailure()
+    private fun safeSample(data: ByteArray, offset: Int, length: Int): Sample? {
+        if (length > MAX_STOCK_BYTES) return null
         val input = ParsableByteArray(data, offset + length)
         input.position = offset
         val charset = input.readUtfCharsetFromBom() ?: Charsets.UTF_8
         val start = input.position
-        val text = charset.newDecoder().onMalformedInput(CodingErrorAction.REPORT)
-            .onUnmappableCharacter(CodingErrorAction.REPORT).decode(ByteBuffer.wrap(data, start, offset + length - start)).toString()
+        val count = offset + length - start
+        var validEncoding = true
+        val text = try {
+            charset.newDecoder().onMalformedInput(CodingErrorAction.REPORT)
+                .onUnmappableCharacter(CodingErrorAction.REPORT)
+                .decode(ByteBuffer.wrap(data, start, count)).toString()
+        } catch (_: CharacterCodingException) {
+            validEncoding = false
+            String(data, start, count, charset)
+        }
+        // Stock uses \{([^}]*)\} twice. Charge each opening brace for the
+        // distance to the next close or line end, even if a prior match would
+        // consume it. This also bounds a Text field ending at an earlier comma.
+        var distance = 0
+        var work = 0
+        for (index in text.indices.reversed()) {
+            when (text[index]) {
+                '}', '\r', '\n' -> distance = 0
+                '{' -> {
+                    work += distance + 1
+                    if (work > MAX_BRACE_SCAN) return null
+                    distance++
+                }
+                else -> distance++
+            }
+        }
+        return Sample(text, charset, start, validEncoding)
+    }
+
+    private fun rewrite(data: ByteArray, offset: Int, length: Int, sample: Sample, format: Format): ByteArray {
+        if (length > MAX_BYTES || !sample.validEncoding) throw DecorationFailure()
+        val text = sample.text
         // Collision means stock fallback; never reinterpret literal media characters as metadata.
         if (text.contains(PREFIX)) throw DecorationFailure()
         val initialFormat = format.initializationData.firstOrNull()
@@ -230,61 +271,96 @@ internal object SsaDialogueParser {
                 if (++ordinal > MAX_EVENTS) throw DecorationFailure()
                 val fields = line.substring(9).split(',', limit = spec.first).toMutableList()
                 if (fields.size != spec.first) throw DecorationFailure()
-                val raw = fields[spec.second]
-                var sign = false
-                blocks.findAll(raw).forEach { block ->
-                    commands.findAll(block.value).forEach { command ->
-                        val tag = command.groupValues[1]
-                        if (tag in listOf("pos", "move", "org", "clip", "iclip") ||
-                            (tag == "p" && positive(command.groupValues[2]))) sign = true
-                    }
+                fields[spec.second] = decorateDialogue(fields[spec.second], ordinal - 1) {
+                    if (++styles > MAX_STYLES) throw DecorationFailure()
                 }
-                var mask = 0
-                var flags = 0
-                var previous = 0
-                val body = StringBuilder()
-                blocks.findAll(raw).forEach { block ->
-                    body.append(raw, previous, block.range.last + 1)
-                    var changed = false
-                    val content = block.value
-                    // Match the desktop emphasis grammar exactly. Unknown tag
-                    // names/values do not alter emphasis; bare tags reset off.
-                    var tagStart = if (content.substring(1).contains('{')) -1 else content.indexOf('\\')
-                    while (tagStart >= 0) {
-                        val next = content.indexOf('\\', tagStart + 1).let { if (it < 0) content.lastIndex else it }
-                        val tag = content.substring(tagStart + 1, next)
-                        if (tag == "r") {
-                            mask = 7
-                            flags = 0
-                            changed = true
-                        } else if (tag in listOf("b", "b0", "b1", "i", "i0", "i1", "u", "u0", "u1")) {
-                            val bit = when (tag[0]) { 'b' -> 1; 'i' -> 2; else -> 4 }
-                            mask = mask or bit
-                            flags = if (tag.endsWith('1')) flags or bit else flags and bit.inv()
-                            changed = true
-                        }
-                        tagStart = if (next < content.lastIndex) next else -1
-                    }
-                    if (changed) {
-                        if (++styles > MAX_STYLES) throw DecorationFailure()
-                        body.append(PREFIX).append('S').append(mask).append(':').append(flags).append(END)
-                    }
-                    previous = block.range.last + 1
-                }
-                body.append(raw, previous, raw.length)
-                fields[spec.second] = "$PREFIX" + "E${ordinal - 1}:${if (sign) 1 else 0}$END" + body
                 result.append("Dialogue:").append(fields.joinToString(",")).append(ending)
             } else result.append(match.value)
             if (result.length > MAX_BYTES) throw DecorationFailure()
         }
-        val encoded = result.toString().toByteArray(charset)
-        val bom = data.copyOfRange(offset, start)
+        val encoded = result.toString().toByteArray(sample.charset)
+        val bom = data.copyOfRange(offset, sample.start)
         if (encoded.size + bom.size > MAX_BYTES) throw DecorationFailure()
         return bom + encoded
     }
 
-    private fun positive(value: String): Boolean = !value.startsWith('-') &&
-        value.removePrefix("+").any { it in '1'..'9' }
+    private fun decorateDialogue(raw: String, ordinal: Int, styleAdded: () -> Unit): String {
+        var sign = false
+        var mask = 0
+        var flags = 0
+        var start = -1
+        var previous = 0
+        var nested = false
+        val body = StringBuilder()
+        for (index in raw.indices) {
+            when (raw[index]) {
+                '{' -> {
+                    if (start < 0) {
+                        start = index + 1
+                        nested = false
+                    } else nested = true
+                }
+                '}' -> {
+                    if (start < 0) continue
+                    body.append(raw, previous, index + 1)
+                    previous = index + 1
+                    // Stock strips through the first closing brace. Keep that
+                    // boundary, but ignore emphasis in nested override blocks.
+                    val content = raw.substring(start, index)
+                    start = -1
+                    var changed = false
+                    var command = content.indexOf('\\')
+                    while (command >= 0) {
+                        val next = content.indexOf('\\', command + 1)
+                        val tag = content.substring(command + 1, if (next < 0) content.length else next)
+                        if (!sign) sign = signTag(tag)
+                        if (!nested) {
+                            val bit = when {
+                                tag == "r" -> 7
+                                tag == "b" || (tag.startsWith('b') && !tag[1].isAsciiLetter()) -> 1
+                                tag == "i" || tag == "i0" || tag == "i1" -> 2
+                                tag == "u" || tag == "u0" || tag == "u1" -> 4
+                                else -> 0
+                            }
+                            if (bit != 0) {
+                                val enabled = if (bit == 1) boldEnabled(tag.substring(1)) else tag.endsWith('1')
+                                mask = mask or bit
+                                flags = if (enabled) flags or bit else flags and bit.inv()
+                                changed = true
+                            }
+                        }
+                        command = next
+                    }
+                    if (changed) {
+                        styleAdded()
+                        body.append(PREFIX).append('S').append(mask).append(':').append(flags).append(END)
+                    }
+                }
+            }
+        }
+        body.append(raw, previous, raw.length)
+        val kind = if (sign) 1 else 0
+        return "$PREFIX" + "E$ordinal:$kind$END" + body
+    }
+
+    private fun Char.isAsciiLetter() = this in 'A'..'Z' || this in 'a'..'z'
+
+    private fun signTag(tag: String): Boolean {
+        val end = tag.indexOfFirst { !it.isAsciiLetter() }.let { if (it < 0) tag.length else it }
+        return when (tag.substring(0, end)) {
+            "pos", "move", "org", "clip", "iclip" -> true
+            "p" -> tag.substring(end).trimStart(' ', '\t', '\u000b', '\u000c').removePrefix("+")
+                .takeWhile { it in '0'..'9' }.any { it in '1'..'9' }
+            else -> false
+        }
+    }
+
+    private fun boldEnabled(argument: String): Boolean {
+        val digits = argument.removePrefix("+")
+        if (digits.any { it !in '0'..'9' }) return false
+        val value = digits.toIntOrNull() ?: return false
+        return value == 1 || value in 700..900
+    }
 
     private fun eventFormat(line: String): Pair<Int, Int>? {
         if (!line.startsWith("Format:")) return null

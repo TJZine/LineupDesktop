@@ -290,15 +290,31 @@
     "class": "unknown emphasis values ignored"
   },
   {
-    "input": "{\\b700}plain",
+    "input": "{\\b700}bold",
     "nativeAss": true,
-    "expectedText": "plain",
+    "expectedText": "bold",
     "expectedSegments": [
       {
-        "text": "plain"
+        "text": "bold",
+        "bold": true
       }
     ],
-    "class": "unknown emphasis values ignored"
+    "class": "numeric bold weight"
+  },
+  {
+    "input": "{\\b1}a{\\b400}b",
+    "nativeAss": true,
+    "expectedText": "ab",
+    "expectedSegments": [
+      {
+        "text": "a",
+        "bold": true
+      },
+      {
+        "text": "b"
+      }
+    ],
+    "class": "numeric weight clears bold"
   },
   {
     "input": "{\\i+1}plain",

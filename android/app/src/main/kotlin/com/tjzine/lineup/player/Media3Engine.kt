@@ -6,6 +6,7 @@ import android.view.SurfaceView
 import androidx.media3.common.*
 import androidx.media3.common.text.Cue
 import androidx.media3.common.text.CueGroup
+import androidx.media3.common.util.Log
 import androidx.media3.common.util.UnstableApi
 import androidx.media3.datasource.DataSource
 import androidx.media3.datasource.okhttp.OkHttpDataSource
@@ -34,6 +35,13 @@ internal class Media3Engine(
     },
     private val subtitlePresentation: () -> SubtitlePresentation = { SubtitlePresentation() },
 ) : PlayerEngine {
+    private val debug =
+        context.applicationInfo.flags and android.content.pm.ApplicationInfo.FLAG_DEBUGGABLE != 0
+
+    init {
+        configureLibraryLogging(debug)
+    }
+
     // The default builder owns an exclusive playback thread. Media3 quits it only
     // after releaseInternal finishes renderer/source teardown. Keep that public
     // thread handle: release() returning (or isReleased) cannot prove completion.
@@ -57,8 +65,6 @@ internal class Media3Engine(
 
     private var initialJoinSource: InitialJoinMediaSource? = null
     private val tracks = Media3Tracks()
-    private val debug =
-        context.applicationInfo.flags and android.content.pm.ApplicationInfo.FLAG_DEBUGGABLE != 0
     private var network: MediaHttp.Load? = null
     private var http: OkHttpDataSource.Factory? = null
     private var closed = false
@@ -408,6 +414,11 @@ internal class Media3Engine(
     }
 
     companion object {
+        // Stock parsers can include media text in warnings, including on fallback.
+        internal fun configureLibraryLogging(debuggable: Boolean) {
+            if (!debuggable) Log.setLogLevel(Log.LOG_LEVEL_OFF)
+        }
+
         internal fun createSource(
             media: MediaLoad,
             source: DataSource.Factory,

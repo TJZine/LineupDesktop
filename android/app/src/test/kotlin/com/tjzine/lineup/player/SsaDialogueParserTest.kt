@@ -8,12 +8,14 @@ import androidx.media3.common.C
 import androidx.media3.common.DataReader
 import androidx.media3.common.Format
 import androidx.media3.common.text.Cue
+import androidx.media3.common.util.Log
 import androidx.media3.common.util.ParsableByteArray
 import androidx.media3.extractor.*
 import androidx.media3.extractor.mkv.MatroskaExtractor
 import androidx.media3.extractor.text.*
 import androidx.media3.extractor.text.ssa.SsaParser
 import java.io.ByteArrayOutputStream
+import kotlin.system.measureTimeMillis
 import org.json.JSONArray
 import org.junit.Assert.*
 import org.junit.Test
@@ -47,6 +49,11 @@ Format: Layer, Start, End, Style, Text
     }
     private fun text(cues: List<Cue>) = cues.joinToString("\n") { it.text.toString() }
 
+    private fun <T> comparePairs(expected: List<T>, actual: List<T>, compare: (T, T) -> Unit) {
+        assertEquals(expected.size, actual.size)
+        expected.indices.forEach { index -> compare(expected[index], actual[index]) }
+    }
+
     @Test fun sharedDesktopWholeEventCasesAndInlineFlagsMatchAfterSerialization() {
         val cases = JSONArray(javaClass.getResourceAsStream("/ssa-dialogue-cases.json")!!.reader().readText())
         repeat(cases.length()) { index ->
@@ -54,7 +61,7 @@ Format: Layer, Start, End, Style, Text
             val factory = SsaDialogueParser.Factory()
             val data = script(case.getString("input").split('\n'))
             val cues = roundTrip(parse(factory.create(format), data))
-            parse(SsaParser(), data).zip(cues).forEach { (a,b) -> equivalent(a,b) }
+            comparePairs(parse(SsaParser(), data), cues, ::equivalent)
             assertFalse("case $index fell back", factory.nativeFallback(format, cues))
             val lineup = SsaDialogueParser.lineupCues(cues)
             assertEquals("case $index", case.getString("expectedText"), text(lineup))
@@ -110,16 +117,16 @@ Format: Layer, Start, End, Style, Text
         val parser = factory.create(format)
         val marked = roundTrip(parse(parser, data))
         assertEquals(stock.size, marked.size)
-        stock.zip(marked).forEach { (a, b) -> equivalent(a, b) }
+        comparePairs(stock, marked, ::equivalent)
         assertFalse(factory.nativeFallback(format, marked))
         assertEquals(4, SsaDialogueParser.lineupCues(marked).size)
         parser.reset()
-        parse(parser, data).zip(stock).forEach { (a,b) -> equivalent(b,a) }
+        comparePairs(stock, parse(parser, data), ::equivalent)
         for (charset in listOf(Charsets.UTF_8, Charsets.UTF_16LE, Charsets.UTF_16BE)) {
             val bom = when (charset) { Charsets.UTF_16LE -> byteArrayOf(-1,-2); Charsets.UTF_16BE -> byteArrayOf(-2,-1); else -> byteArrayOf(-17,-69,-65) }
             val encoded = bom + data.toString(Charsets.UTF_8).toByteArray(charset)
             val current = parse(SsaDialogueParser.Factory().create(format), encoded)
-            parse(SsaParser(), encoded).zip(current).forEach { (a,b) -> equivalent(a,b) }
+            comparePairs(parse(SsaParser(), encoded), current, ::equivalent)
         }
     }
 
@@ -145,9 +152,55 @@ Format: Layer, Start, End, Style, Text
             val fallback = parse(parser, data)
             assertTrue(factory.nativeFallback(format, current))
             assertEquals(1, failures)
-            parse(SsaParser(), data).zip(fallback).forEach { (a,b) -> equivalent(a,b) }
+            comparePairs(parse(SsaParser(), data), fallback, ::equivalent)
             val later = script(listOf("{\\p1}Native after failure"))
-            parse(SsaParser(), later).zip(parse(parser, later)).forEach { (a,b) -> equivalent(a,b) }
+            comparePairs(parse(SsaParser(), later), parse(parser, later), ::equivalent)
+        }
+    }
+
+    @Test fun unmatchedBracesAreBoundedEvenAfterStockFallback() {
+        val factory = SsaDialogueParser.Factory()
+        val parser = factory.create(format)
+        val stray = script(listOf("Ordinary stray { brace"))
+        assertEquals("Ordinary stray { brace", text(SsaDialogueParser.lineupCues(parse(parser, stray))))
+        val hostile = script(listOf("{".repeat(60_000)))
+        fun assertRejected() {
+            val elapsed = measureTimeMillis { assertTrue(parse(parser, hostile).isEmpty()) }
+            assertTrue("Brace pre-check took $elapsed ms", elapsed < 100)
+        }
+        assertRejected()
+        assertEquals("Ordinary stray { brace", text(SsaDialogueParser.lineupCues(parse(parser, stray))))
+        val collision = parse(parser, script(listOf("Literal \uE000LN: marker")))
+        assertTrue(factory.nativeFallback(format, collision))
+        assertRejected()
+        assertEquals("Ordinary stray { brace", text(parse(parser, stray)))
+    }
+
+    @Test fun nonDebugLoggingPolicySuppressesMalformedStockFallbackText() {
+        val sentinel = "SYNTHETIC_SSA_LOG_SENTINEL"
+        val input = (header + "Dialogue: $sentinel\n").toByteArray()
+        val messages = mutableListOf<String>()
+        val oldLevel = Log.getLogLevel()
+        Log.setLogger(object : Log.Logger {
+            override fun d(tag: String, message: String, throwable: Throwable?) { messages.add(message) }
+            override fun i(tag: String, message: String, throwable: Throwable?) { messages.add(message) }
+            override fun w(tag: String, message: String, throwable: Throwable?) { messages.add(message) }
+            override fun e(tag: String, message: String, throwable: Throwable?) { messages.add(message) }
+        })
+        try {
+            Log.setLogLevel(Log.LOG_LEVEL_ALL)
+            assertTrue(parse(SsaDialogueParser.Factory().create(format), input).isEmpty())
+            assertTrue("Stock fallback logs this fixture without the policy", messages.any { sentinel in it })
+            messages.clear()
+            Media3Engine.configureLibraryLogging(debuggable = false)
+            var failures = 0
+            val factory = SsaDialogueParser.Factory(changed = { failures++ })
+            assertTrue(parse(factory.create(format), input).isEmpty())
+            assertEquals("Malformed input still enters benign fallback", 1, failures)
+            assertTrue("Media3 logger must not receive subtitle text", messages.none { sentinel in it })
+        } finally {
+            Log.setLogLevel(oldLevel)
+            Log.setLogger(Log.Logger.DEFAULT)
         }
     }
 
@@ -201,11 +254,9 @@ Format: Layer, Start, End, Style, Text
         val stock = extract(DefaultSubtitleParserFactory())
         val actual = extract(SsaDialogueParser.Factory())
         assertTrue(stock.isNotEmpty())
-        assertEquals(stock.size, actual.size)
-        stock.zip(actual).forEach { (a,b) ->
+        comparePairs(stock, actual) { a, b ->
             assertEquals(a.startTimeUs, b.startTimeUs); assertEquals(a.durationUs, b.durationUs)
-            assertEquals(a.cues.size, b.cues.size)
-            a.cues.zip(b.cues).forEach { (x,y) -> equivalent(x,y) }
+            comparePairs(a.cues, b.cues, ::equivalent)
         }
         assertTrue(actual.flatMap { it.cues }.any { cue ->
             (cue.text as Spanned).getSpans(0, cue.text!!.length, Annotation::class.java).isNotEmpty()
@@ -215,7 +266,7 @@ Format: Layer, Start, End, Style, Text
         val parser = SsaDialogueParser.Factory().create(format)
         for (data in listOf(script(listOf("{\\i1}First")), script(listOf("{\\p0}Second")))) {
             val expected = parse(SsaParser(), data)
-            expected.zip(parse(parser, data)).forEach { (a,b) -> equivalent(a,b) }
+            comparePairs(expected, parse(parser, data), ::equivalent)
             val delegate = parser.javaClass.getDeclaredField("stock").apply { isAccessible = true }.get(parser)
             val input = SsaParser::class.java.getDeclaredField("parsableByteArray")
                 .apply { isAccessible = true }.get(delegate) as ParsableByteArray
@@ -235,10 +286,9 @@ Format: Layer, Start, End, Style, Text
             actual.add(it)
         }
         assertTrue(injected)
-        assertEquals(expected.size, actual.size)
-        expected.zip(actual).forEach { (a,b) ->
+        comparePairs(expected, actual) { a, b ->
             assertEquals(a.startTimeUs, b.startTimeUs); assertEquals(a.durationUs, b.durationUs)
-            a.cues.zip(b.cues).forEach { (x,y) -> equivalent(x,y) }
+            comparePairs(a.cues, b.cues, ::equivalent)
         }
         assertTrue(factory.nativeFallback(format, actual.first().cues))
     }
@@ -262,11 +312,9 @@ Format: Layer, Start, End, Style, Text
                 val actual = mutableListOf<CuesWithTiming>()
                 SsaParser().parse(data, 3, raw.size, option) { expected.add(it) }
                 SsaDialogueParser.Factory().create(format).parse(data, 3, raw.size, option) { actual.add(it) }
-                assertEquals(expected.size, actual.size)
-                expected.zip(actual).forEach { (a,b) ->
+                comparePairs(expected, actual) { a, b ->
                     assertEquals(a.startTimeUs, b.startTimeUs);assertEquals(a.durationUs, b.durationUs)
-                    assertEquals(a.cues.size,b.cues.size)
-                    a.cues.zip(roundTrip(b.cues)).forEach { (x,y) -> equivalent(x,y) }
+                    comparePairs(a.cues, roundTrip(b.cues), ::equivalent)
                 }
             }
         }
