@@ -93,7 +93,7 @@ String _capabilityName(Object? value) {
   if (value is! String ||
       value.isEmpty ||
       value.length > 64 ||
-      !RegExp(r'^[a-zA-Z0-9_. -]+$').hasMatch(value)) {
+      !RegExp(r'^[a-zA-Z0-9_. :-]+$').hasMatch(value)) {
     throw const FormatException();
   }
   return value;

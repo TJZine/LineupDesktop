@@ -162,8 +162,8 @@ the last PlayResY/Style rows; the real-parser JVM test checks authored fractiona
 size and color so a fallback-style render cannot stand in for ASS fidelity.
 
 `subtitle-ass-dialogue.mkv` adds concurrent ordinary dialogue with inline
-italic/bold/underline, p0/an8 dialogue, a sign at7s and a drawing at13s. Dialogue
-records restart at12.1s so a direct-start13s check reads the concurrent records
+italic/bold/underline, p0/an8 dialogue, a sign at 7 s and a drawing at 13 s. Dialogue
+records restart at 12.1 s so a direct-start 13 s check reads the concurrent records
 in the same Matroska cluster; stock Media3 otherwise omits long-lived early cue
 packets on that seek. This is a fixture control, not a production seek fix.
 `subtitle-ass-fallback.mkv` deliberately contains a literal reserved-marker
@@ -189,8 +189,8 @@ LINEUP_ANDROID_SIGNING=debug-key flutter build apk --debug --no-pub --target-pla
 ```
 
 `session-ready` and `session-sample` contain elapsed milliseconds, observed
-position/duration, state and the fixed offset label0. A pass requires readiness,
-at least400ms of progress during8seconds, and no stopped/error/ended state.
+position/duration, state and the fixed offset label 0. A pass requires readiness,
+at least 400 ms of progress during 8 seconds, and no stopped/error/ended state.
 These facts measure the backend timeline; they do not establish HDR appearance,
 decoded audio fidelity or production schedule positioning.
 

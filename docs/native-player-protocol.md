@@ -130,7 +130,9 @@ There are at most 64 video decoder records, 64 decoded audio codecs, 16 audio
 passthrough codecs and 32 containers. Video records have a required Plex
 `codec` name and optional `profiles`, `maxLevel`, positive `maxWidth`,
 `maxHeight`, `maxBitrateKbps`, `hdr` and `dolbyVisionProfiles` facts. Codec
-names use Plex spelling. Android queries these at call time on the application
+names use Plex spelling. Each name is 1–64 characters of letters, digits, space,
+`_`, `.`, `:` or `-`; H.264 profiles include `high 4:2:2` and
+`high 4:4:4 predictive`. Android queries these at call time on the application
 looper and truncates lists deterministically. Dart caches the parsed result
 for one second; malformed, oversized or failed replies become
 `MediaCapabilities.unknown`, requiring a server decision. Desktop Dart uses

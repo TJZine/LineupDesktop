@@ -59,7 +59,7 @@ class SessionHlsPublicCorpusTest {
         read(extractorInput(byteArrayOf()))
         assertTrue(videoTimes.isEmpty()); assertEquals(SessionHlsClock.State.Pending, clock.snapshot())
         // The first delivered media is segment2, not playlist index0. Its raw
-        // first videoPTS31.25s is adjusted to the supplied20s timeline target.
+        // first video PTS 31.25 s is adjusted to the supplied 20 s timeline target.
         read(extractorInput(publicHlsBytes("h264/2.m4s")))
         assertEquals(20_000_000L, videoTimes.first())
         assertEquals(-11_250_000L, adjuster.timestampOffsetUs)

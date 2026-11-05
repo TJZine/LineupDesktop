@@ -1244,19 +1244,14 @@ def main():
     parser.add_argument("--cert", type=Path)
     parser.add_argument("--key", type=Path)
     parser.add_argument("--corpus", type=Path)
-    parser.add_argument(
-        "--manifest",
-        type=Path,
-        default=Path(
-            "/Users/tristan/Software/LineupDesktop/docs/handoffs/transcoding-session-clock-public-requests.md"
-        ),
-    )
+    parser.add_argument("--manifest", type=Path)
     parser.add_argument("--sdk", type=Path, default=Path.home() / "Library/Android/sdk")
     args = parser.parse_args()
     try:
         if args.freeze:
             if any(
-                getattr(args, key) is None for key in ("apk", "cert", "key", "corpus")
+                getattr(args, key) is None
+                for key in ("apk", "cert", "key", "corpus", "manifest")
             ):
                 raise Failure("freeze_arguments_missing")
             config = freeze(args)

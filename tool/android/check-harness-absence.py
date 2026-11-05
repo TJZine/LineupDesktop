@@ -46,9 +46,11 @@ def inspect(path, *, source=False):
     if path.is_dir():
         for member in sorted(path.rglob('*')):
             if member.is_file() and (
-                member.suffix in ('.kt', '.java', '.xml') if source
+                member.suffix in ('.kt', '.java', '.xml', '.dart', '.py') if source
                 else member.suffix in ('.class', '.dex', '.jar')
             ):
+                if source and member.resolve() == Path(__file__).resolve():
+                    continue
                 if member.suffix == '.jar' and not source:
                     with zipfile.ZipFile(member) as archive:
                         for entry in archive.infolist():
@@ -56,6 +58,9 @@ def inspect(path, *, source=False):
                                 check(str(member.relative_to(path)) + ':' + entry.filename, archive.read(entry))
                 else:
                     check(str(member.relative_to(path)), member.read_bytes())
+    elif (not source and path.suffix.lower() in ('.apk', '.aab', '.jar')
+          and not zipfile.is_zipfile(path)):
+        raise ValueError('invalid_input')
     elif zipfile.is_zipfile(path):
         with zipfile.ZipFile(path) as archive:
             for member in archive.infolist():
