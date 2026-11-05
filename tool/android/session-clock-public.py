@@ -149,6 +149,9 @@ class PublicServer:
 
         class Server(ThreadingHTTPServer):
             allow_reuse_address = False
+            # Queue a connection burst for the admission guard instead of letting
+            # the default backlog of 5 drop it before admission (Linux drops SYNs).
+            request_queue_size = 64
             daemon_threads = True
             block_on_close = False
 
