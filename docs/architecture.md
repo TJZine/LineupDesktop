@@ -590,8 +590,9 @@ and [Player/Guide supersessions](player-guide-polish-plan.md) own composition.
 The archived delivery matrix also established these operational constraints:
 
 - Editable fields consume Backspace; PIN's fourth digit submits and empty PIN
-  Backspace does nothing. Guide search uses Ctrl+F, Escape clears a nonempty
-  query, then returns focus from an empty field without cascading into route Back.
+  Backspace does nothing. Guide search uses ⌘F on macOS and Ctrl+F elsewhere.
+  Escape clears a nonempty query, then returns focus from an empty field without
+  cascading into route Back.
 - Menus/dialogs/pickers contain focus, restore the exact invoker and dismiss only
   the top scope. A dismissing outside click is consumed. Player contextual Back
   opens Guide; fullscreen retains its own controls. Settings Back returns to its
@@ -608,9 +609,11 @@ The archived delivery matrix also established these operational constraints:
   retry revalidates the failed source/range without discarding valid sibling work
   or adding an automatic competing retry layer. Extension failure preserves valid
   prior preview coverage; a 1,000-occurrence cap must expose its honest end.
-- Ctrl+1/2/3/4/5 remain Guide/Channels/Settings/Diagnostics/Player. Preserve
-  supported letter/remote/media mappings; generic gamepad support and macOS
-  command-modifier changes require their own decision.
+- Destination shortcuts 1–5 open Guide, Channels, Settings, Diagnostics and
+  Player, respectively. Use ⌘ on macOS and Ctrl elsewhere, as approved in
+  [macOS decision P5](macos-port-plan.md#resolved-2026-10-17). Preserve
+  supported letter, remote and media mappings. Generic gamepad support requires
+  its own decision.
 
 ## Integration and acceptance status
 
