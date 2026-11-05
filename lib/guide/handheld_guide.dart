@@ -113,6 +113,7 @@ class _HandheldGuideIcon extends StatelessWidget {
       onPressed: onPressed,
       icon: active
           ? Container(
+              key: const Key('handheld-guide-active-pill'),
               width: 64,
               height: 32,
               alignment: Alignment.center,
@@ -415,31 +416,33 @@ extension _PortraitGuideLayout on _GuideViewState {
       isScrollControlled: true,
       useSafeArea: true,
       backgroundColor: Colors.transparent,
-      constraints: BoxConstraints(
-        maxWidth: 640,
-        maxHeight: MediaQuery.sizeOf(context).height * .9,
-      ),
+      constraints: const BoxConstraints(maxWidth: 640),
       builder: (context) {
         if (!mounted || !identical(widget.controller, controller)) {
           return const SizedBox.shrink();
         }
-        return ListenableBuilder(
-          listenable: sheetChanges,
-          builder: (context, _) => _HandheldProgramSheet(
-            channel: channel,
-            program: program,
-            now: controller.now,
-            poster: poster,
-            color: color,
-            onWatch: airingToWatch() == null
-                ? null
-                : () {
-                    if (airingToWatch() == null) return;
-                    final route = ModalRoute.of(context);
-                    if (route == null || !route.isCurrent) return;
-                    closingTransition = route.completed;
-                    Navigator.of(context).pop(true);
-                  },
+        return ConstrainedBox(
+          constraints: BoxConstraints(
+            maxHeight: MediaQuery.sizeOf(context).height * .9,
+          ),
+          child: ListenableBuilder(
+            listenable: sheetChanges,
+            builder: (context, _) => _HandheldProgramSheet(
+              channel: channel,
+              program: program,
+              now: controller.now,
+              poster: poster,
+              color: color,
+              onWatch: airingToWatch() == null
+                  ? null
+                  : () {
+                      if (airingToWatch() == null) return;
+                      final route = ModalRoute.of(context);
+                      if (route == null || !route.isCurrent) return;
+                      closingTransition = route.completed;
+                      Navigator.of(context).pop(true);
+                    },
+            ),
           ),
         );
       },

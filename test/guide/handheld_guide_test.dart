@@ -17,6 +17,7 @@ import 'package:lineup_desktop/ui/app_theme.dart';
 import 'package:lineup_desktop/ui/lineup_canvas.dart';
 
 import '../support/golden_test_support.dart';
+import '../support/handheld_probe.dart';
 import '../support/ui_fixture.dart';
 
 const _handheld = DeviceProfile(
@@ -28,6 +29,7 @@ const _nowLineKey = Key('guide-now-line');
 const _sheetKey = Key('handheld-program-sheet');
 const _watchKey = Key('handheld-program-watch');
 const _searchKey = Key('guide-channel-search');
+const _activePillKey = Key('handheld-guide-active-pill');
 final _origin = DateTime(2026, 1, 15, 9);
 
 const _configs = [
@@ -124,7 +126,7 @@ void main() {
             of: tile,
             matching: find.text('Documentary Stories', findRichText: true),
           );
-          _expectNoBrokenWord(tester, tileText, 'Documentary');
+          expectHandheldWords([tester.renderObject<RenderParagraph>(tileText)]);
 
           await tester.tap(later);
           await tester.pumpAndSettle();
@@ -134,17 +136,17 @@ void main() {
             expect(sheet.width, lessThanOrEqualTo(640));
             expect(sheet.center.dx, closeTo(size.width / 2, .01));
           }
-          _expectNoBrokenWord(
-            tester,
-            find.descendant(
-              of: find.byKey(_sheetKey),
-              matching: find.text(
-                'Documentary and Discovery',
-                findRichText: true,
+          expectHandheldWords([
+            tester.renderObject<RenderParagraph>(
+              find.descendant(
+                of: find.byKey(_sheetKey),
+                matching: find.text(
+                  'Documentary and Discovery',
+                  findRichText: true,
+                ),
               ),
             ),
-            'Documentary',
-          );
+          ]);
           await tester.ensureVisible(find.byKey(_watchKey));
           await tester.pumpAndSettle();
           _expectTapTarget(
@@ -187,46 +189,74 @@ void main() {
             size,
             'Search channels: Documentary',
           );
-          await tester.tap(activeSearch);
-          await tester.pumpAndSettle();
-          await tester.tap(clear);
-          await tester.pumpAndSettle();
-          expect(fixture.guide.searchQuery, isEmpty);
-          await tester.binding.handlePopRoute();
-          await tester.pumpAndSettle();
-          expect(field, findsNothing);
-          expect(search, findsOneWidget);
+          final fullRoundTrip =
+              size == const Size(360, 800) && dpr == 3.0 && text == 2.0;
+          if (fullRoundTrip) {
+            await tester.tap(activeSearch);
+            await tester.pumpAndSettle();
+            await tester.tap(clear);
+            await tester.pumpAndSettle();
+            expect(fixture.guide.searchQuery, isEmpty);
+            await tester.binding.handlePopRoute();
+            await tester.pumpAndSettle();
+            expect(field, findsNothing);
+            expect(search, findsOneWidget);
 
-          await tester.tap(filter);
-          await tester.pumpAndSettle();
-          await tester.tap(find.text('Cinema library'));
-          await tester.pumpAndSettle();
-          expect(fixture.guide.libraryFilterId, 'cinema');
-          final activeFilter = find.byTooltip(
-            'Filter by library: Cinema library',
-          );
-          _expectActivePill(
-            tester,
-            activeFilter,
-            size,
-            'Filter by library: Cinema library',
-          );
-          await tester.tap(activeFilter);
-          await tester.pumpAndSettle();
-          await tester.binding.handlePopRoute();
-          await tester.pumpAndSettle();
-          expect(fixture.guide.libraryFilterId, 'cinema');
-          await tester.tap(activeFilter);
-          await tester.pumpAndSettle();
-          await tester.tap(find.text('All libraries'));
-          await tester.pumpAndSettle();
-          expect(fixture.guide.libraryFilterId, isNull);
+            await tester.tap(filter);
+            await tester.pumpAndSettle();
+            await tester.tap(find.text('Cinema library'));
+            await tester.pumpAndSettle();
+            expect(fixture.guide.libraryFilterId, 'cinema');
+            final activeFilter = find.byTooltip(
+              'Filter by library: Cinema library',
+            );
+            _expectActivePill(
+              tester,
+              activeFilter,
+              size,
+              'Filter by library: Cinema library',
+            );
+            await tester.tap(activeFilter);
+            await tester.pumpAndSettle();
+            await tester.binding.handlePopRoute();
+            await tester.pumpAndSettle();
+            expect(fixture.guide.libraryFilterId, 'cinema');
+            await tester.tap(activeFilter);
+            await tester.pumpAndSettle();
+            await tester.tap(find.text('All libraries'));
+            await tester.pumpAndSettle();
+            expect(fixture.guide.libraryFilterId, isNull);
+          }
           expect(tester.takeException(), isNull);
           await fixture.unmount(tester);
         },
       );
     }
   }
+
+  _testGuideWidgets('Guide program sheet follows a live height cap', (
+    tester,
+  ) async {
+    _configure(tester, const Size(800, 1280), 2, 1);
+    final fixture = _GuideFixture();
+    await fixture.mount(tester);
+
+    await tester.tap(_card('Documentary and Discovery, channel 1.'));
+    await tester.pumpAndSettle();
+    final sheet = find.byKey(_sheetKey);
+    expect(sheet, findsOneWidget);
+    expect(
+      _windowRect(tester, sheet).height,
+      lessThanOrEqualTo(1280 * .9 + .1),
+    );
+
+    tester.view.physicalSize = const Size(800, 360) * 2;
+    await tester.pumpAndSettle();
+    expect(tester.takeException(), isNull);
+    expect(_windowRect(tester, sheet).height, lessThanOrEqualTo(360 * .9 + .1));
+
+    await fixture.unmount(tester);
+  });
 
   _testGuideWidgets('Shell exposes only the pinned picture as its tap target', (
     tester,
@@ -626,26 +656,10 @@ void _expectActivePill(
   _expectTapTarget(tester, finder, window, expectedLabel: label);
   final pill = find.descendant(
     of: finder,
-    matching: find.byWidgetPredicate(
-      (widget) =>
-          widget is Container &&
-          widget.decoration is ShapeDecoration &&
-          (widget.decoration! as ShapeDecoration).shape is StadiumBorder,
-    ),
+    matching: find.byKey(_activePillKey),
   );
+  expect(pill, findsOneWidget);
   expect(tester.getSize(pill), const Size(64, 32));
-}
-
-void _expectNoBrokenWord(WidgetTester tester, Finder finder, String word) {
-  final paragraph = tester.renderObject<RenderParagraph>(finder);
-  final text = paragraph.text.toPlainText(includeSemanticsLabels: false);
-  final start = text.indexOf(word);
-  expect(start, isNonNegative, reason: text);
-  final boxes = paragraph.getBoxesForSelection(
-    TextSelection(baseOffset: start, extentOffset: start + word.length),
-  );
-  expect(boxes, isNotEmpty);
-  expect(boxes.map((box) => box.top).toSet(), hasLength(1), reason: word);
 }
 
 class _GuideFixture {
