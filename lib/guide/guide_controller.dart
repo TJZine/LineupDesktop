@@ -905,6 +905,7 @@ class GuideController extends ChangeNotifier {
     }
     final cachedSchedule = _schedules[channel.id];
     if (cachedSchedule != null) {
+      _putSchedule(channel.id, cachedSchedule);
       _putRow(channel.id, _projectedRow(channel, cachedSchedule));
       _updateFocusAndSelection(channel.id);
       notifyListeners();
@@ -1063,7 +1064,10 @@ class GuideController extends ChangeNotifier {
     _schedules.remove(id);
     _schedules[id] = value;
     while (_schedules.length > maximumCachedRows) {
-      _schedules.remove(_schedules.keys.first);
+      final evicted = _schedules.keys.first;
+      _schedules.remove(evicted);
+      // A ready projection needs its index to resolve time outside the window.
+      if (_rows[evicted]?.state == GuideLoadState.ready) _rows.remove(evicted);
     }
   }
 

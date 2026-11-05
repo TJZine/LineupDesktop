@@ -708,17 +708,15 @@ void main() {
     await tester.tap(find.widgetWithText(TextButton, 'Guide'));
     await tester.pumpAndSettle();
 
-    await tester.tap(find.byType(DropdownButton<int>).first);
+    final dropdowns = find.byType(DropdownButton<int>);
+    expect(dropdowns, findsOneWidget);
+    await tester.tap(dropdowns);
     await tester.pumpAndSettle();
     await tester.tap(find.text('Extended (4 hours)').last);
     await tester.pump();
 
-    expect(
-      tester
-          .widgetList<DropdownButton<dynamic>>(find.byType(DropdownButton))
-          .every((dropdown) => dropdown.onChanged == null),
-      isTrue,
-    );
+    expect(dropdowns, findsOneWidget);
+    expect(tester.widget<DropdownButton<int>>(dropdowns).onChanged, isNull);
 
     controller.failUpdate();
     await tester.pumpAndSettle();
@@ -726,12 +724,8 @@ void main() {
       find.text('Could not save. The previous value was restored.'),
       findsOneWidget,
     );
-    expect(
-      tester
-          .widgetList<DropdownButton<dynamic>>(find.byType(DropdownButton))
-          .every((dropdown) => dropdown.onChanged != null),
-      isTrue,
-    );
+    expect(dropdowns, findsOneWidget);
+    expect(tester.widget<DropdownButton<int>>(dropdowns).onChanged, isNotNull);
   });
 
   testWidgets('PIN dialog leaves autofocus with its keyboard owner', (

@@ -414,12 +414,13 @@ report to Flutter.
 | --- | --- | --- |
 | Management screens | Move between controls | `Tab` / `Shift+Tab` |
 | Management screens | Activate focused control | `Enter` or `Space` |
-| Anywhere in the ready app | Open Guide / Player / Settings | `Ctrl+G` / `Ctrl+P` / `Ctrl+,` |
-| Anywhere in the ready app | Open destination 1-5 | `Ctrl+1` Guide, `Ctrl+2` Channels, `Ctrl+3` Settings, `Ctrl+4` Diagnostics, `Ctrl+5` Player |
+| Anywhere in the ready app | Open Guide / Player / Settings | `⌘G` / `⌘P` / `⌘,` on macOS. `Ctrl+G` / `Ctrl+P` / `Ctrl+,` elsewhere. |
+| Anywhere in the ready app | Open Guide, Channels, Settings, Diagnostics and Player in order | `⌘1`–`⌘5` on macOS. `Ctrl+1`–`Ctrl+5` elsewhere. |
 | Anywhere in the ready app | Open Settings directly | `F3` |
 | Guide | Move between channels | `Up` / `Down` |
 | Guide | Move between scheduled programs | `Left` / `Right` |
 | Guide | Move by a visible page | `Page Up` / `Page Down` |
+| Guide | Find | `⌘F` on macOS, `Ctrl+F` elsewhere |
 | Guide | Jump to the current time | `Home`, `P`, or Media Play |
 | Guide | Select/tune a currently airing program and open Player | `Enter`, numpad `Enter`, `Space`, or Select |
 | Guide | Close Guide to Player when playback exists; otherwise open the Lineup menu | `Esc`, `Backspace`, Back, `G`, or `F2` |
@@ -432,7 +433,7 @@ report to Flutter.
 | Player | Enter a channel number | Number keys; confirm with `Enter`, numpad `Enter`, or Select while the entry overlay is open |
 | Player | Audio / subtitle tracks | `A` / `C` |
 | Player | Sleep timer | `S` |
-| Player | Toggle fullscreen | `F` or `F11` |
+| Player | Toggle fullscreen | `F` or `F11`. macOS also has `⌃⌘F`. |
 | Player | Collapse Now Playing to OSD; close other overlays; otherwise return to Guide | `Esc`, `Backspace`, or Back |
 | Mini Guide | Browse nearby channels | `Up` / `Down` |
 | Mini Guide | Move seven channels | `Page Up` / `Page Down` |

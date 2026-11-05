@@ -2,6 +2,15 @@ part of '../channel_studio_view.dart';
 
 enum _StudioPendingChoice { filter, selection }
 
+Widget _studioFilterFieldInk(BuildContext context, LineupFieldButton field) {
+  final roles = LineupTheme.of(context);
+  if (roles.focusTreatment != LineupFocusTreatment.fill) return field;
+  return IconTheme.merge(
+    data: IconThemeData(color: roles.primaryText),
+    child: field,
+  );
+}
+
 /// Shared only by the library filter editor and the manual browser.
 /// Pending choices never mutate the draft until the picker applies them.
 final class _FilterPickerController extends ChangeNotifier {
@@ -182,17 +191,21 @@ mixin _StudioFilterControls<T extends StatefulWidget> on State<T> {
               ? 'Any collection'
               : 'Any'
         : '${selectedLabels.take(3).join(', ')}${selected.length > 3 ? ' · +${selected.length - 3} more' : ''}${unavailable > 0 ? ' · $unavailable unavailable' : ''}';
-    return LineupFieldButton(
-      key: Key('studio-filter-$key'),
-      label: _facetLabel(key),
-      value: key == 'collection' && values.isEmpty && selected.isEmpty
-          ? 'None in this library'
-          : summary,
-      focusNode: focus,
-      onPressed:
-          _saving || (key == 'collection' && values.isEmpty && selected.isEmpty)
-          ? null
-          : () => _openFilterPicker(key, values, labels),
+    return _studioFilterFieldInk(
+      context,
+      LineupFieldButton(
+        key: Key('studio-filter-$key'),
+        label: _facetLabel(key),
+        value: key == 'collection' && values.isEmpty && selected.isEmpty
+            ? 'None in this library'
+            : summary,
+        focusNode: focus,
+        onPressed:
+            _saving ||
+                (key == 'collection' && values.isEmpty && selected.isEmpty)
+            ? null
+            : () => _openFilterPicker(key, values, labels),
+      ),
     );
   }
 
