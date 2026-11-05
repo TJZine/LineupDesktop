@@ -10,7 +10,6 @@ import androidx.media3.common.util.UnstableApi
 import androidx.media3.datasource.DataSource
 import androidx.media3.datasource.okhttp.OkHttpDataSource
 import androidx.media3.exoplayer.ExoPlayer
-import androidx.media3.exoplayer.ExoTimeoutException
 import androidx.media3.exoplayer.SeekParameters
 import androidx.media3.exoplayer.analytics.AnalyticsListener
 import androidx.media3.exoplayer.hls.HlsMediaSource
@@ -20,7 +19,6 @@ import androidx.media3.exoplayer.source.ProgressiveMediaSource
 import androidx.media3.extractor.ExtractorsFactory
 import androidx.media3.ui.SubtitleView
 import okhttp3.HttpUrl.Companion.toHttpUrlOrNull
-import okhttp3.OkHttpClient
 
 /** Media/OS mechanism only. Each instance has one immutable load and is never reused. */
 @UnstableApi
@@ -56,32 +54,12 @@ internal class Media3Engine(
         player.playbackSuppressionReason == Player.PLAYBACK_SUPPRESSION_REASON_TRANSIENT_AUDIO_FOCUS_LOSS
     private val playbackThread = player.playbackLooper.thread
     private var releaseReturned = false
-    private var releasingPlayer = false
-    private var releaseTimedOut = false
-
-    init {
-        player.addListener(
-            object : Player.Listener {
-                override fun onPlayerError(error: PlaybackException) {
-                    val timeout = error.cause as? ExoTimeoutException
-                    if (
-                        releasingPlayer &&
-                            error.errorCode == PlaybackException.ERROR_CODE_TIMEOUT &&
-                            timeout?.timeoutOperation ==
-                                ExoTimeoutException.TIMEOUT_OPERATION_RELEASE
-                    ) {
-                        releaseTimedOut = true
-                    }
-                }
-            }
-        )
-    }
 
     private var initialJoinSource: InitialJoinMediaSource? = null
     private val tracks = Media3Tracks()
     private val debug =
         context.applicationInfo.flags and android.content.pm.ApplicationInfo.FLAG_DEBUGGABLE != 0
-    private var client: OkHttpClient? = null
+    private var network: MediaHttp.Load? = null
     private var http: OkHttpDataSource.Factory? = null
     private var closed = false
     private var released = false
@@ -170,8 +148,8 @@ internal class Media3Engine(
         val network = MediaHttp.forLoad(
             if (media.kind == LoadKind.plexSession) media.uri.toHttpUrlOrNull() else null,
         )
-        client = network
-        val source = OkHttpDataSource.Factory(network)
+        this.network = network
+        val source = OkHttpDataSource.Factory(network.client)
         if (media.kind == LoadKind.direct && media.token != null)
             source.setDefaultRequestProperties(mapOf("X-Plex-Token" to media.token))
         http = source
@@ -385,17 +363,14 @@ internal class Media3Engine(
         handler.removeCallbacks(progress)
         http?.setDefaultRequestProperties(emptyMap())
         http = null
-        val closingNetwork = client
-        client = null
+        val closingNetwork = network
+        closingNetwork?.retire()
         if (firstAttempt) {
-            releasingPlayer = true
             try {
                 player.release()
                 releaseReturned = true
             } catch (_: Exception) {
                 // Retain cleanup ownership. A failed release call is not proof of teardown.
-            } finally {
-                releasingPlayer = false
             }
         }
         try {
@@ -405,16 +380,15 @@ internal class Media3Engine(
         } finally {
             keepScreenOn(false)
         }
-        // Cancelling an in-flight call closes its socket (TLS close_notify). Never
-        // perform this IO on the application looper or reply to stop/dispose before
-        // it completes. Idle connections stay in the shared pool (see MediaHttp).
+        // Fence all in-flight calls, including delivered bodies, on the cleanup
+        // executor. Idle connections stay in the shared pool (see MediaHttp).
         // Media3's blocking-call deadline is not the teardown fence: its queued
         // release can finish just afterward. Wait for the actual playback thread
         // even after that deadline, and acknowledge only once it has terminated.
         // A later retry observes the same thread; it never calls release() again.
-        val timedOutThisAttempt = firstAttempt && releaseTimedOut
         val returned = releaseReturned
         cleanupExecutor.execute {
+            val networkSuccess = closingNetwork?.cancelAndAwait() ?: true
             val decoderSuccess =
                 if (returned) {
                     try {
@@ -425,15 +399,8 @@ internal class Media3Engine(
                         false
                     }
                 } else false
-            val networkSuccess =
-                try {
-                    closingNetwork?.dispatcher?.cancelAll()
-                    true
-                } catch (_: Exception) {
-                    false
-                }
             handler.post {
-                if (!networkSuccess) client = closingNetwork
+                if (networkSuccess) network = null
                 released = decoderSuccess && networkSuccess
                 complete(released)
             }

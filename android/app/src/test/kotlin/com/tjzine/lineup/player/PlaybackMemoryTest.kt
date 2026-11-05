@@ -28,8 +28,8 @@ class PlaybackMemoryTest {
 
     @Test
     fun perLoadClientsShareTransportButNotPolicyOrCancellation() {
-        val first = MediaHttp.forLoad()
-        val second = MediaHttp.forLoad()
+        val first = MediaHttp.forLoad().client
+        val second = MediaHttp.forLoad().client
         for (client in listOf(first, second)) {
             assertFalse(client.followRedirects)
             assertFalse(client.followSslRedirects)

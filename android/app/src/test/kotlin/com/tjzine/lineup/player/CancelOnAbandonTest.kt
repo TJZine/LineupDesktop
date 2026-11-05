@@ -4,7 +4,10 @@ import java.io.Closeable
 import java.io.IOException
 import java.net.InetAddress
 import java.util.concurrent.CountDownLatch
+import java.util.concurrent.CompletableFuture
+import java.util.concurrent.Executors
 import java.util.concurrent.TimeUnit
+import java.util.concurrent.TimeoutException
 import okhttp3.Call
 import okhttp3.Callback
 import okhttp3.ConnectionPool
@@ -12,6 +15,7 @@ import okhttp3.OkHttpClient
 import okhttp3.Protocol
 import okhttp3.Request
 import okhttp3.Response
+import okhttp3.ResponseBody
 import okhttp3.mockwebserver.Dispatcher as ServerDispatcher
 import okhttp3.mockwebserver.MockResponse
 import okhttp3.mockwebserver.MockWebServer
@@ -19,6 +23,8 @@ import okhttp3.mockwebserver.RecordedRequest
 import okhttp3.tls.HandshakeCertificates
 import okhttp3.tls.HeldCertificate
 import okio.Buffer
+import okio.ForwardingSource
+import okio.buffer
 import org.junit.Assert.*
 import org.junit.Test
 
@@ -174,7 +180,8 @@ class CancelOnAbandonTest {
                     return MockResponse().setBody("complete")
                 }
             }
-            val retiring = fixture.client()
+            val retiringLoad = MediaHttp.forLoad()
+            val retiring = fixture.client(load = retiringLoad)
             val active = fixture.client()
             assertNotSame(retiring.dispatcher, active.dispatcher)
             assertSame(retiring.connectionPool, active.connectionPool)
@@ -189,7 +196,8 @@ class CancelOnAbandonTest {
                 assertTrue("All three asynchronous calls must be waiting for headers", arrived.await(5, TimeUnit.SECONDS))
                 assertEquals(2, retiring.dispatcher.runningCallsCount())
                 assertEquals(1, active.dispatcher.runningCallsCount())
-                retiring.dispatcher.cancelAll()
+                retiringLoad.retire()
+                assertTrue(retiringLoad.cancelAndAwait())
                 for (i in 0..1) {
                     assertTrue(results[i].done.await(3, TimeUnit.SECONDS))
                     assertTrue(results[i].failed)
@@ -204,6 +212,74 @@ class CancelOnAbandonTest {
                 assertFalse(calls[2].isCanceled())
             } finally {
                 releaseHeaders.countDown()
+            }
+        }
+    }
+
+    @Test(timeout = 10000)
+    fun retirementWaitsForDeliveredResponseBodyOutsideTheDispatcher() {
+        Fixture().use { fixture ->
+            val load = MediaHttp.forLoad()
+            val reading = CountDownLatch(1)
+            val resumeRead = CountDownLatch(1)
+            val client = fixture.client(load = load) {
+                addNetworkInterceptor { chain ->
+                    val response = chain.proceed(chain.request())
+                    val upstream = checkNotNull(response.body)
+                    response.newBuilder().body(object : ResponseBody() {
+                        private val input = object : ForwardingSource(upstream.source()) {
+                            override fun read(sink: Buffer, byteCount: Long): Long {
+                                reading.countDown()
+                                check(resumeRead.await(5, TimeUnit.SECONDS))
+                                return super.read(sink, byteCount)
+                            }
+                        }.buffer()
+                        override fun contentType() = upstream.contentType()
+                        override fun contentLength() = upstream.contentLength()
+                        override fun source() = input
+                    }).build()
+                }
+            }
+            fixture.server.enqueue(response206(LARGE.size).setBodyDelay(2, TimeUnit.SECONDS))
+            val idle = CountDownLatch(1)
+            client.dispatcher.idleCallback = Runnable { idle.countDown() }
+            val delivered = CompletableFuture<Response>()
+            val call = client.newCall(fixture.request("/body"))
+            val workers = Executors.newFixedThreadPool(2)
+            try {
+                call.enqueue(object : Callback {
+                    override fun onFailure(call: Call, e: IOException) { delivered.completeExceptionally(e) }
+                    override fun onResponse(call: Call, response: Response) { delivered.complete(response) }
+                })
+                val response = delivered.get(3, TimeUnit.SECONDS)
+                val reader = workers.submit<Boolean> {
+                    try {
+                        response.use { it.body!!.source().readByte() }
+                        false
+                    } catch (_: IOException) { true }
+                }
+                assertTrue(idle.await(2, TimeUnit.SECONDS))
+                assertEquals(0, client.dispatcher.runningCallsCount())
+                assertTrue(reading.await(2, TimeUnit.SECONDS))
+
+                load.retire()
+                val cleanup = workers.submit<Boolean> { load.cancelAndAwait() }
+                val deadline = System.nanoTime() + TimeUnit.SECONDS.toNanos(2)
+                while (!call.isCanceled() && !cleanup.isDone && System.nanoTime() < deadline) Thread.sleep(1)
+                assertTrue("Retirement must cancel the delivered call", call.isCanceled())
+                assertThrows(TimeoutException::class.java) { cleanup.get(100, TimeUnit.MILLISECONDS) }
+                assertFalse("The wait bound preserves incomplete cleanup for retry", cleanup.get(2, TimeUnit.SECONDS))
+                val retry = workers.submit<Boolean> { load.cancelAndAwait() }
+                resumeRead.countDown()
+                assertTrue("Cancellation interrupts the body read", reader.get(2, TimeUnit.SECONDS))
+                assertTrue("The retry completes after the body terminates", retry.get(2, TimeUnit.SECONDS))
+
+                val late = client.newCall(fixture.request("/late"))
+                assertThrows(IOException::class.java) { late.execute().close() }
+                assertTrue("Calls started after retirement cancel immediately", late.isCanceled())
+            } finally {
+                resumeRead.countDown()
+                workers.shutdownNow()
             }
         }
     }
@@ -265,11 +341,16 @@ class CancelOnAbandonTest {
             server.protocols = listOf(Protocol.HTTP_1_1)
             server.start(InetAddress.getLoopbackAddress(), 0)
         }
-        fun client(candidate: Boolean = true): OkHttpClient = MediaHttp.forLoad().newBuilder()
+        fun client(
+            candidate: Boolean = true,
+            load: MediaHttp.Load = MediaHttp.forLoad(),
+            configure: OkHttpClient.Builder.() -> Unit = {},
+        ): OkHttpClient = load.client.newBuilder()
             .sslSocketFactory(clientCertificates.sslSocketFactory(), clientCertificates.trustManager)
             .connectionPool(pool)
             .protocols(listOf(Protocol.HTTP_1_1))
             .apply { if (!candidate) networkInterceptors().removeAll { it is CancelOnAbandon } }
+            .apply(configure)
             .build().also {
                 assertEquals(if (candidate) 1 else 0, it.networkInterceptors.count { interceptor -> interceptor is CancelOnAbandon })
                 clients.add(it)

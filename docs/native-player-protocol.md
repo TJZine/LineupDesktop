@@ -546,8 +546,11 @@ Media3 callbacks run on the application looper. A fresh engine/listener captures
 one load and lifecycle generation; replacement retires it before teardown.
 Dispose retires its generation and queued credentials before asynchronously
 releasing the engine and replying. Decoder/view operations stay on the application
-looper; cancellation and TLS pool closure run on an IO worker. Stop/dispose and
-successor loads wait for that cleanup, which is coalesced across concurrent
+looper. On retirement, new calls are cancelled and the cleanup worker cancels
+the load's queued and live calls, including delivered response bodies. The worker
+waits up to one second for those calls to terminate and separately fences the
+playback thread. Idle TLS connections remain in the shared pool. Stop/dispose
+and successor loads wait for cleanup, which is coalesced across concurrent
 retirement requests. A failed release retains cleanup responsibility for retry.
 Events use the 256-entry property-first
 queue above, with one slot reserved for the latest `subtitle-cues` (including a
