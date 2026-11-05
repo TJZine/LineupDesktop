@@ -392,6 +392,12 @@ void main() {
         }
         expect(tester.getTopLeft(appearance), top);
       }
+
+      await _tap(tester, find.text('Playback'));
+      // This window keeps the bottom tabs but Settings uses its rail.
+      tester.view.physicalSize = const Size(820, 900);
+      await tester.pumpAndSettle();
+      expect(find.byTooltip('Back to Settings'), findsNothing);
       await tester.binding.handlePopRoute();
       await tester.pumpAndSettle();
       expect(view, findsNothing);

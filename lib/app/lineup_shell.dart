@@ -332,9 +332,8 @@ class _LineupShellState extends State<LineupShell> {
       _portraitComposition ? ShellDestination.guide : _handheldBackDestination;
 
   bool get _settingsCategoryPageApplies =>
-      widget.profile.isHandheld &&
-      _portraitComposition &&
-      _settingsCategoryPageOpen;
+      _settingsCategoryPageOpen &&
+      SettingsView.usesCategoryPages(context, widget.profile);
 
   void _closeSettingsCategoryPage() {
     if (!_settingsCategoryPageOpen || !mounted) return;
@@ -350,9 +349,10 @@ class _LineupShellState extends State<LineupShell> {
         _handheldOrigins.clear();
         return;
       }
-      final ancestor = _handheldOrigins.indexOf(destination);
-      if (ancestor >= 0) {
-        _handheldOrigins.removeRange(ancestor, _handheldOrigins.length);
+      if (destination == ShellDestination.settings &&
+          _destination == ShellDestination.diagnostics &&
+          _handheldOrigins.lastOrNull == ShellDestination.settings) {
+        _handheldOrigins.removeLast();
         return;
       }
       if (destination == ShellDestination.diagnostics &&

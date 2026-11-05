@@ -37,7 +37,7 @@ class SettingsView extends StatefulWidget {
     this.subtitleAppearance,
     this.category = SettingsCategory.appearance,
     this.onCategoryChanged,
-    this.categoryPageOpen,
+    this.categoryPageOpen = false,
     this.onCloseCategoryPage,
     this.onSwitchProfile,
     this.onSwitchServer,
@@ -58,7 +58,7 @@ class SettingsView extends StatefulWidget {
   final SubtitleAppearanceSource? subtitleAppearance;
   final SettingsCategory category;
   final ValueChanged<SettingsCategory>? onCategoryChanged;
-  final bool? categoryPageOpen;
+  final bool categoryPageOpen;
   final VoidCallback? onCloseCategoryPage;
   final VoidCallback? onSwitchProfile;
   final VoidCallback? onSwitchServer;
@@ -74,6 +74,9 @@ class SettingsView extends StatefulWidget {
   final VoidCallback? onBack;
   final String backLabel;
 
+  static bool usesCategoryPages(BuildContext context, DeviceProfile profile) =>
+      profile.isHandheld && MediaQuery.sizeOf(context).width < 900;
+
   @override
   State<SettingsView> createState() => SettingsViewState();
 }
@@ -83,9 +86,6 @@ class SettingsViewState extends State<SettingsView> {
   late LineupSettings _displaySettings;
   late LineupSettings _lastControllerSettings;
   bool _categoryFocusPlaced = false;
-  bool _localCategoryPageOpen = false;
-
-  bool get _categoryOpen => widget.categoryPageOpen ?? _localCategoryPageOpen;
   final List<_PendingSave> _pendingSaves = [];
   final _subtitleRailFocus = FocusNode(debugLabel: 'Subtitles category');
   final _subtitleFocus = <_SettingKey, FocusNode>{};
@@ -170,25 +170,8 @@ class SettingsViewState extends State<SettingsView> {
     super.dispose();
   }
 
-  bool get _usesCategoryPages =>
-      DeviceProfile.of(context).isHandheld &&
-      MediaQuery.sizeOf(context).width < 900;
-
-  bool handleBack() {
-    if (!_usesCategoryPages || !_categoryOpen || widget.supportOnly) {
-      return false;
-    }
-    if (widget.onCloseCategoryPage case final close?) {
-      close();
-    } else {
-      setState(() => _localCategoryPageOpen = false);
-    }
-    return true;
-  }
-
   void _openCategory(SettingsCategory category) {
     setState(() {
-      _localCategoryPageOpen = true;
       _localCategory = category;
       if (category != SettingsCategory.subtitles) {
         _focusedSubtitle = null;
@@ -201,9 +184,9 @@ class SettingsViewState extends State<SettingsView> {
   }
 
   Widget _handheldSettings() {
-    final showCategory = _categoryOpen || widget.supportOnly;
+    final showCategory = widget.categoryPageOpen || widget.supportOnly;
     final onBack = showCategory && !widget.supportOnly
-        ? handleBack
+        ? widget.onCloseCategoryPage
         : widget.onBack;
     return Column(
       crossAxisAlignment: CrossAxisAlignment.stretch,
@@ -299,7 +282,12 @@ class SettingsViewState extends State<SettingsView> {
               bottom: DeviceProfile.of(context).isTv,
               child: LayoutBuilder(
                 builder: (context, constraints) {
-                  if (_usesCategoryPages) return _handheldSettings();
+                  if (SettingsView.usesCategoryPages(
+                    context,
+                    DeviceProfile.of(context),
+                  )) {
+                    return _handheldSettings();
+                  }
                   final compact =
                       LineupLayout.isCompactWidth(constraints.maxWidth) ||
                       MediaQuery.textScalerOf(context).scale(1) >= 2;
