@@ -331,17 +331,45 @@ class _LineupShellState extends State<LineupShell> {
   ShellDestination get _channelsBackDestination =>
       _portraitComposition ? ShellDestination.guide : _handheldBackDestination;
 
+  bool get _settingsCategoryPageApplies =>
+      widget.profile.isHandheld &&
+      _portraitComposition &&
+      _settingsCategoryPageOpen;
+
+  void _closeSettingsCategoryPage() {
+    if (!_settingsCategoryPageOpen || !mounted) return;
+    setState(() => _settingsCategoryPageOpen = false);
+  }
+
   // Unique ancestors retain each parent's context. Revisiting an ancestor
   // consumes its child context instead of recording a new forward origin.
   void _recordHandheldRoute(ShellDestination destination) {
     if (_portraitComposition) {
-      _handheldOrigins.clear();
-      if (destination != ShellDestination.guide &&
-          destination != ShellDestination.player) {
-        _handheldOrigins.add(ShellDestination.guide);
-        if (destination == ShellDestination.diagnostics) {
+      if (destination == ShellDestination.guide ||
+          destination == ShellDestination.player) {
+        _handheldOrigins.clear();
+        return;
+      }
+      final ancestor = _handheldOrigins.indexOf(destination);
+      if (ancestor >= 0) {
+        _handheldOrigins.removeRange(ancestor, _handheldOrigins.length);
+        return;
+      }
+      if (destination == ShellDestination.diagnostics &&
+          _destination == ShellDestination.settings) {
+        if (_handheldOrigins.isEmpty) {
+          _handheldOrigins.add(ShellDestination.guide);
+        }
+        if (!_handheldOrigins.contains(ShellDestination.settings)) {
           _handheldOrigins.add(ShellDestination.settings);
         }
+        return;
+      }
+      _handheldOrigins
+        ..clear()
+        ..add(ShellDestination.guide);
+      if (destination == ShellDestination.diagnostics) {
+        _handheldOrigins.add(ShellDestination.settings);
       }
       return;
     }
@@ -412,9 +440,8 @@ class _LineupShellState extends State<LineupShell> {
         }
         return true;
       case ShellDestination.settings:
-        if (GlobalObjectKey<SettingsViewState>(this).currentState
-                ?.handleBack() ==
-            true) {
+        if (_settingsCategoryPageApplies) {
+          _closeSettingsCategoryPage();
           return true;
         }
         if (_settingsBackDestination == null) return false;
@@ -1388,9 +1415,6 @@ class _LineupShellState extends State<LineupShell> {
           !guidePlaybackUnavailable,
     );
     final settingsView = SettingsView(
-      key: widget.profile.isHandheld
-          ? GlobalObjectKey<SettingsViewState>(this)
-          : null,
       displayMatching: widget.player.capabilities.displayMatching,
       controller: controller,
       subtitleAppearance: _player.subtitleAppearance,
@@ -1410,8 +1434,7 @@ class _LineupShellState extends State<LineupShell> {
       categoryPageOpen: _settingsCategoryPageOpen,
       onCategoryChanged: (category) =>
           setState(() => _showSettingsCategory(category)),
-      onCloseCategoryPage: () =>
-          setState(() => _settingsCategoryPageOpen = false),
+      onCloseCategoryPage: _closeSettingsCategoryPage,
       onSwitchProfile: _openProfilePickerFromAccount,
       onSwitchServer: _openServerPickerFromAccount,
       onSignOut: _requestLogout,

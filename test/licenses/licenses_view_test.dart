@@ -126,10 +126,21 @@ void main() {
       for (final (index, name) in names.indexed) {
         final row = find.byKey(ValueKey('license-row-android/$index'));
         await tester.scrollUntilVisible(row, 150, scrollable: scroll);
-        final parts = find.descendant(of: row, matching: find.byType(Text));
+        final parts = find.descendant(
+          of: row,
+          matching: find.byWidgetPredicate(
+            (widget) =>
+                widget is RichText &&
+                widget.text.toPlainText().contains(name.substring(0, 1)),
+          ),
+        );
+        expect(parts, findsOneWidget);
+        final paragraph = tester.renderObject<RenderParagraph>(parts);
+        final boxes = _originalCharacterBoxes(paragraph, name);
+        final lines = boxes.map((entry) => entry.box.top).toSet();
         expect(
-          tester.widgetList<Text>(parts).map((text) => text.data).join(),
-          name,
+          lines.length,
+          name == overwide ? greaterThan(1) : greaterThanOrEqualTo(1),
         );
         final nodes = find.semantics
             .byAction(ui.SemanticsAction.tap)
@@ -143,48 +154,24 @@ void main() {
           ),
           hasLength(1),
         );
-        for (final part in parts.evaluate()) {
-          final richText = find.descendant(
-            of: find.byWidget(part.widget),
-            matching: find.byType(RichText),
-          );
-          final paragraph = tester.renderObject<RenderParagraph>(richText);
-          final text = (part.widget as Text).data!;
-          final boxes = paragraph.getBoxesForSelection(
-            TextSelection(baseOffset: 0, extentOffset: text.length),
-          );
-          final lines = boxes.map((box) => box.top).toSet();
-          expect(
-            lines.length,
-            text == overwide ? greaterThan(1) : 1,
-            reason: text,
-          );
-          if (text != overwide) {
-            expect(
-              boxes.every((box) => box.right <= paragraph.size.width + 1),
-              isTrue,
-              reason: text,
-            );
+        if (name != overwide) {
+          for (var index = 0; index < boxes.length - 1; index++) {
+            final current = boxes[index];
+            final next = boxes[index + 1];
+            if (next.index == current.index + 1 &&
+                current.box.top != next.box.top) {
+              expect(
+                RegExp(r'[\s.:\-_/]').hasMatch(name[current.index]),
+                isTrue,
+                reason: name,
+              );
+            }
           }
         }
         if (name == okhttp) {
-          expect(
-            tester.getTopLeft(parts.last).dy,
-            greaterThan(tester.getTopLeft(parts.first).dy),
-          );
+          expect(lines, hasLength(greaterThan(1)));
         }
-        if (name == fitted) {
-          final token = find.descendant(
-            of: row,
-            matching: find.text('multiplatformregistration-'),
-          );
-          final natural = tester.getSize(token).width;
-          final drawn =
-              tester.getRect(token).width /
-              LineupCanvas.scaleOf(tester.element(token));
-          expect(drawn, lessThan(natural));
-          expect(drawn, greaterThanOrEqualTo(natural / 2));
-        }
+        expect(find.bySemanticsLabel(name), findsOneWidget);
       }
       expect(tester.takeException(), isNull);
     } finally {
@@ -240,41 +227,72 @@ void main() {
           of: title,
           matching: find.byType(RichText),
         );
+        expect(richText, findsOneWidget);
         final paragraph = tester.renderObject<RenderParagraph>(richText);
-        final visual = paragraph.text.toPlainText(
-          includeSemanticsLabels: false,
-        );
-        expect(visual.replaceAll('\u200b', ''), name);
+        final boxes = _originalCharacterBoxes(paragraph, name);
         expect(find.bySemanticsLabel(name), findsOneWidget);
-        final parts = visual.split('\u200b');
-        final lines = <double>{};
-        var start = 0;
-        var ellipsized = false;
-        for (final (index, part) in parts.indexed) {
-          if (index < parts.length - 1) {
-            expect(RegExp(r'[.:\-_/]$').hasMatch(part), isTrue, reason: part);
+        for (var index = 0; index < boxes.length - 1; index++) {
+          final current = boxes[index];
+          final next = boxes[index + 1];
+          if (next.index == current.index + 1 &&
+              current.box.top != next.box.top) {
+            expect(
+              RegExp(r'[\s.:\-_/]').hasMatch(name[current.index]),
+              isTrue,
+              reason: name,
+            );
           }
-          final boxes = paragraph.getBoxesForSelection(
-            TextSelection(baseOffset: start, extentOffset: start + part.length),
-          );
-          final partLines = boxes.map((box) => box.top).toSet();
-          if (partLines.isEmpty) {
-            // B1 still uses two lines and the original title for semantics.
-            ellipsized = true;
-          } else {
-            expect(ellipsized, isFalse, reason: part);
-            expect(partLines, hasLength(1), reason: part);
-            lines.addAll(partLines);
-          }
-          start += part.length + 1;
         }
-        expect(lines, hasLength(2), reason: name);
         await tester.tap(find.byTooltip('Back to Licenses'));
         await tester.pumpAndSettle();
       }
       expect(tester.takeException(), isNull);
     } finally {
       semantics.dispose();
+      await tester.pumpWidget(const SizedBox.shrink());
+      debugDefaultTargetPlatformOverride = null;
+    }
+  });
+
+  testWidgets('handheld reading pages restore focus to the page-bar Back', (
+    tester,
+  ) async {
+    debugDefaultTargetPlatformOverride = TargetPlatform.android;
+    const handheld = DeviceProfile(
+      host: TargetPlatform.android,
+      formFactor: FormFactor.handheld,
+    );
+    try {
+      await show(
+        tester,
+        [
+          LicenseSource(
+            'Packages',
+            () async => [
+              LicenseItem.list('component', 'Component', [
+                LicenseItem.document(
+                  'notice',
+                  'Notice',
+                  () async => 'License text',
+                ),
+              ]),
+            ],
+          ),
+        ],
+        size: const Size(360, 800),
+        profile: handheld,
+      );
+      await tester.sendKeyEvent(LogicalKeyboardKey.arrowDown);
+      await tester.pumpAndSettle();
+      await tester.sendKeyEvent(LogicalKeyboardKey.select);
+      await tester.pumpAndSettle();
+      await tester.sendKeyEvent(LogicalKeyboardKey.arrowDown);
+      await tester.pumpAndSettle();
+      await tester.sendKeyEvent(LogicalKeyboardKey.select);
+      await tester.pumpAndSettle();
+      expect(FocusManager.instance.primaryFocus?.debugLabel, 'Licenses back');
+      expect(find.byTooltip('Back to Component'), findsOneWidget);
+    } finally {
       await tester.pumpWidget(const SizedBox.shrink());
       debugDefaultTargetPlatformOverride = null;
     }
@@ -883,6 +901,36 @@ void main() {
       await tester.pumpWidget(const SizedBox());
     }
   });
+}
+
+List<({int index, TextBox box})> _originalCharacterBoxes(
+  RenderParagraph paragraph,
+  String original,
+) {
+  final rendered = paragraph.text.toPlainText(includeSemanticsLabels: false);
+  final result = <({int index, TextBox box})>[];
+  var renderedOffset = 0;
+  for (
+    var originalOffset = 0;
+    originalOffset < original.length;
+    originalOffset++
+  ) {
+    while (renderedOffset < rendered.length &&
+        rendered[renderedOffset] != original[originalOffset]) {
+      renderedOffset++;
+    }
+    if (renderedOffset >= rendered.length) break;
+    final boxes = paragraph.getBoxesForSelection(
+      TextSelection(
+        baseOffset: renderedOffset,
+        extentOffset: renderedOffset + 1,
+      ),
+    );
+    if (boxes.isEmpty) break;
+    result.add((index: originalOffset, box: boxes.first));
+    renderedOffset++;
+  }
+  return result;
 }
 
 class _PreloadedLicenseAssets extends CachingAssetBundle {

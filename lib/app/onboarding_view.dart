@@ -1293,7 +1293,11 @@ class _HeroContent extends StatelessWidget {
         Semantics(
           header: true,
           child: centered && DeviceProfile.of(context).isHandheld
-              ? _OnboardingWordText(title, style: LineupTypography.pageTitle)
+              ? HandheldWordText(
+                  title,
+                  style: LineupTypography.pageTitle,
+                  textAlign: TextAlign.center,
+                )
               : Text(
                   title,
                   textAlign: centered ? TextAlign.center : TextAlign.left,
@@ -1468,10 +1472,11 @@ class _ProfileCardState extends State<_ProfileCard> {
                             fontWeight: FontWeight.w600,
                           );
                           if (widget.compact) {
-                            return _OnboardingWordText(
+                            return HandheldWordText(
                               user.name,
                               style: nameStyle,
-                              maxWidth: widget.compactWidth! - 12,
+                              maxWidth: widget.compactWidth! - 18,
+                              textAlign: TextAlign.center,
                             );
                           }
                           return OverlayPortal(
@@ -1559,74 +1564,6 @@ class _ProfileCardState extends State<_ProfileCard> {
             ),
           ),
         ),
-      ),
-    );
-  }
-}
-
-/// Keeps a single overwide word intact while all other text uses the
-/// platform scaler. The smaller role never goes below its unscaled size.
-class _OnboardingWordText extends StatelessWidget {
-  const _OnboardingWordText(this.value, {required this.style, this.maxWidth});
-
-  final String value;
-  final TextStyle style;
-  final double? maxWidth;
-
-  @override
-  Widget build(BuildContext context) {
-    if (maxWidth case final width?) return _fitWords(context, width);
-    return LayoutBuilder(
-      builder: (context, constraints) =>
-          _fitWords(context, constraints.maxWidth),
-    );
-  }
-
-  Widget _fitWords(BuildContext context, double availableWidth) {
-    final resolvedStyle = DefaultTextStyle.of(context).style.merge(style);
-    final scaler = MediaQuery.textScalerOf(context);
-    final fontSize = style.fontSize!;
-    final painter = TextPainter(
-      text: TextSpan(text: value, style: resolvedStyle),
-      textDirection: Directionality.of(context),
-      textScaler: scaler,
-      textAlign: TextAlign.center,
-    )..layout(maxWidth: availableWidth);
-    final words = RegExp(r'\S+').allMatches(value).toList();
-    final breaksWord = words.any((word) {
-      final boxes = painter.getBoxesForSelection(
-        TextSelection(baseOffset: word.start, extentOffset: word.end),
-      );
-      return boxes.map((box) => box.top).toSet().length > 1;
-    });
-    if (!breaksWord && scaler.scale(fontSize) <= fontSize) {
-      painter.dispose();
-      return Text(value, style: style, textAlign: TextAlign.center);
-    }
-
-    painter.textScaler = TextScaler.noScaling;
-    final wordWidgets = <Widget>[];
-    for (final match in words) {
-      final word = match.group(0)!;
-      painter
-        ..text = TextSpan(text: word, style: resolvedStyle)
-        ..layout();
-      final text = Text(word, style: style, softWrap: false);
-      wordWidgets.add(
-        painter.width <= availableWidth
-            ? FittedBox(fit: BoxFit.scaleDown, child: text)
-            : Text(word, style: style),
-      );
-    }
-    painter.dispose();
-    return Semantics(
-      label: value,
-      excludeSemantics: true,
-      child: Wrap(
-        alignment: WrapAlignment.center,
-        crossAxisAlignment: WrapCrossAlignment.center,
-        spacing: scaler.scale(fontSize) / 4,
-        children: wordWidgets,
       ),
     );
   }
@@ -2008,13 +1945,20 @@ class _ProfilePinStepState extends State<_ProfilePinStep> {
                         : null,
                   ),
                   SizedBox(height: gap),
-                  Text(
-                    widget.user.name,
-                    textAlign: TextAlign.center,
-                    maxLines: 2,
-                    overflow: TextOverflow.ellipsis,
-                    style: LineupTypography.pageTitle,
-                  ),
+                  DeviceProfile.of(context).isHandheld
+                      ? HandheldWordText(
+                          widget.user.name,
+                          textAlign: TextAlign.center,
+                          maxLines: 2,
+                          style: LineupTypography.pageTitle,
+                        )
+                      : Text(
+                          widget.user.name,
+                          textAlign: TextAlign.center,
+                          maxLines: 2,
+                          overflow: TextOverflow.ellipsis,
+                          style: LineupTypography.pageTitle,
+                        ),
                   SizedBox(height: 28),
                   Semantics(
                     key: const Key('profile-pin-progress'),

@@ -7,10 +7,12 @@ import 'package:flutter/rendering.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:lineup_desktop/app/diagnostics_view.dart';
+import 'package:lineup_desktop/app/lineup_app.dart';
 import 'package:lineup_desktop/app/lineup_controller.dart';
 import 'package:lineup_desktop/app/settings_view.dart';
 import 'package:lineup_desktop/licenses/licenses_view.dart';
 import 'package:lineup_desktop/playback/native_player.dart';
+import 'package:lineup_desktop/playback/player_view.dart';
 import 'package:lineup_desktop/plex/plex_models.dart';
 import 'package:lineup_desktop/ui/handheld_management.dart';
 import 'package:lineup_desktop/ui/lineup_canvas.dart';
@@ -28,6 +30,8 @@ const _settingsTab = ValueKey('handheld-tab-settings');
 const _profileAvatar = ValueKey('profile-card-taylor');
 const _overwideProfileName =
     'Multiplatformregistrationmultiplatformregistrationmultiplatformregistration';
+const _protectedOverwideProfileName =
+    'Protectedprofileprotectedprofileprotectedprofile';
 
 void main() {
   setUpAll(loadPinnedTestFonts);
@@ -237,7 +241,7 @@ void main() {
     expect(controller.pinAttempts, ['1234']);
   });
 
-  _h4Test('a profile word wider than the unscaled line breaks in place', (
+  _h4Test('a profile word wider than the unscaled line ellipsizes intact', (
     tester,
   ) async {
     _window(tester, const Size(360, 800), 1, 2);
@@ -245,21 +249,76 @@ void main() {
       tester,
       UiFixture(profile: _handheld, controller: _PinController()),
     );
-    final word = find.text(_overwideProfileName);
-    await tester.ensureVisible(word);
+    final card = find.byKey(const ValueKey('profile-card-overwide'));
+    await tester.ensureVisible(card);
     await tester.pumpAndSettle();
-    final richText = find.descendant(of: word, matching: find.byType(RichText));
-    final paragraph = tester.renderObject<RenderParagraph>(richText);
-    final boxes = paragraph.getBoxesForSelection(
-      const TextSelection(
-        baseOffset: 0,
-        extentOffset: _overwideProfileName.length,
+    final richText = find.descendant(
+      of: card,
+      matching: find.byWidgetPredicate(
+        (widget) =>
+            widget is RichText &&
+            widget.textAlign == TextAlign.center &&
+            widget.text.toPlainText().contains(
+              _overwideProfileName.substring(0, 1),
+            ),
       ),
     );
-    expect(boxes.map((box) => box.top).toSet(), hasLength(greaterThan(1)));
-    final card = find.byKey(const ValueKey('profile-card-overwide'));
-    expect(tester.getRect(word).width, lessThan(tester.getRect(card).width));
+    expect(richText, findsOneWidget);
+    final paragraph = tester.renderObject<RenderParagraph>(richText);
+    final visual = paragraph.text.toPlainText(includeSemanticsLabels: false);
+    final boxes = paragraph.getBoxesForSelection(
+      TextSelection(baseOffset: 0, extentOffset: visual.length),
+    );
+    expect(boxes.map((box) => box.top).toSet(), hasLength(1));
+    expect(visual, endsWith('…'));
+    expect(visual, isNot(_overwideProfileName));
+    expect(
+      find.semantics
+          .byAction(SemanticsAction.tap)
+          .evaluate()
+          .map((node) => node.getSemanticsData().label)
+          .any((label) => label.contains(_overwideProfileName)),
+      isTrue,
+    );
     expect(tester.takeException(), isNull);
+  });
+
+  _h4Test('the protected profile PIN title also fits its long name', (
+    tester,
+  ) async {
+    _window(tester, const Size(360, 800), 1, 1);
+    await _pump(
+      tester,
+      UiFixture(profile: _handheld, controller: _PinController()),
+    );
+    await _tap(
+      tester,
+      find.byKey(const ValueKey('profile-card-protected-overwide')),
+    );
+    final sheet = find.byKey(const Key('profile-pin-sheet'));
+    final title = find.descendant(
+      of: sheet,
+      matching: find.byWidgetPredicate(
+        (widget) =>
+            widget is RichText &&
+            widget.text.toPlainText().contains('Protectedprofile'),
+      ),
+    );
+    expect(title, findsOneWidget);
+    final paragraph = tester.renderObject<RenderParagraph>(title);
+    final visual = paragraph.text.toPlainText(includeSemanticsLabels: false);
+    final boxes = paragraph.getBoxesForSelection(
+      TextSelection(baseOffset: 0, extentOffset: visual.length),
+    );
+    expect(boxes.map((box) => box.top).toSet(), hasLength(1));
+    expect(visual, endsWith('…'));
+    expect(
+      find.descendant(
+        of: sheet,
+        matching: find.bySemanticsLabel(_protectedOverwideProfileName),
+      ),
+      findsOneWidget,
+    );
   });
 
   _h4Test('Settings tab restores the last list or category page', (
@@ -338,6 +397,46 @@ void main() {
       expect(view, findsNothing);
     },
   );
+
+  _h4Test('Diagnostics keeps the wide Player parent across a portrait resize', (
+    tester,
+  ) async {
+    _window(tester, const Size(1280, 800), 1, 1);
+    final fixture = UiFixture(
+      profile: _handheld,
+      scenario: const LineupScenario(stage: SetupStage.ready),
+    );
+    addTearDown(fixture.controller.dispose);
+    await tester.pumpWidget(
+      LineupBootstrap(
+        player: fixture.player,
+        controller: fixture.controller,
+        profile: _handheld,
+        initialMediaPath: '/synthetic.mp4',
+      ),
+    );
+    await tester.pump(const Duration(milliseconds: 100));
+    expect(find.byType(PlayerView), findsOneWidget);
+    await tester.sendKeyDownEvent(LogicalKeyboardKey.controlLeft);
+    await tester.sendKeyEvent(LogicalKeyboardKey.digit3);
+    await tester.sendKeyUpEvent(LogicalKeyboardKey.controlLeft);
+    await tester.pump();
+    tester.view.physicalSize = const Size(412, 915);
+    await tester.pump();
+    await tester.tap(find.text('Support').first);
+    await tester.pump();
+    await tester.tap(find.text('Open Diagnostics'));
+    await tester.pump();
+    tester.view.physicalSize = const Size(1280, 800);
+    await tester.pump();
+    await tester.binding.handlePopRoute();
+    await tester.pump();
+    expect(find.byType(DiagnosticsView), findsNothing);
+    expect(find.byType(SettingsView), findsOneWidget);
+    await tester.binding.handlePopRoute();
+    await tester.pump();
+    expect(find.byType(PlayerView), findsOneWidget);
+  });
 
   _h4Test('phone QR gate uses display dimensions in a short tablet pane', (
     tester,
@@ -434,6 +533,11 @@ class _PinController extends FixtureController {
               id: 'overwide',
               name: _overwideProfileName,
               protected: false,
+            ),
+            PlexHomeUser(
+              id: 'protected-overwide',
+              name: _protectedOverwideProfileName,
+              protected: true,
             ),
             PlexHomeUser(
               id: 'long',
