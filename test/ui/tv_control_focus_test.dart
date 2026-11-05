@@ -59,6 +59,87 @@ Future<void> _mount(
 }
 
 void main() {
+  for (final (tier, tv) in [
+    (LineupButtonTier.primary, true),
+    (LineupButtonTier.text, true),
+    (LineupButtonTier.secondary, true),
+    (LineupButtonTier.primary, false),
+  ]) {
+    testWidgets('button keeps resolved text and icon ink: $tier tv=$tv', (
+      tester,
+    ) async {
+      final node = FocusNode();
+      final enabled = ValueNotifier(true);
+      addTearDown(node.dispose);
+      addTearDown(enabled.dispose);
+      const label = 'Action';
+      const icon = Icons.add;
+      const child = Row(
+        mainAxisSize: MainAxisSize.min,
+        children: [Text(label), Icon(icon)],
+      );
+      await _mount(
+        tester,
+        ValueListenableBuilder<bool>(
+          valueListenable: enabled,
+          builder: (context, isEnabled, _) {
+            final VoidCallback? press = isEnabled ? () {} : null;
+            return switch (tier) {
+              LineupButtonTier.primary => FilledButton(
+                focusNode: node,
+                onPressed: press,
+                child: child,
+              ),
+              LineupButtonTier.secondary => OutlinedButton(
+                focusNode: node,
+                onPressed: press,
+                child: child,
+              ),
+              _ => TextButton(focusNode: node, onPressed: press, child: child),
+            };
+          },
+        ),
+        tv: tv,
+        platform: tv ? TargetPlatform.android : TargetPlatform.windows,
+      );
+      final element = tester.element(find.text(label));
+      final roles = LineupTheme.of(element);
+      void expectInk(Color color) {
+        expect(_ink(tester, label), color, reason: 'plain text ink');
+        expect(
+          _inkAt(tester, find.byIcon(icon)),
+          color,
+          reason: 'plain icon ink',
+        );
+        expect(tester.element(find.text(label)), same(element));
+      }
+
+      final resting = switch (tier) {
+        LineupButtonTier.primary => roles.onFocus,
+        LineupButtonTier.secondary => roles.primaryText,
+        _ => roles.secondaryText,
+      };
+      expect(node.hasFocus, isFalse);
+      expectInk(resting);
+      node.requestFocus();
+      await tester.pumpAndSettle();
+      expect(node.hasFocus, isTrue);
+      expectInk(roles.onFocus);
+      node.unfocus();
+      await tester.pumpAndSettle();
+      expect(node.hasFocus, isFalse);
+      expectInk(resting);
+      enabled.value = false;
+      await tester.pumpAndSettle();
+      expectInk(
+        (tier == LineupButtonTier.primary
+                ? roles.progressFill
+                : roles.secondaryText)
+            .withValues(alpha: .45),
+      );
+    });
+  }
+
   for (final tv in [true, false]) {
     for (final selected in [true, false]) {
       testWidgets('tab scoped ink tv=$tv selected=$selected', (tester) async {
