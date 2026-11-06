@@ -3491,6 +3491,47 @@ void main() {
         ),
         [first.toJson(), third.toJson()],
       );
+      // Reset the editor with all three original occurrences for filtered removal.
+      await tester.pumpWidget(const SizedBox.shrink());
+      await tester.pumpWidget(
+        _studio(
+          controller,
+          ChannelStudioMode.editCustom,
+          channel: original,
+          studioKey: studioKey,
+        ),
+      );
+      await tester.pumpAndSettle();
+      final search = find.byKey(const Key('studio-rundown-search'));
+      await tester.enterText(search, 'ir');
+      await tester.pump();
+      FocusNode rowFocus(Finder row) => tester
+          .widget<Focus>(
+            find.ancestor(of: row, matching: find.byType(Focus)).first,
+          )
+          .focusNode!;
+      rowFocus(firstRow).requestFocus();
+      await tester.pump();
+      await tester.sendKeyEvent(LogicalKeyboardKey.delete);
+      await tester.pump();
+      expect(FocusManager.instance.primaryFocus, same(rowFocus(thirdRow)));
+      await tester.sendKeyDownEvent(LogicalKeyboardKey.altLeft);
+      await tester.sendKeyEvent(LogicalKeyboardKey.arrowDown);
+      await tester.sendKeyUpEvent(LogicalKeyboardKey.altLeft);
+      await tester.pump();
+      await tester.enterText(search, '');
+      await tester.pump();
+      expect(
+        tester.getTopLeft(thirdRow).dy,
+        greaterThan(tester.getTopLeft(secondRow).dy),
+      );
+      await tester.enterText(search, 'ir');
+      await tester.pump();
+      rowFocus(thirdRow).requestFocus();
+      await tester.pump();
+      await tester.sendKeyEvent(LogicalKeyboardKey.delete);
+      await tester.pump();
+      expect(tester.widget<TextField>(search).focusNode!.hasFocus, isTrue);
     },
   );
 
@@ -3628,6 +3669,100 @@ void main() {
       );
     },
   );
+
+  for (final isTv in [false, true]) {
+    final register = isTv ? _studioTvTest : testWidgets;
+    register('pending manual save blocks keyboard rundown edits (TV: $isTv)', (
+      tester,
+    ) async {
+      final a = _media('a', title: 'Program A');
+      final b = _media('b', title: 'Program B');
+      final c = _media('c', title: 'Program C');
+      final original = _channel(
+        id: 'pending-manual',
+        number: 26,
+        name: 'Pending manual',
+        source: ManualSource([channelItemFor(a)]),
+      );
+      final controller = _RecordingSaveController(
+        scenario: LineupScenario(
+          channels: [original],
+          availableMedia: [a, b, c],
+        ),
+      )..saveGate = Completer<void>();
+      addTearDown(controller.dispose);
+      final studioKey = GlobalKey<ChannelStudioViewState>();
+      await tester.pumpWidget(
+        _studio(
+          controller,
+          ChannelStudioMode.editCustom,
+          channel: original,
+          studioKey: studioKey,
+          profile: isTv ? tvProfile : desktopProfile,
+        ),
+      );
+      await _settleAirCheck(tester);
+      final browse = find.textContaining('Browse library');
+      await tester.ensureVisible(browse);
+      await tester.tap(browse);
+      await tester.pumpAndSettle();
+      final rowB = find.byKey(const Key('studio-result-b'));
+      await tester.ensureVisible(rowB);
+      await tester.tap(rowB);
+      await _settleAirCheck(tester);
+      final undo = find.widgetWithText(TextButton, 'Undo last addition');
+      await tester.ensureVisible(undo);
+      Focus.of(tester.element(find.text('Undo last addition'))).requestFocus();
+      await tester.pump();
+      expect(
+        Focus.of(tester.element(find.text('Undo last addition')))
+            .hasPrimaryFocus,
+        isTrue,
+      );
+      final save = find.text('Save changes');
+      await tester.ensureVisible(save);
+      await tester.tap(save);
+      await tester.pump();
+      expect(studioKey.currentState!.saving, isTrue);
+      await tester.sendKeyEvent(LogicalKeyboardKey.space);
+      await tester.pump();
+      expect(undo, findsOneWidget, reason: 'Space must leave B in the rundown');
+      expect(tester.widget<TextButton>(undo).onPressed, isNull);
+      final rowC = find.byKey(const Key('studio-result-c'));
+      expect(tester.widget<ListTile>(rowC).onTap, isNull);
+      await tester.sendKeyEvent(LogicalKeyboardKey.enter);
+      controller.saveGate!.complete();
+      await tester.pumpAndSettle();
+      expect(studioKey.currentState!.dirty, isFalse);
+      expect(
+        (controller.saved!.source as ManualSource).items.map((item) => item.id),
+        ['a', 'b'],
+      );
+      expect(FocusManager.instance.primaryFocus, isA<FocusScopeNode>());
+      await tester.sendKeyEvent(LogicalKeyboardKey.tab);
+      await tester.pumpAndSettle();
+      expect(
+        FocusManager.instance.primaryFocus?.debugLabel,
+        'Back to Channels',
+      );
+      if (isTv) {
+        await tester.sendKeyEvent(LogicalKeyboardKey.arrowDown);
+        await tester.pumpAndSettle();
+        final name = find.byKey(const Key('studio-name'));
+        expect(_studioFieldNavigation(tester, name).hasPrimaryFocus, isTrue);
+      }
+      final rundown = find.textContaining('Channel programs');
+      await tester.ensureVisible(rundown);
+      await tester.tap(rundown);
+      await tester.pumpAndSettle();
+      final rowA = find.byKey(const Key('studio-rundown-a'));
+      final savedRowB = find.byKey(const Key('studio-rundown-b'));
+      expect(
+        tester.getTopLeft(rowA).dy,
+        lessThan(tester.getTopLeft(savedRowB).dy),
+      );
+    });
+  }
 
   testWidgets('successful save refreshes every retained occurrence snapshot', (
     tester,
@@ -5183,7 +5318,113 @@ void main() {
     await tester.ensureVisible(find.text('Done'));
     await tester.tap(find.text('Done'));
     await tester.pumpAndSettle();
-    expect(find.text('Genre: Drama'), findsOneWidget);
+    final chip = find.byKey(const Key('studio-applied-genre'));
+    final addFilter = find.byKey(const Key('studio-library-add-filter'));
+    await tester.ensureVisible(chip);
+    await tester.tap(chip);
+    await tester.pumpAndSettle();
+    await tester.tap(find.widgetWithText(CheckboxListTile, 'Drama'));
+    await tester.ensureVisible(find.text('Done'));
+    await tester.tap(find.text('Done'));
+    await tester.pumpAndSettle();
+    expect(chip, findsNothing);
+    expect(
+      find.descendant(
+        of: addFilter,
+        matching: find.byElementPredicate(
+          (element) =>
+              identical(element, FocusManager.instance.primaryFocus?.context),
+        ),
+      ),
+      findsOneWidget,
+    );
+    final addFilterFocus = tester.widget<TextButton>(addFilter).focusNode!;
+    await tester.sendKeyEvent(LogicalKeyboardKey.enter);
+    await tester.pumpAndSettle();
+    final genreField = find.byKey(const Key('studio-filter-genre'));
+    expect(genreField, findsOneWidget);
+    Future<void> tapControl(Finder control) async {
+      expect(control, findsOneWidget);
+      await tester.ensureVisible(control);
+      await tester.tap(control);
+      await tester.pumpAndSettle();
+    }
+
+    final drama = find.widgetWithText(CheckboxListTile, 'Drama');
+    await tapControl(genreField);
+    await tapControl(drama);
+    await tapControl(find.text('Done'));
+    final inputChip = tester.widget<InputChip>(chip);
+    inputChip.focusNode!.requestFocus();
+    await tester.pump();
+    await tapControl(
+      find.descendant(of: chip, matching: find.byIcon(Icons.close)),
+    );
+    expect(chip, findsNothing);
+    expect(addFilterFocus.hasPrimaryFocus, isTrue);
+
+    await _openStudioFilter(tester, 'genre');
+    await tapControl(find.text('Cancel'));
+    expect(addFilterFocus.hasPrimaryFocus, isTrue);
+  });
+
+  testWidgets('clearing Library Collection restores focus to the field', (
+    tester,
+  ) async {
+    final channel = _channel(
+      id: 'collection-channel',
+      number: 27,
+      name: 'Collection channel',
+      source: const LibrarySource(
+        libraryId: 'movies',
+        libraryType: PlexLibraryType.movie,
+        filters: {
+          LibraryFilter.collection: ['Library collection'],
+        },
+      ),
+    );
+    final controller = _RecordingSaveController(
+      scenario: LineupScenario(
+        channels: [channel],
+        libraries: const [
+          PlexLibrary(
+            id: 'movies',
+            title: 'Movies',
+            type: PlexLibraryType.movie,
+          ),
+        ],
+        selectedLibraryIds: {'movies'},
+        availableMedia: [
+          _media(
+            'member',
+            libraryId: 'movies',
+            collections: ['Library collection'],
+          ),
+        ],
+      ),
+    );
+    addTearDown(controller.dispose);
+    await tester.pumpWidget(
+      _studio(controller, ChannelStudioMode.editCustom, channel: channel),
+    );
+    await _settleAirCheck(tester);
+    final collection = find.byKey(const Key('studio-filter-collection'));
+    await tester.ensureVisible(collection);
+    await tester.tap(collection);
+    await tester.pumpAndSettle();
+    final clear = find.text('Clear selection');
+    await tester.ensureVisible(clear);
+    await tester.tap(clear);
+    await tester.pump();
+    final done = find.text('Done');
+    await tester.ensureVisible(done);
+    await tester.tap(done);
+    await tester.pumpAndSettle();
+    expect(
+      tester.widget<LineupFieldButton>(collection).focusNode!.hasPrimaryFocus,
+      isTrue,
+    );
+    expect(find.text('Any collection'), findsOneWidget);
   });
 
   testWidgets(
@@ -6223,6 +6464,7 @@ class _BlockingSaveController extends FixtureController {
 class _RecordingSaveController extends FixtureController {
   _RecordingSaveController({super.scenario});
 
+  Completer<void>? saveGate;
   Channel? saved;
   Channel? expectedBase;
   Channel? loaded;
@@ -6255,6 +6497,7 @@ class _RecordingSaveController extends FixtureController {
     Channel channel, {
     required Channel? expectedBase,
   }) async {
+    if (saveGate case final gate?) await gate.future;
     saved = channel;
     this.expectedBase = expectedBase;
     return channel;

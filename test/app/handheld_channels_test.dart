@@ -385,6 +385,28 @@ void main() {
     },
   );
 
+  _handheldTest('cancelling stacked row deletion restores Actions', (
+    tester,
+  ) async {
+    _window(tester, const Size(412, 915), 2.625);
+    await tester.runAsync(loadPinnedTestFonts);
+    await _DirectoryFixture(count: 3).pump(tester, 1);
+    final actions = find.byTooltip('Actions for Documentaries');
+    await _tap(tester, actions);
+    await _tap(tester, find.text('Delete…'));
+    await _tap(tester, find.widgetWithText(TextButton, 'Cancel'));
+    expect(
+      FocusManager.instance.primaryFocus,
+      same(
+        tester
+            .widget<IconButton>(
+              find.ancestor(of: actions, matching: find.byType(IconButton)),
+            )
+            .focusNode,
+      ),
+    );
+  });
+
   _handheldTest('Back closes Channels sheets, then mode, then tab', (
     tester,
   ) async {
@@ -417,7 +439,33 @@ void main() {
     await _back(tester);
     expect(_moveSearch, findsNothing);
     expect(_reorder, findsOneWidget);
+    await _tap(tester, _move);
+    await _tap(tester, find.text('Move down'));
+    await _tap(tester, _move);
     await _back(tester);
+    expect(find.text('Move channel'), findsNothing);
+    expect(find.text('Discard changes?'), findsNothing);
+    await _back(tester);
+    expect(
+      find.text('Your unsaved channel order will be lost.'),
+      findsOneWidget,
+    );
+    expect(
+      Focus.of(tester.element(find.text('Keep editing'))).hasPrimaryFocus,
+      isTrue,
+    );
+    await _tap(tester, find.text('Keep editing'));
+    final cancelReorder = find.byTooltip('Cancel reorder');
+    await _tap(tester, cancelReorder);
+    expect(
+      find.text('Your unsaved channel order will be lost.'),
+      findsOneWidget,
+    );
+    await _tap(tester, find.text('Discard changes'));
+    expect(_reorder, findsNothing);
+    await _startReorder(tester);
+    await _tap(tester, cancelReorder);
+    expect(find.text('Discard changes?'), findsNothing);
     expect(_reorder, findsNothing);
     expect(_search, findsOneWidget);
     await _back(tester);

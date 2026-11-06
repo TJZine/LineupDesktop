@@ -137,9 +137,12 @@ mixin _StudioFilterControls<T extends StatefulWidget> on State<T> {
 
   void _restoreFilterFocus(String key) {
     WidgetsBinding.instance.addPostFrameCallback((_) {
-      if (mounted) {
-        (_filterControlFocus[key] ?? _filterControlFocus['choose'])
-            ?.requestFocus();
+      if (!mounted) return;
+      final node = _filterControlFocus[key];
+      if (node != null && node.parent != null && node.canRequestFocus) {
+        node.requestFocus();
+      } else {
+        _filterControlFocus['choose']?.requestFocus();
       }
     });
   }
@@ -239,7 +242,13 @@ mixin _StudioFilterControls<T extends StatefulWidget> on State<T> {
                     ),
               onDeleted: _saving
                   ? null
-                  : () => _filtersChanged(() => filters.remove(entry.key)),
+                  : () {
+                      final key = entry.key.name;
+                      final hadFocus =
+                          _filterControlFocus[key]?.hasFocus ?? false;
+                      _filtersChanged(() => filters.remove(entry.key));
+                      if (hadFocus) _restoreFilterFocus(key);
+                    },
               deleteIcon: const Icon(Icons.close, size: 20),
             ),
             if (entry.value.length > 3)

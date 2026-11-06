@@ -99,6 +99,8 @@ class ChannelsViewState extends State<ChannelsView> {
   List<Channel> _reorderBase = const [];
   List<String> _reorderIds = const [];
   final _openFocus = <String, FocusNode>{};
+  final _stackedActionsFocus = <String, FocusNode>{};
+  FocusNode? _popupActionsInvoker;
   List<String> _lastChannelOrder = const [];
   final _addFocus = FocusNode(debugLabel: 'Add a custom channel');
   final _selectionFocus = FocusNode(debugLabel: 'Select channels');
@@ -199,7 +201,11 @@ class ChannelsViewState extends State<ChannelsView> {
         _cancelSelection();
         return true;
       case _DirectoryMode.reorder:
-        _cancelReorder();
+        if (_reorderDirty) {
+          unawaited(requestLeave());
+        } else {
+          _cancelReorder();
+        }
         return true;
     }
   }
@@ -222,37 +228,49 @@ class ChannelsViewState extends State<ChannelsView> {
 
   Future<bool> _requestLeave(String? focusId) async {
     if (_saving) return false;
+    if (_reorderDirty) {
+      if (!await _confirmDiscard('Your unsaved channel order will be lost.') ||
+          !mounted) {
+        return false;
+      }
+      _cancelReorder();
+      return true;
+    }
     if (!_studioOpen) return true;
     final studio = _studio;
     if (studio == null || studio.saving) return false;
     if (studio.dirty) {
-      final discard =
-          await showDialog<bool>(
-            context: context,
-            builder: (context) => AlertDialog(
-              title: const Text('Discard changes?'),
-              content: const Text(
-                'Your unsaved Channel Studio changes will be lost.',
-              ),
-              actions: [
-                TextButton(
-                  autofocus: true,
-                  onPressed: () => Navigator.pop(context, false),
-                  child: const Text('Keep editing'),
-                ),
-                FilledButton(
-                  onPressed: () => Navigator.pop(context, true),
-                  child: const Text('Discard changes'),
-                ),
-              ],
-            ),
-          ) ??
-          false;
-      if (!discard || !mounted) return false;
+      if (!await _confirmDiscard(
+            'Your unsaved Channel Studio changes will be lost.',
+          ) ||
+          !mounted) {
+        return false;
+      }
     }
     _showList(focusId ?? _returnFocusId);
     return true;
   }
+
+  Future<bool> _confirmDiscard(String message) async =>
+      await showDialog<bool>(
+        context: context,
+        builder: (context) => AlertDialog(
+          title: const Text('Discard changes?'),
+          content: Text(message),
+          actions: [
+            TextButton(
+              autofocus: true,
+              onPressed: () => Navigator.pop(context, false),
+              child: const Text('Keep editing'),
+            ),
+            FilledButton(
+              onPressed: () => Navigator.pop(context, true),
+              child: const Text('Discard changes'),
+            ),
+          ],
+        ),
+      ) ??
+      false;
 
   Future<void> closeStudio([String? focusId]) async {
     await requestLeave(focusId);
@@ -324,7 +342,7 @@ class ChannelsViewState extends State<ChannelsView> {
     _addFocus.dispose();
     _selectionFocus.dispose();
     _reorderFocus.dispose();
-    for (final node in _openFocus.values) {
+    for (final node in [..._openFocus.values, ..._stackedActionsFocus.values]) {
       node.dispose();
     }
     super.dispose();
@@ -635,6 +653,7 @@ class ChannelsViewState extends State<ChannelsView> {
                                   FocusNode(debugLabel: 'Open ${channel.name}'),
                             );
                             rowFocus.debugLabel = 'Open ${channel.name}';
+                            BuildContext? actionsIconContext;
                             return Material(
                               key: ValueKey('channel-row-${channel.id}'),
                               color: Colors.transparent,
@@ -717,11 +736,26 @@ class ChannelsViewState extends State<ChannelsView> {
                                                 'Actions for ${channel.name}',
                                             padding: EdgeInsets.all(8),
                                             iconSize: 24,
-                                            icon: Icon(
-                                              Icons.adaptive.more,
-                                              semanticLabel:
-                                                  'Actions for ${channel.name}',
+                                            icon: Builder(
+                                              builder: (context) {
+                                                actionsIconContext = context;
+                                                return Icon(
+                                                  Icons.adaptive.more,
+                                                  semanticLabel:
+                                                      'Actions for ${channel.name}',
+                                                );
+                                              },
                                             ),
+                                            onOpened: () {
+                                              final iconContext =
+                                                  actionsIconContext;
+                                              _popupActionsInvoker =
+                                                  iconContext == null
+                                                  ? null
+                                                  : Focus.maybeOf(iconContext);
+                                            },
+                                            onCanceled: () =>
+                                                _popupActionsInvoker = null,
                                             menuPadding: EdgeInsets.zero,
                                             style: handheld
                                                 ? IconButton.styleFrom(
@@ -732,14 +766,22 @@ class ChannelsViewState extends State<ChannelsView> {
                                                     ),
                                                   )
                                                 : null,
-                                            onSelected: (action) =>
-                                                switch (action) {
-                                                  _RowAction.duplicate =>
-                                                    _openDuplicate(channel),
-                                                  _RowAction.delete => _delete(
-                                                    channel,
-                                                  ),
-                                                },
+                                            onSelected: (action) {
+                                              final invoker =
+                                                  _popupActionsInvoker;
+                                              _popupActionsInvoker = null;
+                                              switch (action) {
+                                                case _RowAction.duplicate:
+                                                  _openDuplicate(channel);
+                                                case _RowAction.delete:
+                                                  unawaited(
+                                                    _delete(
+                                                      channel,
+                                                      invoker: invoker,
+                                                    ),
+                                                  );
+                                              }
+                                            },
                                             itemBuilder: (_) => [
                                               if (channel.builderKey != null)
                                                 PopupMenuItem(
@@ -879,19 +921,12 @@ class ChannelsViewState extends State<ChannelsView> {
       ),
       _DirectoryMode.reorder => HandheldPageBar(
         title: 'Reorder channels',
-        onBack: _saving ? null : _cancelReorder,
+        onBack: _saving ? null : handleBack,
         backIcon: Icons.close,
         backTooltip: 'Cancel reorder',
         actions: [
           FilledButton(
-            onPressed:
-                _saving ||
-                    _sameOrder(
-                      _reorderBase.map((channel) => channel.id),
-                      _reorderIds,
-                    )
-                ? null
-                : _saveOrder,
+            onPressed: _saving || !_reorderDirty ? null : _saveOrder,
             child: Text(_saving ? 'Saving…' : 'Save'),
           ),
         ],
@@ -1086,6 +1121,12 @@ class ChannelsViewState extends State<ChannelsView> {
     );
     final ownership = channel.builderKey == null ? 'Custom' : 'Generated';
     final extent = _channelTouchExtent(context);
+    final actionsFocus = selecting
+        ? null
+        : _stackedActionsFocus.putIfAbsent(
+            channel.id,
+            () => FocusNode(debugLabel: 'Actions for ${channel.name}'),
+          );
     return KeyedSubtree(
       key: ValueKey('channel-row-${channel.id}'),
       child: HandheldStackedRow(
@@ -1123,7 +1164,10 @@ class ChannelsViewState extends State<ChannelsView> {
             : _channelIcon(
                 'Actions for ${channel.name}',
                 Icons.adaptive.more,
-                _saving ? null : () => _stackedRowActions(channel),
+                _saving
+                    ? null
+                    : () => _stackedRowActions(channel, actionsFocus!),
+                focusNode: actionsFocus,
               ),
       ),
     );
@@ -1202,7 +1246,7 @@ class ChannelsViewState extends State<ChannelsView> {
     }
   }
 
-  Future<void> _stackedRowActions(Channel channel) async {
+  Future<void> _stackedRowActions(Channel channel, FocusNode invoker) async {
     final action = await showHandheldChoiceSheet(
       context,
       title: '${channel.number} · ${channel.name}',
@@ -1226,7 +1270,7 @@ class ChannelsViewState extends State<ChannelsView> {
       case _RowAction.duplicate:
         _openDuplicate(channel);
       case _RowAction.delete:
-        await _delete(channel);
+        await _delete(channel, invoker: invoker);
       case null:
     }
   }
@@ -1630,10 +1674,6 @@ class ChannelsViewState extends State<ChannelsView> {
 
   Widget _directoryControls(List<Channel> matching) {
     if (_mode == _DirectoryMode.reorder) {
-      final changed = !_sameOrder(
-        _reorderBase.map((channel) => channel.id),
-        _reorderIds,
-      );
       return LineupCompactControls(
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.stretch,
@@ -1650,7 +1690,7 @@ class ChannelsViewState extends State<ChannelsView> {
                     child: const Text('Cancel'),
                   ),
                   FilledButton(
-                    onPressed: changed && !_saving ? _saveOrder : null,
+                    onPressed: _reorderDirty && !_saving ? _saveOrder : null,
                     child: Text(_saving ? 'Saving…' : 'Save order'),
                   ),
                 ],
@@ -1841,6 +1881,10 @@ class ChannelsViewState extends State<ChannelsView> {
       if (mounted) setState(() => _saving = false);
     }
   }
+
+  bool get _reorderDirty =>
+      _mode == _DirectoryMode.reorder &&
+      !_sameOrder(_reorderBase.map((channel) => channel.id), _reorderIds);
 
   void _beginReorder() => setState(() {
     _mode = _DirectoryMode.reorder;
@@ -2071,9 +2115,10 @@ class ChannelsViewState extends State<ChannelsView> {
   }
 
   void _scheduleFocusPrune(Set<String> liveIds) {
-    final staleIds = _openFocus.keys
-        .where((id) => !liveIds.contains(id))
-        .toList();
+    final staleIds = {
+      ..._openFocus.keys,
+      ..._stackedActionsFocus.keys,
+    }.where((id) => !liveIds.contains(id)).toList();
     if (staleIds.isEmpty) return;
     final focusedStaleId = staleIds
         .where((id) => _openFocus[id]?.hasFocus ?? false)
@@ -2092,9 +2137,10 @@ class ChannelsViewState extends State<ChannelsView> {
       final currentIds = widget.controller.channels
           .map((channel) => channel.id)
           .toSet();
-      final staleIds = _openFocus.keys
-          .where((id) => !currentIds.contains(id))
-          .toList();
+      final staleIds = {
+        ..._openFocus.keys,
+        ..._stackedActionsFocus.keys,
+      }.where((id) => !currentIds.contains(id)).toList();
       final restoreFocus = _focusPruneNeedsRestore;
       final anchorId = _focusPruneAnchorId;
       final anchorIndex = _focusPruneAnchorIndex;
@@ -2103,6 +2149,7 @@ class ChannelsViewState extends State<ChannelsView> {
       _focusPruneAnchorIndex = null;
       for (final id in staleIds) {
         _openFocus.remove(id)?.dispose();
+        _stackedActionsFocus.remove(id)?.dispose();
       }
       if (restoreFocus) {
         _restoreNavigationFocus(
@@ -2119,14 +2166,14 @@ class ChannelsViewState extends State<ChannelsView> {
         preferredIndex: preferredIndex,
       );
 
-  Future<void> _delete(Channel channel) async {
+  Future<void> _delete(Channel channel, {required FocusNode? invoker}) async {
     if (_saving) return;
     final confirmed = await _confirmChannelDeletion([
       channel,
     ], 'Delete channel');
     if (!mounted) return;
     if (!confirmed) {
-      _restoreNavigationFocus(preferredId: channel.id);
+      _restoreNavigationFocus(preferredNode: invoker, preferredId: channel.id);
       return;
     }
     final deletionAnchorIndex = _sortedChannels().indexWhere(

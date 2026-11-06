@@ -91,7 +91,10 @@ void main() {
           profile: profileFor(true),
           scenario: LineupScenario(
             stage: SetupStage.ready,
-            channels: [_channel('back', 2, 'Back channel')],
+            channels: [
+              _channel('back', 2, 'Back channel'),
+              _channel('next', 3, 'Next channel'),
+            ],
           ),
         ).build(),
       );
@@ -128,10 +131,60 @@ void main() {
 
       await tester.tap(find.text('Reorder channels'));
       await tester.pumpAndSettle();
+      await tester.tap(find.byTooltip('Move Next channel up'));
+      await tester.pumpAndSettle();
+      expect(channelsState.handleBack(), isTrue);
       expect(channelsState.handleBack(), isTrue);
       await tester.pumpAndSettle();
+      expect(
+        find.text('Your unsaved channel order will be lost.'),
+        findsOneWidget,
+      );
+      expect(find.text('Discard changes?'), findsOneWidget);
+      expect(
+        Focus.of(tester.element(find.text('Keep editing'))).hasPrimaryFocus,
+        isTrue,
+      );
+      await tester.sendKeyEvent(LogicalKeyboardKey.enter);
+      await tester.pumpAndSettle();
+      expect(find.text('Discard changes?'), findsNothing);
+      expect(find.byTooltip('Move Back channel up'), findsOneWidget);
+      final moveUp = find.ancestor(
+        of: find.byTooltip('Move Back channel up'),
+        matching: find.byType(IconButton),
+      );
+      Focus.of(
+        tester.element(
+          find.descendant(
+            of: moveUp,
+            matching: find.byIcon(Icons.arrow_upward),
+          ),
+        ),
+      ).requestFocus();
+      await tester.pump();
+
+      await tester.sendKeyEvent(
+        LogicalKeyboardKey.goBack,
+        physicalKey: PhysicalKeyboardKey.escape,
+      );
+      await tester.pumpAndSettle();
+      expect(find.text('Discard changes?'), findsOneWidget);
+      await tester.tap(find.text('Discard changes'));
+      await tester.pumpAndSettle();
+      expect(find.byTooltip('Move Back channel up'), findsNothing);
       expect(find.text('Reorder channels'), findsOneWidget);
       expect(backgrounded, 0);
+
+      await tester.tap(find.text('Reorder channels'));
+      await tester.pumpAndSettle();
+      await tester.tap(find.byTooltip('Move Next channel up'));
+      await tester.pumpAndSettle();
+      await tester.tap(find.byTooltip('Move Next channel down'));
+      await tester.pumpAndSettle();
+      expect(channelsState.handleBack(), isTrue);
+      await tester.pumpAndSettle();
+      expect(find.text('Discard changes?'), findsNothing);
+      expect(find.byKey(const Key('channels-reorder-list')), findsNothing);
 
       await tester.binding.handlePopRoute();
       await tester.pumpAndSettle();
@@ -1027,7 +1080,28 @@ void main() {
           .height,
       greaterThan(40),
     );
-    await tester.tap(find.text('Cancel'));
+    Future<void> cancelAndReopen() async {
+      await tester.tap(find.text('Cancel'));
+      await tester.pumpAndSettle();
+      expect(
+        find.descendant(
+          of: actionButton,
+          matching: find.byElementPredicate(
+            (element) =>
+                identical(element, FocusManager.instance.primaryFocus?.context),
+          ),
+        ),
+        findsOneWidget,
+      );
+      await tester.sendKeyEvent(LogicalKeyboardKey.enter);
+      await tester.pumpAndSettle();
+      expect(find.text('Delete…'), findsOneWidget);
+    }
+
+    await cancelAndReopen();
+    await tester.tap(find.text('Delete…'));
+    await tester.pumpAndSettle();
+    await cancelAndReopen();
   });
 
   for (final (label, batch, deletedName, expectedFocus) in [

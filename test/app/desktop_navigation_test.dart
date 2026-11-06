@@ -184,14 +184,34 @@ void main() {
           ..emit(
             const PlayerStatus(state: PlayerState.ready, message: 'Ready'),
           ),
-        scenario: LineupScenario(stage: SetupStage.ready),
+        scenario: LineupScenario(
+          stage: SetupStage.ready,
+          channels: [
+            for (final number in [1, 2])
+              Channel(
+                id: 'reorder-$number',
+                number: number,
+                name: 'Channel $number',
+                source: ManualSource([
+                  ChannelItem(
+                    id: 'program-$number',
+                    title: 'Program $number',
+                    duration: const Duration(minutes: 30),
+                  ),
+                ]),
+                playbackMode: PlaybackMode.sequential,
+                anchor: DateTime.utc(2026),
+                shuffleSeed: 1,
+              ),
+          ],
+        ),
       );
       await tester.pumpWidget(fixture.build());
       await tester.pumpAndSettle();
 
       for (final (key, destination) in routeChords) {
         await _routeShortcut(tester, 1);
-        await tester.tap(find.text('Create a custom channel'));
+        await tester.tap(find.text('Add a custom channel'));
         await tester.pumpAndSettle();
         final name = find.byKey(const Key('studio-name'));
         await tester.enterText(name, 'Retained draft');
@@ -212,6 +232,48 @@ void main() {
         expect(name, findsNothing);
         _expectDestination(destination);
       }
+
+      await _routeShortcut(tester, 1);
+      await tester.tap(find.text('Reorder channels'));
+      await tester.pumpAndSettle();
+      await tester.tap(find.byTooltip('Move Channel 2 up'));
+      await tester.pumpAndSettle();
+      expect(
+        tester
+            .widget<FilledButton>(
+              find.widgetWithText(FilledButton, 'Save order'),
+            )
+            .onPressed,
+        isNotNull,
+      );
+      await openDestination(tester, 'Settings');
+      expect(
+        find.text('Your unsaved channel order will be lost.'),
+        findsOneWidget,
+      );
+      await tester.tap(find.text('Keep editing'));
+      await tester.pumpAndSettle();
+      _expectDestination('Channels');
+      expect(
+        tester
+            .widget<FilledButton>(
+              find.widgetWithText(FilledButton, 'Save order'),
+            )
+            .onPressed,
+        isNotNull,
+      );
+      await tester.tap(find.text('Settings').last);
+      await tester.pumpAndSettle();
+      await tester.tap(find.text('Discard changes'));
+      await tester.pumpAndSettle();
+      _expectDestination('Settings');
+
+      await _routeShortcut(tester, 1);
+      await tester.tap(find.text('Reorder channels'));
+      await tester.pumpAndSettle();
+      await openDestination(tester, 'Settings');
+      expect(find.text('Discard changes?'), findsNothing);
+      _expectDestination('Settings');
     },
   );
 

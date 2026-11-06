@@ -212,15 +212,9 @@ class _StudioManualEditorState extends State<_StudioManualEditor>
         .length;
     final selectedIds = entries.map((entry) => entry.id).toSet();
     final rundownQuery = _rundownSearch.text.trim().toLowerCase();
-    final rundownEntries = [
-      if (_manualRundown)
-        for (var index = 0; index < entries.length; index++)
-          if (_manualEntrySearchText(
-            entries[index],
-            inventoryById,
-          ).contains(rundownQuery))
-            (entry: entries[index], index: index),
-    ];
+    final rundownEntries = _manualRundown
+        ? _visibleRundownEntries(entries, inventoryById, rundownQuery)
+        : const <({ManualOccurrence entry, int index})>[];
     final countLabel = '${visible.length} matching · ${entries.length} added';
     return LineupCompactControls(
       child: Column(
@@ -260,7 +254,7 @@ class _StudioManualEditorState extends State<_StudioManualEditor>
               Text(countLabel, style: _studioSupportStyle(context)),
               if (!_manualRundown && !_browseSelecting)
                 OutlinedButton(
-                  onPressed: () => _setSelecting(true),
+                  onPressed: _saving ? null : () => _setSelecting(true),
                   child: const Text('Select'),
                 ),
             ],
@@ -390,7 +384,7 @@ class _StudioManualEditorState extends State<_StudioManualEditor>
                         child: const Text('Cancel'),
                       ),
                       FilledButton(
-                        onPressed: _browseSelection.isEmpty
+                        onPressed: _saving || _browseSelection.isEmpty
                             ? null
                             : _addBrowseSelected,
                         child: Text(
@@ -401,7 +395,7 @@ class _StudioManualEditorState extends State<_StudioManualEditor>
                   : [
                       if (_rundown.canUndo)
                         TextButton(
-                          onPressed: _undoLastAddition,
+                          onPressed: _saving ? null : _undoLastAddition,
                           child: const Text('Undo last addition'),
                         ),
                     ],
@@ -425,7 +419,7 @@ class _StudioManualEditorState extends State<_StudioManualEditor>
 
                   final browseCheckbox = Checkbox(
                     value: _browseSelection.contains(item.id),
-                    onChanged: selectedIds.contains(item.id)
+                    onChanged: _saving || selectedIds.contains(item.id)
                         ? null
                         : (_) => _toggleBrowseSelection(item),
                   );
@@ -477,7 +471,7 @@ class _StudioManualEditorState extends State<_StudioManualEditor>
                                 : () => _addManualItem(item),
                             child: const Text('Add'),
                           ),
-                    onTap: selectedIds.contains(item.id)
+                    onTap: _saving || selectedIds.contains(item.id)
                         ? null
                         : _browseSelecting
                         ? () => _toggleBrowseSelection(item)
@@ -577,6 +571,7 @@ class _StudioManualEditorState extends State<_StudioManualEditor>
   }
 
   void _addManualItem(PlexMediaItem item) {
+    if (_saving) return;
     _refreshPlayableInventory();
     final current = _playableInventory.byId[item.id];
     if (current == null) {
@@ -603,6 +598,7 @@ class _StudioManualEditorState extends State<_StudioManualEditor>
   }
 
   void _addBrowseSelected() {
+    if (_saving) return;
     _refreshPlayableInventory();
     _changed(() {
       _rundown.addBatch(
@@ -619,6 +615,7 @@ class _StudioManualEditorState extends State<_StudioManualEditor>
   }
 
   void _undoLastAddition() {
+    if (_saving) return;
     // Focus retirement needs the occurrences from before the mutation.
     final previous = _rundown.occurrences;
     _changed(_rundown.undoLastAddition);
@@ -851,6 +848,7 @@ class _StudioManualEditorState extends State<_StudioManualEditor>
   }
 
   Future<void> _moveManualTo(ManualOccurrence entry) async {
+    if (_saving) return;
     final entries = _rundown.occurrences;
     final target = await showDialog<({int index, bool after})>(
       context: context,
@@ -861,11 +859,21 @@ class _StudioManualEditorState extends State<_StudioManualEditor>
             _manualEntryTitle(candidate, _playableInventory.byId),
       ),
     );
-    if (target == null || !mounted) return;
+    if (target == null || !mounted || _saving) return;
     _changed(() {
       _rundown.moveTo(entry, target.index, after: target.after);
     });
   }
+
+  List<({ManualOccurrence entry, int index})> _visibleRundownEntries(
+    List<ManualOccurrence> entries,
+    Map<String, PlexMediaItem> inventoryById,
+    String query,
+  ) => [
+    for (var index = 0; index < entries.length; index++)
+      if (_manualEntrySearchText(entries[index], inventoryById).contains(query))
+        (entry: entries[index], index: index),
+  ];
 
   void _removeManual(ManualOccurrence entry) {
     if (_saving) return;
@@ -878,16 +886,26 @@ class _StudioManualEditorState extends State<_StudioManualEditor>
       remaining = _rundown.occurrences;
       if (remaining.isEmpty) _manualRundown = false;
     });
-    final nextEntry = remaining.isEmpty
-        ? null
-        : remaining[index.clamp(0, remaining.length - 1)];
+    final visible = _visibleRundownEntries(
+      remaining,
+      _playableInventory.byId,
+      _rundownSearch.text.trim().toLowerCase(),
+    );
+    final nextEntry =
+        visible.where((row) => row.index >= index).firstOrNull ??
+        visible.lastOrNull;
+    final restoreSearchFocus =
+        !DeviceProfile.of(context).isHandheld ||
+        FocusManager.instance.highlightMode == FocusHighlightMode.traditional;
     final removedFocus = _rundownFocus.remove(entry);
     WidgetsBinding.instance.addPostFrameCallback((_) {
       if (mounted) {
-        if (nextEntry == null) {
+        if (remaining.isEmpty) {
           _searchFocus.requestFocus();
-        } else {
-          _rundownFocus[nextEntry]?.requestFocus();
+        } else if (nextEntry != null) {
+          _rundownFocus[nextEntry.entry]?.requestFocus();
+        } else if (restoreSearchFocus) {
+          _rundownSearchFocus.requestFocus();
         }
       }
       removedFocus?.dispose();

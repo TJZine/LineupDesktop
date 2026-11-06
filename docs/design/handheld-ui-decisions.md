@@ -954,7 +954,8 @@ text 1.0, 1.3 and 2.0; stacked rows instead of desktop tables).
   handle;
   its equivalent is row ⋮ (a sheet: Move up, Move down, Move to…). Move to… opens
   a full-height sheet (B6) with search and "Move before" / "Move after" per
-  channel.
+  channel. With a moved draft, ✕ and Back show the discard prompt (maintainer
+  decision, November 5, 2026).
 - Rendered: `sheets/ub3-channels-before.png`, `ub3-channels-after.png`,
   `ub3-channels-text.png`.
 
