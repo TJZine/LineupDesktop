@@ -523,6 +523,26 @@ void main() {
       final search = _toolbarNode(tester, 'search');
       search.requestFocus();
       await tester.pumpAndSettle();
+      guide.controller.setSearchQuery('no such channel');
+      await _settle(tester);
+      await _key(tester, _down);
+      expect(guide.focusNode!.hasPrimaryFocus, isTrue);
+      await _key(tester, _up);
+      _expectToolbarFocus(tester, 'search');
+      await _key(tester, _right);
+      final clear = tester.widget<IconButton>(
+        find.byWidgetPredicate(
+          (widget) => widget is IconButton && widget.tooltip == 'Clear search',
+        ),
+      );
+      expect(clear.focusNode!.hasPrimaryFocus, isTrue);
+      await _key(tester, LogicalKeyboardKey.select);
+      expect(guide.controller.searchQuery, isEmpty);
+      expect(search.hasPrimaryFocus, isTrue);
+      expect(guide.controller.focusedChannelId, 'fixture');
+
+      search.requestFocus();
+      await tester.pumpAndSettle();
       await _key(tester, LogicalKeyboardKey.select);
       await tester.pumpAndSettle();
       await _key(tester, LogicalKeyboardKey.keyI);

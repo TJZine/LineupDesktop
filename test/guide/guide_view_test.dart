@@ -1191,141 +1191,190 @@ void main() {
     },
   );
 
-  for (final activation in [
-    LogicalKeyboardKey.enter,
-    LogicalKeyboardKey.select,
-  ]) {
+  for (final tv in [false, true]) {
+    for (final activation in [
+      LogicalKeyboardKey.enter,
+      LogicalKeyboardKey.select,
+    ]) {
+      testWidgets(
+        'single timeline retry is reachable with $activation on TV=$tv and returns to row failures',
+        (tester) async {
+          tester.view.physicalSize = const Size(1920, 1080);
+          tester.view.devicePixelRatio = 1;
+          addTearDown(tester.view.resetPhysicalSize);
+          addTearDown(tester.view.resetDevicePixelRatio);
+          final lineup = _Lineup(
+            12,
+            scenario: LineupScenario(
+              settings: const LineupSettings(reduceMotion: true),
+            ),
+          );
+          addTearDown(lineup.dispose);
+          final attempts = <String, int>{};
+          final guide = GuideController(
+            lineup: lineup,
+            loadSchedule: (channel) async {
+              final attempt = attempts.update(
+                channel.id,
+                (n) => n + 1,
+                ifAbsent: () => 1,
+              );
+              if ((attempt == 2 && channel.id == 'channel-0') ||
+                  (attempt == 3 && channel.id == 'channel-1')) {
+                return _schedule(channel);
+              }
+              throw StateError('offline');
+            },
+          );
+          addTearDown(guide.dispose);
+          guide.requestChannels(lineup.channels);
+          var tunes = 0;
+          await tester.pumpWidget(
+            MaterialApp(
+              builder: _guideCanvasBuilderFor(tv),
+              theme: LineupTheme.forName(
+                LineupThemeName.emberSteel,
+                formFactor: profileFor(tv).formFactor,
+              ),
+              home: GuideView(
+                controller: guide,
+                onClose: (_, _) {},
+                onTune: (_) async => tunes++,
+              ),
+            ),
+          );
+          await tester.pumpAndSettle();
+          expect(find.text("Schedules couldn't load"), findsOneWidget);
+          final failureHeading = find.text("Schedules couldn't load");
+          expect(
+            tester.widget<Text>(failureHeading).style,
+            Theme.of(tester.element(failureHeading)).textTheme.titleLarge,
+          );
+          expect(
+            tester
+                .getSemantics(failureHeading)
+                .getSemanticsData()
+                .flagsCollection
+                .isHeader,
+            isTrue,
+          );
+          expect(find.text('Retry'), findsOneWidget);
+          expect(find.text('Schedule unavailable ·'), findsNothing);
+          await tester.sendKeyEvent(LogicalKeyboardKey.arrowDown);
+          await tester.pump();
+          expect(guide.focusedChannelId, 'channel-1');
+          expect(find.text('2 • Channel 1'), findsOneWidget);
+          await tester.sendKeyEvent(activation);
+          await tester.pumpAndSettle();
+          expect(attempts.values, everyElement(1));
+          await tester.sendKeyEvent(LogicalKeyboardKey.arrowRight);
+          await tester.pump();
+          expect(
+            FocusManager.instance.primaryFocus?.debugLabel,
+            'Guide retry all schedules',
+          );
+          await tester.sendKeyEvent(activation);
+          await tester.pumpAndSettle();
+          expect(attempts.length, 12);
+          expect(attempts.values, everyElement(2));
+          expect(find.text("Schedules couldn't load"), findsNothing);
+          expect(find.text('Schedule unavailable ·'), findsWidgets);
+          expect(guide.row('channel-0').state, GuideLoadState.ready);
+          expect(guide.row('channel-1').state, GuideLoadState.error);
+          await tester.sendKeyEvent(activation);
+          await tester.pumpAndSettle();
+          if (tv) {
+            expect(attempts['channel-1'], 3);
+            expect(
+              attempts.entries
+                  .where((entry) => entry.key != 'channel-1')
+                  .map((entry) => entry.value),
+              everyElement(2),
+              reason: 'Only the focused failed row should retry on TV',
+            );
+            expect(guide.row('channel-1').state, GuideLoadState.ready);
+            expect(tunes, 0);
+            expect(
+              FocusManager.instance.primaryFocus?.debugLabel,
+              'Guide grid',
+            );
+          } else {
+            expect(attempts.values, everyElement(2));
+            expect(guide.row('channel-1').state, GuideLoadState.error);
+          }
+          expect(tester.takeException(), isNull);
+        },
+      );
+    }
+  }
+
+  for (final tv in [false, true]) {
     testWidgets(
-      'single timeline retry is reachable with $activation and returns to row failures',
+      'empty Guide setup action and filtered empty state remain distinct on TV=$tv',
       (tester) async {
-        tester.view.physicalSize = const Size(1920, 1080);
-        tester.view.devicePixelRatio = 1;
-        addTearDown(tester.view.resetPhysicalSize);
-        addTearDown(tester.view.resetDevicePixelRatio);
-        final lineup = _Lineup(
-          12,
-          scenario: LineupScenario(
-            settings: const LineupSettings(reduceMotion: true),
-          ),
-        );
+        final lineup = _Lineup(0);
         addTearDown(lineup.dispose);
-        final attempts = <String, int>{};
         final guide = GuideController(
           lineup: lineup,
-          loadSchedule: (channel) async {
-            final attempt = attempts.update(
-              channel.id,
-              (n) => n + 1,
-              ifAbsent: () => 1,
-            );
-            if (attempt == 2 && channel.id == 'channel-0') {
-              return _schedule(channel);
-            }
-            throw StateError('offline');
-          },
+          loadSchedule: (c) async => _schedule(c),
         );
         addTearDown(guide.dispose);
-        guide.requestChannels(lineup.channels);
+        var setups = 0;
         await tester.pumpWidget(
           MaterialApp(
-            builder: _guideCanvasBuilder,
+            builder: _guideCanvasBuilderFor(tv),
+            theme: LineupTheme.forName(
+              LineupThemeName.emberSteel,
+              formFactor: profileFor(tv).formFactor,
+            ),
             home: GuideView(
               controller: guide,
               onClose: (_, _) {},
               onTune: (_) async {},
+              onSetUpChannels: () => setups++,
             ),
           ),
         );
         await tester.pumpAndSettle();
-        expect(find.text("Schedules couldn't load"), findsOneWidget);
-        final failureHeading = find.text("Schedules couldn't load");
+        expect(find.text('No channels yet'), findsOneWidget);
+        final emptyHeading = find.text('No channels yet');
         expect(
-          tester.widget<Text>(failureHeading).style,
-          Theme.of(tester.element(failureHeading)).textTheme.titleLarge,
+          tester.widget<Text>(emptyHeading).style,
+          Theme.of(tester.element(emptyHeading)).textTheme.titleLarge,
         );
         expect(
           tester
-              .getSemantics(failureHeading)
+              .getSemantics(emptyHeading)
               .getSemanticsData()
               .flagsCollection
               .isHeader,
           isTrue,
         );
-        expect(find.text('Retry'), findsOneWidget);
-        expect(find.text('Schedule unavailable ·'), findsNothing);
-        await tester.sendKeyEvent(LogicalKeyboardKey.arrowDown);
-        await tester.pump();
-        expect(guide.focusedChannelId, 'channel-1');
-        expect(find.text('2 • Channel 1'), findsOneWidget);
+        expect(find.text('Move to a program for details.'), findsNothing);
+        if (tv) {
+          await tester.sendKeyEvent(LogicalKeyboardKey.arrowUp);
+          await tester.pump();
+          expect(
+            FocusManager.instance.primaryFocus?.debugLabel,
+            'Guide channel search',
+          );
+          await tester.sendKeyEvent(LogicalKeyboardKey.arrowDown);
+          await tester.pump();
+          expect(FocusManager.instance.primaryFocus?.debugLabel, 'Guide grid');
+        }
         await tester.sendKeyEvent(LogicalKeyboardKey.arrowRight);
         await tester.pump();
         expect(
           FocusManager.instance.primaryFocus?.debugLabel,
-          'Guide retry all schedules',
+          'Guide set up channels',
         );
-        await tester.sendKeyEvent(activation);
-        await tester.pumpAndSettle();
-        expect(attempts.length, 12);
-        expect(attempts.values, everyElement(2));
-        expect(find.text("Schedules couldn't load"), findsNothing);
-        expect(find.text('Schedule unavailable ·'), findsWidgets);
-        expect(guide.row('channel-0').state, GuideLoadState.ready);
-        expect(guide.row('channel-1').state, GuideLoadState.error);
-        expect(tester.takeException(), isNull);
+        await tester.sendKeyEvent(LogicalKeyboardKey.select);
+        expect(setups, 1);
+        await tester.tap(find.text('Set up channels'));
+        expect(setups, 2);
       },
     );
   }
-
-  testWidgets(
-    'empty Guide setup action and filtered empty state remain distinct',
-    (tester) async {
-      final lineup = _Lineup(0);
-      addTearDown(lineup.dispose);
-      final guide = GuideController(
-        lineup: lineup,
-        loadSchedule: (c) async => _schedule(c),
-      );
-      addTearDown(guide.dispose);
-      var setups = 0;
-      await tester.pumpWidget(
-        MaterialApp(
-          builder: _guideCanvasBuilder,
-          home: GuideView(
-            controller: guide,
-            onClose: (_, _) {},
-            onTune: (_) async {},
-            onSetUpChannels: () => setups++,
-          ),
-        ),
-      );
-      await tester.pumpAndSettle();
-      expect(find.text('No channels yet'), findsOneWidget);
-      final emptyHeading = find.text('No channels yet');
-      expect(
-        tester.widget<Text>(emptyHeading).style,
-        Theme.of(tester.element(emptyHeading)).textTheme.titleLarge,
-      );
-      expect(
-        tester
-            .getSemantics(emptyHeading)
-            .getSemanticsData()
-            .flagsCollection
-            .isHeader,
-        isTrue,
-      );
-      expect(find.text('Move to a program for details.'), findsNothing);
-      await tester.sendKeyEvent(LogicalKeyboardKey.arrowRight);
-      await tester.pump();
-      expect(
-        FocusManager.instance.primaryFocus?.debugLabel,
-        'Guide set up channels',
-      );
-      await tester.sendKeyEvent(LogicalKeyboardKey.select);
-      expect(setups, 1);
-      await tester.tap(find.text('Set up channels'));
-      expect(setups, 2);
-    },
-  );
 
   testWidgets('sources default hidden and Watching remains independent', (
     tester,
@@ -4920,6 +4969,74 @@ void main() {
     await tester.pump();
     await tester.sendKeyEvent(LogicalKeyboardKey.keyG);
     expect(closes, 1);
+
+    final tvLineup = _Lineup(3);
+    final tvGuide = GuideController(
+      lineup: tvLineup,
+      loadSchedule: (channel) async => _schedule(channel),
+    );
+    final tvFocus = FocusNode(debugLabel: 'Guide grid');
+    addTearDown(tvFocus.dispose);
+    addTearDown(tvGuide.dispose);
+    addTearDown(tvLineup.dispose);
+    await tester.pumpWidget(
+      MaterialApp(
+        builder: _guideTvCanvasBuilder,
+        theme: LineupTheme.forName(
+          LineupThemeName.emberSteel,
+          formFactor: FormFactor.tv,
+        ),
+        home: GuideView(
+          controller: tvGuide,
+          focusNode: tvFocus,
+          onClose: (_, _) => closes++,
+          onTune: (_) async {},
+        ),
+      ),
+    );
+    await tester.pumpAndSettle();
+    final tvActivation = tester.widget<LineupTextFieldActivation>(
+      find.byType(LineupTextFieldActivation),
+    );
+    final tvSearch = find.byKey(const Key('guide-channel-search'));
+    tvActivation.focusNode!.requestFocus();
+    await tester.pumpAndSettle();
+    await tester.sendKeyEvent(LogicalKeyboardKey.select);
+    await tester.pumpAndSettle();
+    tester.testTextInput.enterText('   ');
+    await tester.pump();
+    expect(tester.widget<TextField>(tvSearch).controller!.text, '   ');
+    await tester.sendKeyEvent(LogicalKeyboardKey.escape);
+    await tester.pumpAndSettle();
+    expect(tvGuide.searchQuery, isEmpty);
+    expect(tester.widget<TextField>(tvSearch).controller!.text, isEmpty);
+    expect(
+      tester.widget<TextField>(tvSearch).focusNode!.hasPrimaryFocus,
+      isTrue,
+    );
+    expect(tester.testTextInput.isVisible, isTrue);
+    expect(closes, 1);
+
+    await tester.sendKeyEvent(LogicalKeyboardKey.escape);
+    await tester.pumpAndSettle();
+    expect(tvFocus.hasPrimaryFocus, isTrue);
+    expect(tester.testTextInput.isVisible, isFalse);
+    expect(closes, 1);
+
+    tvActivation.focusNode!.requestFocus();
+    await tester.pumpAndSettle();
+    await tester.sendKeyEvent(LogicalKeyboardKey.select);
+    await tester.pumpAndSettle();
+    tester.testTextInput.enterText('retained');
+    await tester.sendKeyEvent(
+      LogicalKeyboardKey.goBack,
+      physicalKey: PhysicalKeyboardKey.escape,
+    );
+    await tester.pumpAndSettle();
+    expect(tester.widget<TextField>(tvSearch).controller!.text, 'retained');
+    expect(tvActivation.focusNode!.hasPrimaryFocus, isTrue);
+    expect(tester.testTextInput.isVisible, isFalse);
+
     guide.dispose();
     lineup.dispose();
   });

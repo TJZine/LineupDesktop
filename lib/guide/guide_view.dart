@@ -826,9 +826,14 @@ class _GuideViewState extends State<GuideView>
         keyboard.isMetaPressed ||
         keyboard.isAltPressed;
     if (key == LogicalKeyboardKey.arrowUp) {
-      if (DeviceProfile.of(context).isTv &&
-          widget.controller.focusedChannelIndex == 0) {
-        _focusNearestToolbarControl();
+      if (DeviceProfile.of(context).isTv) {
+        if (widget.controller.focusedChannelIndex < 0) {
+          _searchFocus.requestFocus();
+        } else if (widget.controller.focusedChannelIndex == 0) {
+          _focusNearestToolbarControl();
+        } else {
+          widget.controller.moveVertical(-1);
+        }
       } else {
         widget.controller.moveVertical(-1);
       }
@@ -859,6 +864,15 @@ class _GuideViewState extends State<GuideView>
       final selected = widget.controller.selectFocusedProgram();
       if (selected?.isCurrentAt(widget.controller.now) == true) {
         unawaited(widget.onTune(selected!.channelId));
+      } else if (event is KeyDownEvent &&
+          DeviceProfile.of(context).isTv &&
+          selected == null &&
+          !_allVisibleFailed) {
+        final channelId = widget.controller.focusedChannelId;
+        if (channelId != null &&
+            widget.controller.row(channelId).state == GuideLoadState.error) {
+          unawaited(widget.controller.retry(channelId));
+        }
       }
     } else {
       return KeyEventResult.ignored;
@@ -1890,6 +1904,7 @@ class _GuideControls extends StatelessWidget {
                 onKeyEvent: onSearchKey,
                 child: LineupTextFieldActivation(
                   focusNode: searchFocus,
+                  finishEditingOnEscape: false,
                   builder: (fieldContext, fieldFocus, finishEditing) =>
                       TextField(
                         onEditingComplete: finishEditing,

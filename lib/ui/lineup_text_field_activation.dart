@@ -15,6 +15,7 @@ class LineupTextFieldActivation extends StatefulWidget {
     required this.builder,
     this.focusNode,
     this.enabled = true,
+    this.finishEditingOnEscape = true,
     super.key,
   });
 
@@ -26,6 +27,7 @@ class LineupTextFieldActivation extends StatefulWidget {
   builder;
   final FocusNode? focusNode;
   final bool enabled;
+  final bool finishEditingOnEscape;
 
   @override
   State<LineupTextFieldActivation> createState() =>
@@ -196,7 +198,8 @@ class _LineupTextFieldActivationState extends State<LineupTextFieldActivation>
     }
     if (_editing &&
         (key == LogicalKeyboardKey.goBack ||
-            key == LogicalKeyboardKey.escape ||
+            (key == LogicalKeyboardKey.escape &&
+                widget.finishEditingOnEscape) ||
             key == LogicalKeyboardKey.enter ||
             key == LogicalKeyboardKey.numpadEnter)) {
       _finishEditing();
