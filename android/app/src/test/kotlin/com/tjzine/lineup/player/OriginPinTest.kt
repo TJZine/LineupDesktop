@@ -15,7 +15,7 @@ class OriginPinTest {
     @Test
     fun everyPlaylistInitializationAndSegmentIsPinnedWithoutCredentials() {
         val requests = mutableListOf<Request>()
-        val client = MediaHttp.forLoad(origin).newBuilder().addInterceptor { chain ->
+        val client = MediaHttp.forLoad(origin).client.newBuilder().addInterceptor { chain ->
             requests += chain.request()
             Response.Builder().request(chain.request()).protocol(Protocol.HTTP_1_1)
                 .code(200).message("OK").body("synthetic".toResponseBody()).build()
@@ -46,7 +46,7 @@ class OriginPinTest {
     fun sameOriginRedirectPassesAndCrossOriginHopIsRefusedBeforeRequest() {
         val requests = mutableListOf<Request>()
         var target = "https://session.invalid:18443/base/segment.m4s"
-        val client = MediaHttp.forLoad(origin).newBuilder().addInterceptor { chain ->
+        val client = MediaHttp.forLoad(origin).client.newBuilder().addInterceptor { chain ->
             val request = chain.request()
             requests += request
             Response.Builder().request(request).protocol(Protocol.HTTP_1_1)

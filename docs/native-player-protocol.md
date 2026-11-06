@@ -546,8 +546,11 @@ Media3 callbacks run on the application looper. A fresh engine/listener captures
 one load and lifecycle generation; replacement retires it before teardown.
 Dispose retires its generation and queued credentials before asynchronously
 releasing the engine and replying. Decoder/view operations stay on the application
-looper; cancellation and TLS pool closure run on an IO worker. Stop/dispose and
-successor loads wait for that cleanup, which is coalesced across concurrent
+looper. On retirement, new calls are cancelled and the cleanup worker cancels
+the load's queued and live calls, including delivered response bodies. The worker
+waits up to one second for those calls to terminate and separately fences the
+playback thread. Idle TLS connections remain in the shared pool. Stop/dispose
+and successor loads wait for cleanup, which is coalesced across concurrent
 retirement requests. A failed release retains cleanup responsibility for retry.
 Events use the 256-entry property-first
 queue above, with one slot reserved for the latest `subtitle-cues` (including a
@@ -793,6 +796,9 @@ caption channel. Canceled/disposed reads and callbacks cannot publish or send.
   rest to bottom, and negative rows (counted from the bottom) to bottom. On
   desktop, ffmpeg's WebVTT decoder drops cue settings, so WebVTT positions apply
   on Android only. Italic, bold and underline are kept.
+- For ASS/SSA cue conversion on desktop and Android, `\b1` enables bold and `\b0`
+  clears it. Numeric weights from 100 through 900 enable bold at 700 and above
+  and clear it below 700. Other bold arguments reset it like bare `\b`.
 - Cue text is media content: never logged, exported or retained after clearing.
 
 **Separate channel `lineup/device_captions` (Android only).** Not part of
@@ -879,6 +885,10 @@ p0 dialogue and i/b/u/an remain. A failed decorator track falls back to stock
 native drawing even when `lineupDrawsStyled` is true; existing decoded cues also
 fall back without reload or a playback-error event. Native drawing receives
 stock-equivalent cues with private metadata removed.
+SSA samples with excessive override-scan work or more than 128 KiB produce no
+cues. Benign decoration failures still use stock parsing within the same bound.
+Media3 library logging is disabled before player creation in non-debuggable
+builds because stock parser warnings can contain raw subtitle text.
 
 Pinned Media3 1.11.1 can lose overlapping SSA events after a paused same-load
 seek when several events share a start timestamp. A stock parser control

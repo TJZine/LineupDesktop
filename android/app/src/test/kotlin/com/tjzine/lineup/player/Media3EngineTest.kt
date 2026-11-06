@@ -241,7 +241,7 @@ class Media3EngineTest {
     }
     @Test
     fun explicitSessionUsesHlsAndDirectKeepsGuardedProgressiveSource() {
-        val factory = androidx.media3.datasource.okhttp.OkHttpDataSource.Factory(MediaHttp.forLoad())
+        val factory = androidx.media3.datasource.okhttp.OkHttpDataSource.Factory(MediaHttp.forLoad().client)
         val direct = MediaLoad("https://session.invalid/index.m3u8", 1, null, false, 0.0)
         assertTrue(Media3Engine.createSource(direct, factory, GuardedExtractorsFactory {}) is
             InitialJoinMediaSource)

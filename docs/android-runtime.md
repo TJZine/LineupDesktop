@@ -30,6 +30,12 @@ validation, bounded queues, correlation and lifecycle fencing. A fresh
 for failure mapping, telemetry, bounded initial joins (up to 5 seconds early,
 otherwise exact) and display limitations.
 
+Every load has its own HTTP dispatcher and live-call tracker. Retirement fences
+new calls and cancels queued requests and delivered response bodies on the
+cleanup worker. Cleanup waits up to one second for calls to terminate and retains
+ownership for retry if the fence is incomplete. Idle connections and TLS session
+resumption are shared across loads. Authentication stays on each request.
+
 `plexSession` loads use the HLS module at the same Media3 version, with a
 per-load origin pin before the existing redirect policy. Playlists, keys,
 initialization files and segments must stay on the load's HTTPS scheme, host

@@ -9,13 +9,11 @@ class GuardedMp4(
     private val delegate: Extractor,
     private val report: (Map<String, Any?>) -> Unit = {},
 ) : Extractor by delegate {
-    private var observerRevisionForReport = 0
     private var omittedParsedTrack = false
     private val observer = Mp4TypeObserver {
         exposedVideo = false
         exposedAudio = false
         omittedParsedTrack = false
-        report(mapOf("phase" to "moov-start", "revision" to (observerRevisionForReport + 1)))
     }
     private var exposedVideo = false
     private var exposedAudio = false
@@ -28,7 +26,6 @@ class GuardedMp4(
         validatedRevision = 0
         omittedParsedTrack = false
         (delegate as? ParsedTrackReporter)?.reportParsedTrack = { type ->
-            report(mapOf("phase" to "parsed-track", "type" to type))
             when (type) {
                 C.TRACK_TYPE_VIDEO -> exposedVideo = true
                 C.TRACK_TYPE_AUDIO -> exposedAudio = true
@@ -67,14 +64,13 @@ class GuardedMp4(
         if (types.audio && !exposedAudio) throw OmittedMediaType(C.TRACK_TYPE_AUDIO)
         observer.markValidated()
         validatedRevision = observer.revision
-        observerRevisionForReport = observer.revision
     }
 
     override fun seek(position: Long, timeUs: Long) {
-        if (delegate is ParsedTrackReporter)
+        if (delegate is ParsedTrackReporter) {
             report(mapOf("phase" to "fragment-seek", "position" to position))
-        if (delegate is ParsedTrackReporter) observer.seekToBox(position)
-        else observer.seek(position)
+            observer.seekToBox(position)
+        } else observer.seek(position)
         delegate.seek(position, timeUs)
     }
 
