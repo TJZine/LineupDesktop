@@ -7785,14 +7785,16 @@ void main() {
     await tester.pump(const Duration(seconds: 1));
     await tester.pump();
     expect(player.stops, 2);
+
+    guideRelease.complete();
+    await tester.pump();
+    await Future.wait([tune, stopping]);
+
     expect(coordinator.error, isNull);
     expect(coordinator.overlay, isNot(PlayerOverlay.error));
     expect(coordinator.canRetry, isFalse);
     expect(coordinator.status.message, 'Playback stopped by timer');
 
-    guideRelease.complete();
-    await tester.pump();
-    await Future.wait([tune, stopping]);
     await tester.pump(const Duration(seconds: 4));
   });
 
