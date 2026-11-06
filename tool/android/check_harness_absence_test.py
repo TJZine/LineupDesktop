@@ -43,6 +43,19 @@ class CheckHarnessAbsenceTest(unittest.TestCase):
         self.assertEqual(1, result.returncode, result.stdout)
         self.assertFalse(json.loads(result.stdout)['harnessAbsent'])
 
+    @unittest.skipIf(os.geteuid() == 0, 'root can traverse chmod 0444 directories')
+    def test_marker_inside_directory_without_search_permission(self):
+        blocked = self.root / 'blocked'
+        blocked.mkdir()
+        (blocked / 'Marker.kt').write_text('class DebugSessionLogging')
+        blocked.chmod(0o444)
+        self.addCleanup(blocked.chmod, 0o700)
+        result = subprocess.run([sys.executable, str(SCRIPT), '--source', str(self.root)],
+                                capture_output=True, text=True)
+        self.assertEqual(1, result.returncode, result.stdout)
+        self.assertEqual({'harnessAbsent': False, 'fixedError': 'invalid_input'},
+                         json.loads(result.stdout))
+
     def test_file_symlink(self):
         (self.root / 'linked.txt').symlink_to(self.root / 'Clean.kt')
         with self.assertRaisesRegex(ValueError, 'invalid_input'):

@@ -10,6 +10,7 @@ import json
 import os
 from pathlib import Path
 import re
+import stat
 import zipfile
 
 SOURCE_MARKERS = re.compile(r'\bE6[A-Za-z_]\w*|\bDebugSessionLogging\b|lineup/e6|--e6-|session-live')
@@ -55,11 +56,13 @@ def inspect(path, *, source=False):
         ):
             for name in dirnames + filenames:
                 member = Path(directory) / name
-                if member.is_symlink():
+                mode = os.lstat(member).st_mode
+                if stat.S_ISLNK(mode):
                     raise ValueError('invalid_input')
-                tree_members.append(member)
+                if stat.S_ISREG(mode):
+                    tree_members.append(member)
         for member in sorted(tree_members):
-            if member.is_file() and (
+            if (
                 member.suffix in ('.kt', '.java', '.xml', '.dart', '.py') if source
                 else member.suffix in ('.class', '.dex', '.jar')
             ):

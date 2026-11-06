@@ -58,6 +58,25 @@ class CollectNoticesTest(unittest.TestCase):
         with self.assertRaises(FileNotFoundError):
             self.collect()
 
+    def test_rejects_missing_or_non_directory_build(self):
+        for invalid, error in ((self.build / 'missing', FileNotFoundError),
+                               (self.archive, NotADirectoryError)):
+            with self.subTest(build=invalid.name), self.assertRaises(error):
+                collector.collect([str(self.build), str(invalid)], [], str(self.source))
+
+    @unittest.skipIf(os.geteuid() == 0, 'root can read chmod 000 directories')
+    def test_rejects_unreadable_discovery_subdirectories(self):
+        for root in (self.build, self.source):
+            with self.subTest(root=root.name):
+                blocked = root / 'blocked'
+                blocked.mkdir()
+                blocked.chmod(0)
+                self.addCleanup(blocked.chmod, 0o700)
+                self.fake_tool('lipo', 'exit 1')
+                self.fake_tool('ar', 'echo archived.o')
+                with self.assertRaises(PermissionError):
+                    self.collect(archive=root == self.source)
+
     def test_failed_ar(self):
         self.fake_tool('lipo', 'exit 0')
         self.fake_tool('ar', 'exit 1')

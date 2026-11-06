@@ -25,6 +25,7 @@ notices outside a file's leading comments, or in generated files, need review.
 import argparse
 import os
 import re
+import stat
 import subprocess
 import sys
 import tempfile
@@ -119,6 +120,10 @@ def archive_members(archive):
     return [m for m in out.split() if m.endswith(".o")]
 
 
+def raise_walk_error(error):
+    raise error
+
+
 def collect(build_dirs, archives, source_root):
     found = set()
 
@@ -139,17 +144,19 @@ def collect(build_dirs, archives, source_root):
             found.add(path)
 
     for build in build_dirs:
+        if not stat.S_ISDIR(os.stat(build).st_mode):
+            raise NotADirectoryError(f"Build input is not a directory: {build}")
         if os.path.isfile(os.path.join(build, "build.ninja")):
             for f in ninja_files(build):
                 add(f, build)
-        for dirpath, _, names in os.walk(build):
+        for dirpath, _, names in os.walk(build, onerror=raise_walk_error):
             for name in names:
                 if name.endswith((".d", ".Plo", ".Po")):
                     for f in parse_make_deps(os.path.join(dirpath, name)):
                         add(f, build, os.path.dirname(dirpath), dirpath)
     if archives:
         stems = {}
-        for dirpath, _, names in os.walk(source_root):
+        for dirpath, _, names in os.walk(source_root, onerror=raise_walk_error):
             for name in names:
                 stem, ext = os.path.splitext(name)
                 if ext in SOURCE_EXTENSIONS - {".h", ".hh", ".hpp", ".hxx"}:
