@@ -813,6 +813,26 @@ void main() {
         title: 'Movie',
         duration: Duration(minutes: 1),
         mediaKind: ChannelMediaKind.movie,
+        seasonNumber: 0,
+      ),
+      const ChannelItem(
+        id: 'keyless-special',
+        title: 'Keyless special',
+        duration: Duration(minutes: 1),
+        mediaKind: ChannelMediaKind.episode,
+        seasonNumber: 0,
+      ),
+      const ChannelItem(
+        id: 'unknown-kind',
+        title: 'Unknown kind',
+        duration: Duration(minutes: 1),
+        seasonNumber: 0,
+      ),
+      const ChannelItem(
+        id: 'keyless-unknown-season',
+        title: 'Unknown season',
+        duration: Duration(minutes: 1),
+        mediaKind: ChannelMediaKind.episode,
       ),
     ];
 
@@ -827,7 +847,21 @@ void main() {
 
     expect(showWithout, ['s1e1', 's1e2', 's2e1', 'unknown']);
     expect(showWith, ['s1e1', 's1e2', 's2e1', 'special', 'unknown']);
-    expect(withoutSpecials.map((item) => item.id), contains('movie'));
+    final withoutIds = withoutSpecials.map((item) => item.id);
+    expect(withoutIds, isNot(contains('keyless-special')));
+    expect(
+      withoutIds,
+      containsAll(['movie', 'unknown-kind', 'keyless-unknown-season']),
+    );
+    expect(withSpecials.map((item) => item.id), contains('keyless-special'));
+    final legacy = buildSchedule(
+      content,
+      mode: PlaybackMode.block,
+      seed: 1,
+      includeSpecials: false,
+      scheduleVersion: 1,
+    );
+    expect(legacy.items.map((item) => item.id), contains('keyless-special'));
   });
 
   test('block ordering preserves episode order inside a series', () {
