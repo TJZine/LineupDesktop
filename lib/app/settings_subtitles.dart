@@ -323,13 +323,36 @@ extension _SubtitleSettingsPage on SettingsViewState {
     return Focus(
       canRequestFocus: false,
       onKeyEvent: (_, event) {
-        if (DeviceProfile.of(context).isTv &&
-            event is KeyDownEvent &&
+        if (!DeviceProfile.of(context).isTv) {
+          return KeyEventResult.ignored;
+        }
+        if (event is KeyDownEvent &&
             event.logicalKey == LogicalKeyboardKey.arrowLeft) {
           (widget.focusNode ?? _subtitleRailFocus).requestFocus();
           return KeyEventResult.handled;
         }
-        return KeyEventResult.ignored;
+        if (event is! KeyDownEvent && event is! KeyRepeatEvent) {
+          return KeyEventResult.ignored;
+        }
+        final direction = switch (event.logicalKey) {
+          LogicalKeyboardKey.arrowUp => -1,
+          LogicalKeyboardKey.arrowDown => 1,
+          _ => null,
+        };
+        if (direction == null) return KeyEventResult.ignored;
+        final rows = children
+            .whereType<_SubtitleSettingRow>()
+            .where((row) => row.enabled)
+            .toList();
+        final current = rows.indexWhere(
+          (row) => identical(FocusManager.instance.primaryFocus, row.focusNode),
+        );
+        if (current < 0) return KeyEventResult.ignored;
+        final next = current + direction;
+        if (next >= 0 && next < rows.length) {
+          rows[next].focusNode.requestFocus();
+        }
+        return KeyEventResult.handled;
       },
       child: LayoutBuilder(
         key: _subtitlePageKey,

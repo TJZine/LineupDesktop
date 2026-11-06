@@ -282,8 +282,11 @@ class LineupController extends ChangeNotifier {
         value.map((playlist) => playlist.immutableCopy()),
       );
   PlexPin? _activePin;
+  bool _pinExpiredDuringPoll = false;
   PlexPin? get activePin => _activePin;
-  bool get pinExpired => _activePin != null && _isPinExpired(_activePin!);
+  bool get pinExpired =>
+      _pinExpiredDuringPoll ||
+      (_activePin != null && _isPinExpired(_activePin!));
   bool get pinUsable =>
       _activePin != null && !pinExpired && !_secureCancellationRequired;
   Duration get pinRemaining =>
@@ -575,6 +578,7 @@ class LineupController extends ChangeNotifier {
       await cancelLinking();
       return;
     }
+    _pinExpiredDuringPoll = false;
     _retireScope();
     final operation = _invalidateOperation();
     _pinTimer?.cancel();
@@ -605,6 +609,7 @@ class LineupController extends ChangeNotifier {
     _busyOperation = null;
     _busy = true;
     _error = null;
+    _pinExpiredDuringPoll = false;
     notifyListeners();
     Object? cleanupFailure;
     Object? pinFailure;
@@ -662,6 +667,7 @@ class LineupController extends ChangeNotifier {
     if (busy || operation != _epoch) return;
     if (_isPinExpired(pin)) {
       _pinTimer?.cancel();
+      _pinExpiredDuringPoll = true;
       _activePin = null;
       _error = 'The Plex link code expired. Request a new code.';
       notifyListeners();
@@ -2366,6 +2372,7 @@ class LineupController extends ChangeNotifier {
       _resetSetupDiscovery();
       _contentGeneration++;
       _stage = SetupStage.welcome;
+      _pinExpiredDuringPoll = false;
       _error = null;
       return true;
     } finally {

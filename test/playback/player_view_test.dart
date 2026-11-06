@@ -3364,59 +3364,64 @@ void main() {
   testWidgets(
     'shell Diagnostics reacts to display reports without media events',
     (tester) async {
+      debugDefaultTargetPlatformOverride = TargetPlatform.windows;
       tester.view.physicalSize = const Size(1920, 1080);
       tester.view.devicePixelRatio = 1;
       addTearDown(tester.view.resetPhysicalSize);
       addTearDown(tester.view.resetDevicePixelRatio);
-      final f = _Fixture(PlayerState.playing);
-      await tester.pumpWidget(
-        MaterialApp(
-          builder: _playerDesktopCanvasBuilder,
-          theme: LineupTheme.forName(
-            LineupThemeName.emberSteel,
-            largeFocusIndicators: false,
+      try {
+        final f = _Fixture(PlayerState.playing);
+        await tester.pumpWidget(
+          MaterialApp(
+            builder: _playerDesktopCanvasBuilder,
+            theme: LineupTheme.forName(
+              LineupThemeName.emberSteel,
+              largeFocusIndicators: false,
+            ),
+            home: LineupShell(
+              player: f.native,
+              controller: f.lineup,
+              initialMediaPath: 'https://synthetic.test/local',
+              profile: desktopProfile,
+            ),
           ),
-          home: LineupShell(
-            player: f.native,
-            controller: f.lineup,
-            initialMediaPath: 'https://synthetic.test/local',
-            profile: desktopProfile,
+        );
+        await tester.pumpAndSettle();
+        await tester.tap(find.byTooltip('Lineup menu'));
+        await tester.pumpAndSettle();
+        await tester.tap(find.text('Settings'));
+        await tester.pumpAndSettle();
+        await tester.tap(find.text('Support'));
+        await tester.pumpAndSettle();
+        await tester.ensureVisible(find.text('Open Diagnostics'));
+        await tester.tap(find.text('Open Diagnostics'));
+        await tester.pumpAndSettle();
+        await tester.ensureVisible(find.text('Technical details'));
+        await tester.tap(find.text('Technical details'));
+        await tester.pumpAndSettle();
+        f.native.emitDisplay(
+          const DisplayMatchingReport(
+            revision: 1,
+            session: DisplayMatchingSessionState.active,
+            observed: DisplayMatchingState.hdr,
+            outcome: DisplayMatchingOutcome.matched,
+            wrote: true,
+            owned: true,
+            reason: null,
+            route: DisplayMatchingRoute.advancedColor,
+            activeColorMode: null,
           ),
-        ),
-      );
-      await tester.pumpAndSettle();
-      await tester.tap(find.byTooltip('Lineup menu'));
-      await tester.pumpAndSettle();
-      await tester.tap(find.text('Settings'));
-      await tester.pumpAndSettle();
-      await tester.tap(find.text('Support'));
-      await tester.pumpAndSettle();
-      await tester.ensureVisible(find.text('Open Diagnostics'));
-      await tester.tap(find.text('Open Diagnostics'));
-      await tester.pumpAndSettle();
-      await tester.ensureVisible(find.text('Technical details'));
-      await tester.tap(find.text('Technical details'));
-      await tester.pumpAndSettle();
-      f.native.emitDisplay(
-        const DisplayMatchingReport(
-          revision: 1,
-          session: DisplayMatchingSessionState.active,
-          observed: DisplayMatchingState.hdr,
-          outcome: DisplayMatchingOutcome.matched,
-          wrote: true,
-          owned: true,
-          reason: null,
-          route: DisplayMatchingRoute.advancedColor,
-          activeColorMode: null,
-        ),
-      );
-      await tester.pump();
-      await tester.pump();
-      expect(find.text('hdr · advancedColor'), findsOneWidget);
-      expect(find.textContaining('revision=1'), findsOneWidget);
-      await tester.pumpWidget(const SizedBox.shrink());
-      f.dispose();
-      await f.native.dispose();
+        );
+        await tester.pump();
+        await tester.pump();
+        expect(find.text('hdr · advancedColor'), findsOneWidget);
+        expect(find.textContaining('revision=1'), findsOneWidget);
+        await tester.pumpWidget(const SizedBox.shrink());
+        f.dispose();
+        await f.native.dispose();
+      } finally {
+        debugDefaultTargetPlatformOverride = null;
+      }
     },
   );
 

@@ -168,7 +168,10 @@ class Diagnostics extends ChangeNotifier {
 
   String buildSupportReport(DiagnosticSupportSnapshot snapshot) {
     final telemetry = snapshot.playback.receivedTelemetry;
-    final isMacOS = isMacOSPlatform(snapshot.platform);
+    final display = displayFacts(
+      snapshot.platform,
+      snapshot.playback.displayReport,
+    );
     final lines = <String>[
       'Lineup Desktop support report',
       'Report time: ${snapshot.reportTime.toIso8601String()}',
@@ -178,16 +181,9 @@ class Diagnostics extends ChangeNotifier {
       'Diagnostic recording: ${snapshot.recordingEnabled ? 'On' : 'Off'}',
       'Playback state: ${snapshot.playback.state.name}',
       'Playback method: ${_methodLabel(snapshot.playback.method)}',
-      if (isMacOS) ...[
-        'HDR output: $macOSHdrOutputFact',
-        'Renderer output: ${rendererOutputFact(telemetry)}',
-        macOSDisplayStateNote,
-      ] else ...[
-        'Windows display: ${windowsDisplayFact(snapshot.playback.displayReport)}',
-        'HDR matching: ${hdrMatchingFact(snapshot.playback.displayReport)}',
-        'Renderer output: ${rendererOutputFact(telemetry)}',
-        windowsDisplayStateNote,
-      ],
+      ...display.facts.map((fact) => '${fact.label}: ${fact.value}'),
+      'Renderer output: ${rendererOutputFact(telemetry)}',
+      ?display.note,
       'Plex server selected: ${snapshot.plexServerSelected ? 'Yes' : 'No'}',
       'Plex connection verified: ${snapshot.plexConnectionVerified ? 'Yes' : 'No'}',
       if (telemetry?.width case final width? when width > 0)
@@ -241,8 +237,36 @@ class Diagnostics extends ChangeNotifier {
   static const macOSHdrOutputFact = 'Managed by macOS';
   static const macOSDisplayStateNote =
       'macOS manages HDR output; Lineup does not change display modes.';
+  static const androidHdrOutputFact = 'Managed by Android';
+  static const androidDisplayStateNote =
+      'Android manages HDR output; Lineup does not change display modes.';
+  static const unavailableHdrOutputFact = 'Unavailable';
   static const windowsDisplayStateNote =
       "Display state is reported by Windows; it does not verify the TV's picture.";
+
+  static ({List<({String label, String value})> facts, String? note})
+  displayFacts(String platform, DisplayMatchingReport report) =>
+      switch (platform) {
+        'macOS' => (
+          facts: [(label: 'HDR output', value: macOSHdrOutputFact)],
+          note: macOSDisplayStateNote,
+        ),
+        'windows' => (
+          facts: [
+            (label: 'Windows display', value: windowsDisplayFact(report)),
+            (label: 'HDR matching', value: hdrMatchingFact(report)),
+          ],
+          note: windowsDisplayStateNote,
+        ),
+        'android' => (
+          facts: [(label: 'HDR output', value: androidHdrOutputFact)],
+          note: androidDisplayStateNote,
+        ),
+        _ => (
+          facts: [(label: 'HDR output', value: unavailableHdrOutputFact)],
+          note: null,
+        ),
+      };
 
   static String windowsDisplayFact(DisplayMatchingReport report) =>
       '${report.observed.name} · ${report.route.name}'

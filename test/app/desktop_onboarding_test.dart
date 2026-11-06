@@ -1234,7 +1234,9 @@ void main() {
     });
   }
 
-  test('PIN polling expires at the exact injected clock boundary', () async {
+  testWidgets('PIN polling expires at the exact injected clock boundary', (
+    tester,
+  ) async {
     final expiresAt = DateTime.utc(2026, 10, 15, 12);
     final plex = _PinPollingPlex(
       PlexPin(id: 10, code: 'POLL', expiresAt: expiresAt),
@@ -1249,12 +1251,103 @@ void main() {
     addTearDown(controller.dispose);
 
     await controller.startLinking();
-    await Future<void>.delayed(Duration.zero);
+    await tester.pump(const Duration(milliseconds: 1));
 
     expect(plex.pollCalls, 0);
     expect(plex.cancelPinCalls, 0);
     expect(controller.activePin, isNull);
     expect(controller.error, 'The Plex link code expired. Request a new code.');
+    await show(tester, controller);
+    expect(
+      find.text('That code expired before sign-in finished.'),
+      findsOneWidget,
+    );
+    expect(find.text('Code expired'), findsOneWidget);
+    expect(find.text('Get a new code'), findsOneWidget);
+    expect(find.text('Lineup could not complete that request.'), findsNothing);
+    expect(find.text('Unavailable'), findsNothing);
+    expect(plex.cancelPinCalls, 0);
+  });
+
+  testWidgets('real PIN expiry state is cleared by retry, cancel, and logout', (
+    tester,
+  ) async {
+    var now = DateTime.utc(2026, 10, 15, 12);
+    final first = PlexPin(
+      id: 11,
+      code: 'FIRST',
+      expiresAt: now.add(const Duration(seconds: 1)),
+    );
+    final second = PlexPin(
+      id: 12,
+      code: 'SECOND',
+      expiresAt: now.add(const Duration(hours: 1)),
+    );
+    final third = PlexPin(
+      id: 13,
+      code: 'THIRD',
+      expiresAt: now.add(const Duration(hours: 2)),
+    );
+    final fourth = PlexPin(
+      id: 14,
+      code: 'FOURTH',
+      expiresAt: now.add(const Duration(hours: 3)),
+    );
+    final plex = _QueuedPinPlex([first, second, third, fourth]);
+    final controller = LineupController(
+      store: MemoryAppStore(),
+      credentials: MemoryCredentialStore(),
+      plex: plex,
+      clock: () => now,
+      pinPollInterval: const Duration(milliseconds: 10),
+    );
+    addTearDown(controller.dispose);
+
+    await controller.startLinking();
+    await tester.pump();
+    now = first.expiresAt;
+    await tester.pump(const Duration(milliseconds: 11));
+    await show(tester, controller);
+    expect(controller.pinExpired, isTrue);
+    expect(
+      find.text('That code expired before sign-in finished.'),
+      findsOneWidget,
+    );
+    expect(find.text('Code expired'), findsOneWidget);
+
+    await tester.tap(find.text('Get a new code'));
+    await tester.pump();
+    expect(controller.activePin?.id, second.id);
+    expect(controller.pinUsable, isTrue);
+    expect(controller.pinExpired, isFalse);
+    expect(
+      find.text('That code expired before sign-in finished.'),
+      findsNothing,
+    );
+    expect(find.text('Code expired'), findsNothing);
+    expect(find.text('SECOND'), findsOneWidget);
+
+    await tester.tap(find.text('Cancel'));
+    await tester.pumpAndSettle();
+    expect(controller.stage, SetupStage.welcome);
+    expect(controller.pinExpired, isFalse);
+
+    await controller.startLinking();
+    await tester.pump();
+    expect(controller.activePin?.id, third.id);
+    expect(controller.pinExpired, isFalse);
+
+    expect(await controller.logout(), isTrue);
+    expect(controller.pinExpired, isFalse);
+
+    plex.failNextCreate = true;
+    await controller.startLinking();
+    expect(controller.pinExpired, isFalse);
+    await controller.startLinking();
+    await tester.pump();
+    expect(controller.activePin?.id, fourth.id);
+    expect(controller.pinExpired, isFalse);
+    await controller.cancelLinking();
   });
 
   testWidgets('linking slots stay aligned across code and failure states', (
@@ -1386,8 +1479,12 @@ void main() {
     await tester.pump();
     expect(controller.submitted, ['1234']);
     expect(find.text('Incorrect PIN. Try again.'), findsOneWidget);
+    expect(find.bySemanticsLabel('0 of 4 digits entered'), findsOneWidget);
     await tester.sendKeyEvent(LogicalKeyboardKey.backspace);
     expect(find.byKey(const Key('profile-pin-sheet')), findsOneWidget);
+    expect(find.text('Incorrect PIN. Try again.'), findsOneWidget);
+    expect(find.bySemanticsLabel('0 of 4 digits entered'), findsOneWidget);
+    expect(controller.submitted, ['1234']);
   });
 
   testWidgets('unexpected PIN submission failure restores focus and retry', (
@@ -2161,6 +2258,32 @@ class _PinPollingPlex extends PlexClient {
   Future<void> cancelPin(PlexPin pin) async {
     cancelPinCalls++;
   }
+}
+
+class _QueuedPinPlex extends PlexClient {
+  _QueuedPinPlex(this._pins)
+    : super(
+        clientIdentifier: 'lineup-desktop-test-abcdefghijklmnopqrst',
+        httpClient: testPlexHttpClient(),
+      );
+
+  final List<PlexPin> _pins;
+  bool failNextCreate = false;
+
+  @override
+  Future<PlexPin> createPin() async {
+    if (failNextCreate) {
+      failNextCreate = false;
+      throw const PlexException('create-failed', 'Synthetic create failure');
+    }
+    return _pins.removeAt(0);
+  }
+
+  @override
+  Future<String?> pollPin(PlexPin pin) => Completer<String?>().future;
+
+  @override
+  Future<void> cancelPin(PlexPin pin) async {}
 }
 
 class _ProfileRecoveryStore extends MemoryAppStore {

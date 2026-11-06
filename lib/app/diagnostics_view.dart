@@ -468,7 +468,10 @@ class _DiagnosticsViewState extends State<DiagnosticsView> {
     DiagnosticSupportSnapshot snapshot,
     PlayerTelemetry? telemetry,
   ) {
-    final isMacOS = Diagnostics.isMacOSPlatform(snapshot.platform);
+    final display = Diagnostics.displayFacts(
+      snapshot.platform,
+      snapshot.playback.displayReport,
+    );
     return LayoutBuilder(
       builder: (context, constraints) {
         final roles = LineupTheme.of(context);
@@ -548,18 +551,8 @@ class _DiagnosticsViewState extends State<DiagnosticsView> {
               ],
             ),
             SizedBox(height: 20),
-            if (isMacOS)
-              _technicalFact('HDR output', Diagnostics.macOSHdrOutputFact)
-            else ...[
-              _technicalFact(
-                'Windows display',
-                Diagnostics.windowsDisplayFact(snapshot.playback.displayReport),
-              ),
-              _technicalFact(
-                'HDR matching',
-                Diagnostics.hdrMatchingFact(snapshot.playback.displayReport),
-              ),
-            ],
+            for (final fact in display.facts)
+              _technicalFact(fact.label, fact.value),
             _technicalFact(
               'Renderer output',
               Diagnostics.rendererOutputFact(telemetry),
@@ -581,15 +574,14 @@ class _DiagnosticsViewState extends State<DiagnosticsView> {
               style: TextStyle(fontSize: 18),
             ),
             SizedBox(height: 16),
-            Text(
-              isMacOS
-                  ? Diagnostics.macOSDisplayStateNote
-                  : Diagnostics.windowsDisplayStateNote,
-              style: TextStyle(
-                color: LineupTheme.of(context).secondaryText,
-                fontSize: 14,
+            if (display.note case final note?)
+              Text(
+                note,
+                style: TextStyle(
+                  color: LineupTheme.of(context).secondaryText,
+                  fontSize: 14,
+                ),
               ),
-            ),
           ],
         );
       },

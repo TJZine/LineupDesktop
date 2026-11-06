@@ -182,6 +182,76 @@ void main() {
     expect(report, isNot(contains('reported by Windows')));
   });
 
+  test('Android support report states Android-managed HDR output', () {
+    final d = Diagnostics();
+    final report = d.buildSupportReport(
+      d.snapshot(
+        reportTime: DateTime.utc(2026),
+        timeZone: 'UTC',
+        appVersion: '1.0',
+        appBuild: '1',
+        platform: 'android',
+        plexServerSelected: false,
+        plexConnectionVerified: false,
+        playback: const PlaybackDiagnosticSnapshot(
+          state: PlayerState.idle,
+          displayReport: DisplayMatchingReport.unavailable(revision: 1),
+        ),
+      ),
+    );
+
+    expect(report, contains('Platform: android'));
+    expect(report, contains('HDR output: Managed by Android'));
+    expect(
+      report,
+      contains('Renderer output: Unavailable · Unavailable · Unavailable'),
+    );
+    expect(
+      report,
+      contains(
+        'Android manages HDR output; Lineup does not change display modes.',
+      ),
+    );
+    expect(report, isNot(contains('Windows display')));
+    expect(report, isNot(contains('HDR matching')));
+    expect(report, isNot(contains('reported by Windows')));
+  });
+
+  test('unrecognized support-report platforms make no display-state claim', () {
+    final d = Diagnostics();
+    final report = d.buildSupportReport(
+      d.snapshot(
+        reportTime: DateTime.utc(2026),
+        timeZone: 'UTC',
+        appVersion: '1.0',
+        appBuild: '1',
+        platform: 'linux',
+        plexServerSelected: false,
+        plexConnectionVerified: false,
+        playback: const PlaybackDiagnosticSnapshot(
+          state: PlayerState.idle,
+          displayReport: DisplayMatchingReport(
+            revision: 3,
+            session: DisplayMatchingSessionState.active,
+            observed: DisplayMatchingState.hdr,
+            outcome: DisplayMatchingOutcome.matched,
+            wrote: true,
+            owned: true,
+            reason: null,
+            route: DisplayMatchingRoute.hdrState,
+            activeColorMode: DisplayActiveColorMode.hdr,
+          ),
+        ),
+      ),
+    );
+
+    expect(report, contains('Platform: linux'));
+    expect(report, contains('HDR output: Unavailable'));
+    expect(report, isNot(contains('Windows display')));
+    expect(report, isNot(contains('HDR matching')));
+    expect(report, isNot(contains('Display state is reported by Windows')));
+  });
+
   test('display and renderer support facts are normalized independently', () {
     final d = Diagnostics();
     final snapshot = d.snapshot(

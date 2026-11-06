@@ -546,9 +546,11 @@ void main() {
       tv: true,
       size: const Size(960, 540),
     );
-    dropdown<SubtitlePreset>(tester, 'Preset').focusNode!.requestFocus();
+    final preset = dropdown<SubtitlePreset>(tester, 'Preset').focusNode!;
+    preset.requestFocus();
     await tester.pumpAndSettle();
     final expected = [
+      'subtitlePreset',
       'subtitleSize',
       'subtitlePosition',
       'subtitleTextColor',
@@ -561,12 +563,278 @@ void main() {
       'subtitleWindowOpacity',
       'subtitleStyled',
     ];
-    for (final name in expected) {
+    bool focusedIn(Finder finder) {
+      final target = tester.element(finder);
+      final primary = FocusManager.instance.primaryFocus?.context as Element?;
+      var inside = identical(target, primary);
+      primary?.visitAncestorElements((element) {
+        inside |= identical(element, target);
+        return !inside;
+      });
+      return inside;
+    }
+
+    void expectFocused(String name) {
+      expect(
+        focusedIn(find.byKey(ValueKey('subtitle-row-$name'))),
+        isTrue,
+        reason: 'focused row $name',
+      );
+      final viewport = tester.getRect(
+        find.byKey(const ValueKey('subtitle-rows')),
+      );
+      final row = tester.getRect(find.byKey(ValueKey('subtitle-row-$name')));
+      expect(row.top, greaterThanOrEqualTo(viewport.top - .1), reason: name);
+      expect(row.bottom, lessThanOrEqualTo(viewport.bottom + .1), reason: name);
+    }
+
+    expectFocused('subtitlePreset');
+    for (final name in expected.skip(1)) {
       await tester.sendKeyEvent(LogicalKeyboardKey.arrowDown);
       await tester.pumpAndSettle();
-      expect(FocusManager.instance.primaryFocus!.debugLabel, name);
+      expect(FocusManager.instance.primaryFocus?.debugLabel, name);
+      expectFocused(name.replaceFirst('subtitle', 'subtitle'));
     }
+    await tester.sendKeyEvent(LogicalKeyboardKey.arrowDown);
+    await tester.pumpAndSettle();
+    expect(FocusManager.instance.primaryFocus?.debugLabel, 'subtitleStyled');
+    expectFocused('subtitleStyled');
+    for (final name in expected.reversed.skip(1)) {
+      await tester.sendKeyEvent(LogicalKeyboardKey.arrowUp);
+      await tester.pumpAndSettle();
+      expect(FocusManager.instance.primaryFocus?.debugLabel, name);
+      expectFocused(name.replaceFirst('subtitle', 'subtitle'));
+    }
+
+    for (final key in [
+      LogicalKeyboardKey.arrowUp,
+      LogicalKeyboardKey.arrowUp,
+    ]) {
+      await tester.sendKeyEvent(key);
+      await tester.pumpAndSettle();
+    }
+    expect(FocusManager.instance.primaryFocus?.debugLabel, 'subtitlePreset');
+    expectFocused('subtitlePreset');
+    final ancestorFocuses = tester
+        .widgetList<Focus>(
+          find.ancestor(
+            of: find.byKey(const ValueKey('subtitle-row-subtitlePreset')),
+            matching: find.byType(Focus),
+          ),
+        )
+        .where((focus) => focus.onKeyEvent != null)
+        .toList();
+    final columnFocus = ancestorFocuses.first;
+    expect(
+      columnFocus.onKeyEvent!(
+        FocusManager.instance.primaryFocus!,
+        const KeyRepeatEvent(
+          physicalKey: PhysicalKeyboardKey.arrowUp,
+          logicalKey: LogicalKeyboardKey.arrowUp,
+          timeStamp: Duration.zero,
+        ),
+      ),
+      KeyEventResult.handled,
+    );
+    expect(FocusManager.instance.primaryFocus?.debugLabel, 'subtitlePreset');
+    expect(
+      columnFocus.onKeyEvent!(
+        FocusManager.instance.primaryFocus!,
+        const KeyRepeatEvent(
+          physicalKey: PhysicalKeyboardKey.arrowDown,
+          logicalKey: LogicalKeyboardKey.arrowDown,
+          timeStamp: Duration.zero,
+        ),
+      ),
+      KeyEventResult.handled,
+    );
+    await tester.pump();
+    expect(FocusManager.instance.primaryFocus?.debugLabel, 'subtitleSize');
+    expectFocused('subtitleSize');
   });
+
+  subtitleTest(
+    'TV subtitle traversal keeps complete rows visible at text scale 2',
+    (tester) async {
+      final controller = FixtureController(
+        scenario: const LineupScenario(
+          settings: LineupSettings(largeFocusIndicators: true),
+        ),
+      );
+      addTearDown(controller.dispose);
+      await showSettings(
+        tester,
+        controller,
+        tv: true,
+        size: const Size(960, 540),
+        text: 2,
+      );
+      dropdown<SubtitlePreset>(tester, 'Preset').focusNode!.requestFocus();
+      await tester.pumpAndSettle();
+      const expected = [
+        'subtitlePreset',
+        'subtitleSize',
+        'subtitlePosition',
+        'subtitleTextColor',
+        'subtitleTextOpacity',
+        'subtitleFont',
+        'subtitleBold',
+        'subtitleEdge',
+        'subtitleEdgeColor',
+        'subtitleBackgroundOpacity',
+        'subtitleWindowOpacity',
+        'subtitleStyled',
+      ];
+      void checkVisible(String name) {
+        final viewport = tester.getRect(
+          find.byKey(const ValueKey('subtitle-rows')),
+        );
+        final row = tester.getRect(find.byKey(ValueKey('subtitle-row-$name')));
+        expect(row.top, greaterThanOrEqualTo(viewport.top - .1), reason: name);
+        expect(
+          row.bottom,
+          lessThanOrEqualTo(viewport.bottom + .1),
+          reason: name,
+        );
+      }
+
+      checkVisible('subtitlePreset');
+      for (final name in expected.skip(1)) {
+        await tester.sendKeyEvent(LogicalKeyboardKey.arrowDown);
+        await tester.pumpAndSettle();
+        expect(FocusManager.instance.primaryFocus?.debugLabel, name);
+        checkVisible(name);
+      }
+    },
+  );
+
+  subtitleTest('TV subtitle traversal handles repeats at both ends', (
+    tester,
+  ) async {
+    final controller = FixtureController(
+      scenario: const LineupScenario(
+        settings: LineupSettings(subtitleStyle: SubtitleStyle(bold: true)),
+      ),
+    );
+    addTearDown(controller.dispose);
+    await showSettings(
+      tester,
+      controller,
+      tv: true,
+      size: const Size(960, 540),
+    );
+    final preset = dropdown<SubtitlePreset>(tester, 'Preset').focusNode!;
+    preset.requestFocus();
+    await tester.pumpAndSettle();
+    expect(
+      tester
+          .widget<OutlinedButton>(
+            find.widgetWithText(OutlinedButton, 'Reset to standard'),
+          )
+          .onPressed,
+      isNotNull,
+    );
+    final reset = tester.widget<OutlinedButton>(
+      find.widgetWithText(OutlinedButton, 'Reset to standard'),
+    );
+    reset.focusNode!.requestFocus();
+    await tester.pumpAndSettle();
+    expect(FocusManager.instance.primaryFocus?.debugLabel, 'subtitleReset');
+    final columnFocus = tester
+        .widgetList<Focus>(
+          find.ancestor(
+            of: find.byKey(const ValueKey('subtitle-row-subtitleReset')),
+            matching: find.byType(Focus),
+          ),
+        )
+        .where((focus) => focus.onKeyEvent != null)
+        .first;
+    final node = FocusManager.instance.primaryFocus!;
+    expect(
+      columnFocus.onKeyEvent!(
+        node,
+        const KeyRepeatEvent(
+          physicalKey: PhysicalKeyboardKey.arrowDown,
+          logicalKey: LogicalKeyboardKey.arrowDown,
+          timeStamp: Duration.zero,
+        ),
+      ),
+      KeyEventResult.handled,
+    );
+    expect(FocusManager.instance.primaryFocus?.debugLabel, 'subtitleReset');
+  });
+
+  subtitleTest('TV subtitle traversal uses Android device-style order', (
+    tester,
+  ) async {
+    debugDefaultTargetPlatformOverride = TargetPlatform.android;
+    final controller = FixtureController(
+      scenario: const LineupScenario(
+        settings: LineupSettings(
+          subtitleStyle: SubtitleStyle(useDeviceStyle: true),
+        ),
+      ),
+    );
+    addTearDown(controller.dispose);
+    await showSettings(
+      tester,
+      controller,
+      tv: true,
+      size: const Size(960, 540),
+    );
+    final device = find.byKey(const ValueKey('subtitle-field-subtitleDevice'));
+    tester.widget<Switch>(device).focusNode!.requestFocus();
+    await tester.pumpAndSettle();
+    const expected = [
+      'subtitleDevice',
+      'subtitlePosition',
+      'subtitleBold',
+      'subtitleStyled',
+    ];
+    for (final name in expected) {
+      expect(FocusManager.instance.primaryFocus?.debugLabel, name);
+      if (name != expected.last) {
+        await tester.sendKeyEvent(LogicalKeyboardKey.arrowDown);
+        await tester.pumpAndSettle();
+      }
+    }
+    await tester.sendKeyEvent(LogicalKeyboardKey.arrowDown);
+    await tester.pumpAndSettle();
+    expect(FocusManager.instance.primaryFocus?.debugLabel, 'subtitleStyled');
+  });
+
+  subtitleTest('subtitle column leaves arrows to ordinary traversal off TV', (
+    tester,
+  ) async {
+    final controller = FixtureController();
+    addTearDown(controller.dispose);
+    await showSettings(tester, controller, tv: false);
+    dropdown<SubtitlePreset>(tester, 'Preset').focusNode!.requestFocus();
+    await tester.pumpAndSettle();
+    await tester.sendKeyEvent(LogicalKeyboardKey.arrowDown);
+    await tester.pumpAndSettle();
+    expect(FocusManager.instance.primaryFocus?.debugLabel, 'subtitleSize');
+  });
+
+  subtitleTest(
+    'TV subtitle dropdown keeps arrow movement inside its open menu',
+    (tester) async {
+      final controller = FixtureController();
+      addTearDown(controller.dispose);
+      await showSettings(tester, controller, tv: true);
+      final preset = dropdown<SubtitlePreset>(tester, 'Preset');
+      preset.focusNode!.requestFocus();
+      await tester.pumpAndSettle();
+      await tester.tap(field('Preset'));
+      await tester.pumpAndSettle();
+      expect(find.text('Drop shadow', skipOffstage: false), findsWidgets);
+      await tester.sendKeyEvent(LogicalKeyboardKey.arrowDown);
+      await tester.pumpAndSettle();
+      await tester.sendKeyEvent(LogicalKeyboardKey.arrowUp);
+      await tester.pumpAndSettle();
+      expect(find.text('Standard', skipOffstage: false), findsWidgets);
+    },
+  );
 
   subtitleTest(
     'largest handheld focus context includes growing saving and error feedback',

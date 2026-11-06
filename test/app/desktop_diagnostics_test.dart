@@ -105,7 +105,7 @@ void main() {
             isTrue,
           );
           expect(tester.getRect(tile), rect);
-          final body = find.text('Windows display');
+          final body = find.text('HDR output');
           expect(
             LineupTheme.of(tester.element(body)).primaryText,
             roles.primaryText,
@@ -114,6 +114,10 @@ void main() {
             Theme.of(tester.element(body)).textTheme.bodyMedium?.color,
             Theme.of(tester.element(technical)).textTheme.bodyMedium?.color,
           );
+          expect(find.text('Managed by Android'), findsOneWidget);
+          expect(find.text('Windows display'), findsNothing);
+          expect(find.text('HDR matching'), findsNothing);
+          expect(find.textContaining('reported by Windows'), findsNothing);
           await key(LogicalKeyboardKey.arrowUp);
           expect(
             tester.widget<ExpansionTile>(technical).controller!.isExpanded,
@@ -251,24 +255,33 @@ void main() {
   testWidgets('diagnostics exposes its report and technical details', (
     tester,
   ) async {
-    final controller = FixtureController();
-    addTearDown(controller.dispose);
-    await show(tester, controller);
-    await tester.pumpAndSettle();
-    expect(find.text('Copy redacted report'), findsOneWidget);
-    expect(find.text('Recording off'), findsOneWidget);
-    await tester.tap(find.text('Technical details'));
-    await tester.pumpAndSettle();
-    expect(tester.takeException(), isNull);
-    for (final row in ['Windows display', 'HDR matching', 'Renderer output']) {
-      expect(find.text(row), findsOneWidget);
+    try {
+      debugDefaultTargetPlatformOverride = TargetPlatform.windows;
+      final controller = FixtureController();
+      addTearDown(controller.dispose);
+      await show(tester, controller);
+      await tester.pumpAndSettle();
+      expect(find.text('Copy redacted report'), findsOneWidget);
+      expect(find.text('Recording off'), findsOneWidget);
+      await tester.tap(find.text('Technical details'));
+      await tester.pumpAndSettle();
+      expect(tester.takeException(), isNull);
+      for (final row in [
+        'Windows display',
+        'HDR matching',
+        'Renderer output',
+      ]) {
+        expect(find.text(row), findsOneWidget);
+      }
+      expect(
+        find.text(
+          "Display state is reported by Windows; it does not verify the TV's picture.",
+        ),
+        findsOneWidget,
+      );
+    } finally {
+      debugDefaultTargetPlatformOverride = null;
     }
-    expect(
-      find.text(
-        "Display state is reported by Windows; it does not verify the TV's picture.",
-      ),
-      findsOneWidget,
-    );
   });
 
   testWidgets('macOS technical details report HDR output as OS-managed', (
