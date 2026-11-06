@@ -496,7 +496,20 @@ void main() {
     await tester.pumpAndSettle();
     expect(fixture.controller.channels, hasLength(1));
     expect(find.byTooltip('Actions for Newsroom'), findsOneWidget);
-    expect(FocusManager.instance.primaryFocus?.debugLabel, 'Open Newsroom');
+    expect(
+      find.descendant(
+        of: find.byWidgetPredicate(
+          (widget) =>
+              widget is PopupMenuButton &&
+              widget.tooltip == 'Actions for Newsroom',
+        ),
+        matching: find.byElementPredicate(
+          (element) =>
+              identical(element, FocusManager.instance.primaryFocus?.context),
+        ),
+      ),
+      findsOneWidget,
+    );
 
     await tester.tap(find.byTooltip('Actions for Newsroom'));
     await tester.pumpAndSettle();
