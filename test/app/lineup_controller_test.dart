@@ -2676,8 +2676,22 @@ void main() {
         ChannelPlanApplyResult.stale,
       );
       expect(store.saveCalls, saves);
+      final edited = Channel.fromJson({...first.toJson(), 'name': 'Edited'});
       store.blockNext();
-      final deleting = controller.deleteChannels(expectedChannels: [first]);
+      final editing = controller.saveChannel(edited, expectedBase: first);
+      await store.blockedSaveStarted.future;
+      final queuedBehindEdit = controller.applyReviewedChannelPlan(
+        [generated],
+        mode: ChannelBuildMode.append,
+        expectedBase: List.of(controller.channels),
+      );
+      store.releaseBlockedSave();
+      await editing;
+      expect(await queuedBehindEdit, ChannelPlanApplyResult.stale);
+      expect(store.saveCalls, saves + 1);
+
+      store.blockNext();
+      final deleting = controller.deleteChannels(expectedChannels: [edited]);
       await store.blockedSaveStarted.future;
       final queued = controller.applyReviewedChannelPlan(
         [generated],
@@ -2687,7 +2701,7 @@ void main() {
       store.releaseBlockedSave();
       await deleting;
       expect(await queued, ChannelPlanApplyResult.stale);
-      expect(store.saveCalls, saves + 1);
+      expect(store.saveCalls, saves + 2);
     },
   );
 
@@ -2731,13 +2745,17 @@ void main() {
       ..._channel('third').toJson(),
       'number': 30,
     });
+    final fourth = Channel.fromJson({
+      ..._channel('fourth').toJson(),
+      'number': 40,
+    });
 
     final controller = LineupController(
       store: store,
       credentials: _MemoryCredentials(),
       plex: _FakePlex(),
       scenario: LineupScenario(
-        channels: [first, second, third],
+        channels: [first, second, third, fourth],
         currentChannelId: second.id,
       ),
     );
@@ -2747,7 +2765,7 @@ void main() {
       expectedChannels: [first, second],
     );
     await store.blockedSaveStarted.future;
-    expect(controller.channels, channelValues([first, second, third]));
+    expect(controller.channels, channelValues([first, second, third, fourth]));
     final stale = controller.deleteChannels(expectedChannels: [second]);
     final staleExpectation = expectLater(
       stale,
@@ -2756,9 +2774,20 @@ void main() {
     store.releaseBlockedSave();
     await deleting;
     await staleExpectation;
-    expect(controller.channels, channelValues([third]));
-    expect(controller.currentChannelId, third.id);
+    expect(controller.channels, channelValues([third, fourth]));
+    expect(controller.currentChannelId, fourth.id);
     expect(store.saveCalls, 1);
+
+    final edited = Channel.fromJson({...third.toJson(), 'name': 'Edited'});
+    controller.fixtureActor.replaceChannels([edited, fourth]);
+    await expectLater(
+      controller.deleteChannels(expectedChannels: [third]),
+      throwsA(isA<ChannelStateConflictException>()),
+    );
+    expect(store.saveCalls, 1);
+    await controller.deleteChannels(expectedChannels: [fourth]);
+    expect(controller.channels, channelValues([edited]));
+    expect(store.saveCalls, 2);
   });
 
   test('reorder retains numbers and recipe, and failed save never publishes a draft', () async {
@@ -2807,6 +2836,23 @@ void main() {
       'number': first.number,
     });
     expect(controller.currentChannelId, first.id);
+
+    final captured = List<Channel>.of(controller.channels);
+    final edited = Channel.fromJson({
+      ...captured.first.toJson(),
+      'name': 'Edited',
+    });
+    controller.fixtureActor.replaceChannels([edited, captured.last]);
+    final saves = store.saveCalls;
+    await expectLater(
+      controller.reorderChannels(
+        expectedLineup: captured,
+        orderedChannelIds: [first.id, second.id],
+      ),
+      throwsA(isA<ChannelStateConflictException>()),
+    );
+    expect(store.saveCalls, saves);
+    expect(controller.channels, channelValues([edited, captured.last]));
   });
 
   test(
@@ -7719,6 +7765,7 @@ void main() {
       await expectLater(settings, throwsStateError);
       await current;
       expect(controller.settings.diagnosticsEnabled, isFalse);
+      expect(store.savedStates.last.settings.diagnosticsEnabled, isFalse);
       expect(controller.currentChannelId, second.id);
       expect(
         store.state.currentChannelByProfileServer['owner']!['server'],
@@ -7838,6 +7885,8 @@ void main() {
     await selection;
 
     expect(controller.profile, child);
+    expect(controller.settings.nowWatchingBanner, isFalse);
+    expect(store.savedStates.last.settings.nowWatchingBanner, isFalse);
     expect(store.savedStates[store.savedStates.length - 2].profileId, owner.id);
     expect(store.savedStates.last.profileId, child.id);
   });
@@ -7879,6 +7928,8 @@ void main() {
     await selection;
 
     expect(controller.server?.id, nextServer.id);
+    expect(controller.settings.nowWatchingBanner, isFalse);
+    expect(store.savedStates.last.settings.nowWatchingBanner, isFalse);
     expect(
       store.savedStates[store.savedStates.length - 2].selectedServerByProfile,
       {'owner': oldServer.id},

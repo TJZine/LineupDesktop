@@ -330,25 +330,67 @@ void main() {
           showTitle: index.isEven ? 'Even' : 'Odd',
         ),
     ];
-    for (final mode in PlaybackMode.values) {
-      var now = DateTime.utc(2025, 12, 31, 23, 59, 59, 999, 999);
-      final channel = _channel(
-        items: items,
-        mode: mode,
-        blockSize: mode == PlaybackMode.block ? 2 : null,
-      );
+    final anchor = DateTime.utc(2026);
+    final special = ChannelItem(
+      id: 'special',
+      title: 'Special',
+      duration: const Duration(minutes: 20),
+      mediaKind: ChannelMediaKind.episode,
+      showTitle: 'Even',
+      seasonNumber: 0,
+    );
+    final migrated = _channel(
+      items: items,
+      mode: PlaybackMode.shuffle,
+      transition: ScheduleTransition(
+        boundary: anchor.add(const Duration(minutes: 40)),
+        legacyCycleItems: [special, items.first],
+      ),
+    );
+    final specialsOff = _channel(
+      items: [special, items.first],
+      mode: PlaybackMode.block,
+      blockSize: 2,
+      includeSpecials: false,
+    );
+    for (final channel in [
+      for (final mode in PlaybackMode.values)
+        _channel(
+          items: items,
+          mode: mode,
+          blockSize: mode == PlaybackMode.block ? 2 : null,
+          scheduleVersion: 1,
+        ),
+      migrated,
+      specialsOff,
+    ]) {
+      final beforeAnchor = anchor.subtract(const Duration(microseconds: 1));
+      var now = beforeAnchor;
+      final content = (channel.source as ManualSource).items;
+      final schedule = buildChannelSchedule(channel, content);
+      DateTime? differingInstant;
+      if (channel.scheduleVersion == currentScheduleVersion) {
+        final unrepaired = buildSchedule(
+          content,
+          mode: channel.playbackMode,
+          seed: channel.shuffleSeed,
+          blockSize: channel.blockSize ?? 3,
+        );
+        differingInstant = channel == migrated
+            ? anchor.add(const Duration(minutes: 10))
+            : anchor.add(const Duration(minutes: 5));
+        expect(
+          programAt(differingInstant, anchor, schedule).item.id,
+          isNot(programAt(differingInstant, anchor, unrepaired).item.id),
+        );
+      }
       await tester.pumpWidget(_airCheck(controller, channel, clock: () => now));
       await tester.pumpAndSettle();
-      final schedule = buildSchedule(
-        items,
-        mode: mode,
-        seed: channel.shuffleSeed,
-        blockSize: channel.blockSize ?? 3,
-      );
       for (final instant in [
-        DateTime.utc(2025, 12, 31, 23, 59, 59, 999, 999),
-        channel.anchor,
-        channel.anchor.add(const Duration(microseconds: 1)),
+        beforeAnchor,
+        anchor,
+        anchor.add(const Duration(microseconds: 1)),
+        ?differingInstant,
       ]) {
         now = instant;
         await tester.pump(const Duration(seconds: 30));
@@ -1590,6 +1632,9 @@ Channel _channel({
   required List<ChannelItem> items,
   PlaybackMode mode = PlaybackMode.sequential,
   int? blockSize,
+  int scheduleVersion = currentScheduleVersion,
+  bool includeSpecials = true,
+  ScheduleTransition? transition,
 }) => Channel(
   id: 'channel',
   number: 4,
@@ -1599,6 +1644,9 @@ Channel _channel({
   anchor: DateTime.utc(2026),
   shuffleSeed: 17,
   blockSize: blockSize,
+  scheduleVersion: scheduleVersion,
+  includeSpecials: includeSpecials,
+  scheduleTransition: transition,
 );
 
 ChannelItem _item(String id) => ChannelItem(
@@ -1640,13 +1688,7 @@ class _AirController extends FixtureController {
       );
     }
     final schedule =
-        scheduleOverride ??
-        buildSchedule(
-          source.items,
-          mode: channel.playbackMode,
-          seed: channel.shuffleSeed,
-          blockSize: channel.blockSize ?? 3,
-        );
+        scheduleOverride ?? buildChannelSchedule(channel, source.items);
     if (!controlled) return Future.value(schedule);
     final completer = Completer<ScheduleIndex>();
     _pending.add((completer, schedule));
@@ -1666,12 +1708,8 @@ class _AirController extends FixtureController {
 class _MixedAirController extends _AirController {
   _MixedAirController({super.scenario});
   @override
-  Future<ScheduleIndex> loadScheduleFor(Channel channel) async => buildSchedule(
-    [_item('live')],
-    mode: channel.playbackMode,
-    seed: channel.shuffleSeed,
-    blockSize: channel.blockSize ?? 3,
-  );
+  Future<ScheduleIndex> loadScheduleFor(Channel channel) async =>
+      buildChannelSchedule(channel, [_item('live')]);
 }
 
 PlexMediaItem _playableMedia(String id) => PlexMediaItem(

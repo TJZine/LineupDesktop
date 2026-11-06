@@ -274,7 +274,7 @@ void main() {
     expect(controller.stage, SetupStage.ready);
   });
 
-  testWidgets('successful Channel Setup opens Channels after durable apply', (
+  testWidgets('successful Channel Setup shows completion and opens Channels', (
     tester,
   ) async {
     tester.view
@@ -1340,14 +1340,19 @@ void main() {
     expect(controller.selectedProfile, standard);
   });
 
-  testWidgets('profile cards show no Active badge without a current profile', (
+  testWidgets('profile cards show no Current badge without a current profile', (
     tester,
   ) async {
     final controller = _FakeController(
       scenario: LineupScenario(
         stage: SetupStage.profiles,
         profiles: const [
-          PlexHomeUser(id: 'standard', name: 'Standard', protected: false),
+          PlexHomeUser(
+            id: 'standard',
+            name: 'Standard',
+            protected: false,
+            restricted: true,
+          ),
         ],
       ),
     );
@@ -1356,7 +1361,8 @@ void main() {
     );
     await tester.pumpAndSettle();
 
-    expect(find.text('Active'), findsNothing);
+    expect(find.text('Restricted'), findsOneWidget);
+    expect(find.text('Current'), findsNothing);
   });
 
   for (final isTv in [false, true]) {
