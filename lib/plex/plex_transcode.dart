@@ -281,26 +281,32 @@ PlexDecision parsePlexDecision(String body) {
     if (_int(container['generalDecisionCode']) == null) {
       throw const FormatException();
     }
-    final metadata = _firstRecord(container['Metadata'] ?? container['Video']);
-    final media = _firstRecord(metadata?['Media'] ?? container['Media']);
-    final part = _firstRecord(media?['Part']);
+    final metadata = _firstRecord(
+      container['Metadata'] ?? container['Video'],
+      'Metadata',
+    );
+    final media = _firstRecord(
+      metadata?['Media'] ?? container['Media'],
+      'Media',
+    );
+    final part = _firstRecord(media?['Part'], 'Part');
     return PlexDecision(
       generalDecisionCode: _int(container['generalDecisionCode']),
       generalDecisionText: sanitizePlexDecisionText(
-        container['generalDecisionText'],
+        _string(container['generalDecisionText']),
       ),
       directPlayDecisionCode: _int(container['directPlayDecisionCode']),
       directPlayDecisionText: sanitizePlexDecisionText(
-        container['directPlayDecisionText'],
+        _string(container['directPlayDecisionText']),
       ),
       transcodeDecisionCode: _int(container['transcodeDecisionCode']),
       transcodeDecisionText: sanitizePlexDecisionText(
-        container['transcodeDecisionText'],
+        _string(container['transcodeDecisionText']),
       ),
       mediaDecision: _string(media?['decision']),
       partDecision: _string(part?['decision']),
       streams: List.unmodifiable([
-        for (final stream in _records(part?['Stream']))
+        for (final stream in _records(part?['Stream'], 'Stream'))
           PlexDecisionStream(
             streamType: _int(stream['streamType']),
             id: _stringId(stream['id']),
@@ -322,27 +328,41 @@ PlexDecision parsePlexDecision(String body) {
   }
 }
 
-Map<String, Object?> _xmlRecord(XmlElement element) => {
-  for (final attribute in element.attributes)
-    attribute.name.local: attribute.value,
-  for (final name
-      in element.childElements.map((child) => child.name.local).toSet())
-    name: [
-      for (final child in element.childElements.where(
-        (child) => child.name.local == name,
-      ))
-        _xmlRecord(child),
-    ],
-};
+Map<Object?, Object?>? _firstRecord(Object? raw, String field) =>
+    _records(raw, field).firstOrNull;
 
-Iterable<Map<Object?, Object?>> _records(Object? raw) =>
-    raw is List ? raw.whereType<Map<Object?, Object?>>() : const [];
-Map<Object?, Object?>? _firstRecord(Object? raw) => _records(raw).firstOrNull;
-int? _int(Object? value) =>
-    value is int ? value : int.tryParse(value is String ? value : '');
-String? _string(Object? value) =>
-    value is String && value.isNotEmpty ? value : null;
-String? _stringId(Object? value) => value is int ? '$value' : _string(value);
+List<Map<Object?, Object?>> _records(Object? raw, String field) {
+  if (raw == null) return const [];
+  if (raw is! List || raw.any((entry) => entry is! Map)) {
+    throw FormatException('Plex decision field $field was invalid.');
+  }
+  return [for (final entry in raw) Map<Object?, Object?>.from(entry as Map)];
+}
+
+int? _int(Object? value) {
+  if (value == null || value == '') return null;
+  if (value is int) return value;
+  if (value is double && value.isFinite && value == value.truncateToDouble()) {
+    return value.toInt();
+  }
+  if (value is String) {
+    final parsed = int.tryParse(value);
+    if (parsed != null) return parsed;
+  }
+  throw const FormatException();
+}
+
+String? _string(Object? value) {
+  if (value == null || value == '') return null;
+  if (value is String) return value;
+  throw const FormatException();
+}
+
+String? _stringId(Object? value) {
+  if (value == null || value == '') return null;
+  if (value is String) return value;
+  return _int(value)?.toString();
+}
 
 String? sanitizePlexDecisionText(Object? raw) {
   if (raw is! String || raw.isEmpty) return null;
