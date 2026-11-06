@@ -128,6 +128,53 @@ void main() {
       },
     );
   }
+
+  test(
+    'normalizes invalid credential header failures without leaking it',
+    () async {
+      final server = await ServerSocket.bind(InternetAddress.loopbackIPv4, 0);
+      final sockets = <Socket>[];
+      final connections = server.listen((socket) {
+        sockets.add(socket);
+        socket.listen((_) {}, onDone: () {});
+      });
+      addTearDown(() async {
+        for (final socket in sockets) {
+          socket.destroy();
+        }
+        await connections.cancel();
+        await server.close();
+      });
+      final client = PlexClient(
+        clientIdentifier: 'lineup-desktop-test-abcdefghijklmnopqrst',
+      );
+      addTearDown(client.close);
+
+      final error = await getPlexError(
+        client.libraries(
+          Uri.parse('http://127.0.0.1:${server.port}'),
+          'SECRETHEAD\r\nSECRETTAIL',
+        ),
+      );
+      expect(error, isA<PlexException>());
+      final plexError = error as PlexException;
+      expect(plexError.code, 'auth-invalid');
+      expect(plexError.message, isNot(contains('SECRETHEAD')));
+      expect(plexError.message, isNot(contains('SECRETTAIL')));
+      expect(plexError.toString(), isNot(contains('SECRETHEAD')));
+      expect(plexError.toString(), isNot(contains('SECRETTAIL')));
+      expect(sockets, isEmpty);
+    },
+  );
+}
+
+Future<Object?> getPlexError(Future<Object?> operation) async {
+  try {
+    await operation;
+    fail('Expected a Plex error.');
+  } catch (error) {
+    return error;
+  }
 }
 
 Matcher _plexError(String code) => throwsA(

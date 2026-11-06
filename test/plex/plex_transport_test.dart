@@ -4193,6 +4193,102 @@ void main() {
     );
   });
 
+  test('Plex PIN treats missing credentials as pending', () async {
+    for (final value in [null, '', '   ', 7]) {
+      final client = PlexClient(
+        clientIdentifier: 'lineup-desktop-test-abcdefghijklmnopqrst',
+        httpClient: MockClient(
+          (_) async => http.Response(jsonEncode({'authToken': ?value}), 200),
+        ),
+      );
+      addTearDown(client.close);
+
+      expect(
+        await client.pollPin(
+          PlexPin(id: 7, code: 'ABCD', expiresAt: DateTime.utc(2026)),
+        ),
+        isNull,
+      );
+    }
+  });
+
+  test('Plex PIN rejects an unsafe credential', () async {
+    final client = PlexClient(
+      clientIdentifier: 'lineup-desktop-test-abcdefghijklmnopqrst',
+      httpClient: MockClient(
+        (_) async =>
+            http.Response(jsonEncode({'authToken': 'BAD\r\nTOKEN'}), 200),
+      ),
+    );
+    addTearDown(client.close);
+
+    await expectLater(
+      client.pollPin(
+        PlexPin(id: 7, code: 'ABCD', expiresAt: DateTime.utc(2026)),
+      ),
+      throwsA(
+        isA<PlexException>().having(
+          (error) => error.code,
+          'code',
+          'parse-error',
+        ),
+      ),
+    );
+  });
+
+  for (final response in [
+    jsonEncode({'authenticationToken': 'BAD\r\nTOKEN'}),
+    '<user authenticationToken="BAD&#13;&#10;TOKEN"/>',
+  ]) {
+    test(
+      'Plex Home rejects invalid profile token from ${response[0]}',
+      () async {
+        final client = PlexClient(
+          clientIdentifier: 'lineup-desktop-test-abcdefghijklmnopqrst',
+          httpClient: MockClient((_) async => http.Response(response, 200)),
+        );
+        addTearDown(client.close);
+
+        await expectLater(
+          client.switchHomeUser('account-token', '7', null),
+          throwsA(
+            isA<PlexException>().having(
+              (error) => error.code,
+              'code',
+              'parse-error',
+            ),
+          ),
+        );
+      },
+    );
+  }
+
+  test('PlexServerAccess rejects blank and unsafe tokens', () {
+    final server = PlexServer(
+      id: 'server',
+      name: 'Server',
+      connections: [
+        PlexConnection(
+          uri: Uri.parse('https://server.example:32400'),
+          local: true,
+          relay: false,
+        ),
+      ],
+    );
+    for (final token in ['', '   ', 'BAD\r\nTOKEN']) {
+      expect(
+        () => PlexServerAccess(server: server, token: token),
+        throwsA(
+          isA<PlexException>().having(
+            (error) => error.code,
+            'code',
+            'parse-error',
+          ),
+        ),
+      );
+    }
+  });
+
   test('Plex Home JSON preserves explicit role facts', () async {
     final client = PlexClient(
       clientIdentifier: 'lineup-desktop-test-abcdefghijklmnopqrst',

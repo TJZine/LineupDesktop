@@ -51,11 +51,7 @@ class PlexServerAccess {
       'PlexServerAccess(server: ${server.id}, token: <redacted>)';
 
   static String _requiredToken(String token) {
-    final value = token.trim();
-    if (value.isEmpty) {
-      throw ArgumentError('A PMS resource token is required.');
-    }
-    return value;
+    return _validateCredential(token, required: true)!;
   }
 }
 
@@ -118,7 +114,7 @@ class PlexClient {
       headers: _headers(),
     );
     final json = _json(response, {200});
-    return _optionalText(json['authToken']);
+    return _validateCredential(json['authToken']);
   }
 
   Future<void> cancelPin(PlexPin pin) async {
@@ -210,7 +206,7 @@ class PlexClient {
       }
       final json = _tryJson(response.body);
       final token = _findToken(json) ?? _findTokenInXml(response.body);
-      if (token != null) return token;
+      if (token != null) return _validateCredential(token, required: true)!;
       if (!path.contains('/v2/')) break;
     }
     throw const PlexException(
@@ -230,13 +226,17 @@ class PlexClient {
     );
     final data = _jsonList(response, {200});
     final servers = <PlexServerAccess>[];
+    final seenServerIds = <String>{};
     for (final raw in data) {
       final json = _record(raw, 'resource');
       final provides = _optionalText(json['provides'])
           ?.split(',')
           .map((item) => item.trim());
       if (provides?.contains('server') != true) continue;
-      final resourceToken = _optionalText(json['accessToken']);
+      final resourceToken = _validateCredential(
+        json['accessToken'],
+        invalidAsMissing: true,
+      );
       if (resourceToken == null) continue;
       final connections = <PlexConnection>[];
       for (final rawConnection in _optionalList(json['connections'])) {
@@ -1562,6 +1562,11 @@ class PlexClient {
       throw const PlexException(
         'network-timeout',
         'Plex did not respond in time. Try again.',
+      );
+    } on FormatException {
+      throw const PlexException(
+        'auth-invalid',
+        'Plex authentication is no longer valid.',
       );
     } on http.RequestAbortedException {
       throw _scanCancelledException;
