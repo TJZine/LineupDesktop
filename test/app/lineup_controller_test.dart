@@ -3982,6 +3982,94 @@ void main() {
     expect(plex.artworkToken, 'old-pms');
   });
 
+  for (final replaceSelection in [true, false]) {
+    test(
+      replaceSelection
+          ? 'obsolete selection cannot clear a newer target for the same server'
+          : 'obsolete selection releases its target when there is no replacement',
+      () async {
+        final old = _server('old');
+        final next = _server('next');
+        final obsoleteRefresh = Completer<List<PlexServerAccess>>();
+        final currentRefresh = Completer<List<PlexServerAccess>>();
+        List<PlexServerAccess> access(int generation) => [
+          PlexServerAccess(server: old, token: 'old-pms-$generation'),
+          PlexServerAccess(server: next, token: 'next-pms-$generation'),
+        ];
+        var discoveries = 0;
+        final plex = _FakePlex()
+          ..discoverServersHandler = (_) {
+            return switch (++discoveries) {
+              1 => Future.value(access(1)),
+              2 => obsoleteRefresh.future,
+              3 => currentRefresh.future,
+              _ => throw StateError('Unexpected discovery'),
+            };
+          }
+          ..selectConnectionHandler = (server, token) async {
+            if (token == 'next-pms-1') {
+              throw const PlexException('auth-required', 'Expired');
+            }
+            return server.connections.single;
+          }
+          ..artworkHandler = (_, token, _) async {
+            if (token == 'old-pms-1') {
+              throw const PlexException('auth-required', 'Expired');
+            }
+            return Uint8List.fromList([8]);
+          };
+        final store = _ControlledSaveStore(
+          const PersistedState(selectedServerByProfile: {'owner': 'old'}),
+        );
+        final controller = LineupController(
+          store: store,
+          credentials: _MemoryCredentials(accountToken: 'cloud-token'),
+          plex: plex,
+        );
+        addTearDown(controller.dispose);
+        await controller.initialize();
+        final baseline = store.saveCalls;
+        controller
+          ..fixtureActor.present(LineupPresentation(stage: SetupStage.ready))
+          ..showServers();
+
+        final obsolete = controller.selectServer(next);
+        await Future<void>.delayed(Duration.zero);
+        expect(discoveries, 2);
+        if (replaceSelection) {
+          controller
+            ..cancelServerSelection()
+            ..showServers();
+          final replacement = controller.selectServer(next);
+          await Future<void>.delayed(Duration.zero);
+          expect(discoveries, 3);
+
+          obsoleteRefresh.complete(access(2));
+          await obsolete;
+          currentRefresh.complete(access(3));
+          await replacement;
+
+          expect(controller.error, isNull);
+          expect(controller.server?.id, next.id);
+          expect(controller.connection?.uri, next.connections.single.uri);
+          expect(store.saveCalls, baseline + 1);
+        } else {
+          controller
+            ..showServers()
+            ..cancelServerSelection();
+          obsoleteRefresh.complete(access(2));
+          await obsolete;
+
+          currentRefresh.complete(access(3));
+          expect(await controller.artworkForPath(Uri.parse('/old')), [8]);
+          expect(plex.artworkToken, 'old-pms-3');
+          expect(discoveries, 3);
+          expect(store.saveCalls, baseline);
+        }
+      },
+    );
+  }
+
   test('playback requests remove Plex tokens without an empty query', () {
     final tokenOnly = LineupPlaybackRequest.parts([
       LineupPlaybackPart(

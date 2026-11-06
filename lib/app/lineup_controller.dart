@@ -452,6 +452,7 @@ class LineupController extends ChangeNotifier {
   Map<String, PlexServerAccess> _serverAccess = const {};
   String? _pmsToken;
   String? _serverTargetId;
+  int? _serverTargetOperation;
   Future<PlexConnection>? _pmsRefresh;
   int? _pmsRefreshOperation;
   String? _pmsRefreshServerId;
@@ -763,7 +764,7 @@ class LineupController extends ChangeNotifier {
   Future<bool> selectProfile(PlexHomeUser selected, {String? pin}) async {
     final operation = _invalidateOperation();
     _invalidatePmsRefresh();
-    _serverTargetId = null;
+    _clearServerTarget();
     _pinTimer?.cancel();
     var accepted = false;
     await _run(
@@ -877,7 +878,7 @@ class LineupController extends ChangeNotifier {
   Future<void> refreshServers() async {
     final operation = _invalidateOperation();
     _invalidatePmsRefresh();
-    _serverTargetId = null;
+    _clearServerTarget();
     await _run(
       () => _discover(operation, reconnectSaved: false),
       operation: operation,
@@ -885,10 +886,16 @@ class LineupController extends ChangeNotifier {
     );
   }
 
+  void _clearServerTarget() {
+    _serverTargetId = null;
+    _serverTargetOperation = null;
+  }
+
   Future<void> selectServer(PlexServer selected) async {
     final operation = _invalidateOperation();
     _invalidatePmsRefresh();
     _serverTargetId = selected.id;
+    _serverTargetOperation = operation;
     await _run(
       () async {
         final selectedConnection = await _withPmsAuthorization(
@@ -976,7 +983,9 @@ class LineupController extends ChangeNotifier {
       fallbackStage: SetupStage.servers,
     );
     if (_isCurrent(operation)) _restoringSavedLineup = false;
-    if (_serverTargetId == selected.id) _serverTargetId = null;
+    if (_serverTargetId == selected.id && _serverTargetOperation == operation) {
+      _clearServerTarget();
+    }
   }
 
   void _publishServerSelection(_ServerSelection selection, int operation) {
@@ -1432,7 +1441,7 @@ class LineupController extends ChangeNotifier {
     if (busy) {
       _invalidateOperation();
       _invalidatePmsRefresh();
-      _serverTargetId = null;
+      _clearServerTarget();
       _busyOperation = null;
       _busy = false;
     }
@@ -1474,7 +1483,7 @@ class LineupController extends ChangeNotifier {
     if (busy) {
       _invalidateOperation();
       _invalidatePmsRefresh();
-      _serverTargetId = null;
+      _clearServerTarget();
       _busyOperation = null;
       _busy = false;
     }
@@ -1503,7 +1512,7 @@ class LineupController extends ChangeNotifier {
 
     _serverSelectionCanCancel = false;
     _channelSetupCanCancel = false;
-    _serverTargetId = null;
+    _clearServerTarget();
     _error = null;
     _stage = SetupStage.channelSetup;
     notifyListeners();
@@ -2317,7 +2326,7 @@ class LineupController extends ChangeNotifier {
       (_) => releaseStateOperations.future,
     );
     _invalidatePmsRefresh();
-    _serverTargetId = null;
+    _clearServerTarget();
     _pinTimer?.cancel();
     _busyOperation = null;
     _busy = true;
@@ -2359,7 +2368,7 @@ class LineupController extends ChangeNotifier {
       _profileToken = null;
       _serverAccess = const {};
       _pmsToken = null;
-      _serverTargetId = null;
+      _clearServerTarget();
       _invalidatePmsRefresh();
       _secureCancellationRequired = false;
       _resetSetupDiscovery();
@@ -2465,7 +2474,7 @@ class LineupController extends ChangeNotifier {
     }
     _invalidateOperation();
     _invalidatePmsRefresh();
-    _serverTargetId = null;
+    _clearServerTarget();
     _scan.reset();
   }
 
@@ -2528,7 +2537,7 @@ class LineupController extends ChangeNotifier {
     _publishServer = null;
     _connection = null;
     _pmsToken = null;
-    _serverTargetId = null;
+    _clearServerTarget();
     _invalidatePmsRefresh();
     _publishLibraries = const [];
     _publishEmptyLineup();
@@ -2765,7 +2774,7 @@ class LineupController extends ChangeNotifier {
     _scheduleWorker?.dispose();
     _serverAccess = const {};
     _pmsToken = null;
-    _serverTargetId = null;
+    _clearServerTarget();
     _invalidatePmsRefresh();
     final pin = activePin;
     if (pin == null) {
