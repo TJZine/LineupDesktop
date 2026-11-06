@@ -28,6 +28,8 @@ jobs:
           channel: stable
           cache: true
       - run: dart tool/check_toolchain.dart
+      - name: Run macOS notice collector tests
+        run: python3 tool/macos/collect_notices_test.py
       - name: Run portable engine tooling fixtures (platform skips visible)
         run: python3 tool/flutter_engine/desktop_accessibility_test.py
       - run: flutter pub get

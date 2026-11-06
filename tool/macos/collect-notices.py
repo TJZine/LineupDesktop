@@ -77,10 +77,8 @@ COMPONENTS = {
 
 def parse_make_deps(path):
     """Prerequisites listed in a make-style dependency file."""
-    try:
-        text = open(path, encoding="utf-8", errors="replace").read()
-    except OSError:
-        return []
+    with open(path, encoding="utf-8", errors="replace") as deps_file:
+        text = deps_file.read()
     text = text.replace("\\\n", " ")
     files = []
     for line in text.splitlines():
@@ -100,12 +98,12 @@ def ninja_files(build):
     """Sources and headers from ninja's dependency log and build graph."""
     files = []
     out = subprocess.run(["ninja", "-C", build, "-t", "deps"], capture_output=True,
-                         text=True).stdout
+                         text=True, check=True).stdout
     for line in out.splitlines():
         if line.startswith("    "):
             files.append(line.strip())
     out = subprocess.run(["ninja", "-C", build, "-t", "inputs"], capture_output=True,
-                         text=True).stdout
+                         text=True, check=True).stdout
     files += [line.strip() for line in out.splitlines() if line.strip()]
     return files
 
@@ -117,7 +115,7 @@ def archive_members(archive):
         result = subprocess.run(["lipo", archive, "-thin", "arm64", "-output", thin],
                                 capture_output=True)
         source = thin if result.returncode == 0 else archive
-        out = subprocess.run(["ar", "-t", source], capture_output=True, text=True).stdout
+        out = subprocess.run(["ar", "-t", source], capture_output=True, text=True, check=True).stdout
     return [m for m in out.split() if m.endswith(".o")]
 
 
