@@ -3,6 +3,7 @@ import 'dart:convert';
 import 'package:xml/xml.dart';
 
 import 'plex_models.dart';
+import 'plex_xml.dart';
 
 class VideoDecoderCapabilities {
   const VideoDecoderCapabilities({
@@ -272,7 +273,7 @@ PlexDecision parsePlexDecision(String body) {
       if (decoded is! Map) throw const FormatException();
       root = decoded;
     } on FormatException {
-      root = _xmlRecord(XmlDocument.parse(body).rootElement);
+      root = plexXmlRecord(XmlDocument.parse(body).rootElement);
     }
     final container = root['MediaContainer'] is Map
         ? root['MediaContainer'] as Map<Object?, Object?>

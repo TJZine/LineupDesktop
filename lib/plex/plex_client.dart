@@ -10,6 +10,34 @@ import '../app_version.dart';
 import '../channels/channel.dart';
 import 'plex_models.dart';
 import 'plex_transcode.dart';
+import 'plex_xml.dart';
+
+final _credentialPattern = RegExp(r'^[\x21-\x7E]{1,4096}$');
+const _invalidCredential = PlexException(
+  'parse-error',
+  'Plex returned an invalid credential.',
+);
+
+String? _validateCredential(
+  Object? raw, {
+  bool required = false,
+  bool invalidAsMissing = false,
+}) {
+  if (raw is! String) {
+    if (required) throw _invalidCredential;
+    return null;
+  }
+  final value = raw.trim();
+  if (value.isEmpty) {
+    if (required) throw _invalidCredential;
+    return null;
+  }
+  if (!_credentialPattern.hasMatch(value)) {
+    if (invalidAsMissing) return null;
+    throw _invalidCredential;
+  }
+  return value;
+}
 
 class PlexServerAccess {
   PlexServerAccess({required this.server, required String token})
@@ -1447,7 +1475,7 @@ class PlexClient {
     if (json != null) return _record(json, 'Plex response');
     try {
       final root = XmlDocument.parse(response.body).rootElement;
-      return {root.name.local: _metadataXmlRecord(root)};
+      return {root.name.local: plexXmlRecord(root, videoAsMetadata: true)};
     } catch (_) {
       throw const PlexException('parse-error', 'Plex response was invalid.');
     }
@@ -1767,27 +1795,6 @@ String? _identityId(String body) {
     return null;
   }
 }
-
-Map<String, Object?> _metadataXmlRecord(XmlElement element) => {
-  for (final attribute in element.attributes)
-    attribute.name.local: attribute.value,
-  for (final name
-      in element.childElements.map((child) => child.name.local).toSet())
-    if (name == 'Video')
-      'Metadata': [
-        for (final child in element.childElements.where(
-          (child) => child.name.local == name,
-        ))
-          _metadataXmlRecord(child),
-      ]
-    else
-      name: [
-        for (final child in element.childElements.where(
-          (child) => child.name.local == name,
-        ))
-          _metadataXmlRecord(child),
-      ],
-};
 
 PlexMediaItem parseMediaItem(Object? raw, {String? libraryId}) {
   final json = _record(raw, 'media item');

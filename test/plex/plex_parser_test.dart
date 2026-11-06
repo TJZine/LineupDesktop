@@ -442,6 +442,31 @@ void main() {
     expect(await client.discoverServers('account-token'), isEmpty);
   });
 
+  test(
+    'converts 50,000 unique XML library children within the bound',
+    () async {
+      final client = PlexClient(
+        clientIdentifier: 'lineup-desktop-test-abcdefghijklmnopqrst',
+        httpClient: MockClient(
+          (_) async => http.Response(
+            '<MediaContainer size="0">'
+            '${List.generate(50000, (index) => '<Node$index/>').join()}'
+            '</MediaContainer>',
+            200,
+          ),
+        ),
+      );
+      addTearDown(client.close);
+
+      final watch = Stopwatch()..start();
+      expect(
+        await client.libraries(Uri.parse('https://synthetic.invalid'), 'token'),
+        isEmpty,
+      );
+      expect(watch.elapsed, lessThan(const Duration(seconds: 5)));
+    },
+  );
+
   test('normalizes numeric grandparent rating keys', () {
     final item = parseMediaItem({
       'ratingKey': 'episode-42',
