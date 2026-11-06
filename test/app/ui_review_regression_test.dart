@@ -72,34 +72,110 @@ void main() {
     );
   });
 
-  testWidgets('disabled navigation rows retain selection semantics', (
+  testWidgets('Studio fields expose one complete semantic control', (
     tester,
   ) async {
+    await tester.binding.setSurfaceSize(const Size(1280, 1000));
+    addTearDown(() => tester.binding.setSurfaceSize(null));
+    final controller = FixtureController(
+      scenario: LineupScenario(
+        stage: SetupStage.ready,
+        channels: [_channel],
+        libraries: const [
+          PlexLibrary(
+            id: 'movies',
+            title: 'Movies',
+            type: PlexLibraryType.movie,
+          ),
+        ],
+        selectedLibraryIds: {'movies'},
+        availableMedia: [
+          PlexMediaItem(
+            id: 'member',
+            title: 'Collection member',
+            type: 'movie',
+            duration: const Duration(minutes: 30),
+            libraryId: 'movies',
+            collections: const ['Library collection'],
+            parts: [PlexMediaPart(path: '/collection-member')],
+          ),
+        ],
+      ),
+    );
+    addTearDown(controller.dispose);
     await tester.pumpWidget(
       MaterialApp(
         builder: _desktopCanvasBuilder,
-        home: LineupNavigationRow(
-          key: const ValueKey('navigation-row'),
-          selected: false,
-          onPressed: null,
-          child: const Text('Movies'),
-        ),
+        home: _studio(controller, _channel),
+      ),
+    );
+    await tester.pumpAndSettle();
+    final field = find.byKey(const Key('studio-filter-collection'));
+    await tester.ensureVisible(field);
+    await tester.pumpAndSettle();
+    expect(
+      tester.getSemantics(field),
+      matchesSemantics(
+        label: 'Collection',
+        value: 'Any collection',
+        isButton: true,
+        hasEnabledState: true,
+        isEnabled: true,
+        isFocusable: true,
+        hasTapAction: true,
+        hasFocusAction: true,
       ),
     );
 
+    final mediaType = find.widgetWithText(LineupFieldButton, 'Media type');
+    await tester.ensureVisible(mediaType);
+    await tester.pumpAndSettle();
     expect(
-      tester
-          .getSemantics(find.byKey(const ValueKey('navigation-row')))
-          .getSemanticsData()
-          .flagsCollection
-          .isSelected,
-      ui.Tristate.isFalse,
+      tester.getSemantics(mediaType),
+      matchesSemantics(
+        label: 'Media type',
+        value: 'Movies',
+        isButton: true,
+        hasEnabledState: true,
+      ),
     );
-    final disabled = tester
-        .getSemantics(find.widgetWithText(TextButton, 'Movies'))
-        .getSemanticsData();
-    expect(disabled.flagsCollection.isEnabled, ui.Tristate.isFalse);
-    expect(disabled.hasAction(ui.SemanticsAction.tap), isFalse);
+  });
+
+  testWidgets('disabled navigation rows retain selection semantics', (
+    tester,
+  ) async {
+    for (final selected in [false, true]) {
+      await tester.pumpWidget(
+        MaterialApp(
+          builder: _desktopCanvasBuilder,
+          home: LineupNavigationRow(
+            key: const ValueKey('navigation-row'),
+            selected: selected,
+            onPressed: null,
+            child: const Text('Movies'),
+          ),
+        ),
+      );
+
+      expect(
+        tester
+            .getSemantics(find.byKey(const ValueKey('navigation-row')))
+            .getSemanticsData()
+            .flagsCollection
+            .isSelected,
+        selected ? ui.Tristate.isTrue : ui.Tristate.isFalse,
+      );
+      final disabled = tester
+          .getSemantics(find.widgetWithText(TextButton, 'Movies'))
+          .getSemanticsData();
+      expect(disabled.flagsCollection.isEnabled, ui.Tristate.isFalse);
+      expect(disabled.hasAction(ui.SemanticsAction.tap), isFalse);
+      final label = tester.element(find.text('Movies'));
+      expect(
+        DefaultTextStyle.of(label).style.color,
+        LineupTheme.of(label).secondaryText.withValues(alpha: .45),
+      );
+    }
   });
 
   testWidgets('Swiss notices keep square production corners', (tester) async {

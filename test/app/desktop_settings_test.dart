@@ -47,6 +47,29 @@ void main() {
         ),
         findsOneWidget,
       );
+      store.failNext = true;
+      await tester.tap(field);
+      await tester.pumpAndSettle();
+      await tester.tap(find.text('Reduce transparency').last);
+      await tester.pumpAndSettle();
+      expect(
+        tester.widget<DropdownButton<OverlayTransparency>>(field).value,
+        OverlayTransparency.standard,
+      );
+      expect(
+        controller.settings.overlayTransparency,
+        OverlayTransparency.standard,
+      );
+      expect(
+        store.state.settings.overlayTransparency,
+        OverlayTransparency.standard,
+      );
+      expect(
+        find.text('Could not save. The previous value was restored.'),
+        findsOneWidget,
+      );
+      expect(store.saveCount, 1);
+
       await tester.tap(field);
       await tester.pumpAndSettle();
       expect(find.text('Most solid, easiest to read'), findsOneWidget);
@@ -441,8 +464,16 @@ String _categoryContent(SettingsCategory category) => switch (category) {
 
 class _DelayedSettingsStore extends MemoryAppStore {
   Completer<void> pending = Completer<void>();
+  bool failNext = false;
+  int saveCount = 0;
+
   @override
   Future<void> save(value) async {
+    saveCount++;
+    if (failNext) {
+      failNext = false;
+      throw StateError('synthetic save failure');
+    }
     await pending.future;
     await super.save(value);
   }

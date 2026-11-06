@@ -145,15 +145,16 @@ class LineupNavigationRow extends StatelessWidget {
                 ).copyWith(
                   shape: const WidgetStatePropertyAll(RoundedRectangleBorder()),
                   alignment: Alignment.centerLeft,
-                  foregroundColor: WidgetStateProperty.resolveWith(
-                    (states) =>
-                        roles.focusTreatment == LineupFocusTreatment.fill &&
-                            states.contains(WidgetState.focused)
-                        ? roles.onFocus
-                        : selected
-                        ? roles.primaryText
-                        : roles.secondaryText,
-                  ),
+                  foregroundColor: WidgetStateProperty.resolveWith((states) {
+                    if (states.contains(WidgetState.disabled)) {
+                      return roles.secondaryText.withValues(alpha: .45);
+                    }
+                    if (roles.focusTreatment == LineupFocusTreatment.fill &&
+                        states.contains(WidgetState.focused)) {
+                      return roles.onFocus;
+                    }
+                    return selected ? roles.primaryText : roles.secondaryText;
+                  }),
                   padding: const WidgetStatePropertyAll(
                     EdgeInsets.symmetric(horizontal: 16, vertical: 12),
                   ),
@@ -735,47 +736,146 @@ Widget lineupDropdownField<T>({
   FormFieldValidator<T>? validator,
   FocusNode? focusNode,
   bool autofocus = false,
-}) {
-  final baseTheme = Theme.of(context);
-  final dropdownColor = LineupTheme.of(context).elevatedSurface;
-  final tv = DeviceProfile.of(context).isTv;
-  Widget field(BuildContext context) {
-    final roles = LineupTheme.of(context);
-    return DropdownButtonFormField<T>(
-      key: key,
-      initialValue: initialValue,
-      onChanged: onChanged,
-      items: lineupMenuItems(
-        items,
-        initialValue,
-        menuTheme: tv ? baseTheme : null,
-      ),
-      selectedItemBuilder: (_) =>
-          selectedItemChildren ??
-          (items ?? <DropdownMenuItem<T>>[]).map((item) => item.child).toList(),
-      dropdownColor: dropdownColor,
-      borderRadius: BorderRadius.circular(8),
-      isExpanded: isExpanded,
-      isDense: isDense,
-      iconSize: iconSize,
-      itemHeight: itemHeight,
-      icon: icon ?? const Icon(Icons.keyboard_arrow_down),
-      style: tv
-          ? (style ?? LineupTypography.control).copyWith(
-              color: onChanged == null ? roles.mutedText : roles.primaryText,
-            )
-          : style ?? LineupTypography.control,
-      iconEnabledColor: tv ? roles.secondaryText : null,
-      iconDisabledColor: tv ? roles.mutedText : null,
-      decoration: decoration,
-      validator: validator,
-      focusNode: focusNode,
-      autofocus: autofocus,
-    );
+}) => _LineupDropdownField<T>(
+  fieldKey: key,
+  items: items,
+  onChanged: onChanged,
+  selectedItemChildren: selectedItemChildren,
+  initialValue: initialValue,
+  isExpanded: isExpanded,
+  isDense: isDense,
+  iconSize: iconSize,
+  itemHeight: itemHeight,
+  icon: icon,
+  style: style,
+  decoration: decoration,
+  validator: validator,
+  focusNode: focusNode,
+  autofocus: autofocus,
+);
+
+class _LineupDropdownField<T> extends StatefulWidget {
+  const _LineupDropdownField({
+    required this.fieldKey,
+    required this.items,
+    required this.onChanged,
+    required this.selectedItemChildren,
+    required this.initialValue,
+    required this.isExpanded,
+    required this.isDense,
+    required this.iconSize,
+    required this.itemHeight,
+    required this.icon,
+    required this.style,
+    required this.decoration,
+    required this.validator,
+    required this.focusNode,
+    required this.autofocus,
+  });
+
+  final Key? fieldKey;
+  final List<DropdownMenuItem<T>>? items;
+  final ValueChanged<T?>? onChanged;
+  final List<Widget>? selectedItemChildren;
+  final T? initialValue;
+  final bool isExpanded;
+  final bool isDense;
+  final double iconSize;
+  final double? itemHeight;
+  final Widget? icon;
+  final TextStyle? style;
+  final InputDecoration decoration;
+  final FormFieldValidator<T>? validator;
+  final FocusNode? focusNode;
+  final bool autofocus;
+
+  @override
+  State<_LineupDropdownField<T>> createState() =>
+      _LineupDropdownFieldState<T>();
+}
+
+class _LineupDropdownFieldState<T> extends State<_LineupDropdownField<T>> {
+  FormFieldState<T>? _fieldState;
+  bool _reconciliationScheduled = false;
+  bool _reconciling = false;
+
+  void _selected(T? value) {
+    if (_reconciling) return;
+    widget.onChanged?.call(value);
+    if (_reconciliationScheduled) return;
+    _reconciliationScheduled = true;
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      _reconciliationScheduled = false;
+      final field = _fieldState;
+      if (!mounted ||
+          field == null ||
+          !field.mounted ||
+          field.value == widget.initialValue) {
+        return;
+      }
+      // The owner can reject a selection without changing initialValue.
+      // Reset restores its value and also calls onChanged.
+      _reconciling = true;
+      try {
+        field.reset();
+      } finally {
+        _reconciling = false;
+      }
+    });
   }
 
-  if (!tv) return field(context);
-  return _LineupDropdownFocus(enabled: onChanged != null, builder: field);
+  @override
+  Widget build(BuildContext context) {
+    final baseTheme = Theme.of(context);
+    final dropdownColor = LineupTheme.of(context).elevatedSurface;
+    final tv = DeviceProfile.of(context).isTv;
+    Widget field(BuildContext context) {
+      final roles = LineupTheme.of(context);
+      return DropdownButtonFormField<T>(
+        key: widget.fieldKey,
+        initialValue: widget.initialValue,
+        onChanged: widget.onChanged == null ? null : _selected,
+        items: lineupMenuItems(
+          widget.items,
+          widget.initialValue,
+          menuTheme: tv ? baseTheme : null,
+        ),
+        selectedItemBuilder: (context) {
+          _fieldState = context.findAncestorStateOfType<FormFieldState<T>>();
+          return widget.selectedItemChildren ??
+              (widget.items ?? <DropdownMenuItem<T>>[])
+                  .map((item) => item.child)
+                  .toList();
+        },
+        dropdownColor: dropdownColor,
+        borderRadius: BorderRadius.circular(8),
+        isExpanded: widget.isExpanded,
+        isDense: widget.isDense,
+        iconSize: widget.iconSize,
+        itemHeight: widget.itemHeight,
+        icon: widget.icon ?? const Icon(Icons.keyboard_arrow_down),
+        style: tv
+            ? (widget.style ?? LineupTypography.control).copyWith(
+                color: widget.onChanged == null
+                    ? roles.mutedText
+                    : roles.primaryText,
+              )
+            : widget.style ?? LineupTypography.control,
+        iconEnabledColor: tv ? roles.secondaryText : null,
+        iconDisabledColor: tv ? roles.mutedText : null,
+        decoration: widget.decoration,
+        validator: widget.validator,
+        focusNode: widget.focusNode,
+        autofocus: widget.autofocus,
+      );
+    }
+
+    if (!tv) return field(context);
+    return _LineupDropdownFocus(
+      enabled: widget.onChanged != null,
+      builder: field,
+    );
+  }
 }
 
 class _LineupDropdownFocus extends StatefulWidget {
@@ -899,34 +999,43 @@ class LineupFieldButton extends StatelessWidget {
   final VoidCallback? onPressed;
   final FocusNode? focusNode;
   @override
-  Widget build(BuildContext context) => LineupField(
-    label: label,
-    child: LineupDropdownBox(
+  Widget build(BuildContext context) => MergeSemantics(
+    child: Semantics(
+      button: true,
+      value: value,
       enabled: onPressed != null,
-      child: Builder(
-        builder: (context) {
-          final roles = LineupTheme.of(context);
-          return InkWell(
-            focusNode: focusNode,
-            onTap: onPressed,
-            borderRadius: BorderRadius.circular(8),
-            child: Row(
-              children: [
-                Expanded(
-                  child: Text(
-                    value,
-                    style: LineupTypography.control.copyWith(
-                      color: onPressed == null
-                          ? roles.mutedText
-                          : roles.primaryText,
+      child: LineupField(
+        label: label,
+        child: LineupDropdownBox(
+          enabled: onPressed != null,
+          child: Builder(
+            builder: (context) {
+              final roles = LineupTheme.of(context);
+              return InkWell(
+                focusNode: focusNode,
+                onTap: onPressed,
+                borderRadius: BorderRadius.circular(8),
+                child: Row(
+                  children: [
+                    Expanded(
+                      child: ExcludeSemantics(
+                        child: Text(
+                          value,
+                          style: LineupTypography.control.copyWith(
+                            color: onPressed == null
+                                ? roles.mutedText
+                                : roles.primaryText,
+                          ),
+                        ),
+                      ),
                     ),
-                  ),
+                    const Icon(Icons.keyboard_arrow_down, size: 20),
+                  ],
                 ),
-                const Icon(Icons.keyboard_arrow_down, size: 20),
-              ],
-            ),
-          );
-        },
+              );
+            },
+          ),
+        ),
       ),
     ),
   );

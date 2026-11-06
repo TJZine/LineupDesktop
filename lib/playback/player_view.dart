@@ -82,6 +82,7 @@ class PlayerViewState extends State<PlayerView> with WidgetsBindingObserver {
   FocusNode get _sleepFocus => _controls[_PlayerControl.sleep]!;
   _PlayerControl _lastAction = _PlayerControl.subtitles;
   PlayerOverlay? _trackOrigin;
+  _PlayerControl? _trackInvoker;
   bool get _isTv => DeviceProfile.of(context).isTv;
   bool get _isHandheld => DeviceProfile.of(context).isHandheld;
 
@@ -309,6 +310,40 @@ class PlayerViewState extends State<PlayerView> with WidgetsBindingObserver {
         _focusTvAction(
           first: nextOverlay == PlayerOverlay.nowPlaying && !leavingTracks,
         );
+      }
+    }
+    if (!_isTv && nextOverlay != _renderedOverlay) {
+      final wasTracks =
+          _renderedOverlay == PlayerOverlay.audioTracks ||
+          _renderedOverlay == PlayerOverlay.subtitleTracks;
+      final isTracks =
+          nextOverlay == PlayerOverlay.audioTracks ||
+          nextOverlay == PlayerOverlay.subtitleTracks;
+      if (isTracks && !wasTracks && _keyboardInput) {
+        for (final entry in _controls.entries) {
+          if (entry.value.hasPrimaryFocus) {
+            _trackInvoker = entry.key;
+            break;
+          }
+        }
+      } else if (wasTracks) {
+        final invoker = _trackInvoker;
+        _trackInvoker = null;
+        if (invoker != null &&
+            nextOverlay == PlayerOverlay.osd &&
+            _keyboardInput) {
+          final generation = widget.controller.overlayPresentationGeneration;
+          WidgetsBinding.instance.addPostFrameCallback((_) {
+            if (!_canOwnFocus ||
+                !_keyboardInput ||
+                widget.controller.overlay != PlayerOverlay.osd ||
+                widget.controller.overlayPresentationGeneration != generation) {
+              return;
+            }
+            final node = _controls[invoker]!;
+            if (_isLiveControl(node)) node.requestFocus();
+          });
+        }
       }
     }
     final retiringBottomPanel =
@@ -914,13 +949,15 @@ class PlayerViewState extends State<PlayerView> with WidgetsBindingObserver {
                       children: [
                         for (final child in previousChildren)
                           if (overlay != PlayerOverlay.programInfo)
-                            ExcludeFocus(
-                              child: ExcludeSemantics(
-                                // Dispose tooltip overlays with their retiring
-                                // semantics origin, before further label updates.
-                                child: TooltipVisibility(
-                                  visible: false,
-                                  child: child,
+                            IgnorePointer(
+                              child: ExcludeFocus(
+                                child: ExcludeSemantics(
+                                  // Dispose tooltip overlays with their retiring
+                                  // semantics origin, before further label updates.
+                                  child: TooltipVisibility(
+                                    visible: false,
+                                    child: child,
+                                  ),
                                 ),
                               ),
                             ),
@@ -3589,12 +3626,11 @@ class _SleepTimerPicker extends StatelessWidget {
     final theme = Theme.of(context);
     final selected = controller.sleepDuration;
     final remaining = controller.sleepRemaining;
-    // A newly opened TV picker must take focus from its invoking action.
+    // A newly opened picker must take focus from its invoking action.
     // Its selected preset can autofocus within this fresh scope; without it,
     // the already-focused OSD scope keeps the arrow keys on the action row.
-    Widget pickerFocus(Widget child) => DeviceProfile.of(context).isTv
-        ? FocusScope(autofocus: true, child: child)
-        : child;
+    Widget pickerFocus(Widget child) =>
+        FocusScope(autofocus: true, child: child);
     return Positioned.fill(
       child: Align(
         alignment: Alignment.topLeft,

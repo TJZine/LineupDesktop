@@ -3044,6 +3044,18 @@ void main() {
         isNull,
       );
 
+      expect(
+        tester
+            .widget<DropdownButton<PlaybackMode?>>(
+              find.descendant(
+                of: variant,
+                matching: find.byType(DropdownButton<PlaybackMode?>),
+              ),
+            )
+            .value,
+        isNull,
+      );
+
       await tester.ensureVisible(
         _setupField<PlaybackMode?>('Different playback mode'),
       );

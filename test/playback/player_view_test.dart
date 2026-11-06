@@ -4142,7 +4142,7 @@ void main() {
   testWidgets('sleep picker keeps arrow navigation within its focused rows', (
     tester,
   ) async {
-    final fixture = _Fixture(PlayerState.playing);
+    final fixture = _Fixture(PlayerState.playing, dvrControlsEnabled: true);
     await tester.binding.setSurfaceSize(const Size(1280, 720));
     addTearDown(() => tester.binding.setSurfaceSize(null));
     fixture.player.showOsd();
@@ -4158,20 +4158,29 @@ void main() {
 
     final thirtyMinutes = find.text('30 minutes');
     final oneHour = find.text('1 hour');
-    expect(thirtyMinutes, findsOneWidget);
-    expect(oneHour, findsOneWidget);
-    Focus.of(tester.element(thirtyMinutes)).requestFocus();
-    await tester.pump();
+    void expectPickerFocus(Finder row) {
+      expect(fixture.player.overlay, PlayerOverlay.osd);
+      expect(fixture.player.sleepPickerOpen, isTrue);
+      expect(Focus.of(tester.element(row)).hasPrimaryFocus, isTrue);
+    }
+
+    expectPickerFocus(find.text('Off'));
     await tester.sendKeyEvent(LogicalKeyboardKey.arrowDown);
     await tester.pump();
-    expect(fixture.player.overlay, PlayerOverlay.osd);
-    expect(fixture.player.sleepPickerOpen, isTrue);
-    expect(Focus.of(tester.element(oneHour)).hasFocus, isTrue);
+    expectPickerFocus(thirtyMinutes);
+    await tester.sendKeyEvent(LogicalKeyboardKey.arrowDown);
+    await tester.pump();
+    expectPickerFocus(oneHour);
 
     await tester.sendKeyEvent(LogicalKeyboardKey.arrowUp);
     await tester.pump();
-    expect(Focus.of(tester.element(thirtyMinutes)).hasFocus, isTrue);
-    expect(fixture.player.overlay, PlayerOverlay.osd);
+    expectPickerFocus(thirtyMinutes);
+
+    await tester.sendKeyEvent(LogicalKeyboardKey.keyK);
+    await tester.pumpAndSettle();
+    expect(fixture.player.sleepPickerOpen, isFalse);
+    await tester.sendKeyEvent(LogicalKeyboardKey.keyS);
+    await tester.pumpAndSettle();
     expect(fixture.player.sleepPickerOpen, isTrue);
 
     await tester.pumpWidget(const SizedBox.shrink());
@@ -4199,7 +4208,7 @@ void main() {
         await tester.pumpAndSettle();
         await tester.sendKeyEvent(LogicalKeyboardKey.keyS);
         await tester.pumpAndSettle();
-        Focus.of(tester.element(find.text('30 minutes'))).requestFocus();
+        await tester.sendKeyEvent(LogicalKeyboardKey.arrowDown);
         await tester.pump();
 
         await tester.sendKeyEvent(LogicalKeyboardKey.space);
@@ -6310,6 +6319,22 @@ void main() {
         );
         await tester.pumpAndSettle();
         if (keyboard) {
+          final sleep = find.byKey(const Key('player-osd-sleep'));
+          tester.widget<TextButton>(sleep).focusNode!.requestFocus();
+          await tester.pump();
+          await tester.sendKeyEvent(LogicalKeyboardKey.enter);
+          await tester.pumpAndSettle();
+          expect(
+            Focus.of(tester.element(find.text('Off'))).hasPrimaryFocus,
+            isTrue,
+          );
+          await tester.sendKeyEvent(LogicalKeyboardKey.escape);
+          await tester.pumpAndSettle();
+          expect(fixture.player.sleepPickerOpen, isFalse);
+          expect(
+            tester.widget<TextButton>(sleep).focusNode!.hasPrimaryFocus,
+            isTrue,
+          );
           await tester.sendKeyEvent(LogicalKeyboardKey.keyS);
         } else {
           await tester.tap(
@@ -6319,9 +6344,7 @@ void main() {
         }
         await tester.pump();
         if (keyboard) {
-          await tester.sendKeyEvent(LogicalKeyboardKey.tab);
-          final choiceContext = tester.element(find.text('30 minutes'));
-          Focus.of(choiceContext).requestFocus();
+          await tester.sendKeyEvent(LogicalKeyboardKey.arrowDown);
           await tester.pump();
           await tester.sendKeyEvent(LogicalKeyboardKey.enter);
         } else {
@@ -6504,6 +6527,56 @@ void main() {
     await tester.pumpWidget(const SizedBox.shrink());
     fixture.dispose();
   });
+
+  for (final type in [PlayerTrackType.audio, PlayerTrackType.subtitle]) {
+    testWidgets('keyboard track drawer restores its ${type.name} action', (
+      tester,
+    ) async {
+      final fixture = _Fixture(
+        PlayerState.playing,
+        tracks: const [
+          PlayerTrack(id: 1, type: PlayerTrackType.audio, selected: true),
+          PlayerTrack(id: 2, type: PlayerTrackType.subtitle, selected: true),
+        ],
+      );
+      fixture.player.showOsd();
+      await tester.pumpWidget(
+        MaterialApp(
+          builder: _playerDesktopCanvasBuilder,
+          home: PlayerView(controller: fixture.player, openGuide: () {}),
+        ),
+      );
+      await tester.pumpAndSettle();
+
+      final action = find.byKey(
+        Key(
+          type == PlayerTrackType.audio
+              ? 'player-osd-audio'
+              : 'player-osd-subtitles',
+        ),
+      );
+      tester.widget<TextButton>(action).focusNode!.requestFocus();
+      await tester.pump();
+      await tester.sendKeyEvent(LogicalKeyboardKey.enter);
+      await tester.pumpAndSettle();
+      expect(
+        fixture.player.overlay,
+        type == PlayerTrackType.audio
+            ? PlayerOverlay.audioTracks
+            : PlayerOverlay.subtitleTracks,
+      );
+      await tester.sendKeyEvent(LogicalKeyboardKey.escape);
+      await tester.pumpAndSettle();
+      expect(fixture.player.overlay, PlayerOverlay.osd);
+      expect(
+        tester.widget<TextButton>(action).focusNode!.hasPrimaryFocus,
+        isTrue,
+      );
+
+      await tester.pumpWidget(const SizedBox.shrink());
+      fixture.dispose();
+    });
+  }
 
   testWidgets('track rows distinguish focused and selected presentation', (
     tester,
@@ -8237,9 +8310,20 @@ void main() {
 
     await tester.pumpAndSettle();
     fixture.player.closeOverlay();
+    final generation = fixture.player.overlayPresentationGeneration;
     await tester.pump();
     switcher = tester.widget<AnimatedSwitcher>(find.byType(AnimatedSwitcher));
     expect(switcher.duration, const Duration(milliseconds: 300));
+    final close = find.descendant(
+      of: find.byKey(const Key('playback-options-rail')),
+      matching: find.text('Close'),
+    );
+    await tester.tapAt(tester.getCenter(close));
+    await tester.pump();
+    expect(fixture.player.overlay, PlayerOverlay.osd);
+    expect(fixture.player.overlayPresentationGeneration, generation);
+    expect(fixture.native.selectedTracks, isEmpty);
+
     await tester.pump(const Duration(milliseconds: 150));
     positions = tester
         .widgetList<SlideTransition>(
@@ -8255,6 +8339,53 @@ void main() {
     await tester.pumpWidget(const SizedBox.shrink());
     fixture.dispose();
   });
+
+  for (final handheld in [false, true]) {
+    testWidgets(
+      'retiring track row passes taps to ${handheld ? 'handheld' : 'desktop'} video',
+      (tester) async {
+        final fixture = _Fixture(
+          PlayerState.playing,
+          tracks: const [
+            PlayerTrack(id: 1, type: PlayerTrackType.audio, selected: false),
+            PlayerTrack(id: 2, type: PlayerTrackType.audio, selected: true),
+          ],
+        );
+        await tester.binding.setSurfaceSize(const Size(960, 600));
+        addTearDown(() => tester.binding.setSurfaceSize(null));
+        if (handheld) {
+          await _pumpHandheldPlayer(tester, fixture);
+        } else {
+          await tester.pumpWidget(
+            MaterialApp(
+              builder: _playerDesktopCanvasBuilder,
+              home: PlayerView(controller: fixture.player, openGuide: () {}),
+            ),
+          );
+        }
+        fixture.player.showTracks(PlayerTrackType.audio);
+        await tester.pumpAndSettle();
+        fixture.player.closeOverlay();
+        final generation = fixture.player.overlayPresentationGeneration;
+        await tester.pump();
+        await tester.tapAt(
+          tester.getCenter(find.byKey(const Key('playback-track-audio-1'))),
+        );
+        await tester.pumpAndSettle();
+        expect(fixture.native.selectedTracks, isEmpty);
+        expect(
+          fixture.player.overlay,
+          handheld ? PlayerOverlay.none : PlayerOverlay.osd,
+        );
+        if (!handheld) {
+          expect(fixture.player.overlayPresentationGeneration, generation);
+        }
+
+        await tester.pumpWidget(const SizedBox.shrink());
+        fixture.dispose();
+      },
+    );
+  }
 
   testWidgets('Reduce Motion settles track rails in one pump', (tester) async {
     final fixture = _Fixture(
