@@ -1508,6 +1508,11 @@ class PlexClient {
       late final http.StreamedResponse streamed;
       try {
         streamed = await pendingResponse.timeout(limit);
+      } on FormatException {
+        throw const PlexException(
+          'auth-invalid',
+          'Plex authentication is no longer valid.',
+        );
       } on TimeoutException {
         abortRequest();
         unawaited(
@@ -1561,10 +1566,7 @@ class PlexClient {
         'Plex did not respond in time. Try again.',
       );
     } on FormatException {
-      throw const PlexException(
-        'auth-invalid',
-        'Plex authentication is no longer valid.',
-      );
+      throw const PlexException('parse-error', 'Plex response was invalid.');
     } on http.RequestAbortedException {
       throw _scanCancelledException;
     } on TlsException {
