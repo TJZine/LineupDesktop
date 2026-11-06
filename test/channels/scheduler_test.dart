@@ -613,6 +613,42 @@ void main() {
     for (var cycle = 1; cycle < cycles.length; cycle++) {
       expect(cycles[cycle].first, isNot(cycles[cycle - 1].last));
     }
+
+    final migratedContent = [
+      ...content,
+      const ChannelItem(id: 'd', title: 'D', duration: Duration(minutes: 1)),
+    ];
+    final legacy = Channel(
+      id: 'legacy-shuffle',
+      number: 1,
+      name: 'Legacy shuffle',
+      source: ManualSource(migratedContent),
+      playbackMode: PlaybackMode.shuffle,
+      anchor: anchor,
+      shuffleSeed: 6,
+      scheduleVersion: 1,
+    );
+    final migrated = migrateLegacySchedule(
+      legacy,
+      migratedContent,
+      anchor.add(const Duration(seconds: 30)),
+    );
+    const cycleLength = Duration(minutes: 4);
+    final boundary = anchor.add(cycleLength);
+    for (final channel in [migrated, Channel.fromJson(migrated.toJson())]) {
+      expect(channel.scheduleTransition!.boundary, boundary);
+      final schedule = buildChannelSchedule(channel, migratedContent);
+      Iterable<String> cycleAt(DateTime start) => scheduleWindow(
+        start,
+        start.add(cycleLength),
+        anchor,
+        schedule,
+      ).map((program) => program.item.id);
+
+      expect(cycleAt(anchor), ['d', 'b', 'a', 'c']);
+      expect(cycleAt(boundary), ['d', 'c', 'b', 'a']);
+      expect(cycleAt(boundary.add(cycleLength)), ['c', 'a', 'd', 'b']);
+    }
   });
 
   test('transition preserves the frozen cycle and changes at its boundary', () {

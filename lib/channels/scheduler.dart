@@ -379,15 +379,20 @@ _CycleIndex _shuffleCycle(ScheduleIndex schedule, int cycle) {
     _cycleSeed(schedule.seed, schedule.scheduleVersion, cycle),
   );
   if (items.length > 2) {
-    final previous = seededShuffle(
-      schedule.items,
-      _cycleSeed(schedule.seed, schedule.scheduleVersion, cycle - 1),
-    );
-    if (items.first.id == previous.last.id) {
+    final legacyPredecessor = cycle == 0
+        ? schedule.transition?.legacyCycleItems.last
+        : null;
+    final previousId =
+        legacyPredecessor?.id ??
+        seededShuffle(
+          schedule.items,
+          _cycleSeed(schedule.seed, schedule.scheduleVersion, cycle - 1),
+        ).last.id;
+    if (items.first.id == previousId) {
       final swap = Iterable<int>.generate(
         items.length - 2,
         (index) => index + 1,
-      ).where((index) => items[index].id != previous.last.id).firstOrNull;
+      ).where((index) => items[index].id != previousId).firstOrNull;
       if (swap != null) {
         final first = items.first;
         items[0] = items[swap];
