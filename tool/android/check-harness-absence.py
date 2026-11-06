@@ -7,6 +7,7 @@ optimization removing a currently unused observer is not a release boundary.
 import argparse
 import hashlib
 import json
+import os
 from pathlib import Path
 import re
 import zipfile
@@ -22,6 +23,10 @@ BINARY_MARKERS = (
     b'--e6-transport',
     b'session-live',
 )
+
+
+def raise_walk_error(error):
+    raise error
 
 
 def inspect(path, *, source=False):
@@ -44,7 +49,16 @@ def inspect(path, *, source=False):
                     findings.append({'member': name, 'marker': marker.decode()})
 
     if path.is_dir():
-        for member in sorted(path.rglob('*')):
+        tree_members = []
+        for directory, dirnames, filenames in os.walk(
+            path, onerror=raise_walk_error, followlinks=False
+        ):
+            for name in dirnames + filenames:
+                member = Path(directory) / name
+                if member.is_symlink():
+                    raise ValueError('invalid_input')
+                tree_members.append(member)
+        for member in sorted(tree_members):
             if member.is_file() and (
                 member.suffix in ('.kt', '.java', '.xml', '.dart', '.py') if source
                 else member.suffix in ('.class', '.dex', '.jar')
