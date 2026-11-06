@@ -518,7 +518,7 @@ void main() {
     ]);
   });
 
-  test('drops media parts without a usable path', () {
+  test('a malformed selected part makes the item unsupported', () {
     final item = parseMediaItem({
       'ratingKey': 'malformed-parts',
       'title': 'Malformed parts',
@@ -530,6 +530,34 @@ void main() {
             {'duration': 1000},
             {'key': '   ', 'duration': 1000},
             {'key': '/library/parts/valid.mkv', 'duration': 1000},
+          ],
+        },
+      ],
+    });
+    final nullMember = parseMediaItem({
+      'ratingKey': 'null-part-member',
+      'title': 'Null part member',
+      'type': 'movie',
+      'duration': 3000,
+      'Media': [
+        {
+          'Part': [
+            null,
+            {'key': '/library/parts/valid.mkv'},
+          ],
+        },
+      ],
+    });
+    final scalarMember = parseMediaItem({
+      'ratingKey': 'scalar-part-member',
+      'title': 'Scalar part member',
+      'type': 'movie',
+      'duration': 3000,
+      'Media': [
+        {
+          'Part': [
+            1,
+            {'key': '/library/parts/valid.mkv'},
           ],
         },
       ],
@@ -566,9 +594,12 @@ void main() {
     );
     addTearDown(client.close);
 
-    expect(item.parts.map((part) => part.path), ['/library/parts/valid.mkv']);
-    expect(item.parts.single.duration, const Duration(seconds: 1));
-    expect(item.isPlayable, isTrue);
+    expect(item.parts, isEmpty);
+    expect(item.isPlayable, isFalse);
+    expect(nullMember.parts, isEmpty);
+    expect(nullMember.isPlayable, isFalse);
+    expect(scalarMember.parts, isEmpty);
+    expect(scalarMember.isPlayable, isFalse);
     expect(unsupported.parts, isEmpty);
     expect(unsupported.isPlayable, isFalse);
     expect(zeroDuration.parts, hasLength(1));

@@ -1806,11 +1806,21 @@ PlexMediaItem parseMediaItem(Object? raw, {String? libraryId}) {
     'Media',
   ).whereType<Map<Object?, Object?>>().firstOrNull;
   final rawParts = _structuralList(media?['Part'], 'Part');
-  final parts = rawParts
-      .whereType<Map<Object?, Object?>>()
-      .map(_parseMediaPart)
-      .nonNulls
-      .toList(growable: false);
+  final parsedParts = <PlexMediaPart>[];
+  var malformedPart = false;
+  for (final rawPart in rawParts) {
+    if (rawPart is! Map<Object?, Object?>) {
+      malformedPart = true;
+      break;
+    }
+    final part = _parseMediaPart(rawPart);
+    if (part == null) {
+      malformedPart = true;
+      break;
+    }
+    parsedParts.add(part);
+  }
+  final parts = malformedPart ? const <PlexMediaPart>[] : parsedParts;
   final firstPart = rawParts.whereType<Map<Object?, Object?>>().firstOrNull;
   return PlexMediaItem(
     id: _id(json['ratingKey'], 'media id'),
