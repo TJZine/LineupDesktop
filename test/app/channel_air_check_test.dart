@@ -331,13 +331,23 @@ void main() {
         ),
     ];
     final anchor = DateTime.utc(2026);
-    final special = ChannelItem(
+    const special = ChannelItem(
       id: 'special',
       title: 'Special',
-      duration: const Duration(minutes: 20),
+      duration: Duration(minutes: 20),
       mediaKind: ChannelMediaKind.episode,
       showTitle: 'Even',
       seasonNumber: 0,
+      episodeNumber: 1,
+    );
+    const regular = ChannelItem(
+      id: 'regular',
+      title: 'Regular',
+      duration: Duration(minutes: 20),
+      mediaKind: ChannelMediaKind.episode,
+      showTitle: 'Even',
+      seasonNumber: 1,
+      episodeNumber: 1,
     );
     final migrated = _channel(
       items: items,
@@ -353,36 +363,49 @@ void main() {
       blockSize: 2,
       includeSpecials: false,
     );
-    for (final channel in [
+    final shuffle = _channel(items: items, mode: PlaybackMode.shuffle);
+    final specialsOn = _channel(
+      items: [special, regular],
+      mode: PlaybackMode.block,
+      blockSize: 2,
+    );
+    for (final (channel, differingMinutes) in [
       for (final mode in PlaybackMode.values)
-        _channel(
-          items: items,
-          mode: mode,
-          blockSize: mode == PlaybackMode.block ? 2 : null,
-          scheduleVersion: 1,
+        (
+          _channel(
+            items: items,
+            mode: mode,
+            blockSize: mode == PlaybackMode.block ? 2 : null,
+            scheduleVersion: 1,
+          ),
+          <int>[],
         ),
-      migrated,
-      specialsOff,
+      (migrated, [10, 45]),
+      (specialsOff, [5]),
+      (shuffle, [25]),
+      (specialsOn, [5, 25]),
     ]) {
       final beforeAnchor = anchor.subtract(const Duration(microseconds: 1));
       var now = beforeAnchor;
       final content = (channel.source as ManualSource).items;
       final schedule = buildChannelSchedule(channel, content);
-      DateTime? differingInstant;
-      if (channel.scheduleVersion == currentScheduleVersion) {
-        final unrepaired = buildSchedule(
+      final distinguishingInstants = [
+        for (final minute in differingMinutes)
+          anchor.add(Duration(minutes: minute)),
+      ];
+      if (distinguishingInstants.isNotEmpty) {
+        final v1 = buildSchedule(
           content,
           mode: channel.playbackMode,
           seed: channel.shuffleSeed,
           blockSize: channel.blockSize ?? 3,
         );
-        differingInstant = channel == migrated
-            ? anchor.add(const Duration(minutes: 10))
-            : anchor.add(const Duration(minutes: 5));
-        expect(
-          programAt(differingInstant, anchor, schedule).item.id,
-          isNot(programAt(differingInstant, anchor, unrepaired).item.id),
-        );
+        for (final instant in distinguishingInstants) {
+          expect(
+            programAt(instant, anchor, schedule).item.id,
+            isNot(programAt(instant, anchor, v1).item.id),
+          );
+        }
       }
       await tester.pumpWidget(_airCheck(controller, channel, clock: () => now));
       await tester.pumpAndSettle();
@@ -390,7 +413,7 @@ void main() {
         beforeAnchor,
         anchor,
         anchor.add(const Duration(microseconds: 1)),
-        ?differingInstant,
+        ...distinguishingInstants,
       ]) {
         now = instant;
         await tester.pump(const Duration(seconds: 30));
@@ -403,6 +426,7 @@ void main() {
         expect(
           find.byKey(ValueKey('air-check-program-${guideProgram.id}')),
           findsOneWidget,
+          reason: '${channel.playbackMode.name} at $now',
         );
         expect(
           find.bySemanticsLabel(
