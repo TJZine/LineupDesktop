@@ -1543,22 +1543,10 @@ class LineupController extends ChangeNotifier {
     required ChannelBuildMode mode,
     required List<Channel> expectedBase,
     Set<String> removeChannelIds = const {},
-  }) => _applyChannelPlan(
-    planned,
-    mode: mode,
-    expectedBase: expectedBase,
-    removeChannelIds: removeChannelIds,
-  );
-
-  Future<ChannelPlanApplyResult> _applyChannelPlan(
-    List<Channel> planned, {
-    required ChannelBuildMode mode,
-    List<Channel>? expectedBase,
-    Set<String> removeChannelIds = const {},
   }) async {
     final operation = _mutationScope;
     final expected = expectedBase
-        ?.map((channel) => channel.immutableCopy().toJson())
+        .map((channel) => channel.immutableCopy().toJson())
         .toList();
     final plan = List<Channel>.unmodifiable(
       planned.map((channel) => channel.immutableCopy()),
@@ -1566,11 +1554,10 @@ class LineupController extends ChangeNotifier {
     final removals = Set<String>.unmodifiable(removeChannelIds);
     var result = ChannelPlanApplyResult.stale;
     await _queueScopeOperation(operation, () async {
-      if (expected != null &&
-          !canonicalChannelValueEquals(
-            channels.map((channel) => channel.toJson()).toList(),
-            expected,
-          )) {
+      if (!canonicalChannelValueEquals(
+        channels.map((channel) => channel.toJson()).toList(),
+        expected,
+      )) {
         return;
       }
       if (plan.any((channel) => channel.builderKey == null)) {
