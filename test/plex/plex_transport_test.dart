@@ -716,6 +716,94 @@ void main() {
     );
   });
 
+  test('discovery keeps the first accepted record for a server id', () async {
+    final client = PlexClient(
+      clientIdentifier: 'lineup-desktop-test-abcdefghijklmnopqrst',
+      httpClient: MockClient(
+        (_) async => http.Response(
+          jsonEncode([
+            {
+              'clientIdentifier': 'same-id',
+              'name': 'First server',
+              'provides': 'server',
+              'accessToken': 'first-token',
+              'connections': [
+                {'uri': 'https://first.example:32400'},
+              ],
+            },
+            {
+              'clientIdentifier': 'same-id',
+              'name': 'Second server',
+              'provides': 'server',
+              'accessToken': 'second-token',
+              'connections': [
+                {'uri': 'https://second.example:32400'},
+              ],
+            },
+          ]),
+          200,
+        ),
+      ),
+    );
+    addTearDown(client.close);
+
+    final servers = await client.discoverServers('cloud-token');
+    expect(servers, hasLength(1));
+    expect(servers.single.token, 'first-token');
+    expect(servers.single.server.name, 'First server');
+    expect(servers.single.server.connections.single.uri.host, 'first.example');
+  });
+
+  test('an unaccepted duplicate does not suppress a valid resource', () async {
+    for (final first in [
+      {
+        'clientIdentifier': 'same-id',
+        'name': 'No HTTPS',
+        'provides': 'server',
+        'accessToken': 'first-token',
+        'connections': [
+          {'uri': 'http://first.example:32400'},
+        ],
+      },
+      {
+        'clientIdentifier': 'same-id',
+        'name': 'Invalid token',
+        'provides': 'server',
+        'accessToken': 'BAD\r\nTOKEN',
+        'connections': [
+          {'uri': 'https://first.example:32400'},
+        ],
+      },
+    ]) {
+      final client = PlexClient(
+        clientIdentifier: 'lineup-desktop-test-abcdefghijklmnopqrst',
+        httpClient: MockClient(
+          (_) async => http.Response(
+            jsonEncode([
+              first,
+              {
+                'clientIdentifier': 'same-id',
+                'name': 'Valid second',
+                'provides': 'server',
+                'accessToken': 'second-token',
+                'connections': [
+                  {'uri': 'https://second.example:32400'},
+                ],
+              },
+            ]),
+            200,
+          ),
+        ),
+      );
+      addTearDown(client.close);
+
+      final servers = await client.discoverServers('cloud-token');
+      expect(servers, hasLength(1));
+      expect(servers.single.server.name, 'Valid second');
+      expect(servers.single.token, 'second-token');
+    }
+  });
+
   test('direct play retains the selected Plex server origin', () {
     final descriptor = _directPlaybackDescriptor('/library/parts/1/file.mkv');
 

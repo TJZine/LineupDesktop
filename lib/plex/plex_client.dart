@@ -261,17 +261,14 @@ class PlexClient {
         );
       }
       if (connections.isNotEmpty) {
-        servers.add(
-          PlexServerAccess(
-            server: PlexServer(
-              id: _text(json['clientIdentifier'], 'server id'),
-              name: _text(json['name'], 'server name'),
-              connections: connections,
-              owned: _boolean(json['owned']),
-            ),
-            token: resourceToken,
-          ),
+        final server = PlexServer(
+          id: _text(json['clientIdentifier'], 'server id'),
+          name: _text(json['name'], 'server name'),
+          connections: connections,
+          owned: _boolean(json['owned']),
         );
+        if (!seenServerIds.add(server.id)) continue;
+        servers.add(PlexServerAccess(server: server, token: resourceToken));
       }
     }
     return servers;
