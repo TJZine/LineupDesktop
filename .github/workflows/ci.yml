@@ -24,6 +24,8 @@ jobs:
           persist-credentials: false
       - uses: ./.github/actions/setup-flutter
       - run: dart tool/check_toolchain.dart
+      - name: Check committed source material mirrors
+        run: python3 tool/macos/source_materials.py assets --flutter-sdk "$FLUTTER_ROOT" --check
       - name: Run macOS notice collector tests
         run: python3 tool/macos/collect_notices_test.py
       - name: Run portable engine tooling fixtures (platform skips visible)
