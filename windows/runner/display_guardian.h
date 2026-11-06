@@ -37,6 +37,7 @@ public:
   std::optional<GuardianAck> Accept(const GuardianRecord &record);
   void Malformed();
   bool Finished() const { return invalid_ || disarmed_; }
+  bool Disarmed() const { return disarmed_; }
   // Called on either pipe loss or parent loss. At most one recovery attempt.
   bool ParentLost(DisplayConfigApi &api);
   const std::optional<DisplayOwnership> &Ownership() const {

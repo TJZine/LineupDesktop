@@ -68,6 +68,9 @@ class DisplayGuardianLink {
   virtual bool Arm(const DisplayOwnership& ownership) = 0;
   virtual bool Update(const DisplayOwnership& ownership) = 0;
   virtual bool Disarm() = 0;
+  // Relinquish the display without restoration, even if the journal cannot
+  // be resolved here.
+  virtual void StandDown() { Disarm(); }
   virtual bool IsAlive() = 0;
   virtual bool Execute(const std::function<bool()>& action) = 0;
 };
