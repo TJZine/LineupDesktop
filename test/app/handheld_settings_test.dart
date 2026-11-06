@@ -214,7 +214,7 @@ void main() {
     }
   }
 
-  _h4Test('hardware Backspace clears failed PIN feedback at zero digits', (
+  _h4Test('hardware Backspace retains failed PIN feedback at zero digits', (
     tester,
   ) async {
     _window(tester, const Size(412, 915), 1, 1);
@@ -233,7 +233,7 @@ void main() {
     );
     await tester.sendKeyEvent(LogicalKeyboardKey.backspace);
     await tester.pumpAndSettle();
-    expect(feedback, findsNothing);
+    expect(feedback, findsOneWidget);
     expect(
       tester.widget<Semantics>(progress).properties.label,
       '0 of 4 digits entered',

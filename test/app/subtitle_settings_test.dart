@@ -31,6 +31,7 @@ Future<void> showSettings(
   bool tv = false,
   double text = 1,
   SubtitleAppearanceSource? source,
+  KeyEventResult Function(FocusNode, KeyEvent)? parentOnKeyEvent,
 }) async {
   debugDefaultTargetPlatformOverride ??= TargetPlatform.macOS;
   addTearDown(() => debugDefaultTargetPlatformOverride = null);
@@ -47,10 +48,19 @@ Future<void> showSettings(
         largeFocusIndicators: controller.settings.largeFocusIndicators,
         formFactor: profileFor(tv).formFactor,
       ),
-      builder: (context, child) => DeviceProfileScope(
-        profile: profileFor(tv),
-        child: LineupCanvas(child: child!),
-      ),
+      builder: (context, child) {
+        final content = DeviceProfileScope(
+          profile: profileFor(tv),
+          child: LineupCanvas(child: child!),
+        );
+        return parentOnKeyEvent == null
+            ? content
+            : Focus(
+                canRequestFocus: false,
+                onKeyEvent: parentOnKeyEvent,
+                child: content,
+              );
+      },
       home: Scaffold(
         body: SettingsView(
           controller: controller,
@@ -547,6 +557,15 @@ void main() {
       tv: true,
       size: const Size(960, 540),
     );
+    final rail = tester
+        .widget<TextButton>(find.widgetWithText(TextButton, 'Subtitles').first)
+        .focusNode!;
+    rail.requestFocus();
+    await tester.pumpAndSettle();
+    expect(rail.hasFocus, isTrue);
+    await tester.sendKeyEvent(LogicalKeyboardKey.arrowRight);
+    await tester.pumpAndSettle();
+    expect(FocusManager.instance.primaryFocus?.debugLabel, 'subtitlePreset');
     final preset = dropdown<SubtitlePreset>(tester, 'Preset').focusNode!;
     preset.requestFocus();
     await tester.pumpAndSettle();
@@ -670,6 +689,11 @@ void main() {
         size: const Size(960, 540),
         text: 2,
       );
+      final rail = tester
+          .widget<TextButton>(
+            find.widgetWithText(TextButton, 'Subtitles').first,
+          )
+          .focusNode!;
       dropdown<SubtitlePreset>(tester, 'Preset').focusNode!.requestFocus();
       await tester.pumpAndSettle();
       const expected = [
@@ -700,12 +724,19 @@ void main() {
       }
 
       checkVisible('subtitlePreset');
+      await tester.sendKeyEvent(LogicalKeyboardKey.arrowUp);
+      await tester.pumpAndSettle();
+      expect(FocusManager.instance.primaryFocus?.debugLabel, 'subtitlePreset');
+      checkVisible('subtitlePreset');
       for (final name in expected.skip(1)) {
         await tester.sendKeyEvent(LogicalKeyboardKey.arrowDown);
         await tester.pumpAndSettle();
         expect(FocusManager.instance.primaryFocus?.debugLabel, name);
         checkVisible(name);
       }
+      await tester.sendKeyEvent(LogicalKeyboardKey.arrowLeft);
+      await tester.pumpAndSettle();
+      expect(rail.hasFocus, isTrue);
     },
   );
 
@@ -809,12 +840,26 @@ void main() {
   ) async {
     final controller = FixtureController();
     addTearDown(controller.dispose);
-    await showSettings(tester, controller, tv: false);
+    var sawArrow = false;
+    await showSettings(
+      tester,
+      controller,
+      tv: false,
+      parentOnKeyEvent: (_, event) {
+        if (event.logicalKey == LogicalKeyboardKey.arrowDown) {
+          sawArrow = true;
+          return KeyEventResult.handled;
+        }
+        return KeyEventResult.ignored;
+      },
+    );
     dropdown<SubtitlePreset>(tester, 'Preset').focusNode!.requestFocus();
     await tester.pumpAndSettle();
+    final before = FocusManager.instance.primaryFocus;
     await tester.sendKeyEvent(LogicalKeyboardKey.arrowDown);
     await tester.pumpAndSettle();
-    expect(FocusManager.instance.primaryFocus?.debugLabel, 'subtitleSize');
+    expect(sawArrow, isTrue);
+    expect(FocusManager.instance.primaryFocus, same(before));
   });
 
   subtitleTest(
@@ -829,10 +874,19 @@ void main() {
       await tester.tap(field('Preset'));
       await tester.pumpAndSettle();
       expect(find.text('Drop shadow', skipOffstage: false), findsWidgets);
+      bool isRowFocus(FocusNode? node) =>
+          node?.debugLabel?.startsWith('subtitle') == true;
+      final before = FocusManager.instance.primaryFocus;
       await tester.sendKeyEvent(LogicalKeyboardKey.arrowDown);
       await tester.pumpAndSettle();
+      final afterDown = FocusManager.instance.primaryFocus;
+      expect(afterDown, isNot(same(before)));
+      expect(isRowFocus(afterDown), isFalse);
       await tester.sendKeyEvent(LogicalKeyboardKey.arrowUp);
       await tester.pumpAndSettle();
+      final afterUp = FocusManager.instance.primaryFocus;
+      expect(afterUp, same(before));
+      expect(isRowFocus(afterUp), isRowFocus(before));
       expect(find.text('Standard', skipOffstage: false), findsWidgets);
     },
   );

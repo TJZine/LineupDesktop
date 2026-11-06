@@ -1293,7 +1293,17 @@ void main() {
       code: 'FOURTH',
       expiresAt: now.add(const Duration(hours: 3)),
     );
-    final plex = _QueuedPinPlex([first, second, third, fourth]);
+    final fifth = PlexPin(
+      id: 15,
+      code: 'FIFTH',
+      expiresAt: now.add(const Duration(hours: 4)),
+    );
+    final sixth = PlexPin(
+      id: 16,
+      code: 'SIXTH',
+      expiresAt: now.add(const Duration(hours: 5)),
+    );
+    final plex = _QueuedPinPlex([first, second, third, fourth, fifth, sixth]);
     final controller = LineupController(
       store: MemoryAppStore(),
       credentials: MemoryCredentialStore(),
@@ -1303,10 +1313,16 @@ void main() {
     );
     addTearDown(controller.dispose);
 
+    Future<void> expire(PlexPin pin) async {
+      now = pin.expiresAt;
+      await tester.pump(const Duration(milliseconds: 11));
+      expect(controller.activePin, isNull);
+      expect(controller.pinExpired, isTrue);
+    }
+
     await controller.startLinking();
     await tester.pump();
-    now = first.expiresAt;
-    await tester.pump(const Duration(milliseconds: 11));
+    await expire(first);
     await show(tester, controller);
     expect(controller.pinExpired, isTrue);
     expect(
@@ -1327,6 +1343,10 @@ void main() {
     expect(find.text('Code expired'), findsNothing);
     expect(find.text('SECOND'), findsOneWidget);
 
+    await controller.startLinking();
+    await tester.pump();
+    expect(controller.activePin?.id, third.id);
+    await expire(third);
     await tester.tap(find.text('Cancel'));
     await tester.pumpAndSettle();
     expect(controller.stage, SetupStage.welcome);
@@ -1334,19 +1354,38 @@ void main() {
 
     await controller.startLinking();
     await tester.pump();
-    expect(controller.activePin?.id, third.id);
-    expect(controller.pinExpired, isFalse);
+    expect(controller.activePin?.id, fourth.id);
+    await expire(fourth);
+    expect(controller.pinExpired, isTrue);
 
     expect(await controller.logout(), isTrue);
     expect(controller.pinExpired, isFalse);
 
-    plex.failNextCreate = true;
-    await controller.startLinking();
-    expect(controller.pinExpired, isFalse);
     await controller.startLinking();
     await tester.pump();
-    expect(controller.activePin?.id, fourth.id);
+    expect(controller.activePin?.id, fifth.id);
+    await expire(fifth);
+    plex.failNextCreate = true;
+    await controller.startLinking();
+    await tester.pump();
+    expect(controller.activePin, isNull);
     expect(controller.pinExpired, isFalse);
+
+    await controller.startLinking();
+    await tester.pump();
+    expect(controller.activePin?.id, sixth.id);
+    expect(controller.pinExpired, isFalse);
+
+    plex.failNextPoll = true;
+    await tester.pump(const Duration(milliseconds: 11));
+    await tester.pumpAndSettle();
+    expect(controller.activePin, isNull);
+    expect(controller.pinExpired, isFalse);
+    expect(find.text('Unavailable'), findsOneWidget);
+    expect(
+      find.text('That code expired before sign-in finished.'),
+      findsNothing,
+    );
     await controller.cancelLinking();
   });
 
@@ -1481,6 +1520,7 @@ void main() {
     expect(find.text('Incorrect PIN. Try again.'), findsOneWidget);
     expect(find.bySemanticsLabel('0 of 4 digits entered'), findsOneWidget);
     await tester.sendKeyEvent(LogicalKeyboardKey.backspace);
+    await tester.pump();
     expect(find.byKey(const Key('profile-pin-sheet')), findsOneWidget);
     expect(find.text('Incorrect PIN. Try again.'), findsOneWidget);
     expect(find.bySemanticsLabel('0 of 4 digits entered'), findsOneWidget);
@@ -2269,6 +2309,7 @@ class _QueuedPinPlex extends PlexClient {
 
   final List<PlexPin> _pins;
   bool failNextCreate = false;
+  bool failNextPoll = false;
 
   @override
   Future<PlexPin> createPin() async {
@@ -2280,7 +2321,16 @@ class _QueuedPinPlex extends PlexClient {
   }
 
   @override
-  Future<String?> pollPin(PlexPin pin) => Completer<String?>().future;
+  Future<String?> pollPin(PlexPin pin) {
+    if (failNextPoll) {
+      failNextPoll = false;
+      throw const PlexException(
+        'network-unavailable',
+        'Synthetic poll failure',
+      );
+    }
+    return Completer<String?>().future;
+  }
 
   @override
   Future<void> cancelPin(PlexPin pin) async {}
