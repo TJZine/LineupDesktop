@@ -319,7 +319,7 @@ class SessionPayloadControls(unittest.TestCase):
         fields.update({"timed_out": "0", "session_progressed": str(int(positive)),
                        "session_rejected": str(int(not positive)),
                        "session_override_removed": str(int(stripped)),
-                       "restoration_attempted": str(int(restoration)),
+                       "restoration_attempted": str(int(restoration)), "stop_confirmed": "0",
                        "restoration_rejected": "1", "restoration_progressed": "0",
                        "session_options_captured": "1", "nested_forbidden_count": "0",
                        "internal_redirect_count": "0", "end_file_error_count": "0",
@@ -394,6 +394,15 @@ class SessionPayloadControls(unittest.TestCase):
                                                      True, True, "session-complete"))
         self.assertFalse(fixture.session_pass(result, {**fields, "session_rejected": "1"}, audit,
                                              True, True, "session-complete"))
+
+    def test_stop_confirmation_is_required_only_for_session_stop(self):
+        result, fields, audit = self.baseline(positive=True, restoration=True)
+        confirmed = {**fields, "stop_confirmed": "1"}
+        self.assertTrue(fixture.session_pass(result, confirmed, audit, True, True, "session-stop"))
+        with self.subTest(mode="session-stop"):
+            self.assertFalse(fixture.session_pass(result, fields, audit, True, True, "session-stop"))
+        with self.subTest(mode="session-complete"):
+            self.assertFalse(fixture.session_pass(result, confirmed, audit, True, True, "session-complete"))
 
     def test_redirect_requires_child_attempt_but_no_follow_or_media(self):
         result, fields, audit = self.baseline()

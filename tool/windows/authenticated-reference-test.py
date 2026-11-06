@@ -545,7 +545,8 @@ def session_pass(result, fields, audit, positive, restoration, mode):
               fields["session_progressed"] == str(int(positive)) and
               fields["session_rejected"] == str(int(not positive)) and
               fields["session_override_removed"] == str(int(mode == "session-control-no-references")) and
-              fields["restoration_attempted"] == str(int(restoration)))
+              fields["restoration_attempted"] == str(int(restoration)) and
+              fields["stop_confirmed"] == str(int(mode == "session-stop")))
     restored = ("references", "redirects", "demuxer", "lavf_options", "session_options")
     passed = passed and all(fields[name + "_restored_after"] == "1" for name in restored)
     if positive:
@@ -662,6 +663,7 @@ def session_matrix(args):
                 fields = read_outcomes(result, False)
                 required = {"session_progressed", "session_rejected", "session_override_removed",
                             "restoration_attempted", "restoration_progressed", "restoration_rejected",
+                            "stop_confirmed",
                             "session_options_captured", "nested_forbidden_count", "internal_redirect_count",
                             "end_file_error_count", "session_load_started", "session_structural_failure"}
                 required.update(name + "_restored_" + phase
