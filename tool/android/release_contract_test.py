@@ -8,6 +8,7 @@ import os
 import shutil
 import subprocess
 import unittest
+import zipfile
 from unittest.mock import patch
 
 
@@ -81,11 +82,29 @@ class ReleaseContractTest(unittest.TestCase):
         root = Path(__file__).resolve().parents[2]
         xml = (root / 'android/app/src/main/AndroidManifest.xml').read_text()
         manifest.check(xml)
+        for attribute in ('debuggable="true"', 'networkSecurityConfig="@xml/fixture"'):
+            with self.subTest(attribute=attribute), self.assertRaises(ValueError):
+                manifest.check_release(xml.replace('<application', f'<application android:{attribute}'))
+        manifest.check_release(xml)
         for invalid in (xml.replace('android:enableOnBackInvokedCallback="true"', ''),
                         xml.replace('android:enableOnBackInvokedCallback="true"',
                                     'android:enableOnBackInvokedCallback="false"')):
             with self.assertRaisesRegex(ValueError, 'OnBackInvokedCallback'):
                 manifest.check(invalid)
+
+    def test_rejects_fixture_bytes_at_any_apk_path(self):
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            fixture = root / 'fixture.crt'
+            fixture.write_bytes(b'test certificate')
+            apk = root / 'app.apk'
+            with zipfile.ZipFile(apk, 'w') as archive:
+                archive.writestr('res/a', b'other bytes')
+            manifest.reject_entry_bytes(fixture, apk)
+            with zipfile.ZipFile(apk, 'a') as archive:
+                archive.writestr('res/b', fixture.read_bytes())
+            with self.assertRaises(ValueError):
+                manifest.reject_entry_bytes(fixture, apk)
 
     def test_report_parsing_ignores_build_warnings(self):
         report = '\n'.join((
@@ -124,8 +143,14 @@ class ReleaseContractTest(unittest.TestCase):
             root = Path(directory)
             tools = root / 'tool/android'
             tools.mkdir(parents=True)
-            for name in ('build-release.sh', 'generate-licenses.py', 'check-manifest.py'):
+            for name in ('build-release.sh', 'generate-licenses.py', 'check-manifest.py',
+                         'check-harness-absence.py'):
                 shutil.copy(Path(__file__).with_name(name), tools / name)
+            signing = tools / 'with-signing.sh'
+            signing.write_text('#!/bin/sh\ntouch "$(dirname "$0")/signing-called"\n')
+            signing.chmod(0o755)
+            (root / 'lib').mkdir()
+            (root / 'lib/main.dart').write_text('void main() {}\n')
             android = root / 'android'
             android.mkdir()
             wrapper = android / 'gradlew'
@@ -153,6 +178,7 @@ class ReleaseContractTest(unittest.TestCase):
             self.assertNotEqual(0, result.returncode)
             self.assertEqual('stale SDK terms\n', notice.read_text())
             self.assertIn('notices differ', result.stderr)
+            self.assertFalse((tools / 'signing-called').exists())
 
     def test_notice_check_detects_all_drift_without_writing(self):
         with tempfile.TemporaryDirectory() as directory:

@@ -24,7 +24,8 @@ cert_report="$(mktemp "${TMPDIR:-/tmp}/lineup-android-release-certificates.XXXXX
 cleanup() { rm -f "$cert_report"; }
 trap cleanup EXIT
 
-python3 "$root/tool/android/check-manifest.py" "$root/android/app/src/main/AndroidManifest.xml"
+python3 "$root/tool/android/check-manifest.py" --release "$root/android/app/src/main/AndroidManifest.xml"
+python3 "$root/tool/android/check-harness-absence.py" --source "$root/lib" --source "$root/android/app/src"
 
 # The generator runs Gradle itself so the NOTICE-bearing JARs are downloaded.
 python3 "$root/tool/android/generate-licenses.py" --check \
@@ -43,6 +44,10 @@ if [[ ! -f "$apk" ]]; then
   exit 1
 fi
 
+python3 "$root/tool/android/check-harness-absence.py" --artifact "$apk"
+python3 "$root/tool/android/check-manifest.py" --reject-entry-bytes \
+  "$root/android/app/src/debug/res/raw/fixture_ca.crt" "$apk"
+
 if command -v shasum >/dev/null 2>&1; then
   apk_sha256="$(shasum -a 256 "$apk" | awk '{print $1}')"
 else
@@ -50,7 +55,7 @@ else
 fi
 android_sdk="${ANDROID_SDK_ROOT:-${ANDROID_HOME:-$HOME/Library/Android/sdk}}"
 "$android_sdk/cmdline-tools/latest/bin/apkanalyzer" manifest print "$apk" | \
-  python3 "$root/tool/android/check-manifest.py" -
+  python3 "$root/tool/android/check-manifest.py" --release -
 apksigner="$(find "$android_sdk/build-tools" -maxdepth 2 -type f -name apksigner -print 2>/dev/null | sort -V | tail -n 1)"
 if [[ -z "$apksigner" || ! -x "$apksigner" ]]; then
   echo "Android SDK apksigner is unavailable under $android_sdk/build-tools." >&2

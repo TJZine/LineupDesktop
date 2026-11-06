@@ -67,15 +67,18 @@ jobs:
           --gradle-project android --output android/app/src/main/assets
           --flutter-root "$FLUTTER_ROOT" --flutter-version 3.47.7
           --license-cache build/android-license-cache
-      - name: Check Android Back manifest contract and tooling tests
+      - name: Check Android release manifest, harness and tooling contracts
         run: |
-          python3 tool/android/check-manifest.py android/app/src/main/AndroidManifest.xml
+          python3 tool/android/check-manifest.py --release android/app/src/main/AndroidManifest.xml
+          python3 tool/android/check-harness-absence.py --source lib --source android/app/src
           python3 -m unittest discover -s tool/android -p '*_test.py'
           python3 tool/android/test-session-clock-public.py
       - name: Build ARM debug APK with the CI debug key
         env:
           LINEUP_ANDROID_SIGNING: debug-key
         run: tool/android/with-signing.sh flutter build apk --debug --target-platform android-arm,android-arm64
+      - name: Check ARM debug APK for excluded harness code
+        run: python3 tool/android/check-harness-absence.py --artifact build/app/outputs/flutter-apk/app-debug.apk
       - name: Run Android JVM unit tests
         working-directory: android
         env:
