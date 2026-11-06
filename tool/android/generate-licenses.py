@@ -338,7 +338,11 @@ def run_gradle_report(project: Path, configuration: str) -> str:
                     ).strip(),
                 },
             )
-        except (OSError, subprocess.CalledProcessError) as error:
+        except subprocess.CalledProcessError as error:
+            raise GenerationError(
+                f"Gradle dependency report failed: {error}\n{error.stderr}"
+            ) from error
+        except OSError as error:
             raise GenerationError(f"Gradle dependency report failed: {error}") from error
     return result.stdout + result.stderr
 

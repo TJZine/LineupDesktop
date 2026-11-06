@@ -118,6 +118,17 @@ and `LINEUP_ANDROID_KEY_ALIAS` can override those non-secret defaults.
 **Back up the keystore securely.** Losing it prevents in-place updates and forces
 an uninstall, deleting on-device lineups and sign-in.
 
+Gradle verifies downloaded Maven metadata and artifacts against the committed
+SHA-256 digests in `android/gradle/verification-metadata.xml`. After an Android
+dependency or Flutter SDK change, regenerate it on macOS using a clean Gradle
+user home, a disposable copy of the pinned Flutter SDK and Gradle's
+`--write-verification-metadata sha256` option. Resolve both ARM APK variants
+(debug and release), `:app:testDebugUnitTest` and the notice generator's Gradle
+report. Review the updated digests and use **Verify Android TV build** to
+identify any Linux-only artifacts. The root metadata also covers Flutter's
+included Gradle build. Robolectric fetches its Android runtime JARs at test time
+outside Gradle's verification. Those JARs do not ship.
+
 ## Release packaging and runtime notices
 
 Run the release recipe from the repository root:

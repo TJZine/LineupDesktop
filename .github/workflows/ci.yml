@@ -48,7 +48,9 @@ jobs:
         run: dart tool/check_toolchain.dart
       - run: flutter pub get
       - name: Generate the local Android Gradle wrapper
-        run: flutter create --empty --platforms=android --no-overwrite .
+        run: |
+          flutter create --empty --platforms=android --no-overwrite .
+          git diff --exit-code -- android/gradle/verification-metadata.xml
       - name: Check committed Android runtime notices
         run: >-
           python3 tool/android/generate-licenses.py --check

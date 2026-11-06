@@ -5,10 +5,12 @@ import io
 from pathlib import Path
 import tempfile
 import os
+import re
 import shutil
 import subprocess
 import unittest
 import zipfile
+import xml.etree.ElementTree as ET
 from unittest.mock import patch
 
 
@@ -77,6 +79,39 @@ class ReleaseContractTest(unittest.TestCase):
                 with self.assertRaisesRegex(generator.GenerationError, 'Cannot fetch'):
                     generator.generate(*args, check=True)
             self.assertEqual([], list(root.glob('lineup-android-licenses-*')))
+
+    def test_gradle_verifies_runtime_dependency_artifacts(self):
+        root = Path(__file__).resolve().parents[2]
+        gradle = (root / 'android/app/build.gradle.kts').read_text()
+        metadata = root / 'android/gradle/verification-metadata.xml'
+        self.assertTrue(metadata.is_file())
+        verification = ET.parse(metadata).getroot()
+        namespace = {'v': verification.tag.split('}')[0].removeprefix('{')}
+        self.assertEqual('true', verification.findtext(
+            'v:configuration/v:verify-metadata', namespaces=namespace))
+        modules = (
+            ('androidx.media3', 'media3-exoplayer'),
+            ('androidx.media3', 'media3-exoplayer-hls'),
+            ('androidx.media3', 'media3-datasource-okhttp'),
+            ('androidx.media3', 'media3-ui'),
+            ('com.squareup.okhttp3', 'okhttp'),
+        )
+        for group, module_name in modules:
+            with self.subTest(module=module_name):
+                coordinate = re.escape(f'{group}:{module_name}')
+                dependency = re.search(rf'implementation\("{coordinate}:([^"]+)"\)', gradle)
+                self.assertIsNotNone(dependency)
+                version = dependency.group(1)
+                component = verification.find(
+                    f'v:components/v:component[@group="{group}"]'
+                    f'[@name="{module_name}"][@version="{version}"]', namespace)
+                self.assertIsNotNone(component)
+                binary_names = {f'{module_name}-{version}.{ext}' for ext in ('jar', 'aar')}
+                self.assertTrue(any(
+                    artifact.get('name') in binary_names
+                    and artifact.find('v:sha256', namespace) is not None
+                    for artifact in component.findall('v:artifact', namespace)
+                ), f'missing binary SHA-256 for {group}:{module_name}:{version}')
 
     def test_back_opt_in_is_required(self):
         root = Path(__file__).resolve().parents[2]
