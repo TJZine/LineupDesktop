@@ -16,6 +16,7 @@ import 'package:lineup_desktop/settings/lineup_settings.dart';
 import 'package:lineup_desktop/settings/subtitle_style.dart';
 import 'package:lineup_desktop/ui/app_theme.dart';
 import 'package:lineup_desktop/ui/lineup_canvas.dart';
+import 'package:lineup_desktop/ui/lineup_controls.dart';
 
 import '../support/golden_test_support.dart';
 import '../support/ui_fixture.dart';
@@ -1375,6 +1376,54 @@ void main() {
       expect(tester.takeException(), isNull);
     });
   }
+
+  subtitleTest(
+    'TV subtitle dropdown uses the page theme when its trigger is focused',
+    (tester) async {
+      final focusManager = FocusManager.instance;
+      final highlight = focusManager.highlightStrategy;
+      focusManager.highlightStrategy = FocusHighlightStrategy.alwaysTraditional;
+      addTearDown(() => focusManager.highlightStrategy = highlight);
+      final controller = FixtureController();
+      addTearDown(controller.dispose);
+      await showSettings(tester, controller, tv: true);
+      final focus = dropdown<SubtitlePreset>(tester, 'Preset').focusNode!;
+      focus.requestFocus();
+      await tester.pumpAndSettle();
+      expect(focus.hasPrimaryFocus, isTrue);
+      final pageRoles = LineupTheme.of(tester.element(find.byType(Scaffold)));
+      final popupColor = dropdown<SubtitlePreset>(
+        tester,
+        'Preset',
+      ).dropdownColor;
+      expect(popupColor, pageRoles.elevatedSurface);
+
+      await tester.sendKeyEvent(LogicalKeyboardKey.enter);
+      await tester.pumpAndSettle();
+      final option = tester.element(find.text('Drop shadow'));
+      expect(Focus.of(option).hasFocus, isFalse);
+      expect(LineupTheme.of(option).primaryText, pageRoles.primaryText);
+
+      final focusedRow = find.byWidgetPredicate(
+        (widget) => widget is LineupRowSurface && widget.focused,
+      );
+      expect(Focus.of(tester.element(focusedRow)).hasPrimaryFocus, isTrue);
+      final surface = tester.widget<Container>(
+        find
+            .descendant(
+              of: focusedRow,
+              matching: find.byWidgetPredicate(
+                (widget) =>
+                    widget is Container && widget.foregroundDecoration != null,
+              ),
+            )
+            .first,
+      );
+      final focusColor = (surface.decoration! as BoxDecoration).color;
+      expect(focusColor, pageRoles.focusedSurface);
+      expect(focusColor, isNot(popupColor));
+    },
+  );
 }
 
 class _QueuedStore extends MemoryAppStore {

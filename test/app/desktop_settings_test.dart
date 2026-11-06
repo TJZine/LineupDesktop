@@ -10,6 +10,7 @@ import 'package:flutter/foundation.dart'
         debugDefaultTargetPlatformOverride,
         defaultTargetPlatform;
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:lineup_desktop/ui/lineup_canvas.dart';
 import 'package:lineup_desktop/plex/plex_models.dart';
@@ -394,6 +395,63 @@ void main() {
         findsNothing,
       );
       expect(find.text('Saved setting'), findsNothing);
+    },
+  );
+
+  testWidgets(
+    'TV Settings dropdown uses the page theme when its trigger is focused',
+    (tester) async {
+      final focusManager = FocusManager.instance;
+      final highlight = focusManager.highlightStrategy;
+      focusManager.highlightStrategy = FocusHighlightStrategy.alwaysTraditional;
+      addTearDown(() => focusManager.highlightStrategy = highlight);
+      final controller = FixtureController();
+      addTearDown(controller.dispose);
+      tester.view
+        ..devicePixelRatio = 1
+        ..physicalSize = const Size(960, 540);
+      addTearDown(tester.view.reset);
+      await _showSettings(tester, controller, isTv: true);
+      final trigger = find.byType(DropdownButton<OverlayTransparency>);
+      await tester.ensureVisible(trigger);
+      final focus = Focus.of(
+        tester.element(
+          find.descendant(of: trigger, matching: find.byType(InputDecorator)),
+        ),
+      );
+      focus.requestFocus();
+      await tester.pumpAndSettle();
+      expect(focus.hasPrimaryFocus, isTrue);
+      final pageRoles = LineupTheme.of(tester.element(find.byType(Scaffold)));
+      final popupColor = tester
+          .widget<DropdownButton<OverlayTransparency>>(trigger)
+          .dropdownColor;
+      expect(popupColor, pageRoles.elevatedSurface);
+
+      await tester.sendKeyEvent(LogicalKeyboardKey.enter);
+      await tester.pumpAndSettle();
+      final option = tester.element(find.text('Most solid, easiest to read'));
+      expect(Focus.of(option).hasFocus, isFalse);
+      expect(LineupTheme.of(option).primaryText, pageRoles.primaryText);
+
+      final focusedRow = find.byWidgetPredicate(
+        (widget) => widget is LineupRowSurface && widget.focused,
+      );
+      expect(Focus.of(tester.element(focusedRow)).hasPrimaryFocus, isTrue);
+      final surface = tester.widget<Container>(
+        find
+            .descendant(
+              of: focusedRow,
+              matching: find.byWidgetPredicate(
+                (widget) =>
+                    widget is Container && widget.foregroundDecoration != null,
+              ),
+            )
+            .first,
+      );
+      final focusColor = (surface.decoration! as BoxDecoration).color;
+      expect(focusColor, pageRoles.focusedSurface);
+      expect(focusColor, isNot(popupColor));
     },
   );
 }

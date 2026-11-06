@@ -737,6 +737,9 @@ Widget lineupDropdownField<T>({
   FocusNode? focusNode,
   bool autofocus = false,
 }) => _LineupDropdownField<T>(
+  // Capture popup colors before the trigger inherits the row's focus ink.
+  menuTheme: Theme.of(context),
+  dropdownColor: LineupTheme.of(context).elevatedSurface,
   fieldKey: key,
   items: items,
   onChanged: onChanged,
@@ -756,6 +759,8 @@ Widget lineupDropdownField<T>({
 
 class _LineupDropdownField<T> extends StatefulWidget {
   const _LineupDropdownField({
+    required this.menuTheme,
+    required this.dropdownColor,
     required this.fieldKey,
     required this.items,
     required this.onChanged,
@@ -773,6 +778,8 @@ class _LineupDropdownField<T> extends StatefulWidget {
     required this.autofocus,
   });
 
+  final ThemeData menuTheme;
+  final Color dropdownColor;
   final Key? fieldKey;
   final List<DropdownMenuItem<T>>? items;
   final ValueChanged<T?>? onChanged;
@@ -826,8 +833,6 @@ class _LineupDropdownFieldState<T> extends State<_LineupDropdownField<T>> {
 
   @override
   Widget build(BuildContext context) {
-    final baseTheme = Theme.of(context);
-    final dropdownColor = LineupTheme.of(context).elevatedSurface;
     final tv = DeviceProfile.of(context).isTv;
     Widget field(BuildContext context) {
       final roles = LineupTheme.of(context);
@@ -838,7 +843,7 @@ class _LineupDropdownFieldState<T> extends State<_LineupDropdownField<T>> {
         items: lineupMenuItems(
           widget.items,
           widget.initialValue,
-          menuTheme: tv ? baseTheme : null,
+          menuTheme: tv ? widget.menuTheme : null,
         ),
         selectedItemBuilder: (context) {
           _fieldState = context.findAncestorStateOfType<FormFieldState<T>>();
@@ -847,7 +852,7 @@ class _LineupDropdownFieldState<T> extends State<_LineupDropdownField<T>> {
                   .map((item) => item.child)
                   .toList();
         },
-        dropdownColor: dropdownColor,
+        dropdownColor: widget.dropdownColor,
         borderRadius: BorderRadius.circular(8),
         isExpanded: widget.isExpanded,
         isDense: widget.isDense,
