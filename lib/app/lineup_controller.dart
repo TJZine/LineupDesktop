@@ -1854,7 +1854,7 @@ class LineupController extends ChangeNotifier {
   Channel _channelForSave(Channel incoming, Channel? current) {
     if (current == null) return incoming;
     final sameProgramming =
-        canonicalSourceEquals(current.source, incoming.source) &&
+        scheduleProgrammingSourceEquals(current.source, incoming.source) &&
         current.playbackMode == incoming.playbackMode &&
         (incoming.playbackMode != PlaybackMode.block ||
             (current.blockSize ?? 3) == (incoming.blockSize ?? 3)) &&

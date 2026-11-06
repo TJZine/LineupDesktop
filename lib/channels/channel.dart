@@ -702,6 +702,36 @@ String canonicalScheduleIdentity(Channel channel) => jsonEncode({
 bool canonicalSourceEquals(ContentSource left, ContentSource right) =>
     canonicalSourceIdentity(left) == canonicalSourceIdentity(right);
 
+/// Compares programming for schedule retention. Manual snapshots are
+/// refreshed from inventory, while the ordered occurrence IDs define the recipe.
+bool scheduleProgrammingSourceEquals(ContentSource left, ContentSource right) {
+  if (left is ManualSource && right is ManualSource) {
+    final items = left.items;
+    if (items.length != right.items.length) return false;
+    for (var index = 0; index < items.length; index++) {
+      if (items[index].id != right.items[index].id) return false;
+    }
+    return true;
+  }
+  if (left is MixedSource && right is MixedSource) {
+    final sources = left.sources;
+    if (left.interleave != right.interleave ||
+        sources.length != right.sources.length) {
+      return false;
+    }
+    for (var index = 0; index < sources.length; index++) {
+      if (!scheduleProgrammingSourceEquals(
+        sources[index],
+        right.sources[index],
+      )) {
+        return false;
+      }
+    }
+    return true;
+  }
+  return canonicalSourceEquals(left, right);
+}
+
 String canonicalFilterIdentity(LibraryFilter filter, String value) {
   final trimmed = value.trim();
   return filter == LibraryFilter.actor || filter == LibraryFilter.director
