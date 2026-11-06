@@ -284,6 +284,11 @@ class FixtureControls(unittest.TestCase):
         for key in ("B_token", "secondary_A_token", "token_in_url", "server_error"):
             with self.subTest(key=key):
                 self.assertFalse(fixture.media_pass(result, fields, {**audit, key: True}, True))
+        fields.update(progressed="0", rejected="1")
+        audit["B_requests"] = 0
+        self.assertTrue(fixture.redirect_pass(result, fields, audit))
+        audit["B_requests"] = 1
+        self.assertFalse(fixture.redirect_pass(result, fields, audit))
         for stream in ("stdout", "stderr"):
             with self.subTest(stream=stream):
                 output = {"stdout": b"", "stderr": b"", stream: fixture.TOKEN.encode()}
