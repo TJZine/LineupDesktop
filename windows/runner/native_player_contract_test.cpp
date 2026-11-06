@@ -540,6 +540,11 @@ void Lifecycle(WindowHarness& window, WindowsNativePlayer& player,
   native_test::PumpUntil([&]() { return NativePlayerTestAccess::WindowCloseReady(player); },
                         "window close acknowledgement");
   Check(NativePlayerTestAccess::Disposed(player), "window close acknowledgement follows core shutdown");
+  Reply closing;
+  messenger.Call("initialize", closing);
+  Check(closing.errors == 1 && closing.successes == 0 &&
+            NativePlayerTestAccess::Disposed(player),
+        "initialize during window close is rejected without recreating the worker");
   Check(player.TakeWindowCloseReady() && !player.TakeWindowCloseReady(), "close readiness consumed once");
   // The acknowledgement may use the bounded timeout; immediate close also
   // requires actual display release, independently of core disposal.
