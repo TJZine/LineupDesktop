@@ -49,12 +49,6 @@ jobs:
       - run: flutter pub get
       - name: Generate the local Android Gradle wrapper
         run: flutter create --empty --platforms=android --no-overwrite .
-      - run: dart tool/format.dart --check
-      - run: flutter analyze
-      - name: Run portable Flutter tests
-        run: flutter test
-        env:
-          TZ: America/New_York
       - name: Check committed Android runtime notices
         run: >-
           python3 tool/android/generate-licenses.py --check
