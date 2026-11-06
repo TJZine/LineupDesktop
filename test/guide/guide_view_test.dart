@@ -1376,6 +1376,233 @@ void main() {
     );
   }
 
+  testWidgets('TV Guide held OK does not tune after a failed-row retry', (
+    tester,
+  ) async {
+    final lineup = _Lineup(2);
+    addTearDown(lineup.dispose);
+    final attempts = <String, int>{};
+    final guide = GuideController(
+      lineup: lineup,
+      loadSchedule: (channel) async {
+        final attempt = attempts.update(
+          channel.id,
+          (count) => count + 1,
+          ifAbsent: () => 1,
+        );
+        if (channel.id == 'channel-0' && attempt == 1) {
+          throw StateError('offline');
+        }
+        return _schedule(channel);
+      },
+    );
+    addTearDown(guide.dispose);
+    guide.requestChannels(lineup.channels);
+    var tunes = 0;
+    await tester.pumpWidget(
+      MaterialApp(
+        builder: _guideCanvasBuilderFor(true),
+        theme: LineupTheme.forName(
+          LineupThemeName.emberSteel,
+          formFactor: FormFactor.tv,
+        ),
+        home: GuideView(
+          controller: guide,
+          onClose: (_, _) {},
+          onTune: (_) async => tunes++,
+        ),
+      ),
+    );
+    await tester.pumpAndSettle();
+    expect(guide.row('channel-0').state, GuideLoadState.error);
+
+    await tester.sendKeyDownEvent(LogicalKeyboardKey.enter);
+    await tester.pumpAndSettle();
+    expect(attempts['channel-0'], 2);
+    expect(guide.row('channel-0').state, GuideLoadState.ready);
+    expect(FocusManager.instance.primaryFocus?.debugLabel, 'Guide grid');
+    await tester.sendKeyRepeatEvent(LogicalKeyboardKey.enter);
+    await tester.sendKeyUpEvent(LogicalKeyboardKey.enter);
+    await tester.pumpAndSettle();
+    expect(tunes, 0);
+
+    await tester.sendKeyDownEvent(LogicalKeyboardKey.enter);
+    await tester.sendKeyUpEvent(LogicalKeyboardKey.enter);
+    await tester.pumpAndSettle();
+    expect(tunes, 1);
+  });
+
+  testWidgets('TV Guide held OK retries a still-failed row only once', (
+    tester,
+  ) async {
+    final lineup = _Lineup(2);
+    addTearDown(lineup.dispose);
+    final attempts = <String, int>{};
+    final guide = GuideController(
+      lineup: lineup,
+      loadSchedule: (channel) async {
+        final attempt = attempts.update(
+          channel.id,
+          (count) => count + 1,
+          ifAbsent: () => 1,
+        );
+        if (channel.id == 'channel-0') throw StateError('offline');
+        if (attempt > 1) throw StateError('unexpected retry');
+        return _schedule(channel);
+      },
+    );
+    addTearDown(guide.dispose);
+    guide.requestChannels(lineup.channels);
+    await tester.pumpWidget(
+      MaterialApp(
+        builder: _guideCanvasBuilderFor(true),
+        theme: LineupTheme.forName(
+          LineupThemeName.emberSteel,
+          formFactor: FormFactor.tv,
+        ),
+        home: GuideView(
+          controller: guide,
+          onClose: (_, _) {},
+          onTune: (_) async {},
+        ),
+      ),
+    );
+    await tester.pumpAndSettle();
+    expect(attempts['channel-0'], 1);
+    expect(guide.row('channel-0').state, GuideLoadState.error);
+
+    await tester.sendKeyDownEvent(LogicalKeyboardKey.enter);
+    await tester.pumpAndSettle();
+    expect(attempts['channel-0'], 2);
+    await tester.sendKeyRepeatEvent(LogicalKeyboardKey.enter);
+    await tester.sendKeyRepeatEvent(LogicalKeyboardKey.enter);
+    await tester.sendKeyUpEvent(LogicalKeyboardKey.enter);
+    await tester.pumpAndSettle();
+    expect(attempts['channel-0'], 2);
+    expect(guide.row('channel-0').state, GuideLoadState.error);
+  });
+
+  testWidgets('TV Guide held OK tunes a current program only once', (
+    tester,
+  ) async {
+    final lineup = _Lineup(1);
+    addTearDown(lineup.dispose);
+    final guide = GuideController(
+      lineup: lineup,
+      loadSchedule: (channel) async => _schedule(channel),
+    );
+    addTearDown(guide.dispose);
+    guide.requestChannels(lineup.channels);
+    var tunes = 0;
+    await tester.pumpWidget(
+      MaterialApp(
+        builder: _guideCanvasBuilderFor(true),
+        theme: LineupTheme.forName(
+          LineupThemeName.emberSteel,
+          formFactor: FormFactor.tv,
+        ),
+        home: GuideView(
+          controller: guide,
+          onClose: (_, _) {},
+          onTune: (_) async => tunes++,
+        ),
+      ),
+    );
+    await tester.pumpAndSettle();
+    expect(guide.focusedProgram?.isCurrentAt(guide.now), isTrue);
+
+    await tester.sendKeyDownEvent(LogicalKeyboardKey.enter);
+    await tester.sendKeyRepeatEvent(LogicalKeyboardKey.enter);
+    await tester.sendKeyUpEvent(LogicalKeyboardKey.enter);
+    await tester.pumpAndSettle();
+    expect(tunes, 1);
+  });
+
+  testWidgets(
+    'TV Guide held OK after bulk retry does not tune the recovered row',
+    (tester) async {
+      final lineup = _Lineup(1);
+      addTearDown(lineup.dispose);
+      var attempts = 0;
+      final guide = GuideController(
+        lineup: lineup,
+        loadSchedule: (channel) async {
+          attempts++;
+          if (attempts == 1) throw StateError('offline');
+          return _schedule(channel);
+        },
+      );
+      addTearDown(guide.dispose);
+      guide.requestChannels(lineup.channels);
+      var tunes = 0;
+      await tester.pumpWidget(
+        MaterialApp(
+          builder: _guideCanvasBuilderFor(true),
+          theme: LineupTheme.forName(
+            LineupThemeName.emberSteel,
+            formFactor: FormFactor.tv,
+          ),
+          home: GuideView(
+            controller: guide,
+            onClose: (_, _) {},
+            onTune: (_) async => tunes++,
+          ),
+        ),
+      );
+      await tester.pumpAndSettle();
+      expect(guide.row('channel-0').state, GuideLoadState.error);
+
+      await tester.sendKeyEvent(LogicalKeyboardKey.arrowRight);
+      await tester.pump();
+      expect(
+        FocusManager.instance.primaryFocus?.debugLabel,
+        'Guide retry all schedules',
+      );
+      await tester.sendKeyDownEvent(LogicalKeyboardKey.enter);
+      await tester.pumpAndSettle();
+      expect(attempts, 2);
+      expect(guide.row('channel-0').state, GuideLoadState.ready);
+      expect(FocusManager.instance.primaryFocus?.debugLabel, 'Guide grid');
+      await tester.sendKeyRepeatEvent(LogicalKeyboardKey.enter);
+      await tester.sendKeyUpEvent(LogicalKeyboardKey.enter);
+      await tester.pumpAndSettle();
+      expect(tunes, 0);
+    },
+  );
+
+  testWidgets('non-TV Guide held OK still tunes twice', (tester) async {
+    final lineup = _Lineup(1);
+    addTearDown(lineup.dispose);
+    final guide = GuideController(
+      lineup: lineup,
+      loadSchedule: (channel) async => _schedule(channel),
+    );
+    addTearDown(guide.dispose);
+    guide.requestChannels(lineup.channels);
+    var tunes = 0;
+    await tester.pumpWidget(
+      MaterialApp(
+        builder: _guideCanvasBuilderFor(false),
+        theme: LineupTheme.forName(
+          LineupThemeName.emberSteel,
+          formFactor: FormFactor.desktop,
+        ),
+        home: GuideView(
+          controller: guide,
+          onClose: (_, _) {},
+          onTune: (_) async => tunes++,
+        ),
+      ),
+    );
+    await tester.pumpAndSettle();
+
+    await tester.sendKeyDownEvent(LogicalKeyboardKey.enter);
+    await tester.sendKeyRepeatEvent(LogicalKeyboardKey.enter);
+    await tester.sendKeyUpEvent(LogicalKeyboardKey.enter);
+    await tester.pumpAndSettle();
+    expect(tunes, 2);
+  });
+
   testWidgets('sources default hidden and Watching remains independent', (
     tester,
   ) async {

@@ -861,11 +861,13 @@ class _GuideViewState extends State<GuideView>
         key == LogicalKeyboardKey.numpadEnter ||
         key == LogicalKeyboardKey.space ||
         key == LogicalKeyboardKey.select) {
+      if (DeviceProfile.of(context).isTv && event is! KeyDownEvent) {
+        return KeyEventResult.handled;
+      }
       final selected = widget.controller.selectFocusedProgram();
       if (selected?.isCurrentAt(widget.controller.now) == true) {
         unawaited(widget.onTune(selected!.channelId));
-      } else if (event is KeyDownEvent &&
-          DeviceProfile.of(context).isTv &&
+      } else if (DeviceProfile.of(context).isTv &&
           selected == null &&
           !_allVisibleFailed) {
         final channelId = widget.controller.focusedChannelId;
