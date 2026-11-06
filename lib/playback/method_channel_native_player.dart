@@ -460,6 +460,8 @@ class MethodChannelNativePlayer implements NativePlayer {
     _retireSubtitleCues();
     return _serializeLifecycle(() async {
       _capabilities = const PlayerCapabilities.unavailable();
+      _displayRevision = 0;
+      _displayReport = const DisplayMatchingReport.initial();
       _fullscreen = false;
       ++_nativeEventEpoch;
       final stop = _pendingStop;
@@ -585,13 +587,14 @@ class MethodChannelNativePlayer implements NativePlayer {
       return;
     }
     if (event['type'] == 'stopResult') {
+      final stopId = event['stopId'];
+      final success = event['success'];
+      if (stopId is! int || success is! bool) return;
       final pending = _pendingStop;
-      if (pending == null ||
-          event['stopId'] != pending.$1 ||
-          pending.$2.isCompleted) {
+      if (pending == null || stopId != pending.$1 || pending.$2.isCompleted) {
         return;
       }
-      if (event['success'] == true) {
+      if (success) {
         pending.$2.complete();
       } else {
         pending.$2.completeError(
@@ -605,15 +608,14 @@ class MethodChannelNativePlayer implements NativePlayer {
     }
     if (event['type'] == 'trackResult') {
       final requestId = event['requestId'];
-      final pending = requestId is int
-          ? _pendingTrackSelections[requestId]
-          : null;
-      if (pending == null ||
-          event['loadId'] != pending.$1 ||
-          pending.$2.isCompleted) {
+      final loadId = event['loadId'];
+      final success = event['success'];
+      if (requestId is! int || loadId is! int || success is! bool) return;
+      final pending = _pendingTrackSelections[requestId];
+      if (pending == null || loadId != pending.$1 || pending.$2.isCompleted) {
         return;
       }
-      if (event['success'] == true) {
+      if (success) {
         pending.$2.complete();
       } else {
         pending.$2.completeError(
@@ -634,7 +636,6 @@ class MethodChannelNativePlayer implements NativePlayer {
     }
     if (event["type"] == "property" && event["name"] == "subtitle-cues") {
       if (!_isCurrentLoadEvent(event)) {
-        _clearSubtitleCues();
         return;
       }
       if (!_subtitleCuesActive) return;
@@ -669,15 +670,19 @@ class MethodChannelNativePlayer implements NativePlayer {
   }
 
   void _handleState(Map<Object?, Object?> event) {
-    final state = switch (event['state']) {
+    final rawState = event['state'];
+    if (rawState is! String) return;
+    final state = switch (rawState) {
+      'idle' => PlayerState.idle,
       'loading' => PlayerState.loading,
       'playing' => PlayerState.playing,
       'paused' => PlayerState.paused,
       'ended' => PlayerState.ended,
       'stopped' => PlayerState.stopped,
       'error' => PlayerState.error,
-      _ => PlayerState.idle,
+      _ => null,
     };
+    if (state == null) return;
     if (state == PlayerState.playing && event['paused'] is bool) {
       _paused = event['paused']! as bool;
     }

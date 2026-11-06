@@ -1919,7 +1919,14 @@ class PlayerCoordinator extends ChangeNotifier with WidgetsBindingObserver {
     }
     if (!_disposed) notifyListeners();
     final operation = _tuneOperations.then((_) async {
-      if (nativeStop != null) await nativeStop;
+      if (nativeStop != null) {
+        try {
+          await nativeStop;
+        } catch (_) {
+          if (_disposed || generation != _tuneGeneration) return;
+          rethrow;
+        }
+      }
       if (_disposed || generation != _tuneGeneration) return;
       _status = const PlayerStatus(
         state: PlayerState.stopped,

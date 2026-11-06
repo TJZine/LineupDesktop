@@ -134,6 +134,9 @@ Keys:
 - `failureCode`: present for an error state.
 - `httpStatus`: optional integer, used with `http_error` for 4xx/5xx status.
 
+Dart drops a current-load `state` event whose `state` is missing, non-string or
+unrecognized.
+
 The stable native status messages are `Native libmpv player ready`, `Loading
 media`, `Playing`, `Playback ended`, and `Playback stopped`. Dart preserves
 native error messages where appropriate and uses its existing safe status
@@ -580,7 +583,7 @@ committed settings updates while a call is in flight. Rejection clears its sent
 value for retry on the next load and records only an allowlisted error code.
 Cue updates never emit a general Player snapshot or coordinator notification.
 Malformed cues are skipped with a fixed message. Cues clear on replacement load,
-stop, terminal state, subtitle-off, stale-load rejection and disposal.
+stop, terminal state, subtitle-off and disposal.
 
 The coordinator owns one `SubtitleAppearanceSource` for its app/controller
 scope. Engine presentation, Player text and the Settings preview consume this

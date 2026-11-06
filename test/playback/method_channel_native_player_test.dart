@@ -329,62 +329,68 @@ void main() {
         expect(player.subtitleCues.value.isEmpty, isTrue);
       },
     );
-    test('clears on stale rejection, track off, load, terminal states, stop and dispose', () async {
-      await beginLoad();
-      await cues(cue('fixture'));
-      await cues(cue('stale fixture'), loadId: -1);
-      expect(player.subtitleCues.value.isEmpty, isTrue);
-      await cues(cue('fixture'));
-      await _sendNativeEvent(messenger, {
-        'type': 'property',
-        'name': 'track-list',
-        'loadId': calls
-            .lastWhere((c) => c.method == 'load')
-            .arguments['loadId'],
-        'value': [],
-      });
-      expect(player.subtitleCues.value.isEmpty, isTrue);
-      for (final state in ['ended', 'error']) {
+    test(
+      'clears on track off, load, terminal states, stop and dispose',
+      () async {
         await beginLoad();
         await cues(cue('fixture'));
+        await cues(cue('stale fixture'), loadId: -1);
+        expect(
+          player.subtitleCues.value.cues.single.lines.single.single.text,
+          'fixture',
+        );
+        await cues(cue('fixture'));
         await _sendNativeEvent(messenger, {
-          'type': 'state',
-          'state': state,
+          'type': 'property',
+          'name': 'track-list',
           'loadId': calls
               .lastWhere((c) => c.method == 'load')
               .arguments['loadId'],
+          'value': [],
         });
         expect(player.subtitleCues.value.isEmpty, isTrue);
-        await cues(cue('late fixture'));
+        for (final state in ['ended', 'error']) {
+          await beginLoad();
+          await cues(cue('fixture'));
+          await _sendNativeEvent(messenger, {
+            'type': 'state',
+            'state': state,
+            'loadId': calls
+                .lastWhere((c) => c.method == 'load')
+                .arguments['loadId'],
+          });
+          expect(player.subtitleCues.value.isEmpty, isTrue);
+          await cues(cue('late fixture'));
+          expect(player.subtitleCues.value.isEmpty, isTrue);
+        }
+        await beginLoad();
+        await cues(cue('fixture'));
+        final load = player.load(Uri.parse('file:///replacement-fixture.mkv'));
         expect(player.subtitleCues.value.isEmpty, isTrue);
-      }
-      await beginLoad();
-      await cues(cue('fixture'));
-      final load = player.load(Uri.parse('file:///replacement-fixture.mkv'));
-      expect(player.subtitleCues.value.isEmpty, isTrue);
-      await pumpEventQueue(times: 2);
-      await _sendNativeEvent(messenger, {
-        'type': 'state',
-        'state': 'playing',
-        'loadId': calls.last.arguments['loadId'],
-      });
-      await load;
-      await cues(cue('fixture'));
-      final stop = player.stop();
-      expect(player.subtitleCues.value.isEmpty, isTrue);
-      await pumpEventQueue(times: 2);
-      await _sendNativeEvent(messenger, {
-        'type': 'stopResult',
-        'success': true,
-        'stopId': calls.last.arguments['stopId'],
-      });
-      await stop;
-      await beginLoad();
-      await cues(cue('fixture'));
-      final dispose = player.dispose();
-      expect(player.subtitleCues.value.isEmpty, isTrue);
-      await dispose;
-    });
+        await pumpEventQueue(times: 2);
+        await _sendNativeEvent(messenger, {
+          'type': 'state',
+          'state': 'playing',
+          'loadId': calls.last.arguments['loadId'],
+        });
+        await load;
+        await cues(cue('fixture'));
+        final stop = player.stop();
+        expect(player.subtitleCues.value.isEmpty, isTrue);
+        await pumpEventQueue(times: 2);
+        await _sendNativeEvent(messenger, {
+          'type': 'stopResult',
+          'success': true,
+          'stopId': calls.last.arguments['stopId'],
+        });
+        await stop;
+        await beginLoad();
+        await cues(cue('fixture'));
+        final dispose = player.dispose();
+        expect(player.subtitleCues.value.isEmpty, isTrue);
+        await dispose;
+      },
+    );
   });
 
   group('capability signal', () {
@@ -1379,7 +1385,26 @@ void main() {
         desired: DisplayMatchingState.sdr,
       ),
     );
+    await _sendNativeEvent(messenger, {
+      'type': 'display',
+      'revision': 8,
+      'session': 'active',
+      'observed': 'sdr',
+      'outcome': 'matched',
+      'wrote': true,
+      'owned': true,
+      'reason': null,
+      'route': 'hdr_state',
+      'activeColorMode': 'sdr',
+    });
+    expect(player.displayReport.owned, isTrue);
     await player.dispose();
+    expect(player.displayReport.revision, 0);
+    expect(player.displayReport.session, DisplayMatchingSessionState.inactive);
+    expect(player.displayReport.outcome, DisplayMatchingOutcome.idle);
+    expect(player.displayReport.owned, isFalse);
+    expect(player.displayReport.reason, isNull);
+    expect(player.displayReport.route, DisplayMatchingRoute.none);
     await player.initialize();
     await player.setDisplayMatching(
       const DisplayMatchingRequest(
@@ -1712,6 +1737,36 @@ void main() {
     final trackCalls = calls
         .where((call) => call.method == 'selectTrack')
         .toList(growable: false);
+
+    var firstSettled = false;
+    unawaited(
+      first.then<void>((_) {}, onError: (_, _) {}).whenComplete(() {
+        firstSettled = true;
+      }),
+    );
+    for (final malformed in <Map<String, Object?>>[
+      {
+        'loadId': loadId.toDouble(),
+        'requestId': trackCalls.first.arguments['requestId'],
+        'success': true,
+      },
+      {'loadId': loadId, 'requestId': trackCalls.first.arguments['requestId']},
+      {
+        'loadId': loadId,
+        'requestId': trackCalls.first.arguments['requestId'],
+        'success': 'true',
+      },
+      {
+        'loadId': loadId,
+        'requestId': (trackCalls.first.arguments['requestId'] as int)
+            .toDouble(),
+        'success': true,
+      },
+    ]) {
+      await _sendNativeEvent(messenger, {'type': 'trackResult', ...malformed});
+      expect(firstSettled, isFalse);
+      expect(secondCompleted, isFalse);
+    }
 
     await _sendNativeEvent(messenger, {
       'type': 'trackResult',
@@ -2152,6 +2207,20 @@ void main() {
       final secondId = calls.last.arguments!['loadId']! as int;
 
       expect(player.telemetry.videoCodec, isNull);
+      for (final malformed in <Map<String, Object?>>[
+        {'loadId': secondId},
+        {'loadId': secondId, 'state': 42},
+        {'loadId': secondId, 'state': 'unrecognized'},
+      ]) {
+        await _sendNativeEvent(messenger, {'type': 'state', ...malformed});
+        expect(player.status.state, PlayerState.loading);
+      }
+      await _sendNativeEvent(messenger, {
+        'type': 'state',
+        'loadId': secondId,
+        'state': 'idle',
+      });
+      expect(player.status.state, PlayerState.idle);
       await _sendNativeEvent(messenger, {
         'type': 'state',
         'loadId': firstId,
@@ -2164,7 +2233,7 @@ void main() {
         'message': 'Playback ended',
       });
       await _sendNativeEvent(messenger, {'type': 'state', 'state': 'playing'});
-      expect(player.status.state, PlayerState.loading);
+      expect(player.status.state, PlayerState.idle);
 
       await _sendNativeEvent(messenger, {
         'type': 'state',
@@ -2318,6 +2387,21 @@ void main() {
       await pumpEventQueue(times: 2);
       expect(settled, isFalse);
       final firstId = calls.last.arguments['stopId'];
+      var firstStopSettled = false;
+      unawaited(
+        stop.then<void>((_) {}, onError: (_, _) {}).whenComplete(() {
+          firstStopSettled = true;
+        }),
+      );
+      for (final malformed in <Map<String, Object?>>[
+        {'stopId': (firstId as int).toDouble(), 'success': true},
+        {'stopId': firstId},
+        {'stopId': firstId, 'success': 'true'},
+      ]) {
+        await _sendNativeEvent(messenger, {'type': 'stopResult', ...malformed});
+        expect(firstStopSettled, isFalse);
+        expect(settled, isFalse);
+      }
       await _sendNativeEvent(messenger, {
         'type': 'stopResult',
         'stopId': firstId,

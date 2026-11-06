@@ -226,7 +226,7 @@ void main() {
         );
       }
     }
-    for (final invalidation in ['empty', 'off', 'different-track', 'stale']) {
+    for (final invalidation in ['empty', 'off', 'different-track']) {
       test(
         'rejection cannot roll back native $invalidation observation',
         () async {
@@ -245,8 +245,6 @@ void main() {
               await tracks(false);
             case 'different-track':
               await tracks(true, id: 2);
-            case 'stale':
-              await cues('fixture stale', loadId: -1);
           }
           await result(request, false);
           await selection;
@@ -327,8 +325,8 @@ void main() {
       expect(current(coordinator.subtitleCues), 'fixture next cue');
       expect(notifications, 0);
     });
-    test('empty, Off and stale-load events invalidate pending cues before selected observation', () async {
-      for (final invalidation in ['empty', 'off', 'stale']) {
+    test('empty and Off events invalidate pending cues before selected observation', () async {
+      for (final invalidation in ['empty', 'off']) {
         await tracks(false);
         await cues('fixture must not return');
         switch (invalidation) {
@@ -336,8 +334,6 @@ void main() {
             await cues(null);
           case 'off':
             await tracks(false);
-          case 'stale':
-            await cues('fixture stale', loadId: -1);
         }
         await tracks(true);
         expect(player.subtitleCues.value.isEmpty, isTrue, reason: invalidation);
@@ -348,6 +344,29 @@ void main() {
         );
       }
     });
+    test('stale cue leaves a pending current cue intact', () async {
+      await tracks(false);
+      await cues('fixture must return');
+      await cues('fixture stale', loadId: -1);
+      await tracks(true);
+      expect(current(player.subtitleCues), 'fixture must return');
+      expect(current(coordinator.subtitleCues), 'fixture must return');
+    });
+    test(
+      'stale cue during a pending request does not cancel rejection rollback',
+      () async {
+        await tracks(true);
+        await cues('fixture before request');
+        final selection = coordinator.selectTrack(PlayerTrackType.subtitle, 2);
+        await pumpEventQueue(times: 2);
+        final request = calls.lastWhere((c) => c.method == 'selectTrack');
+        await cues('fixture stale', loadId: -1);
+        await result(request, false);
+        await selection;
+        expect(current(player.subtitleCues), 'fixture before request');
+        expect(current(coordinator.subtitleCues), 'fixture before request');
+      },
+    );
     for (final terminal in ['ended', 'error']) {
       test('pending cue cannot replay after $terminal', () async {
         await tracks(false);
@@ -2045,6 +2064,83 @@ void main() {
         await f.coordinator.setApplicationForeground(true);
         expect(f.player.loads, hasLength(2));
         expect(f.player.loadStartPositions.last, const Duration(seconds: 30));
+      },
+    );
+
+    test(
+      'non-recovering native error is terminal on TV lifecycle return',
+      () async {
+        final f = _ContinuationFixture(isTv: true);
+        addTearDown(f.close);
+        await f.coordinator.tune('channel-0');
+        final loads = f.player.loads.length;
+        f.coordinator.didChangeAppLifecycleState(AppLifecycleState.inactive);
+        f.player.emitError(
+          generation: f.player.loadGenerations.last,
+          recoverable: false,
+        );
+        await pumpEventQueue(times: 4);
+        expect(f.coordinator.overlay, PlayerOverlay.error);
+        f.coordinator.didChangeAppLifecycleState(AppLifecycleState.hidden);
+        await pumpEventQueue(times: 2);
+        f.coordinator.didChangeAppLifecycleState(AppLifecycleState.resumed);
+        await pumpEventQueue(times: 4);
+        expect(f.player.loads, hasLength(loads));
+        expect(f.coordinator.overlay, PlayerOverlay.error);
+      },
+    );
+
+    test(
+      'non-recovering native error is terminal on handheld lifecycle return',
+      () async {
+        final f = _ContinuationFixture(isHandheld: true);
+        addTearDown(f.close);
+        await f.coordinator.tune('channel-0');
+        final loads = f.player.loads.length;
+        f.coordinator.didChangeAppLifecycleState(AppLifecycleState.inactive);
+        f.player.emitError(
+          generation: f.player.loadGenerations.last,
+          recoverable: false,
+        );
+        await pumpEventQueue(times: 4);
+        expect(f.coordinator.overlay, PlayerOverlay.error);
+        f.coordinator.didChangeAppLifecycleState(AppLifecycleState.hidden);
+        await pumpEventQueue(times: 2);
+        f.coordinator.didChangeAppLifecycleState(AppLifecycleState.inactive);
+        await pumpEventQueue(times: 2);
+        f.coordinator.didChangeAppLifecycleState(AppLifecycleState.resumed);
+        await pumpEventQueue(times: 4);
+        expect(f.player.loads, hasLength(loads));
+        expect(f.coordinator.overlay, PlayerOverlay.error);
+      },
+    );
+
+    test(
+      'failed authorization recovery is terminal on TV lifecycle return',
+      () async {
+        final lineup = _TestLineup(
+          recoverAuthorization: true,
+          failAuthorizationRecovery: true,
+        );
+        final f = _ContinuationFixture(lineupController: lineup, isTv: true);
+        addTearDown(f.close);
+        await f.coordinator.tune('channel-0');
+        final loads = f.player.loads.length;
+        f.coordinator.didChangeAppLifecycleState(AppLifecycleState.inactive);
+        f.player.emitError(
+          generation: f.player.loadGenerations.last,
+          recoverable: true,
+          failureCode: 'http_error',
+          httpStatus: 401,
+        );
+        await pumpEventQueue(times: 6);
+        expect(f.coordinator.overlay, PlayerOverlay.error);
+        f.coordinator.didChangeAppLifecycleState(AppLifecycleState.hidden);
+        await pumpEventQueue(times: 2);
+        f.coordinator.didChangeAppLifecycleState(AppLifecycleState.resumed);
+        await pumpEventQueue(times: 4);
+        expect(f.player.loads, hasLength(loads));
+        expect(f.coordinator.overlay, PlayerOverlay.error);
       },
     );
 
@@ -7661,6 +7757,45 @@ void main() {
     expect(player.stops, 2);
   });
 
+  testWidgets('obsolete stop failure cannot replace the sleep stop result', (
+    tester,
+  ) async {
+    final lineup = _TestLineup();
+    final guideRelease = Completer<void>();
+    final guide = _BlockingEnsureGuide(lineup: lineup, release: guideRelease);
+    final player = _EventPlayer()..failStop = true;
+    final coordinator = PlayerCoordinator(
+      player: player,
+      lineup: lineup,
+      guide: guide,
+    );
+    addTearDown(player.close);
+    addTearDown(lineup.dispose);
+    addTearDown(guide.dispose);
+    addTearDown(coordinator.dispose);
+
+    final tune = coordinator.tune('channel-0');
+    await tester.pump();
+    final stopping = coordinator.requestStop();
+    await tester.pump();
+    expect(player.stops, 1);
+
+    player.failStop = false;
+    coordinator.setSleepTimer(const Duration(seconds: 1));
+    await tester.pump(const Duration(seconds: 1));
+    await tester.pump();
+    expect(player.stops, 2);
+    expect(coordinator.error, isNull);
+    expect(coordinator.overlay, isNot(PlayerOverlay.error));
+    expect(coordinator.canRetry, isFalse);
+    expect(coordinator.status.message, 'Playback stopped by timer');
+
+    guideRelease.complete();
+    await tester.pump();
+    await Future.wait([tune, stopping]);
+    await tester.pump(const Duration(seconds: 4));
+  });
+
   test('recoverable player errors retain the retry action', () async {
     final lineup = _TestLineup();
     lineup.diagnostics.enabled = true;
@@ -10256,6 +10391,19 @@ class _ContinuationGuide extends GuideController {
         loop: scheduled.loop,
       ),
     );
+  }
+}
+
+class _BlockingEnsureGuide extends GuideController {
+  _BlockingEnsureGuide({required super.lineup, required this.release})
+    : super(loadSchedule: (channel) async => _schedule(channel));
+
+  final Completer<void> release;
+
+  @override
+  Future<GuideProgram?> ensureCurrentProgram(String channelId) async {
+    await release.future;
+    return super.ensureCurrentProgram(channelId);
   }
 }
 
