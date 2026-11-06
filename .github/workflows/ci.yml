@@ -22,11 +22,7 @@ jobs:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
         with:
           persist-credentials: false
-      - uses: subosito/flutter-action@1a449444c387b1966244ae4d4f8c696479add0b2
-        with:
-          flutter-version: 3.47.7
-          channel: stable
-          cache: true
+      - uses: ./.github/actions/setup-flutter
       - run: dart tool/check_toolchain.dart
       - name: Run macOS notice collector tests
         run: python3 tool/macos/collect_notices_test.py
@@ -47,11 +43,7 @@ jobs:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
         with:
           persist-credentials: false
-      - uses: subosito/flutter-action@1a449444c387b1966244ae4d4f8c696479add0b2
-        with:
-          flutter-version: 3.47.7
-          channel: stable
-          cache: true
+      - uses: ./.github/actions/setup-flutter
       - name: Verify pinned Flutter toolchain
         run: dart tool/check_toolchain.dart
       - run: flutter pub get
@@ -95,11 +87,7 @@ jobs:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
         with:
           persist-credentials: false
-      - uses: subosito/flutter-action@1a449444c387b1966244ae4d4f8c696479add0b2
-        with:
-          flutter-version: 3.47.7
-          channel: stable
-          cache: true
+      - uses: ./.github/actions/setup-flutter
       - name: Verify pinned Flutter toolchain
         shell: bash
         run: dart tool/check_toolchain.dart
@@ -177,7 +165,7 @@ jobs:
               exit 1
             }
           done
-          : "${FLUTTER_ROOT:?FLUTTER_ROOT is not set by flutter-action}"
+          : "${FLUTTER_ROOT:?FLUTTER_ROOT is not set by setup-flutter}"
           [[ -d "$FLUTTER_ROOT" ]] || {
             echo "Pinned Flutter root is not a directory: $FLUTTER_ROOT" >&2
             exit 1
@@ -311,11 +299,7 @@ jobs:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
         with:
           persist-credentials: false
-      - uses: subosito/flutter-action@1a449444c387b1966244ae4d4f8c696479add0b2
-        with:
-          flutter-version: 3.47.7
-          channel: stable
-          cache: true
+      - uses: ./.github/actions/setup-flutter
       - run: dart tool/check_toolchain.dart
       - name: Run Windows engine tooling fixtures (native Mac skips visible)
         run: python tool/flutter_engine/desktop_accessibility_test.py
@@ -443,7 +427,7 @@ jobs:
             engine_required=false
           fi
           if [[ "$engine_required" == "true" ]] ||
-             grep -Eq '^(\.github/workflows/ci\.yml|LICENSE|pubspec\.(lock|yaml)|docs/windows-runtime\.md|tool/flutter_engine/NOTICE|tool/windows/(build-inputs|build-release|ninja-diagnostics|package|prepare-mpv|verify-release-policy)\.ps1)$|^third_party/libmpv/' <<<"$changed_files"; then
+             grep -Eq '^(\.github/workflows/ci\.yml|\.github/actions/setup-flutter/action\.yml|LICENSE|pubspec\.(lock|yaml)|docs/windows-runtime\.md|tool/flutter_engine/NOTICE|tool/windows/(build-inputs|build-release|ninja-diagnostics|package|prepare-mpv|verify-release-policy)\.ps1)$|^third_party/libmpv/' <<<"$changed_files"; then
             package_required=true
           else
             package_required=false
@@ -588,11 +572,7 @@ jobs:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
         with:
           persist-credentials: false
-      - uses: subosito/flutter-action@1a449444c387b1966244ae4d4f8c696479add0b2
-        with:
-          flutter-version: 3.47.7
-          channel: stable
-          cache: true
+      - uses: ./.github/actions/setup-flutter
       - run: dart tool/check_toolchain.dart
       - name: Validate exact Flutter and engine sources and build the patched engine
         shell: pwsh
