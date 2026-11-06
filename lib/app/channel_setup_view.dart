@@ -303,6 +303,7 @@ class UpstreamChannelSetupViewState extends State<UpstreamChannelSetupView> {
     List<Channel> existing, {
     required ChannelBuildMode mode,
     required DateTime anchor,
+    Set<String> previousRemovals = const {},
   }) {
     final proposals = _buildProposals();
     final strategyBySource = <String, BuilderStrategy>{};
@@ -312,14 +313,22 @@ class UpstreamChannelSetupViewState extends State<UpstreamChannelSetupView> {
         () => proposal.strategy,
       );
     }
+    final plan = _allocate(
+      existing,
+      proposals: proposals,
+      mode: mode,
+      anchor: anchor,
+    );
     return SetupReview(
       base: existing,
-      plan: _allocate(
-        existing,
-        proposals: proposals,
-        mode: mode,
-        anchor: anchor,
-      ),
+      plan: plan,
+      removeSourceIds: {
+        if (mode == ChannelBuildMode.merge && previousRemovals.isNotEmpty)
+          for (final channel in plan.unmatchedGenerated)
+            if (previousRemovals.contains(channel.id) &&
+                widget.controller.isGeneratedSourceConfirmedGone(channel))
+              channel.id,
+      },
       mode: mode,
       strategyBySource: strategyBySource,
       planFactory: (nextMode, nextAnchor) {
@@ -582,6 +591,8 @@ class UpstreamChannelSetupViewState extends State<UpstreamChannelSetupView> {
       busy: widget.controller.busy,
       canSwitchServer: widget.controller.canSwitchServer,
       channelSetupCanCancel: widget.controller.channelSetupCanCancel,
+      canCancelSetup:
+          widget.controller.canSwitchServer && !_committingLibraries,
       error: widget.controller.error,
       collectionRecoveryByLibrary: Map.unmodifiable({
         for (final library in widget.controller.libraries)
@@ -624,6 +635,7 @@ class UpstreamChannelSetupViewState extends State<UpstreamChannelSetupView> {
     Set<String>? retryLibraryIds,
     bool advanceWhenReady = true,
   }) async {
+    final startingStep = _step;
     setState(() {
       _error = null;
       _notice = null;
@@ -649,6 +661,8 @@ class UpstreamChannelSetupViewState extends State<UpstreamChannelSetupView> {
         _selectedLibraries,
       );
       if (advanceWhenReady &&
+          _step == startingStep &&
+          ready.isNotEmpty &&
           ready.length == _selectedLibraries.length &&
           widget.controller.libraryScanStatus == LibraryScanStatus.complete &&
           widget.controller.error == null) {
@@ -667,8 +681,9 @@ class UpstreamChannelSetupViewState extends State<UpstreamChannelSetupView> {
 
   Future<void> _commitLibraries(Set<String> ready) async {
     if (_committingLibraries) return;
+    final startingStep = _step;
     final revision = ++_libraryCommitRevision;
-    _committingLibraries = true;
+    setState(() => _committingLibraries = true);
     try {
       final saved = await widget.controller.commitLibraryScan(ready);
       if (!mounted) return;
@@ -680,7 +695,7 @@ class UpstreamChannelSetupViewState extends State<UpstreamChannelSetupView> {
         _selectedLibraries
           ..clear()
           ..addAll(ready);
-        _step = _SetupStep.configure;
+        if (_step == startingStep) _step = _SetupStep.configure;
         _error = null;
       });
     } catch (error) {
@@ -882,6 +897,9 @@ class UpstreamChannelSetupViewState extends State<UpstreamChannelSetupView> {
   }
 
   void _prepareReview() {
+    if (_discoveryRetry || _committingLibraries || widget.controller.busy) {
+      return;
+    }
     final base = List<Channel>.of(widget.controller.channels);
     setState(() {
       _phase = Reviewing(
@@ -961,10 +979,11 @@ class UpstreamChannelSetupViewState extends State<UpstreamChannelSetupView> {
   };
 
   Future<void> _applyReview() async {
-    final review = _review;
-    if (review == null) return;
     final phase = _phase;
-    final confirmed = phase is Reviewing && phase.confirmed;
+    if (_step != _SetupStep.review || phase is! Reviewing) return;
+    final review = phase.review;
+    final confirmed = phase.confirmed;
+    if (review.counts.removed > 0 && !confirmed) return;
     setState(() {
       _phase = Applying(review);
       _error = null;
@@ -986,6 +1005,7 @@ class UpstreamChannelSetupViewState extends State<UpstreamChannelSetupView> {
               base,
               mode: review.mode,
               anchor: DateTime.now().toUtc(),
+              previousRemovals: review.removeSourceIds,
             ),
             confirmed: false,
           );

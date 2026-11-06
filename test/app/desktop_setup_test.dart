@@ -764,6 +764,125 @@ void main() {
     );
   }
 
+  for (final fail in [false, true]) {
+    testWidgets('re-entry Cancel respects library persistence (fail=$fail)', (
+      tester,
+    ) async {
+      final fixture = await _createBoundarySetup();
+      addTearDown(fixture.controller.dispose);
+      fixture.controller.completeChannelSetup();
+      await fixture.controller.enterChannelSetup();
+      fixture.store.blockNext(fail: fail);
+      await _pump(tester, fixture.controller);
+      await tester.tap(find.byKey(const ValueKey('scan-selected-libraries')));
+      await fixture.store.saveStarted.future;
+      await tester.pump();
+      final cancel = find.widgetWithText(TextButton, 'Cancel');
+      final pendingCancel = tester.widget<TextButton>(cancel).onPressed;
+      fixture.controller.cancelChannelSetup();
+      final pendingStage = fixture.controller.stage;
+      fixture.store.releaseBlockedSave();
+      await tester.pumpAndSettle();
+
+      expect((pendingCancel, pendingStage), (null, SetupStage.channelSetup));
+      if (fail) {
+        expect(tester.widget<TextButton>(cancel).onPressed, isNotNull);
+        await tester.tap(cancel);
+        await tester.pumpAndSettle();
+        expect(fixture.controller.stage, SetupStage.ready);
+      } else {
+        expect(find.text('Shape your lineup'), findsOneWidget);
+      }
+    });
+  }
+
+  for (final failApply in [false, true]) {
+    testWidgets('macOS Support retains the Setup draft (apply=$failApply)', (
+      tester,
+    ) async {
+      debugDefaultTargetPlatformOverride = TargetPlatform.macOS;
+      try {
+        final controller = _SetupController(
+          scenario: const LineupScenario(stage: SetupStage.channelSetup),
+          channels: failApply ? [_missingChannel] : [],
+          failApply: failApply,
+        );
+        addTearDown(controller.dispose);
+        tester.view
+          ..physicalSize = const Size(1280, 960)
+          ..devicePixelRatio = 1;
+        await tester.pumpWidget(UiFixture(controller: controller).build());
+        await tester.pumpAndSettle();
+        await _advanceToConfigure(tester);
+        final consent = find.byKey(
+          const ValueKey('channel-setup-replace-confirmation'),
+        );
+        if (failApply) {
+          await tester.tap(find.byKey(const ValueKey('review-channels')));
+          await tester.pumpAndSettle();
+          await _chooseMissingRemoval(tester);
+          controller.applyGate = Completer<void>();
+          await tester.tap(find.byKey(const ValueKey('apply-reviewed-lineup')));
+          await tester.pump();
+          expect(controller.applyCalls, 1);
+        }
+
+        await tester.binding.defaultBinaryMessenger.handlePlatformMessage(
+          'lineup/app_menu',
+          const StandardMethodCodec().encodeMethodCall(
+            const MethodCall('openSettings'),
+          ),
+          (_) {},
+        );
+        await tester.pumpAndSettle();
+        expect(find.byType(UpstreamChannelSetupView), findsNothing);
+        controller.applyGate?.complete();
+        await tester.pumpAndSettle();
+        await tester.tap(find.text('‹ Back to setup'));
+        await tester.pumpAndSettle();
+
+        if (failApply) {
+          expect(find.text('The lineup could not be saved.'), findsOneWidget);
+          await tester.tap(find.text('Back to review'));
+          await tester.pumpAndSettle();
+          expect(tester.widget<CheckboxListTile>(consent).value, isTrue);
+          expect(
+            tester
+                .widget<LineupSegmentedControl<bool>>(
+                  find.byKey(const ValueKey('missing-source-choice-missing')),
+                )
+                .selected,
+            {true},
+          );
+        } else {
+          expect(find.text('Shape your lineup'), findsOneWidget);
+        }
+
+        controller.completeChannelSetup();
+        await tester.pumpAndSettle();
+        await controller.enterChannelSetup();
+        await tester.pumpAndSettle();
+        expect(
+          find.byKey(const ValueKey('library-selection-list')),
+          findsOneWidget,
+        );
+        expect(find.text('3 of 3 selected'), findsOneWidget);
+
+        await tester.tap(find.byKey(const ValueKey('setup-switch-server')));
+        await tester.pumpAndSettle();
+        expect(controller.stage, SetupStage.servers);
+        await controller.enterChannelSetup();
+        await tester.pumpAndSettle();
+        expect(
+          find.byKey(const ValueKey('library-selection-list')),
+          findsOneWidget,
+        );
+      } finally {
+        debugDefaultTargetPlatformOverride = null;
+      }
+    });
+  }
+
   testWidgets('NAV-I2 actual Applying save claims repeated Back until commit', (
     tester,
   ) async {
@@ -1848,6 +1967,110 @@ void main() {
       },
     );
   }
+  for (final (navigate, succeeds) in [
+    (true, true),
+    (true, false),
+    (false, true),
+  ]) {
+    testWidgets(
+      'Playlists held retry (navigate=$navigate, success=$succeeds)',
+      (tester) async {
+        final controller = _SetupController(playlistUnavailable: true)
+          ..retryGate = Completer<bool>();
+        addTearDown(controller.dispose);
+        await _pump(tester, controller);
+        await _advanceToConfigure(tester);
+        final commits = controller.commitCalls;
+        final review = find.byKey(const ValueKey('review-channels'));
+        final reviewCallback = tester.widget<FilledButton>(review).onPressed!;
+        final retry = find.byKey(const ValueKey('retry-discovery-playlists'));
+        await tester.ensureVisible(retry);
+        await tester.tap(retry);
+        await tester.pump();
+        final pendingReview = tester.widget<FilledButton>(review).onPressed;
+        if (!navigate) reviewCallback();
+        await tester.pump();
+        final stayedOnConfigure = find
+            .text('Shape your lineup')
+            .evaluate()
+            .isNotEmpty;
+        if (navigate && stayedOnConfigure) {
+          await tester.tap(find.text('Back to libraries'));
+          await tester.pump();
+          expect(
+            tester
+                .widget<TextButton>(
+                  find.widgetWithText(TextButton, 'Cancel scan'),
+                )
+                .onPressed,
+            isNotNull,
+          );
+          expect(
+            tester
+                .widget<TextButton>(
+                  find.widgetWithText(TextButton, 'Switch server'),
+                )
+                .onPressed,
+            isNotNull,
+          );
+        }
+        controller.retryGate!.complete(succeeds);
+        await tester.pumpAndSettle();
+
+        if (navigate) {
+          expect(
+            find.byKey(const ValueKey('library-selection-list')),
+            findsOneWidget,
+          );
+          expect(controller.commitCalls, commits);
+          if (succeeds) {
+            await tester.tap(
+              find.byKey(const ValueKey('continue-ready-libraries')),
+            );
+            await tester.pumpAndSettle();
+            expect(find.text('Shape your lineup'), findsOneWidget);
+            expect(controller.commitCalls, commits + 1);
+          }
+        } else {
+          expect((pendingReview, stayedOnConfigure), (null, true));
+          expect(find.text('Shape your lineup'), findsOneWidget);
+          expect(controller.commitCalls, commits + 1);
+        }
+      },
+    );
+  }
+  testWidgets('Playlists held commit publishes without moving Libraries', (
+    tester,
+  ) async {
+    final controller = _SetupController(playlistUnavailable: true);
+    addTearDown(controller.dispose);
+    await _pump(tester, controller);
+    await _advanceToConfigure(tester);
+    final commits = controller.commitCalls;
+    controller.commitGate = Completer<void>();
+
+    final retry = find.byKey(const ValueKey('retry-discovery-playlists'));
+    await tester.ensureVisible(retry);
+    await tester.tap(retry);
+    await tester.pump();
+    expect(controller.commitCalls, commits + 1);
+    await tester.tap(find.text('Back to libraries'));
+    await tester.pump();
+    expect(
+      find.byKey(const ValueKey('library-selection-list')),
+      findsOneWidget,
+    );
+
+    controller.commitGate!.complete();
+    await tester.pumpAndSettle();
+    expect(
+      find.byKey(const ValueKey('library-selection-list')),
+      findsOneWidget,
+    );
+    expect(controller.commitCalls, commits + 1);
+    expect(controller.selectedLibraryIds, {'movies', 'shows', 'archive'});
+  });
+
   for (final failure in [null, ...PlexCollectionFailure.values]) {
     final unavailable = failure != null;
     final scale = failure?.isScaleLimit == true;
@@ -2260,6 +2483,24 @@ void main() {
       await tester.pumpAndSettle();
       expect(controller.committedIds, {'movies'});
       expect(find.byKey(const ValueKey('configure-section-0')), findsOneWidget);
+      await tester.tap(find.text('Back to libraries'));
+      await tester.pumpAndSettle();
+      await tester.tap(find.text('Movies').first);
+      await tester.pumpAndSettle();
+      final commits = controller.commitCalls;
+      controller.completeNextRowRetry = true;
+      await tester.tap(find.byKey(const ValueKey('retry-library-archive')));
+      await tester.pumpAndSettle();
+      expect(
+        find.text('The ready libraries could not be saved.'),
+        findsNothing,
+      );
+      expect(controller.commitCalls, commits);
+      expect(
+        find.byKey(const ValueKey('library-selection-list')),
+        findsOneWidget,
+      );
+      expect(find.text('0 of 3 selected'), findsOneWidget);
     },
   );
 
@@ -2679,6 +2920,65 @@ void main() {
     },
   );
 
+  for (final eligible in [false, true]) {
+    testWidgets(
+      'stale merge retains only eligible removals (eligible=$eligible)',
+      (tester) async {
+        final controller =
+            _SetupController(staleOnce: true, channels: [_missingChannel])
+              ..onStale = (controller) {
+                controller.fixtureActor.replaceChannels([
+                  _missingChannel,
+                  _generated('another', 41, builderKey: 'another'),
+                ]);
+                if (!eligible) {
+                  controller.collectionFailures = {
+                    'movies': {'Retired collection'},
+                  };
+                }
+              };
+        addTearDown(controller.dispose);
+        await _pump(tester, controller);
+        await _advanceToReview(tester);
+        await _chooseMissingRemoval(tester);
+
+        final apply = find.byKey(const ValueKey('apply-reviewed-lineup'));
+        await tester.tap(apply);
+        await tester.pumpAndSettle();
+        expect(controller.applyCalls, 1);
+        final choice = find.byKey(
+          const ValueKey('missing-source-choice-missing'),
+        );
+        final consent = find.byKey(
+          const ValueKey('channel-setup-replace-confirmation'),
+        );
+        if (eligible) {
+          expect(tester.widget<LineupSegmentedControl<bool>>(choice).selected, {
+            true,
+          });
+          expect(tester.widget<CheckboxListTile>(consent).value, isFalse);
+          expect(tester.widget<FilledButton>(apply).onPressed, isNull);
+          await tester.tap(consent);
+          await tester.pumpAndSettle();
+        } else {
+          expect(choice, findsNothing);
+          expect(consent, findsNothing);
+        }
+        await tester.tap(apply);
+        await tester.pumpAndSettle();
+        expect(find.text('✓ Review'), findsOneWidget);
+        expect(
+          controller.channels.any((channel) => channel.id == 'missing'),
+          eligible ? isFalse : isTrue,
+        );
+        expect(
+          controller.channels.any((channel) => channel.id == 'another'),
+          isTrue,
+        );
+      },
+    );
+  }
+
   testWidgets('stale replacement resets the contained removal confirmation', (
     tester,
   ) async {
@@ -2728,7 +3028,13 @@ void main() {
       expect(find.text('✓ Review'), findsNothing);
       expect(find.text('+ Added'), findsWidgets);
       expect(find.text('＋ Added'), findsNothing);
-      await tester.tap(find.byKey(const ValueKey('apply-reviewed-lineup')));
+      final apply = tester
+          .widget<FilledButton>(
+            find.byKey(const ValueKey('apply-reviewed-lineup')),
+          )
+          .onPressed!;
+      apply();
+      apply();
       await tester.pump();
       expect(find.text('3 Review'), findsOneWidget);
       expect(find.text('✓ Review'), findsNothing);
@@ -3529,6 +3835,17 @@ void _expectSingleLibraryEntryPaint(WidgetTester tester) {
   expect(tester.widget<Text>(label).style!.color, roles.onFocus);
 }
 
+Future<void> _chooseMissingRemoval(WidgetTester tester) async {
+  final choice = find.byKey(const ValueKey('missing-source-choice-missing'));
+  await tester.ensureVisible(choice);
+  await tester.tap(find.descendant(of: choice, matching: find.text('Remove')));
+  await tester.pumpAndSettle();
+  await tester.tap(
+    find.byKey(const ValueKey('channel-setup-replace-confirmation')),
+  );
+  await tester.pumpAndSettle();
+}
+
 Future<void> _pump(
   WidgetTester tester,
   LineupController controller, {
@@ -3892,12 +4209,23 @@ class _SetupController extends FixtureController {
   int commitCalls = 0;
   int footerRetries = 0;
   Completer<void>? applyGate;
+  Completer<bool>? retryGate;
+  bool completeNextRowRetry = false;
+  void Function(_SetupController)? onStale;
   Completer<void>? commitGate;
   Set<String>? rowRetryIds;
   Set<String>? rowRetryInventory;
 
   @override
-  Future<bool> retryLibraryScan(Set<String> ids, Set<String> retryIds) {
+  Future<bool> retryLibraryScan(Set<String> ids, Set<String> retryIds) async {
+    final gate = retryGate;
+    if (gate != null) {
+      fixtureActor.reportScan(status: LibraryScanStatus.scanning);
+      if (!await gate.future) {
+        fixtureActor.reportScan(status: LibraryScanStatus.transientFailure);
+        return false;
+      }
+    }
     playlistUnavailable = false;
     playlistFailures = {};
     collectionDiscovery = {};
@@ -3946,7 +4274,9 @@ class _SetupController extends FixtureController {
       await _cancelled.future;
       return false;
     }
-    if (mixedScan) {
+    final completeRow = completeNextRowRetry;
+    completeNextRowRetry = false;
+    if (mixedScan && !completeRow) {
       ready = const {'movies'};
       retry = const {'archive'};
       facts = const {
@@ -3999,6 +4329,7 @@ class _SetupController extends FixtureController {
   @override
   Future<bool> commitLibraryScan(Set<String> readyIds) async {
     commitCalls++;
+    if (readyIds.isEmpty) return false;
     if (commitGate != null) await commitGate!.future;
     committedIds = Set.unmodifiable(readyIds);
     fixtureActor.publishInventory(selectedLibraryIds: committedIds);
@@ -4020,7 +4351,10 @@ class _SetupController extends FixtureController {
     applyCalls++;
     if (applyGate != null) await applyGate!.future;
     if (failApply) throw StateError('synthetic apply failure');
-    if (staleOnce && applyCalls == 1) return ChannelPlanApplyResult.stale;
+    if (staleOnce && applyCalls == 1) {
+      onStale?.call(this);
+      return ChannelPlanApplyResult.stale;
+    }
     fixtureActor.replaceChannels(
       composeChannelPlan(
         existing: channels

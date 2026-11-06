@@ -246,10 +246,11 @@ class _LineupShellState extends State<LineupShell> {
     super.dispose();
   }
 
-  bool get _setupVisible =>
+  bool get _inChannelSetup =>
       widget.controller.stage == SetupStage.channelSetup &&
-      !widget.controller.restoringSavedLineup &&
-      !_onboardingSupport;
+      !widget.controller.restoringSavedLineup;
+
+  bool get _setupVisible => _inChannelSetup && !_onboardingSupport;
 
   void _restoreResumedSetupFocus() {
     final key = _setupKey;
@@ -1220,12 +1221,13 @@ class _LineupShellState extends State<LineupShell> {
   @override
   Widget build(BuildContext context) {
     Widget child = _buildShell(context);
-    if (widget.profile.isTv) {
+    if (!widget.profile.isHandheld) {
       final visibleSetup = _setupVisible;
+      final mountSetup = widget.profile.isTv ? _retainSetup : _inChannelSetup;
       child = Stack(
         fit: StackFit.expand,
         children: [
-          if (_retainSetup)
+          if (mountSetup)
             Offstage(
               offstage: !visibleSetup,
               child: ExcludeFocus(
@@ -1320,15 +1322,15 @@ class _LineupShellState extends State<LineupShell> {
       final onboarding = controller.restoringSavedLineup
           ? LineupRestoreView(controller: controller)
           : controller.stage == SetupStage.channelSetup
-          ? widget.profile.isTv
-                ? const SizedBox.shrink()
-                : UpstreamChannelSetupView(
+          ? widget.profile.isHandheld
+                ? UpstreamChannelSetupView(
                     key: _setupKey,
                     controller: controller,
                     onRequestLogout: _requestLogout,
                     onViewLineup: _completeSetup,
                     onAddCustomChannel: _completeSetupAndAdd,
                   )
+                : const SizedBox.shrink()
           : UpstreamOnboardingView(
               key: _onboardingKey,
               controller: controller,

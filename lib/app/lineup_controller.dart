@@ -1403,6 +1403,7 @@ class LineupController extends ChangeNotifier {
   }
 
   void cancelChannelSetup() {
+    if (!canSwitchServer) return;
     if (channelSetupCanCancel) {
       cancelLibraryScan();
       _channelSetupCanCancel = false;

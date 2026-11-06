@@ -189,6 +189,7 @@ class _SetupReviewStepState extends State<SetupReviewStep> {
   final _primaryFocus = FocusNode(debugLabel: 'Review primary');
   final _rowScopes = <String, FocusNode>{};
   List<String> _returnOrder = const [];
+  LogicalKeyboardKey? _heldRegionKey;
   String? _returnId;
   double _returnOffset = 0;
   bool _rosterFocused = false;
@@ -225,6 +226,16 @@ class _SetupReviewStepState extends State<SetupReviewStep> {
     _returnOffset = _rosterScroll.offset;
   }
 
+  KeyEventResult _reviewKey(FocusNode node, KeyEvent event) {
+    if (event is KeyDownEvent ||
+        (event is KeyUpEvent && event.logicalKey == _heldRegionKey)) {
+      _heldRegionKey = null;
+    }
+    return event is KeyRepeatEvent && event.logicalKey == _heldRegionKey
+        ? KeyEventResult.handled
+        : KeyEventResult.ignored;
+  }
+
   KeyEventResult _rowKey(String id, KeyEvent event) {
     if (event.logicalKey != LogicalKeyboardKey.arrowRight ||
         event is KeyUpEvent) {
@@ -238,6 +249,7 @@ class _SetupReviewStepState extends State<SetupReviewStep> {
     if (target == null) return KeyEventResult.ignored;
     _revealGeneration++;
     _rememberRow(id);
+    _heldRegionKey = event.logicalKey;
     target.requestFocus();
     return KeyEventResult.handled;
   }
@@ -341,6 +353,7 @@ class _SetupReviewStepState extends State<SetupReviewStep> {
     }
     if (event is! KeyDownEvent) return KeyEventResult.handled;
     if (_returnId == null) return KeyEventResult.ignored;
+    _heldRegionKey = event.logicalKey;
     unawaited(_returnToRoster());
     return KeyEventResult.handled;
   }
@@ -540,7 +553,15 @@ class _SetupReviewStepState extends State<SetupReviewStep> {
     return profile.isTv
         ? FocusTraversalGroup(
             policy: SetupVerticalTraversalPolicy(),
-            child: body,
+            child: Focus(
+              canRequestFocus: false,
+              skipTraversal: true,
+              onKeyEvent: _reviewKey,
+              onFocusChange: (focused) {
+                if (!focused) _heldRegionKey = null;
+              },
+              child: body,
+            ),
           )
         : body;
   }

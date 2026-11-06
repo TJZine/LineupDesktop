@@ -157,9 +157,11 @@ class _SetupConfigureStepState extends State<SetupConfigureStep> {
         trailing: FilledButton(
           key: const ValueKey('review-channels'),
           onPressed:
-              widget.allocation.channels.isNotEmpty ||
-                  widget.allocation.existingSkipped > 0 ||
-                  widget.hasConfirmedMissingSources
+              !widget.retryingDiscovery &&
+                  !widget.busy &&
+                  (widget.allocation.channels.isNotEmpty ||
+                      widget.allocation.existingSkipped > 0 ||
+                      widget.hasConfirmedMissingSources)
               ? widget.onReview
               : null,
           child: const Text('Review channels'),

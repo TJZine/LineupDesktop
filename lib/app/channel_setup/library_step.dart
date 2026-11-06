@@ -33,6 +33,7 @@ class SetupLibraryData {
     required this.busy,
     required this.canSwitchServer,
     required this.channelSetupCanCancel,
+    required this.canCancelSetup,
     required this.error,
     required Map<String, String> collectionRecoveryByLibrary,
     required this.selectionCollectionRecovery,
@@ -62,6 +63,7 @@ class SetupLibraryData {
   final bool busy;
   final bool canSwitchServer;
   final bool channelSetupCanCancel;
+  final bool canCancelSetup;
   final String? error;
   final Map<String, String> collectionRecoveryByLibrary;
   final String? selectionCollectionRecovery;
@@ -270,7 +272,7 @@ class SetupLibraryStep extends StatelessWidget {
           style: DeviceProfile.of(context).isTv
               ? TextButton.styleFrom(minimumSize: const Size(0, 48))
               : null,
-          onPressed: onCancelSetup,
+          onPressed: data.canCancelSetup ? onCancelSetup : null,
           child: actionLabel('Cancel'),
         ),
     ];

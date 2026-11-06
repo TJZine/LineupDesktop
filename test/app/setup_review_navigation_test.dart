@@ -227,6 +227,11 @@ void main() {
     await tester.sendKeyDownEvent(LogicalKeyboardKey.arrowUp);
     await tester.pumpAndSettle();
     expect(node.hasPrimaryFocus, isTrue);
+    final returnOffset = _scroll(tester).pixels;
+    await tester.sendKeyRepeatEvent(LogicalKeyboardKey.arrowUp);
+    await tester.pumpAndSettle();
+    expect(node.hasPrimaryFocus, isTrue);
+    expect(_scroll(tester).pixels, returnOffset);
     // Keep Up held, enter the footer again, and move the viewport. A repeat
     // must not start another return or run ordinary traversal.
     _back(tester).requestFocus();
@@ -242,6 +247,11 @@ void main() {
 
     await _reveal(tester, _row(92));
     final freshNode = _readNode(tester, _row(92));
+    freshNode.requestFocus();
+    await tester.pumpAndSettle();
+    await tester.sendKeyEvent(LogicalKeyboardKey.arrowUp);
+    await tester.pumpAndSettle();
+    expect(freshNode.hasPrimaryFocus, isFalse);
     freshNode.requestFocus();
     await tester.pumpAndSettle();
     await tester.sendKeyDownEvent(LogicalKeyboardKey.arrowRight);
