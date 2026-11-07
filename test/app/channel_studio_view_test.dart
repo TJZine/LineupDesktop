@@ -3764,6 +3764,126 @@ void main() {
     });
   }
 
+  for (final guard in ['Browse controls', 'Move to entry', 'Move to return']) {
+    testWidgets('pending manual save pins $guard', (tester) async {
+      final a = _media('a', title: 'Program A');
+      final b = _media('b', title: 'Program B');
+      final c = _media('c', title: 'Program C');
+      final original = _channel(
+        id: 'pending-manual',
+        number: 26,
+        name: 'Pending manual',
+        source: ManualSource([channelItemFor(a), channelItemFor(b)]),
+      );
+      final controller = _RecordingSaveController(
+        scenario: LineupScenario(
+          channels: [original],
+          availableMedia: [a, b, c],
+        ),
+      )..saveGate = Completer<void>();
+      addTearDown(controller.dispose);
+      final studioKey = GlobalKey<ChannelStudioViewState>();
+      await tester.pumpWidget(
+        _studio(
+          controller,
+          ChannelStudioMode.editCustom,
+          channel: original,
+          studioKey: studioKey,
+        ),
+      );
+      await tester.enterText(
+        find.byKey(const Key('studio-name')),
+        'Updated channel',
+      );
+      await _settleAirCheck(tester);
+      final save = tester
+          .widget<FilledButton>(
+            find.widgetWithText(FilledButton, 'Save changes'),
+          )
+          .onPressed!;
+
+      final rowA = find.byKey(const Key('studio-rundown-a'));
+      final rowB = find.byKey(const Key('studio-rundown-b'));
+      if (guard == 'Browse controls') {
+        await _selectStudioStage(tester, 'studio-manual-browse-stage');
+        final select = find.widgetWithText(OutlinedButton, 'Select');
+        final startSelecting = tester.widget<OutlinedButton>(select).onPressed!;
+        final rowC = find.byKey(const Key('studio-result-c'));
+        final checkbox = find.descendant(
+          of: rowC,
+          matching: find.byType(Checkbox),
+        );
+        startSelecting();
+        await tester.pump();
+        final selectC = tester.widget<Checkbox>(checkbox).onChanged!;
+        tester
+            .widget<TextButton>(find.widgetWithText(TextButton, 'Cancel'))
+            .onPressed!();
+        await tester.pump();
+
+        save();
+        await tester.pump();
+        expect(studioKey.currentState!.saving, isTrue);
+        expect(tester.widget<OutlinedButton>(select).onPressed, isNull);
+        final add = find.descendant(
+          of: rowC,
+          matching: find.widgetWithText(OutlinedButton, 'Add'),
+        );
+        expect(tester.widget<OutlinedButton>(add).onPressed, isNull);
+
+        // Pending selection normally prevents Save. Replay callbacks from
+        // before Save to exercise the controls in the busy selecting state.
+        startSelecting();
+        await tester.pump();
+        expect(tester.widget<Checkbox>(checkbox).onChanged, isNull);
+        expect(tester.widget<ListTile>(rowC).onTap, isNull);
+        selectC(true);
+        await tester.pump();
+        final addSelected = find.widgetWithText(
+          FilledButton,
+          'Add selected (1)',
+        );
+        expect(tester.widget<FilledButton>(addSelected).onPressed, isNull);
+      } else {
+        final move = tester
+            .widget<TextButton>(
+              find.descendant(
+                of: rowA,
+                matching: find.widgetWithText(TextButton, 'Move to…'),
+              ),
+            )
+            .onPressed!;
+        final dialog = find.byKey(const Key('move-program-search'));
+        if (guard == 'Move to entry') {
+          save();
+          await tester.pump();
+          expect(studioKey.currentState!.saving, isTrue);
+          move();
+          await tester.pumpAndSettle();
+          expect(dialog, findsNothing);
+        } else {
+          move();
+          await tester.pumpAndSettle();
+          expect(dialog, findsOneWidget);
+          await tester.tap(find.text('After'));
+          await tester.pump();
+          save();
+          await tester.pump();
+          expect(studioKey.currentState!.saving, isTrue);
+          await tester.tap(find.widgetWithText(FilledButton, 'Move'));
+          await tester.pumpAndSettle();
+          expect(dialog, findsNothing);
+        }
+        expect(
+          tester.getTopLeft(rowA).dy,
+          lessThan(tester.getTopLeft(rowB).dy),
+        );
+      }
+      controller.saveGate!.complete();
+      await tester.pumpAndSettle();
+    });
+  }
+
   testWidgets('successful save refreshes every retained occurrence snapshot', (
     tester,
   ) async {

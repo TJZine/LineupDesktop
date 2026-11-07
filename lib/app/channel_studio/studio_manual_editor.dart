@@ -898,14 +898,17 @@ class _StudioManualEditorState extends State<_StudioManualEditor>
         !DeviceProfile.of(context).isHandheld ||
         FocusManager.instance.highlightMode == FocusHighlightMode.traditional;
     final removedFocus = _rundownFocus.remove(entry);
+    // Clear focus before the row detaches, or scope history can restore a text field.
+    if (nextEntry == null && !restoreSearchFocus) {
+      FocusManager.instance.primaryFocus?.unfocus();
+    }
     WidgetsBinding.instance.addPostFrameCallback((_) {
       if (mounted) {
-        if (remaining.isEmpty) {
-          _searchFocus.requestFocus();
-        } else if (nextEntry != null) {
+        if (nextEntry != null) {
           _rundownFocus[nextEntry.entry]?.requestFocus();
         } else if (restoreSearchFocus) {
-          _rundownSearchFocus.requestFocus();
+          (remaining.isEmpty ? _searchFocus : _rundownSearchFocus)
+              .requestFocus();
         }
       }
       removedFocus?.dispose();

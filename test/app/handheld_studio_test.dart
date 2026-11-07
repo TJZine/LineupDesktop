@@ -1,7 +1,10 @@
+import 'dart:ui' show PointerDeviceKind;
+
 import 'package:flutter/foundation.dart'
     show TargetPlatform, debugDefaultTargetPlatformOverride;
 import 'package:flutter/material.dart';
 import 'package:flutter/rendering.dart';
+import 'package:flutter/services.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:lineup_desktop/app/channel_studio_view.dart';
 import 'package:lineup_desktop/app/lineup_controller.dart';
@@ -139,6 +142,90 @@ void main() {
     }
   }
 
+  for (final (label, editName, filtered, keyboard) in [
+    ('last touch', false, false, false),
+    ('touch after Name edit', true, false, false),
+    ('filtered touch', false, true, false),
+    ('last keyboard', false, false, true),
+    ('filtered keyboard', false, true, true),
+  ]) {
+    testWidgets('Studio rundown removal focus: $label', (tester) async {
+      debugDefaultTargetPlatformOverride = TargetPlatform.android;
+      try {
+        _window(tester, const Size(412, 915), 2.625);
+        await tester.runAsync(loadPinnedTestFonts);
+        final controller = _StudioController(
+          scenario: _studioScenario(singleProgram: !editName && !filtered),
+        );
+        addTearDown(controller.dispose);
+        await tester.pumpWidget(_studio(controller, 1));
+        await tester.pumpAndSettle();
+
+        final search = find.byKey(const Key('studio-rundown-search'));
+        final browse = find.byKey(const Key('studio-search'));
+        if (editName) {
+          final name = find.byKey(const Key('studio-name'));
+          await tester.ensureVisible(name);
+          await tester.enterText(name, 'Updated channel');
+          await tester.pumpAndSettle();
+          expect(tester.testTextInput.isVisible, isTrue);
+        }
+        if (filtered) {
+          await tester.ensureVisible(search);
+          await tester.enterText(search, 'First program');
+          FocusManager.instance.primaryFocus!.unfocus();
+          await tester.pumpAndSettle();
+          expect(tester.testTextInput.isVisible, isFalse);
+          expect(
+            find.byKey(const Key('studio-rundown-program-2')),
+            findsNothing,
+          );
+        }
+
+        if (keyboard) {
+          final row = find.byKey(const Key('studio-rundown-program-1'));
+          final focus = find
+              .ancestor(of: row, matching: find.byType(Focus))
+              .first;
+          tester.widget<Focus>(focus).focusNode!.requestFocus();
+          await tester.pumpAndSettle();
+          await tester.sendKeyEvent(LogicalKeyboardKey.delete);
+          await tester.pumpAndSettle();
+          expect(
+            tester
+                .widget<TextField>(filtered ? search : browse)
+                .focusNode!
+                .hasPrimaryFocus,
+            isTrue,
+          );
+        } else {
+          for (var i = 0; i < (editName ? 2 : 1); i++) {
+            final remove = find.byTooltip('Remove from channel').first;
+            await tester.ensureVisible(remove);
+            await tester.pumpAndSettle();
+            await tester.tap(remove, kind: PointerDeviceKind.touch);
+            await tester.pumpAndSettle();
+            expect(
+              tester.testTextInput.isVisible,
+              isFalse,
+              reason: 'After removal ${i + 1}',
+            );
+          }
+        }
+
+        if (filtered) {
+          expect(browse, findsNothing);
+          expect(find.textContaining('0 of 1 shown'), findsOneWidget);
+        } else {
+          expect(browse, findsOneWidget);
+        }
+      } finally {
+        await tester.pumpWidget(const SizedBox.shrink());
+        debugDefaultTargetPlatformOverride = null;
+      }
+    });
+  }
+
   for (final useArrow in [true, false]) {
     for (final draft in ['clean', 'pending choice', 'dirty']) {
       testWidgets('Studio ${useArrow ? 'arrow' : 'system'} Back with $draft', (
@@ -243,7 +330,7 @@ Widget _studio(_StudioController controller, double textScale) => MaterialApp(
   ),
 );
 
-LineupScenario _studioScenario() {
+LineupScenario _studioScenario({bool singleProgram = false}) {
   const first = ChannelItem(
     id: 'program-1',
     title: 'First program',
@@ -258,7 +345,7 @@ LineupScenario _studioScenario() {
     id: 'studio-channel',
     number: 7,
     name: 'Documentaries',
-    source: ManualSource([first, second]),
+    source: ManualSource([first, if (!singleProgram) second]),
     playbackMode: PlaybackMode.sequential,
     anchor: DateTime.utc(2026),
     shuffleSeed: 7,
