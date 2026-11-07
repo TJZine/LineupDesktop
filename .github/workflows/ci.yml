@@ -819,21 +819,33 @@ jobs:
               Move-Item -LiteralPath $runtimeProbe -Destination $runtimeArtifact
             }
           }
-          foreach ($licenseName in @(
-            'mpv-LICENSE.LGPL',
-            'FFmpeg-COPYING.LGPLv3',
-            'FFmpeg-COPYING.GPLv3',
-            'libplacebo-LICENSE'
-          )) {
+          $licenseHashes = Import-PowerShellDataFile -LiteralPath 'third_party/libmpv/notice-hashes.psd1'
+          foreach ($licenseName in $licenseHashes.Keys) {
             $license = Join-Path $mpvRoot "licenses\$licenseName"
             $licenseBytes = [IO.File]::ReadAllBytes($license)
+            $missingProbe = Join-Path $env:RUNNER_TEMP "lineup-missing-$licenseName"
+            try {
+              Move-Item -LiteralPath $license -Destination $missingProbe
+              try {
+                & .\tool\windows\package.ps1 -Destination 'build/package/missing-notice-check'
+                throw "Packaging accepted a missing runtime license: $licenseName."
+              } catch {
+                if ($_.Exception.Data['LineupPackageFailure'] -ne 'runtime-license-mismatch' -or
+                  $_.Exception.Message -ne "Prepared production runtime license does not match $licenseName.") { throw }
+              }
+            } finally {
+              if (Test-Path -LiteralPath $missingProbe -PathType Leaf) {
+                Move-Item -LiteralPath $missingProbe -Destination $license
+              }
+            }
             try {
               Add-Content -LiteralPath $license -Value 'tampered'
               try {
                 & .\tool\windows\package.ps1 -Destination 'build/package/provenance-tamper-check'
                 throw "Packaging accepted a modified runtime license: $licenseName."
               } catch {
-                if ($_.Exception.Data['LineupPackageFailure'] -ne 'runtime-license-mismatch') { throw }
+                if ($_.Exception.Data['LineupPackageFailure'] -ne 'runtime-license-mismatch' -or
+                  $_.Exception.Message -ne "Prepared production runtime license does not match $licenseName.") { throw }
               }
             } finally {
               [IO.File]::WriteAllBytes($license, $licenseBytes)
