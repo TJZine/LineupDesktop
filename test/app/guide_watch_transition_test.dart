@@ -70,6 +70,8 @@ class _RuntimeFixturePlayer extends FixturePlayer {
     int? generation,
     bool startPaused = false,
     Duration? startPosition,
+    LoadKind kind = LoadKind.direct,
+    NativeSessionPlaylist? sessionPlaylist,
   }) async {
     await super.load(
       media,
@@ -77,6 +79,8 @@ class _RuntimeFixturePlayer extends FixturePlayer {
       generation: generation,
       startPaused: startPaused,
       startPosition: startPosition,
+      kind: kind,
+      sessionPlaylist: sessionPlaylist,
     );
     emit(
       const PlayerStatus(state: PlayerState.playing, message: 'Synthetic'),
