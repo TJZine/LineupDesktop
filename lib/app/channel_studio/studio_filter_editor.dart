@@ -169,19 +169,22 @@ class _StudioFilterEditorState extends State<_StudioFilterEditor>
           },
         ),
         SizedBox(height: 12),
-        LineupFieldButton(
-          label: 'Media type',
-          value:
-              _selectedLibraries
-                      .where(
-                        (library) => library.id == _session.filterLibraryId,
-                      )
-                      .firstOrNull
-                      ?.type ==
-                  PlexLibraryType.show
-              ? 'TV episodes'
-              : 'Movies',
-          onPressed: null,
+        _studioFilterFieldInk(
+          context,
+          LineupFieldButton(
+            label: 'Media type',
+            value:
+                _selectedLibraries
+                        .where(
+                          (library) => library.id == _session.filterLibraryId,
+                        )
+                        .firstOrNull
+                        ?.type ==
+                    PlexLibraryType.show
+                ? 'TV episodes'
+                : 'Movies',
+            onPressed: null,
+          ),
         ),
         SizedBox(height: 12),
         _filterChips(facets, browse: false),

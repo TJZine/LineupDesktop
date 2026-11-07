@@ -1,0 +1,68 @@
+name: Set up pinned Flutter
+description: Download and verify the pinned Flutter SDK before extracting it
+runs:
+  using: composite
+  steps:
+    - name: Download and verify Flutter SDK
+      shell: bash
+      run: |
+        set -euo pipefail
+
+        # Update the archive paths and SHA-256 digests from Flutter's official
+        # release manifests when changing tool/flutter_version.json.
+        case "$RUNNER_OS/$RUNNER_ARCH" in
+          Linux/X64)
+            archive_path=stable/linux/flutter_linux_3.47.7-stable.tar.xz
+            expected_sha=af7455f540df951184c7953fbe3cf884766e7541dacf8571f9f582db03dd6230
+            ;;
+          macOS/ARM64)
+            archive_path=stable/macos/flutter_macos_arm64_3.47.7-stable.zip
+            expected_sha=dd9da574c3168460550117eb0e8dd0313ae934fabf64a82a6d557fff5fd1422e
+            ;;
+          Windows/X64)
+            archive_path=stable/windows/flutter_windows_3.47.7-stable.zip
+            expected_sha=c2c875da25a1a1448d18ee4e8f398b2f6fce888b4775d8f9130538e16d826cb4
+            ;;
+          *)
+            echo "Unsupported Flutter runner: $RUNNER_OS/$RUNNER_ARCH" >&2
+            exit 1
+            ;;
+        esac
+
+        runner_temp="$RUNNER_TEMP"
+        if [[ "$RUNNER_OS" == Windows ]]; then
+          runner_temp="$(cygpath -au "$runner_temp")"
+        fi
+        sdk_dir="$(mktemp -d "$runner_temp/lineup-flutter.XXXXXX")"
+        archive="$sdk_dir/${archive_path##*/}"
+        trap 'rm -f "$archive"' EXIT
+        curl --fail --location --retry 5 \
+          "https://storage.googleapis.com/flutter_infra_release/releases/$archive_path" \
+          --output "$archive"
+        if [[ "$RUNNER_OS" == macOS ]]; then
+          checksum="$(shasum -a 256 < "$archive")"
+        else
+          checksum="$(sha256sum < "$archive")"
+        fi
+        if [[ "${checksum%% *}" != "$expected_sha" ]]; then
+          echo "Flutter SDK SHA-256 mismatch for $archive_path" >&2
+          exit 1
+        fi
+
+        case "$archive" in
+          *.zip) unzip -q "$archive" -d "$sdk_dir" ;;
+          *.tar.xz) tar xf "$archive" -C "$sdk_dir" ;;
+        esac
+
+        flutter_root="$sdk_dir/flutter"
+        if [[ "$RUNNER_OS" == Windows ]]; then
+          flutter_root="$(cygpath -aw "$flutter_root")"
+          pub_cache="$(cygpath -aw "${PUB_CACHE:-$LOCALAPPDATA\\Pub\\Cache}")"
+          printf '%s\n' "$flutter_root\\bin" "$flutter_root\\bin\\cache\\dart-sdk\\bin" \
+            "$pub_cache\\bin" >> "$GITHUB_PATH"
+        else
+          pub_cache="${PUB_CACHE:-$HOME/.pub-cache}"
+          printf '%s\n' "$flutter_root/bin" "$flutter_root/bin/cache/dart-sdk/bin" \
+            "$pub_cache/bin" >> "$GITHUB_PATH"
+        fi
+        printf 'FLUTTER_ROOT=%s\nPUB_CACHE=%s\n' "$flutter_root" "$pub_cache" >> "$GITHUB_ENV"

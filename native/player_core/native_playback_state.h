@@ -45,7 +45,7 @@ class NativePlaybackState {
           playlist_loads_.size() >= kMaxPlaylistEntries) {
         return false;
       }
-      playlist_loads_[*playlist_id] = load_id;
+      playlist_loads_[*playlist_id].load_id = load_id;
     } else {
       if (pending_loads_.size() >= kMaxPlaylistEntries) {
         return false;
@@ -60,10 +60,22 @@ class NativePlaybackState {
       ClearFailureFor(event_load_);
       return {true, std::nullopt};
     }
+    // IDs increase for replace loads. Once a later entry starts, an earlier
+    // replacement that never started cannot emit lifecycle events. Redirect
+    // siblings are exempt: their allocation order is not their playback order.
+    for (auto entry = playlist_loads_.begin(); entry != playlist_loads_.end();) {
+      if (entry->first < *playlist_id && !entry->second.started &&
+          !entry->second.redirected) {
+        entry = playlist_loads_.erase(entry);
+      } else {
+        ++entry;
+      }
+    }
     const auto load = playlist_loads_.find(*playlist_id);
     StartResult result{true, std::nullopt};
     if (load != playlist_loads_.end()) {
-      event_load_ = load->second;
+      event_load_ = load->second.load_id;
+      load->second.started = true;
     } else if (!pending_loads_.empty()) {
       event_load_ = pending_loads_.front();
       pending_loads_.pop_front();
@@ -71,7 +83,7 @@ class NativePlaybackState {
         result = {false, event_load_};
         event_load_.reset();
       } else {
-        playlist_loads_[*playlist_id] = *event_load_;
+        playlist_loads_[*playlist_id] = {*event_load_, true, false};
       }
     } else {
       event_load_.reset();
@@ -85,7 +97,7 @@ class NativePlaybackState {
     if (playlist_id) {
       const auto load = playlist_loads_.find(*playlist_id);
       if (load != playlist_loads_.end()) {
-        load_id = load->second;
+        load_id = load->second.load_id;
         playlist_loads_.erase(load);
       }
     }
@@ -108,7 +120,9 @@ class NativePlaybackState {
       return false;
     }
     for (int64_t offset = 0; offset < count; ++offset) {
-      playlist_loads_[first + offset] = *load_id;
+      auto& entry = playlist_loads_[first + offset];
+      entry.load_id = *load_id;
+      entry.redirected = true;
     }
     return true;
   }
@@ -116,7 +130,7 @@ class NativePlaybackState {
   void RetireLoad(std::optional<int64_t> load_id) {
     if (load_id) {
       for (auto entry = playlist_loads_.begin(); entry != playlist_loads_.end();) {
-        if (entry->second == *load_id) {
+        if (entry->second.load_id == *load_id) {
           entry = playlist_loads_.erase(entry);
         } else {
           ++entry;
@@ -148,6 +162,16 @@ class NativePlaybackState {
     if (!pending_stop_ || !idle || playlist_count != 0) {
       return std::nullopt;
     }
+    // The caller must drain queued lifecycle events before confirming empty
+    // idle. Even START_FILE/END_FILE pairs may still be queued after stop.
+    for (auto entry = playlist_loads_.begin(); entry != playlist_loads_.end();) {
+      if (!entry->second.started) {
+        entry = playlist_loads_.erase(entry);
+      } else {
+        ++entry;
+      }
+    }
+    pending_loads_.clear();
     const auto completed = pending_stop_;
     pending_stop_.reset();
     return completed;
@@ -165,7 +189,12 @@ class NativePlaybackState {
   std::optional<int64_t> event_load_;
   std::optional<int64_t> pending_stop_;
   std::deque<int64_t> pending_loads_;
-  std::unordered_map<int64_t, int64_t> playlist_loads_;
+  struct PlaylistLoad {
+    int64_t load_id = 0;
+    bool started = false;
+    bool redirected = false;
+  };
+  std::unordered_map<int64_t, PlaylistLoad> playlist_loads_;
   std::optional<Failure> failure_;
 };
 

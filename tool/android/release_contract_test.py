@@ -5,9 +5,12 @@ import io
 from pathlib import Path
 import tempfile
 import os
+import re
 import shutil
 import subprocess
 import unittest
+import zipfile
+import xml.etree.ElementTree as ET
 from unittest.mock import patch
 
 
@@ -20,6 +23,15 @@ def module(name, filename):
 
 generator = module('licenses', 'generate-licenses.py')
 manifest = module('manifest', 'check-manifest.py')
+
+
+def commit_lockfile(root):
+    (root / 'pubspec.lock').write_text('packages: pinned\n')
+    git = ['git', '-C', str(root), '-c', 'user.name=fixture', '-c', 'user.email=fixture@example.invalid',
+           '-c', 'commit.gpgsign=false', '-c', 'core.hooksPath=/dev/null']
+    subprocess.run([*git, 'init', '-q'], check=True)
+    subprocess.run([*git, 'add', 'pubspec.lock'], check=True)
+    subprocess.run([*git, 'commit', '-q', '-m', 'fixture'], check=True)
 
 
 class ReleaseContractTest(unittest.TestCase):
@@ -77,15 +89,66 @@ class ReleaseContractTest(unittest.TestCase):
                     generator.generate(*args, check=True)
             self.assertEqual([], list(root.glob('lineup-android-licenses-*')))
 
+    def test_gradle_verifies_runtime_dependency_artifacts(self):
+        root = Path(__file__).resolve().parents[2]
+        gradle = (root / 'android/app/build.gradle.kts').read_text()
+        metadata = root / 'android/gradle/verification-metadata.xml'
+        self.assertTrue(metadata.is_file())
+        verification = ET.parse(metadata).getroot()
+        namespace = {'v': verification.tag.split('}')[0].removeprefix('{')}
+        self.assertEqual('true', verification.findtext(
+            'v:configuration/v:verify-metadata', namespaces=namespace))
+        modules = (
+            ('androidx.media3', 'media3-exoplayer'),
+            ('androidx.media3', 'media3-exoplayer-hls'),
+            ('androidx.media3', 'media3-datasource-okhttp'),
+            ('androidx.media3', 'media3-ui'),
+            ('com.squareup.okhttp3', 'okhttp'),
+        )
+        for group, module_name in modules:
+            with self.subTest(module=module_name):
+                coordinate = re.escape(f'{group}:{module_name}')
+                dependency = re.search(rf'implementation\("{coordinate}:([^"]+)"\)', gradle)
+                self.assertIsNotNone(dependency)
+                version = dependency.group(1)
+                component = verification.find(
+                    f'v:components/v:component[@group="{group}"]'
+                    f'[@name="{module_name}"][@version="{version}"]', namespace)
+                self.assertIsNotNone(component)
+                binary_names = {f'{module_name}-{version}.{ext}' for ext in ('jar', 'aar')}
+                self.assertTrue(any(
+                    artifact.get('name') in binary_names
+                    and artifact.find('v:sha256', namespace) is not None
+                    for artifact in component.findall('v:artifact', namespace)
+                ), f'missing binary SHA-256 for {group}:{module_name}:{version}')
+
     def test_back_opt_in_is_required(self):
         root = Path(__file__).resolve().parents[2]
         xml = (root / 'android/app/src/main/AndroidManifest.xml').read_text()
         manifest.check(xml)
+        for attribute in ('debuggable="true"', 'networkSecurityConfig="@xml/fixture"'):
+            with self.subTest(attribute=attribute), self.assertRaises(ValueError):
+                manifest.check_release(xml.replace('<application', f'<application android:{attribute}'))
+        manifest.check_release(xml)
         for invalid in (xml.replace('android:enableOnBackInvokedCallback="true"', ''),
                         xml.replace('android:enableOnBackInvokedCallback="true"',
                                     'android:enableOnBackInvokedCallback="false"')):
             with self.assertRaisesRegex(ValueError, 'OnBackInvokedCallback'):
                 manifest.check(invalid)
+
+    def test_rejects_fixture_bytes_at_any_apk_path(self):
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            fixture = root / 'fixture.crt'
+            fixture.write_bytes(b'test certificate')
+            apk = root / 'app.apk'
+            with zipfile.ZipFile(apk, 'w') as archive:
+                archive.writestr('res/a', b'other bytes')
+            manifest.reject_entry_bytes(fixture, apk)
+            with zipfile.ZipFile(apk, 'a') as archive:
+                archive.writestr('res/b', fixture.read_bytes())
+            with self.assertRaises(ValueError):
+                manifest.reject_entry_bytes(fixture, apk)
 
     def test_report_parsing_ignores_build_warnings(self):
         report = '\n'.join((
@@ -124,8 +187,14 @@ class ReleaseContractTest(unittest.TestCase):
             root = Path(directory)
             tools = root / 'tool/android'
             tools.mkdir(parents=True)
-            for name in ('build-release.sh', 'generate-licenses.py', 'check-manifest.py'):
+            for name in ('build-release.sh', 'generate-licenses.py', 'check-manifest.py',
+                         'check-harness-absence.py'):
                 shutil.copy(Path(__file__).with_name(name), tools / name)
+            signing = tools / 'with-signing.sh'
+            signing.write_text('#!/bin/sh\ntouch "$(dirname "$0")/signing-called"\n')
+            signing.chmod(0o755)
+            (root / 'lib').mkdir()
+            (root / 'lib/main.dart').write_text('void main() {}\n')
             android = root / 'android'
             android.mkdir()
             wrapper = android / 'gradlew'
@@ -147,12 +216,41 @@ class ReleaseContractTest(unittest.TestCase):
             generator.generate('+--- io.flutter:flutter_embedding_release:1.0.0', assets, [], sdk, None, 'fixture')
             notice = assets / 'licenses/flutter/Flutter-SDK-LICENSE.txt'
             notice.write_text('stale SDK terms\n')
+            commit_lockfile(root)
             result = subprocess.run(['bash', str(tools / 'build-release.sh')],
                 env={**os.environ, 'PATH': str(sdk / 'bin') + os.pathsep + os.environ['PATH']},
                 capture_output=True, text=True)
             self.assertNotEqual(0, result.returncode)
             self.assertEqual('stale SDK terms\n', notice.read_text())
             self.assertIn('notices differ', result.stderr)
+            self.assertFalse((tools / 'signing-called').exists())
+
+    def test_release_refuses_changed_lockfile_before_packaging(self):
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            tools = root / 'tool/android'
+            tools.mkdir(parents=True)
+            shutil.copy(Path(__file__).with_name('build-release.sh'), tools)
+            signing = tools / 'with-signing.sh'
+            signing.write_text('#!/bin/sh\ntouch "$(dirname "$0")/signing-called"\n')
+            signing.chmod(0o755)
+            wrapper = root / 'android/gradlew'
+            wrapper.parent.mkdir()
+            wrapper.write_text('#!/bin/sh\n')
+            wrapper.chmod(0o755)
+            sdk_bin = root / 'flutter/bin'
+            sdk_bin.mkdir(parents=True)
+            flutter = sdk_bin / 'flutter'
+            flutter.write_text('#!/bin/sh\n')
+            flutter.chmod(0o755)
+            commit_lockfile(root)
+            (root / 'pubspec.lock').write_text('packages: floated\n')
+            result = subprocess.run(['bash', str(tools / 'build-release.sh')],
+                env={**os.environ, 'PATH': str(sdk_bin) + os.pathsep + os.environ['PATH']},
+                capture_output=True, text=True)
+            self.assertNotEqual(0, result.returncode)
+            self.assertIn('pubspec.lock differs', result.stderr)
+            self.assertFalse((tools / 'signing-called').exists())
 
     def test_notice_check_detects_all_drift_without_writing(self):
         with tempfile.TemporaryDirectory() as directory:

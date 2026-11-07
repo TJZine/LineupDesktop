@@ -234,14 +234,24 @@ void main() {
       collections: const ['Favorites'],
     );
     final drama = PlexMediaItem(
-      id: 'a',
-      title: 'Drama A',
+      id: 'b',
+      title: 'Drama B',
       type: 'movie',
       duration: const Duration(minutes: 1),
       libraryId: 'movies',
-      parts: [PlexMediaPart(path: '/parts/drama-a')],
+      parts: [PlexMediaPart(path: '/parts/drama-b')],
       genres: const ['Drama'],
       collections: const ['Favorites'],
+    );
+    final wrongCollection = PlexMediaItem(
+      id: 'c',
+      title: 'Drama C',
+      type: 'movie',
+      duration: const Duration(minutes: 1),
+      libraryId: 'movies',
+      parts: [PlexMediaPart(path: '/parts/drama-c')],
+      genres: const ['Drama'],
+      collections: const ['Other'],
     );
     final resolved = resolveContent(
       const LibrarySource(
@@ -252,10 +262,10 @@ void main() {
           LibraryFilter.collection: ['Favorites'],
         },
       ),
-      [comedy, drama, media[1]],
+      [comedy, drama, comedy, wrongCollection],
     );
 
-    expect(resolved.map((item) => item.id), ['a']);
+    expect(resolved.map((item) => item.id), ['a', 'b']);
   });
 
   test('legacy filters normalize to canonical semantic identity', () {

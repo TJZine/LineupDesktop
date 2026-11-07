@@ -94,4 +94,19 @@ class Media3FailureTest {
                 PlaybackException.ERROR_CODE_UNSPECIFIED to "native_error",
             )) assertEquals(expected to null, classify(code))
     }
+    @Test
+    fun hlsParseChildStatusAndOriginPinRemainSanitizedAndDistinct() {
+        assertEquals("container_error", classify(PlaybackException.ERROR_CODE_PARSING_MANIFEST_MALFORMED).first)
+        assertEquals("container_error", classify(PlaybackException.ERROR_CODE_IO_NETWORK_CONNECTION_FAILED,
+            IOException(androidx.media3.common.ParserException.createForMalformedManifest("synthetic", null))).first)
+        assertEquals("network_error", classify(PlaybackException.ERROR_CODE_IO_UNSPECIFIED,
+            IOException("unsafe_session_origin")).first)
+        val status = androidx.media3.datasource.HttpDataSource.InvalidResponseCodeException(
+            403, "synthetic", IOException(), emptyMap(),
+            androidx.media3.datasource.DataSpec(android.net.Uri.parse("https://fixture.invalid/segment.m4s")),
+            byteArrayOf(),
+        )
+        assertEquals("http_error" to 403, classify(PlaybackException.ERROR_CODE_IO_UNSPECIFIED, status))
+    }
+
 }

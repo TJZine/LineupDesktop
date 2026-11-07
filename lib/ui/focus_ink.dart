@@ -65,9 +65,15 @@ class LineupFocusInk extends StatelessWidget {
             : data.listTileTheme,
       ),
       child: DefaultTextStyle.merge(
-        style: TextStyle(color: inkRoles.primaryText),
+        style: active
+            ? TextStyle(color: inkRoles.primaryText)
+            : const TextStyle(),
         child: IconTheme.merge(
-          data: IconThemeData(color: inkRoles.primaryText),
+          // Theme installs an IconTheme of its own. Capture the incoming
+          // color here so the button's resolved ink survives that scope.
+          data: IconThemeData(
+            color: active ? inkRoles.primaryText : IconTheme.of(context).color,
+          ),
           child: child ?? const SizedBox.shrink(),
         ),
       ),

@@ -28,14 +28,14 @@ class PlaybackMemoryTest {
 
     @Test
     fun perLoadClientsShareTransportButNotPolicyOrCancellation() {
-        val first = MediaHttp.forLoad()
-        val second = MediaHttp.forLoad()
+        val first = MediaHttp.forLoad().client
+        val second = MediaHttp.forLoad().client
         for (client in listOf(first, second)) {
             assertFalse(client.followRedirects)
             assertFalse(client.followSslRedirects)
             assertEquals(1, client.interceptors.count { it is OriginPolicy })
             assertEquals(1, client.interceptors.size)
-            assertTrue(client.networkInterceptors.isEmpty())
+            assertTrue(client.networkInterceptors.single() is CancelOnAbandon)
             assertSame(CookieJar.NO_COOKIES, client.cookieJar)
             assertSame(Authenticator.NONE, client.authenticator)
             assertSame(Authenticator.NONE, client.proxyAuthenticator)

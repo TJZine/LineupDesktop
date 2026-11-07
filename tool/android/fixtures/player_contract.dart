@@ -1,13 +1,15 @@
 // Disposable emulator runtime check: real Dart transport + production Android adapter.
-// This entrypoint never reads app state, credentials, Plex, or private media.
+// Never reads app state or credentials.
 import 'dart:async';
 import 'dart:convert';
 
 import 'package:flutter/material.dart';
+import 'package:flutter/foundation.dart';
+
 import 'package:lineup_desktop/playback/method_channel_native_player.dart';
 import 'package:lineup_desktop/playback/native_player.dart';
 
-void main(List<String> args) {
+Future<void> main(List<String> args) async {
   WidgetsFlutterBinding.ensureInitialized();
   runApp(const MaterialApp(home: _FixtureOverlay()));
   WidgetsBinding.instance.addPostFrameCallback((_) => _run(args));
@@ -48,11 +50,72 @@ Future<void> _wait(bool Function() condition, {int seconds = 12}) async {
   }
 }
 
+class _FixtureFailure implements Exception {
+  const _FixtureFailure(this.code);
+  final String code;
+}
+
+Future<void> _measureSyntheticSession(
+  NativePlayer player,
+  Future<void> cancelled,
+  bool Function() active,
+) async {
+  Future<void> checked(Future<void> operation) => Future.any([
+    operation,
+    cancelled.then<void>((_) => throw const _FixtureFailure('cancelled')),
+  ]);
+  void guard() {
+    if (!active()) throw const _FixtureFailure('cancelled');
+  }
+
+  guard();
+  final clock = Stopwatch()..start();
+  await checked(
+    player.load(
+      Uri.parse('https://localhost:18443/session/index.m3u8'),
+      kind: LoadKind.plexSession,
+    ),
+  );
+  guard();
+  void sample(String phase) => _fact(phase, {
+    'offsetSeconds': 0,
+    'elapsedMs': clock.elapsedMilliseconds,
+    'positionMs': player.position.inMilliseconds,
+    'durationMs': player.duration.inMilliseconds,
+    'state': player.status.state.name,
+  });
+  sample('session-ready');
+  final initial = player.position;
+  for (var i = 0; i < 32; i++) {
+    await checked(Future<void>.delayed(const Duration(milliseconds: 250)));
+    guard();
+    if (player.status.state != PlayerState.playing) {
+      throw const _FixtureFailure('playback_failed');
+    }
+    sample('session-sample');
+  }
+  if (player.position < initial + const Duration(milliseconds: 400)) {
+    throw const _FixtureFailure('no_progress');
+  }
+}
+
 Future<void> _run(List<String> args) async {
   final player = MethodChannelNativePlayer();
   final mode =
       args.where((a) => a.startsWith('--case=')).firstOrNull?.substring(7) ??
       'contract';
+  final sessionMode = mode == 'session-hls';
+  final cancelled = Completer<void>();
+  void cancel() {
+    if (!cancelled.isCompleted) cancelled.complete();
+  }
+
+  final lifecycle = sessionMode
+      ? AppLifecycleListener(onPause: cancel, onDetach: cancel)
+      : null;
+  bool active() =>
+      !cancelled.isCompleted &&
+      WidgetsBinding.instance.lifecycleState == AppLifecycleState.resumed;
   var phase = 'initialize';
   player.events.listen((event) {
     if (event.status.state == PlayerState.error ||
@@ -83,6 +146,10 @@ Future<void> _run(List<String> args) async {
   }
 
   try {
+    if (sessionMode && !kDebugMode) {
+      throw const _FixtureFailure('debug_required');
+    }
+    if (sessionMode && !active()) throw const _FixtureFailure('cancelled');
     await player.initialize();
     if (!player.fullscreen) throw StateError('initial_fullscreen');
     await player.setFullscreen(false);
@@ -103,6 +170,12 @@ Future<void> _run(List<String> args) async {
       const PlayerVideoRect(left: 0, top: 0, width: 960, height: 540, scale: 2),
     );
     _fact('initialized');
+    if (sessionMode) {
+      phase = 'session-measurement';
+      await _measureSyntheticSession(player, cancelled.future, active);
+      _fact('PASS', {'case': mode});
+      return;
+    }
     if (mode == 'release-isolation') {
       phase = 'release-isolation';
       try {
@@ -306,11 +379,18 @@ Future<void> _run(List<String> args) async {
     }
     phase = 'paused-initial-join';
     await load('h264.mp4', paused: true, start: 13.25);
-    await _wait(() => player.position >= const Duration(seconds: 13));
-    if (player.status.state != PlayerState.paused) {
-      throw StateError('paused_ready');
+    // The synthetic clip has a sync point at 12 s, within the direct join
+    // tolerance before the requested 13.25 s position.
+    await _wait(
+      () =>
+          player.position > Duration.zero &&
+          player.status.state == PlayerState.paused,
+    );
+    final joinMs = player.position.inMilliseconds;
+    if ((joinMs - 12000).abs() >= 150) {
+      throw StateError('initial_join_position');
     }
-    _fact(phase, {'positionMs': player.position.inMilliseconds});
+    _fact(phase, {'positionMs': joinMs});
     phase = 'play-pause';
     await player.play();
     await _wait(() => player.position > const Duration(seconds: 14));
@@ -402,9 +482,15 @@ Future<void> _run(List<String> args) async {
   } catch (e) {
     _fact('FAIL', {
       'at': phase,
-      'code': e is PlayerUnavailable ? e.failureCode : 'assertion_or_timeout',
+      'code': e is PlayerUnavailable
+          ? e.failureCode
+          : e is _FixtureFailure
+          ? e.code
+          : 'assertion_or_timeout',
     });
   } finally {
+    cancel();
+    lifecycle?.dispose();
     try {
       await player.dispose();
       _fact('disposed');

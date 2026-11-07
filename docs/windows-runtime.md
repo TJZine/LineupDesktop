@@ -22,10 +22,14 @@ and corresponding sources and preserve their notices. Independent legal review
 is recommended before distribution beyond private alpha because this document
 is an engineering inventory, not legal advice.
 
-The verified archive currently remains hosted by the third-party builder.
-Before public distribution, mirror those exact bytes in an immutable
-project-controlled release, confirm the recorded archive SHA-256 is unchanged,
-and update `tool/windows/prepare-mpv.ps1` to use that release. Do not substitute
+The verified archive is mirrored in the project-controlled
+[`runtime-mpv-20261002-3186d369f9` release](https://github.com/TJZine/LineupDesktop/releases/tag/runtime-mpv-20261002-3186d369f9).
+The upstream builder retains releases for only 30 days. After its October 2
+release expired, the exact archive was recovered from
+[build artifact `11226476657`](https://github.com/zhongfly/mpv-winbuild/actions/runs/37004200613/artifacts/11226476657).
+Its archive, header and DLL SHA-256 values match the existing pins;
+`tool/windows/prepare-mpv.ps1` downloads the mirror and retains those checks.
+Keep the mirror immutable and preserve these exact bytes; do not substitute
 a rebuilt archive under the existing provenance identity.
 
 ## Other native runtime components

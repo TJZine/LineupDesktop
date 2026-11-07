@@ -5,12 +5,15 @@ import java.net.URI
 /** Values cross the Flutter codec only here; engine and callbacks receive validated values. */
 internal class ProtocolError(val code: String) : Exception(code)
 
+internal enum class LoadKind { direct, plexSession }
+
 internal data class MediaLoad(
     val uri: String,
     val loadId: Long,
     val token: String?,
     val paused: Boolean,
     val startSeconds: Double,
+    val kind: LoadKind = LoadKind.direct,
 ) {
     val credentialBytes
         get() =
@@ -75,7 +78,14 @@ internal object PlayerProtocol {
         val a = map(value)
         val uri = string(a["uri"])
         if (uri.toByteArray(Charsets.UTF_8).size !in 1..32768) invalid()
+        val kind =
+            when (if (a.containsKey("kind")) a["kind"] else "direct") {
+                "direct" -> LoadKind.direct
+                "plexSession" -> LoadKind.plexSession
+                else -> invalid()
+            }
         val token = a["plexToken"]?.let { string(it) }
+        if (kind == LoadKind.plexSession && (token != null || a.containsKey("startSeconds"))) invalid()
         if (token != null && (token.length !in 1..8192 || token.any { it.code !in 0x21..0x7e }))
             invalid()
         val parsed =
@@ -90,6 +100,8 @@ internal object PlayerProtocol {
         ) {
             throw ProtocolError("insecure_media_uri")
         }
+        if (kind == LoadKind.plexSession &&
+            (!parsed.scheme.equals("https", true) || parsed.rawAuthority.isNullOrEmpty())) invalid()
         // Embedded credentials and query credentials can never enter networking or diagnostics.
         if (
             parsed.rawUserInfo != null ||
@@ -101,7 +113,7 @@ internal object PlayerProtocol {
             invalid()
         val start = if (a.containsKey("startSeconds")) number(a["startSeconds"]) else 0.0
         val paused = if (a.containsKey("startPaused")) boolean(a["startPaused"]) else false
-        return PlayerCommand.Load(MediaLoad(uri, integer(a["loadId"], 0), token, paused, start))
+        return PlayerCommand.Load(MediaLoad(uri, integer(a["loadId"], 0), token, paused, start, kind))
     }
 
     fun command(method: String, value: Any?): PlayerCommand =
@@ -174,6 +186,8 @@ internal interface PlayerEngine {
 
         fun sourceInitialization(revision: Int, accepted: Boolean) {}
 
+        fun sessionClock(state: SessionHlsClock.State) {}
+
         fun ready(paused: Boolean)
 
         fun ended()
@@ -224,6 +238,7 @@ internal data class QueuedEvent(
     val generation: Long,
     val epoch: Long?,
     val value: Map<String, Any?>,
+    val protectedTransition: Boolean = false,
 )
 
 internal class PlayerEventQueue {
@@ -246,12 +261,12 @@ internal class PlayerEventQueue {
         // including a clear. Its first admission must never evict a completion.
         val ordinaryCount = queue.size - (if (cueIndex >= 0) 1 else 0)
         if (ordinaryCount == 255) {
-            val property = queue.indexOfFirst { it.value["type"] == "property" && !cues(it) }
+            val property = queue.indexOfFirst { it.value["type"] == "property" && !cues(it) && !it.protectedTransition }
             if (property >= 0) {
                 val iterator = queue.iterator()
                 repeat(property + 1) { iterator.next() }
                 iterator.remove()
-            } else if (event.value["type"] == "property") return
+            } else if (event.value["type"] == "property" && !event.protectedTransition) return
             else {
                 val iterator = queue.iterator()
                 while (iterator.hasNext()) {

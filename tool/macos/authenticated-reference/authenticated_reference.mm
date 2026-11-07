@@ -10,6 +10,7 @@
 #include <cstdlib>
 #include <cstring>
 #include <filesystem>
+#include <fstream>
 #include <iostream>
 #include <string>
 #include <thread>
@@ -17,6 +18,7 @@
 
 #import "LineupNativePlayer.h"
 #include "player_core/mpv_operations.h"
+#include "session_policy_test.h"
 
 namespace {
 const char* test_ca = nullptr;
@@ -206,6 +208,8 @@ bool RuntimeBound() {
 @property(nonatomic) BOOL finished;
 @property(nonatomic) BOOL rejected;
 @property(nonatomic) BOOL progressed;
+@property(nonatomic) BOOL playing;
+@property(nonatomic) BOOL stopConfirmed;
 @property(nonatomic) PlaybackObservation* playbackObservation;
 - (BOOL)call:(NSString*)method arguments:(id)arguments;
 - (void)sendEvent:(NSDictionary*)event;
@@ -217,7 +221,10 @@ bool RuntimeBound() {
   if (![call.method isEqualToString:@"event"] ||
       ![call.arguments isKindOfClass:NSDictionary.class]) return;
   NSDictionary* event = call.arguments;
+  if ([event[@"type"] isEqual:@"stopResult"] && [event[@"stopId"] longLongValue] == 1 && [event[@"success"] boolValue])
+    self.stopConfirmed = YES;
   NSString* state = event[@"state"];
+  if ([state isEqual:@"playing"]) self.playing = YES;
   if ([state isEqual:@"ended"] || [state isEqual:@"stopped"] || [state isEqual:@"error"])
     self.finished = YES;
   // A later ended/stopped event must never erase an earlier error.
@@ -347,8 +354,12 @@ int main(int argc, char** argv) {
     try {
       test_ca = argv[1];
       bool nonzero_start = false;
+      std::string session_playlist_path;
       for (int i = 3; i < argc; ++i) {
-        if (std::strcmp(argv[i], "--nonzero-start") == 0) {
+        if (std::strncmp(argv[i], "--session-playlist=", 19) == 0) {
+          if (!session_playlist_path.empty()) return 2;
+          session_playlist_path = argv[i] + 19;
+        } else if (std::strcmp(argv[i], "--nonzero-start") == 0) {
           if (nonzero_start) return 2;
           nonzero_start = true;
         } else {
@@ -359,8 +370,22 @@ int main(int argc, char** argv) {
       if (!mode.empty() && mode != "observe" && mode != "access-references" &&
           mode != "autoload-files" && mode != "control-allow-references" &&
           mode != "control-disable-tls" && mode != "control-late-error" &&
-          mode != "control-delayed-start" && mode != "control-ignore-start-delayed") return 2;
+          mode != "control-delayed-start" && mode != "control-ignore-start-delayed" &&
+          mode != "session") return 2;
+      if ((mode == "session") != !session_playlist_path.empty() || (mode == "session" && nonzero_start)) return 2;
       if (!nonzero_start && (mode == "control-delayed-start" || mode == "control-ignore-start-delayed")) return 2;
+      NSString* session_playlist = nil;
+      if (mode == "session") {
+        std::ifstream file(session_playlist_path, std::ios::binary | std::ios::ate);
+        if (!file) return 2;
+        const auto length = file.tellg();
+        if (length <= 0 || length > 1024 * 1024) return 2;
+        std::string text(static_cast<size_t>(length), '\0');
+        file.seekg(0);
+        if (!file.read(text.data(), static_cast<std::streamsize>(text.size()))) return 2;
+        session_playlist = [[NSString alloc] initWithBytes:text.data() length:text.size() encoding:NSUTF8StringEncoding];
+        if (!session_playlist) return 2;
+      }
       NSURL* uri = [NSURL URLWithString:@(argv[2])];
       if (![uri.scheme isEqual:@"https"] || ![uri.host isEqual:@"127.0.0.1"] ||
           uri.user || uri.password || uri.query || uri.fragment) return 2;
@@ -374,12 +399,18 @@ int main(int argc, char** argv) {
       ReferenceTestPlayer* player = [[ReferenceTestPlayer alloc]
           initWithMessenger:messenger videoHost:host window:(NSWindow*)window];
       const bool initialized = [messenger call:@"initialize" arguments:nil];
+      const auto baseline_policy = initialized ? lineup::fixture::ReadSessionPolicy(observed_client) : lineup::fixture::SessionPolicy{};
       bool timed_out = false;
       if (initialized) {
         PrintAvailableFormats();
         NSMutableDictionary* load = [@{
             @"uri": @(argv[2]), @"loadId": @1,
             @"plexToken": @"lineup-synthetic-reference-test", @"startPaused": @YES} mutableCopy];
+        if (mode == "session") {
+          [load removeObjectForKey:@"plexToken"];
+          load[@"kind"] = @"plexSession";
+          load[@"sessionPlaylist"] = @{@"text": session_playlist, @"offsetMicroseconds": @0};
+        }
         if (nonzero_start) load[@"startSeconds"] = @3.5;
         if ([messenger call:@"load" arguments:load]) {
           const auto deadline = [NSDate dateWithTimeIntervalSinceNow:mode == "observe" ? 2 : 12];
@@ -404,6 +435,15 @@ int main(int argc, char** argv) {
       // Exercise the positive classifier with a real successful media run,
       // followed by a later error delivered through the same event codec.
       if (mode == "control-late-error") [messenger sendEvent:@{@"state": @"error"}];
+      const auto completed_policy = initialized ? lineup::fixture::ReadSessionPolicy(observed_client) : lineup::fixture::SessionPolicy{};
+      const bool completion_restored = !messenger.finished || lineup::fixture::SameSessionPolicy(baseline_policy, completed_policy);
+      const bool stop_accepted = initialized && [messenger call:@"stop" arguments:@{@"stopId": @1}];
+      NSDate* stop_deadline = [NSDate dateWithTimeIntervalSinceNow:1];
+      while (stop_accepted && !messenger.stopConfirmed && stop_deadline.timeIntervalSinceNow > 0)
+        [NSRunLoop.currentRunLoop runMode:NSDefaultRunLoopMode beforeDate:[NSDate dateWithTimeIntervalSinceNow:0.01]];
+      const auto stopped_policy = messenger.stopConfirmed ? lineup::fixture::ReadSessionPolicy(observed_client) : lineup::fixture::SessionPolicy{};
+      const bool policy_checked = baseline_policy.valid && stopped_policy.valid;
+      const bool policy_restored = completion_restored && lineup::fixture::SameSessionPolicy(baseline_policy, stopped_policy);
       __block BOOL disposed = NO;
       [player beginShutdownWithCompletion:^{ disposed = YES; }];
       NSDate* deadline = [NSDate dateWithTimeIntervalSinceNow:6];
@@ -420,9 +460,11 @@ int main(int argc, char** argv) {
                 << " delay_exercised=" << delay_exercised
                 << " ignored_start=" << ignored_start
                 << " landing_confirmed=" << (playback.landing.load() >= 0)
+                << " playing=" << static_cast<bool>(messenger.playing)
                 << " progressed=" << static_cast<bool>(messenger.progressed)
                 << " rejected=" << static_cast<bool>(messenger.rejected)
-                << " timed_out=" << timed_out << '\n';
+                << " timed_out=" << timed_out
+                << " policy_checked=" << policy_checked << " policy_restored=" << policy_restored << '\n';
       if (mode == "access-references" || mode == "autoload-files") return initialized ? 1 : 0;
       return initialized && !timed_out ? 0 : 1;
     } catch (...) {

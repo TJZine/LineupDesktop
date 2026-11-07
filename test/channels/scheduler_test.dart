@@ -613,6 +613,42 @@ void main() {
     for (var cycle = 1; cycle < cycles.length; cycle++) {
       expect(cycles[cycle].first, isNot(cycles[cycle - 1].last));
     }
+
+    final migratedContent = [
+      ...content,
+      const ChannelItem(id: 'd', title: 'D', duration: Duration(minutes: 1)),
+    ];
+    final legacy = Channel(
+      id: 'legacy-shuffle',
+      number: 1,
+      name: 'Legacy shuffle',
+      source: ManualSource(migratedContent),
+      playbackMode: PlaybackMode.shuffle,
+      anchor: anchor,
+      shuffleSeed: 6,
+      scheduleVersion: 1,
+    );
+    final migrated = migrateLegacySchedule(
+      legacy,
+      migratedContent,
+      anchor.add(const Duration(seconds: 30)),
+    );
+    const cycleLength = Duration(minutes: 4);
+    final boundary = anchor.add(cycleLength);
+    for (final channel in [migrated, Channel.fromJson(migrated.toJson())]) {
+      expect(channel.scheduleTransition!.boundary, boundary);
+      final schedule = buildChannelSchedule(channel, migratedContent);
+      Iterable<String> cycleAt(DateTime start) => scheduleWindow(
+        start,
+        start.add(cycleLength),
+        anchor,
+        schedule,
+      ).map((program) => program.item.id);
+
+      expect(cycleAt(anchor), ['d', 'b', 'a', 'c']);
+      expect(cycleAt(boundary), ['d', 'c', 'b', 'a']);
+      expect(cycleAt(boundary.add(cycleLength)), ['c', 'a', 'd', 'b']);
+    }
   });
 
   test('transition preserves the frozen cycle and changes at its boundary', () {
@@ -777,6 +813,26 @@ void main() {
         title: 'Movie',
         duration: Duration(minutes: 1),
         mediaKind: ChannelMediaKind.movie,
+        seasonNumber: 0,
+      ),
+      const ChannelItem(
+        id: 'keyless-special',
+        title: 'Keyless special',
+        duration: Duration(minutes: 1),
+        mediaKind: ChannelMediaKind.episode,
+        seasonNumber: 0,
+      ),
+      const ChannelItem(
+        id: 'unknown-kind',
+        title: 'Unknown kind',
+        duration: Duration(minutes: 1),
+        seasonNumber: 0,
+      ),
+      const ChannelItem(
+        id: 'keyless-unknown-season',
+        title: 'Unknown season',
+        duration: Duration(minutes: 1),
+        mediaKind: ChannelMediaKind.episode,
       ),
     ];
 
@@ -791,7 +847,21 @@ void main() {
 
     expect(showWithout, ['s1e1', 's1e2', 's2e1', 'unknown']);
     expect(showWith, ['s1e1', 's1e2', 's2e1', 'special', 'unknown']);
-    expect(withoutSpecials.map((item) => item.id), contains('movie'));
+    final withoutIds = withoutSpecials.map((item) => item.id);
+    expect(withoutIds, isNot(contains('keyless-special')));
+    expect(
+      withoutIds,
+      containsAll(['movie', 'unknown-kind', 'keyless-unknown-season']),
+    );
+    expect(withSpecials.map((item) => item.id), contains('keyless-special'));
+    final legacy = buildSchedule(
+      content,
+      mode: PlaybackMode.block,
+      seed: 1,
+      includeSpecials: false,
+      scheduleVersion: 1,
+    );
+    expect(legacy.items.map((item) => item.id), contains('keyless-special'));
   });
 
   test('block ordering preserves episode order inside a series', () {

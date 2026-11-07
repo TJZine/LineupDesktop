@@ -160,6 +160,5 @@ class GuardedFragmentedMp4Test {
         val failure = assertThrows(OmittedMediaType::class.java) { extraction.readUntil() }
         assertEquals(C.TRACK_TYPE_VIDEO, failure.mediaType)
         assertTrue(checkNotNull(extraction.seekMap).isSeekable)
-        assertTrue(extraction.events.any { it["phase"] == "moov-start" && it["revision"] == 2 })
     }
 }

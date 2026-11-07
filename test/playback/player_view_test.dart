@@ -10284,6 +10284,10 @@ class _Native implements NativePlayer {
   }
 
   @override
+  Future<MediaCapabilities> mediaCapabilities() async =>
+      MediaCapabilities.desktop;
+
+  @override
   Future<void> initialize() async {}
   @override
   Future<void> load(
@@ -10292,6 +10296,8 @@ class _Native implements NativePlayer {
     int? generation,
     bool startPaused = false,
     Duration? startPosition,
+    LoadKind kind = LoadKind.direct,
+    NativeSessionPlaylist? sessionPlaylist,
   }) async {
     loadCalls++;
     lastLoadGeneration = generation;

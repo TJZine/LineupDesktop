@@ -64,7 +64,41 @@ transparent surface-rendered Flutter. `player/NativePlayerAdapter.kt` owns these
 passive views and the method channel; `NativePlayerController.kt` owns protocol
 validation, bounded queues, correlation and lifecycle fencing. A fresh
 `Media3Engine` belongs to each load. See the [Android protocol details](native-player-protocol.md#android-backend)
-for failure mapping, telemetry, exact initial joins and display limitations.
+for failure mapping, telemetry, bounded initial joins (up to 5 seconds early,
+otherwise exact) and display limitations.
+
+Every load has its own HTTP dispatcher and live-call tracker. Retirement fences
+new calls and cancels queued requests and delivered response bodies on the
+cleanup worker. Cleanup waits up to one second for calls to terminate and retains
+ownership for retry if the fence is incomplete. Idle connections and TLS session
+resumption are shared across loads. Authentication stays on each request.
+
+`plexSession` loads use the HLS module at the same Media3 version, with a
+per-load origin pin before the existing redirect policy. Playlists, keys,
+initialization files and segments must stay on the load's HTTPS scheme, host
+and port, without userinfo or a token query. Session requests have no Plex
+header or explicit player start position; a provided `startSeconds` is rejected,
+including zero. HLS uses the playlist's own start. Direct Play retains the
+guarded progressive source and existing start handling. `mediaCapabilities`
+reads current decoder profiles, display HDR and Media3 audio-output capabilities
+on the application looper; Dart owns eligibility and conversion policy.
+
+`SessionHlsExtractors` decorates the pinned stock HLS factory for session loads.
+It reads the actual initialized timestamp adjustment after the first loaded
+fMP4 video sample; it does not add a renderer observer, custom HTTP client,
+second playlist parser or sample timestamp rewrite. The per-load `SessionHlsClock`
+publishes `pending`, `ready(adjustmentUs)` or terminal `unavailable(reason)` through
+the ordinary generation/load-correlated native property channel. A normal seek
+may replace the adjuster: pending is published before real initialized video
+qualifies the new A1. A changed A is usable, with `clock_rebased` when the change
+exceeds one actual video frame; unknown frame duration defers that diagnostic.
+Replaced callbacks are ignored, while simultaneous live bases, invalid clocks,
+HLS discontinuity and period/timeline mismatch become terminal unavailable with
+`clock_unavailable`, not a Player error. Unsupported fMP4/video preconditions
+stay pending. `time-pos` stays raw; Dart consumption and schedule alignment wait
+for T4. T4 aligns on first ready only; post-seek A1 updates position only.
+See the [clock wire contract](native-player-protocol.md#session-hls-adjustment-fact).
+
 There is one authoritative Dart application; no Android Plex, schedule,
 persistence or navigation implementation exists beside it. Windows/macOS keep
 their existing libmpv adapters and transport contracts.
@@ -120,6 +154,97 @@ signing. The keystore is outside Git at
 and `LINEUP_ANDROID_KEY_ALIAS` can override those non-secret defaults.
 **Back up the keystore securely.** Losing it prevents in-place updates and forces
 an uninstall, deleting on-device lineups and sign-in.
+
+Gradle verifies downloaded Maven metadata and artifacts against the committed
+SHA-256 digests in `android/gradle/verification-metadata.xml`. After an Android
+dependency or Flutter SDK change, regenerate it on macOS using a clean Gradle
+user home, a disposable copy of the pinned Flutter SDK and Gradle's
+`--write-verification-metadata sha256` option. Resolve both ARM APK variants
+(debug and release), `:app:testDebugUnitTest` and the notice generator's Gradle
+report. Review the updated digests and use **Verify Android TV build** to
+identify any Linux-only artifacts. The root metadata also covers Flutter's
+included Gradle build. Robolectric fetches its Android runtime JARs at test time
+outside Gradle's verification. Those JARs do not ship.
+
+### Regenerate Gradle verification metadata on macOS
+
+Start from a clean checkout with the intended dependency pins. Set
+`FLUTTER_SDK` to the pinned SDK directory and `JAVA_HOME` to the JDK 17
+directory before running these commands from the repository root in Bash.
+The temporary Gradle home starts empty, and the Flutter copy keeps Gradle
+writes out of the original SDK. Generate the wrapper with
+`flutter build apk --config-only`, not `flutter create`, which replaces
+`pubspec.lock` and `.metadata` and adds a stock activity.
+
+```bash
+set -euo pipefail
+: "${FLUTTER_SDK:?Set FLUTTER_SDK to the pinned Flutter SDK directory}"
+: "${JAVA_HOME:?Set JAVA_HOME to the JDK 17 directory}"
+sdk="${ANDROID_SDK_ROOT:-${ANDROID_HOME:-$HOME/Library/Android/sdk}}"
+scratch="$(mktemp -d)"
+trap 'rm -rf "$scratch"' EXIT
+cp -R "$FLUTTER_SDK" "$scratch/flutter"
+export PATH="$scratch/flutter/bin:$JAVA_HOME/bin:$PATH"
+export GRADLE_USER_HOME="$scratch/gradle"
+export GRADLE_OPTS=-Dorg.gradle.project.android.builder.sdkDownload=false
+
+flutter pub get --enforce-lockfile
+flutter build apk --config-only --debug
+flutter --version
+dart tool/check_toolchain.dart
+
+apk_properties=(
+  -Ptarget-platform=android-arm,android-arm64
+  -Ptarget=lib/main.dart
+  -Pbase-application-name=android.app.Application
+  -Pdart-obfuscation=false
+  -Ptrack-widget-creation=true
+)
+(
+  cd android
+  LINEUP_ANDROID_SIGNING=debug-key ./gradlew --write-verification-metadata sha256 \
+    --no-daemon :app:assembleDebug :app:testDebugUnitTest \
+    "${apk_properties[@]}" -Ptree-shake-icons=false
+)
+
+# Use a disposable key for this metadata-generation APK.
+keytool -genkeypair -keystore "$scratch/throwaway.p12" -alias metadata-only \
+  -storepass metadata-only -keyalg RSA -keysize 2048 -dname 'CN=Metadata only' -validity 1
+(
+  cd android
+  unset LINEUP_ANDROID_SIGNING
+  LINEUP_ANDROID_KEYSTORE="$scratch/throwaway.p12" \
+    LINEUP_ANDROID_KEY_ALIAS=metadata-only LINEUP_ANDROID_KEY_PASSWORD=metadata-only \
+    ./gradlew --write-verification-metadata sha256 --no-daemon :app:assembleRelease \
+    "${apk_properties[@]}" -Ptree-shake-icons=true \
+    "-Pflutter.androidSdkRoot=$sdk" -Pflutter.installedNdkVersions=28.2.13676358 \
+    "-Pflutter.sdkManagerPath=$sdk/cmdline-tools/latest/bin/sdkmanager"
+)
+rm -f "$scratch/throwaway.p12" build/app/outputs/apk/release/app-release.apk \
+  build/app/outputs/flutter-apk/app-release.apk
+
+# Inject metadata generation into the notice generator's exact Gradle command.
+python3 - <<'PYTHON'
+import importlib.util
+from pathlib import Path
+from unittest.mock import patch
+
+spec = importlib.util.spec_from_file_location('notices', 'tool/android/generate-licenses.py')
+generator = importlib.util.module_from_spec(spec)
+spec.loader.exec_module(generator)
+run = generator.subprocess.run
+
+def record(command, **kwargs):
+    return run([command[0], '--write-verification-metadata', 'sha256', *command[1:]], **kwargs)
+
+with patch.object(generator.subprocess, 'run', record):
+    print(generator.run_gradle_report(Path('android').resolve(), 'releaseRuntimeClasspath'))
+PYTHON
+```
+
+Review the metadata diff. For a Linux-only artifact such as AAPT2, download the
+matching classifier from the same Maven repository and add its SHA-256 to the
+metadata.
 
 ## Release packaging and runtime notices
 
@@ -217,6 +342,16 @@ adb -s emulator-5554 exec-out screencap -p > /tmp/lineup-android.png
 
 Raw logcat and dumps are private evidence. Never commit credentials, tokens,
 server addresses, account names or media titles.
+
+## Synthetic session checks
+
+The alternate [fixture entrypoint](../tool/android/fixtures/README.md#synthetic-session-hls-contract)
+has a debug-only synthetic HLS case using the ordinary production transport and
+adapter. It accepts no private capability input. The completed E6 observer and
+live delivery tools are excluded from the merge candidate; historical results
+remain tied to the preserved `54caf2e1` source and frozen APKs. Removing those
+measurement tools does not establish new emulator, Fire TV, HDR or audio
+acceptance for the production candidate.
 
 ## Storage and backup
 

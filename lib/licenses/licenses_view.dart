@@ -213,7 +213,7 @@ class LicensesViewState extends State<LicensesView> {
                                               LineupInlineLink(
                                                 focusNode: page.back,
                                                 onPressed: back,
-                                                child: Text(
+                                                child: _readingActionLabel(
                                                   '‹ Back to $parent',
                                                 ),
                                               ),
@@ -271,6 +271,19 @@ class LicensesViewState extends State<LicensesView> {
       ),
     );
   }
+
+  // These TV labels share the document's ink, including its focused palette.
+  Widget _readingActionLabel(String label) => Builder(
+    builder: (context) {
+      final roles = LineupTheme.of(context);
+      return Text(
+        label,
+        style: roles.focusTreatment == LineupFocusTreatment.fill
+            ? TextStyle(color: roles.primaryText)
+            : null,
+      );
+    },
+  );
 
   Widget _readingSurface(_ReadingPage page, WidgetBuilder builder) =>
       AnimatedBuilder(
@@ -511,7 +524,7 @@ class LicensesViewState extends State<LicensesView> {
                         )
                       : null,
                   onPressed: () => _copy(page, snapshot.requireData.text!),
-                  child: const Text('Copy document'),
+                  child: _readingActionLabel('Copy document'),
                 ),
               ),
               if (page.copyFeedback != null)

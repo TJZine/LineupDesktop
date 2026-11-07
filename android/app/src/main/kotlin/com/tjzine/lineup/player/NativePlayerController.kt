@@ -1,7 +1,10 @@
 package com.tjzine.lineup.player
 
 /** Protocol/lifetime owner. Calls and completion callbacks use the application looper. */
-internal class NativePlayerController(private val host: PlayerHost) {
+internal class NativePlayerController(
+    private val host: PlayerHost,
+    private val mediaCapabilities: () -> Map<String, Any> = { MediaCapabilitiesProbe.empty },
+) {
     interface Reply {
         fun success(value: Any? = null)
 
@@ -37,6 +40,7 @@ internal class NativePlayerController(private val host: PlayerHost) {
     ) {
         var ready = false
         var terminal = false
+        var clockState: SessionHlsClock.State? = null
     }
 
     fun call(method: String, arguments: Any?, reply: Reply) {
@@ -79,6 +83,11 @@ internal class NativePlayerController(private val host: PlayerHost) {
                 else -> {
                     if (!initialized || disposing) throw ProtocolError("not_initialized")
                     when (method) {
+                        "mediaCapabilities" -> {
+                            if (arguments != null) throw ProtocolError("invalid_argument")
+                            reply.success(mediaCapabilities())
+                        }
+
                         "setSubtitlePresentation" -> {
                             host.subtitlePresentation(PlayerProtocol.subtitlePresentation(arguments))
                             reply.success()
@@ -272,6 +281,15 @@ internal class NativePlayerController(private val host: PlayerHost) {
                         revision,
                         accepted,
                     )
+            }
+
+            override fun sessionClock(state: SessionHlsClock.State) {
+                if (!live(session)) return
+                val transition = session.clockState != state
+                session.clockState = state
+                queue(mapOf("type" to "property", "name" to "session-clock",
+                    "value" to SessionHlsClock.wire(state), "loadId" to session.loadId),
+                    session.epoch, transition)
             }
 
             override fun ready(paused: Boolean) {
@@ -473,8 +491,8 @@ internal class NativePlayerController(private val host: PlayerHost) {
         retire {}
     }
 
-    private fun queue(value: Map<String, Any?>, mediaEpoch: Long? = null) {
-        events.add(QueuedEvent(generation, mediaEpoch, value))
+    private fun queue(value: Map<String, Any?>, mediaEpoch: Long? = null, protectedTransition: Boolean = false) {
+        events.add(QueuedEvent(generation, mediaEpoch, value, protectedTransition))
         if (!eventPosted) {
             eventPosted = true
             host.post {
@@ -499,6 +517,7 @@ internal class NativePlayerController(private val host: PlayerHost) {
                 "initialize",
                 "dispose",
                 "load",
+                "mediaCapabilities",
                 "play",
                 "pause",
                 "seek",

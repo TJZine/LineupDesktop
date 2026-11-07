@@ -1293,25 +1293,42 @@ void main() {
   });
 
   test('tuning resolves now after the Guide browses another window', () async {
-    final lineup = _TestLineup(_channels(1));
+    final lineup = _TestLineup(_channels(65));
+    final oldest = lineup.channels.first;
+    final pending = lineup.channels.last;
+    final pendingSchedule = Completer<ScheduleIndex>();
+    final loads = <String, int>{};
     final now = DateTime(2026, 8, 13, 12);
     final guide = GuideController(
       lineup: lineup,
-      loadSchedule: (channel) async => _schedule(channel),
+      loadSchedule: (channel) async {
+        loads.update(channel.id, (count) => count + 1, ifAbsent: () => 1);
+        return channel == pending ? pendingSchedule.future : _schedule(channel);
+      },
       clock: () => now,
     );
-    guide.requestViewport(0, 1);
+    addTearDown(guide.dispose);
+    addTearDown(lineup.dispose);
+    guide.requestChannels(lineup.channels.take(64));
     await _settle();
-    for (var index = 0; index < 12; index++) {
-      guide.moveHorizontal(1);
-    }
+    expect(guide.cachedRowCount, 64);
+    expect(guide.activeLoadCount, 0);
+    guide.moveWindow(12);
+    expect(guide.nowOffScreen, isTrue);
 
-    final current = await guide.ensureCurrentProgram(lineup.channels.single.id);
+    guide.requestChannels([pending]);
+    expect(guide.activeLoadCount, 1);
+    expect(guide.row(oldest.id).state, GuideLoadState.loading);
+    guide.requestChannels([oldest]);
+    expect(guide.row(oldest.id).state, GuideLoadState.ready);
+    expect(loads[oldest.id], 1);
 
+    pendingSchedule.complete(_schedule(pending));
+    await _settle();
+    final current = await guide.ensureCurrentProgram(oldest.id);
     expect(current, isNotNull);
     expect(current!.isCurrentAt(now), isTrue);
-    guide.dispose();
-    lineup.dispose();
+    expect(loads[oldest.id], 1, reason: 'reprojection promotes the schedule');
   });
 
   test('tuning after disposal returns null without loading', () async {

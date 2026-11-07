@@ -35,6 +35,7 @@ std::shared_ptr<ControlledWorker> worker;
 
 lineup::player::MpvOperations ControlledOperations() {
   lineup::player::MpvOperations operations;
+  operations.stream_cb_add_ro = [](mpv_handle*, const char*, void*, mpv_stream_cb_open_ro_fn) { return 0; };
   operations.create = [] { return reinterpret_cast<mpv_handle*>(worker.get()); };
   operations.initialize = [](mpv_handle*) { return 0; };
   operations.set_option = [](mpv_handle*, const char*, mpv_format, void*) { return 0; };

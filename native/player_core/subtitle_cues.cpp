@@ -1,6 +1,7 @@
 #include "player_core/subtitle_cues.h"
 
 #include <algorithm>
+#include <charconv>
 #include <cstdint>
 #include <string>
 
@@ -58,6 +59,17 @@ bool IsSign(std::string_view event) {
         (name == "p" && PositiveDrawingMode(event.substr(end)))) return true;
   }
   return false;
+}
+
+bool BoldEnabled(std::string_view argument) {
+  if (!argument.empty() && argument.front() == '+') argument.remove_prefix(1);
+  if (argument.empty() || argument.front() < '0' || argument.front() > '9') {
+    return false;
+  }
+  int weight = 0;
+  const auto parsed = std::from_chars(argument.data(), argument.data() + argument.size(), weight);
+  return parsed.ec == std::errc{} && parsed.ptr == argument.data() + argument.size() &&
+         (weight == 1 || (weight >= 700 && weight <= 900));
 }
 
 // Returns a valid UTF-8 scalar width; invalid bytes are discarded. Never emit
@@ -121,11 +133,12 @@ Value ParseEvent(std::string_view event, size_t& bytes) {
         const auto tag = block.substr(j + 1, end == std::string_view::npos ? end : end - j - 1);
         if (tag.size() == 3 && tag.substr(0, 2) == "an" && tag[2] >= '1' && tag[2] <= '9') {
           align = tag[2] - '0';
-        } else if (!tag.empty() && (tag[0] == 'i' || tag[0] == 'b' || tag[0] == 'u') &&
+        } else if (tag == "b" || (tag.size() > 1 && tag[0] == 'b' && !TagLetter(tag[1]))) {
+          style.bold = BoldEnabled(tag.substr(1));
+        } else if (!tag.empty() && (tag[0] == 'i' || tag[0] == 'u') &&
                    (tag.size() == 1 || (tag.size() == 2 && (tag[1] == '0' || tag[1] == '1')))) {
           const bool enabled = tag.size() == 2 && tag[1] == '1';
           if (tag[0] == 'i') style.italic = enabled;
-          if (tag[0] == 'b') style.bold = enabled;
           if (tag[0] == 'u') style.underline = enabled;
         } else if (tag == "r") {
           style = {};

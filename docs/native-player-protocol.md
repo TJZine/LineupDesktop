@@ -55,6 +55,96 @@ load-ID rule. Native command admission also has a capacity of 64 queued
 commands and a combined URI/header budget of 128 KiB; rejection uses
 `command_queue_full`.
 
+### Plex session loads and media capabilities
+
+`load` additionally accepts `kind: "direct" | "plexSession"`; omission means
+`direct`. Unknown values are `invalid_argument`. Direct loads retain the
+existing command, reference restrictions and authenticated header behavior.
+A `plexSession` load forbids a non-null `plexToken` and requires HTTPS with a
+nonempty authority, no userinfo and no `X-Plex-Token` query key (case
+insensitive, including percent-encoded keys). Both Dart and native reject an
+unsafe session with `invalid_argument` before loading it. A session also
+rejects any non-null Dart `startPosition` or present wire `startSeconds`,
+including zero or explicit null: its live offset belongs to the server session,
+so a player start would apply it twice.
+
+Desktop session loads additionally require the private `sessionPlaylist` payload:
+`{text: <whole validated UTF-8 variant>, offsetMicroseconds: <non-negative int64>}`.
+The text is limited to 1 MiB. The shared core independently validates the entire
+original variant, including references before the chosen containing segment,
+before deriving a trimmed finite view. Direct loads reject this payload. The
+optional Dart `NativeSessionPlaylist` transfer does not parse HLS or change the
+public HTTPS descriptor; Android URI-only session loads remain valid. Session
+wire `startPosition` is also rejected by presence, including null.
+
+The desktop core accepts only the bounded reference/lexical/tag scope: one finite
+media playlist, sequence zero, one MAP, no encryption/master/rendition/range or
+unknown URI-bearing tags. Relative flat references resolve against the verified
+HTTPS session namespace; originally absolute references retain their resource
+identity. The trimmed view begins at the EXTINF-containing segment, renders
+absolute MAP/media targets, keeps EXTINF and media bytes unchanged, removes
+EXT-X-START and retains ENDLIST. No native or desktop alignment seek is added.
+
+One registered `lineup-session` stream callback serves a random 128-bit per-load
+opaque URI ending in `.m3u8`. It never exposes the manifest as a filename.
+libmpv has no unregister operation: stop/replacement or a terminal failure
+revokes the capability and wipes its payload immediately, open cookies become
+inert, and registration state remains valid until client destruction returns. Callbacks never call
+libmpv. Registration cleanup occurs at destruction, not through a nonexistent
+per-load unregister API.
+
+For a failed session load, correlation-capacity rejection, terminal command
+failure, or mpv event-queue overflow, the worker revokes the reader,
+clears the session clock and issues a native stop before publishing the error.
+Overflow fails the accepted active load even when its START_FILE has not yet
+been observed. Classified raw-log errors remain observational until a terminal
+failure occurs.
+
+The session node-map has these per-file options, with no token, start or hr-seek:
+
+```text
+access-references=yes
+curl-max-redirects=0
+demuxer=lavf
+demuxer-lavf-o=format_whitelist=%7%hls,mov,protocol_whitelist=%13%https,tls,tcp
+```
+
+The dictionary uses mpv's byte-count quoting for embedded commas. The lavf
+selector prevents failed HLS opens falling back to mpv's generic playlist parser;
+HLS probing itself still uses the private `.m3u8` name. No global format forcing
+is used. Unlike an HTTPS stream, a callback stream has UNSAFE origin in pinned
+libmpv. Containment therefore comes from whole-original closed-grammar validation,
+absolute same-origin HTTPS targets, zero redirects, per-file protocol/format
+lists and the HLS child-context I/O blocker; it does not inherit NET-origin
+sandboxing. Unexpected private playlist redirects fail closed. Direct-load
+global reference defaults remain unchanged.
+
+The core emits fresh finite or null `demuxer-start-time` seconds through the
+ordinary load-correlated property path, clearing it for a new load and rereading
+it at correlated FILE_LOADED rather than relabeling an old notification payload.
+Dart retains nullable signed finite `PlayerTelemetry.demuxerStartTime`; zero is
+valid, unavailable/invalid values clear it, and existing load/lifetime resets
+apply. `P + D - 10 s` mapping and schedule policy wait for T4. Manifest text and
+child references are never forwarded through logs, properties, errors or
+Diagnostics; internal libmpv errors are classified into fixed failures.
+Bounded typed subtitle cues are authored media content, so their URL-like text
+and literals remain renderable. Only the native cue publisher marks that value
+as content; generic properties/platform events retain private-text redaction.
+
+Android additionally implements `mediaCapabilities` with no arguments:
+`{videoDecoders: [...], audioDecoders: [...], audioPassthrough: [...], containers: [...]}`.
+There are at most 64 video decoder records, 64 decoded audio codecs, 16 audio
+passthrough codecs and 32 containers. Video records have a required Plex
+`codec` name and optional `profiles`, `maxLevel`, positive `maxWidth`,
+`maxHeight`, `maxBitrateKbps`, `hdr` and `dolbyVisionProfiles` facts. Codec
+names use Plex spelling. Each name is 1–64 characters of letters, digits, space,
+`_`, `.`, `:` or `-`; H.264 profiles include `high 4:2:2` and
+`high 4:4:4 predictive`. Android queries these at call time on the application
+looper and truncates lists deterministically. Dart caches the parsed result
+for one second; malformed, oversized or failed replies become
+`MediaCapabilities.unknown`, requiring a server decision. Desktop Dart uses
+`MediaCapabilities.desktop` and never sends this native query.
+
 ### Command error mapping in Dart
 
 For a `PlatformException`, the transport preserves these native command codes:
@@ -245,6 +335,14 @@ state arrives. A matching error, timeout, explicit stop, or replacement settles
 the pending load and retires its active ID. The caller's product generation is
 kept in Dart and projected onto `PlayerEvent`; it is not sent as a native
 argument.
+
+Native playlist mappings remain bounded. On START_FILE, a lower-ID replace
+entry that never started is reclaimed; already-started entries remain mapped
+for queued predecessor events. Redirect siblings are exempt from that barrier
+because allocation order need not match playback order. Stop completion
+reclaims all never-started mappings and pending fallback identities only after
+the mpv event queue has drained and idle with an empty playlist is confirmed.
+Command acceptance alone never reclaims a predecessor's event identity.
 
 ### Seeks
 
@@ -451,8 +549,11 @@ Media3 callbacks run on the application looper. A fresh engine/listener captures
 one load and lifecycle generation; replacement retires it before teardown.
 Dispose retires its generation and queued credentials before asynchronously
 releasing the engine and replying. Decoder/view operations stay on the application
-looper; cancellation and TLS pool closure run on an IO worker. Stop/dispose and
-successor loads wait for that cleanup, which is coalesced across concurrent
+looper. On retirement, new calls are cancelled and the cleanup worker cancels
+the load's queued and live calls, including delivered response bodies. The worker
+waits up to one second for those calls to terminate and separately fences the
+playback thread. Idle TLS connections remain in the shared pool. Stop/dispose
+and successor loads wait for cleanup, which is coalesced across concurrent
 retirement requests. A failed release retains cleanup responsibility for retry.
 Events use the 256-entry property-first
 queue above, with one slot reserved for the latest `subtitle-cues` (including a
@@ -472,6 +573,64 @@ Media3's pre-parsed cues to `subrip`/`ass`. There is no wire `default` flag.
 Channel layouts, pixel formats, output color and signal peak stay null when
 unavailable. Source BT.2020/PQ/HLG facts describe source metadata, not display
 appearance; `hwdec-current` is the observed decoder name and `current-vo` is null.
+
+### Session HLS adjustment fact
+
+Android `plexSession` engines additionally publish the optional `session-clock`
+property, correlated by the ordinary adapter-generation fence and outer `loadId`:
+
+```text
+{state: "pending"}
+{state: "ready", adjustmentUs: <signed integral microseconds>}
+{state: "unavailable", reason: <fixed reason>, diagnosticCode: "clock_unavailable"}
+```
+
+One clock belongs to one engine/load. A normal seek that resets Media3's
+adjuster returns `ready(A0)` to `pending`; initialized real video metadata from
+the newly loaded segment establishes `ready(A1)`. A buffered seek that retains
+its existing adjuster keeps its qualified basis. Same-object adjustment resets
+also require fresh initialized video metadata. An initialized zero is valid;
+`TIME_UNSET` is not zero. There is no wire revision or paired position field.
+`adjustmentUs` is the actual `TimestampAdjuster.timestampOffsetUs`, not raw PTS.
+Stock extraction remains authoritative: sample bytes, formats, flags, timestamps
+and extractor reuse/recreation are unchanged. Init data, empty pre-start media
+and audio samples cannot qualify readiness.
+
+A ready value may additionally contain `diagnosticCode: "clock_rebased"` when
+A1 differs from the prior qualified A by more than one video frame. A1 remains
+usable. The threshold uses actual video `Format.frameRate` when available;
+otherwise it uses the minimum positive spacing observed between accepted video
+sample PTS values of the replacement basis. With no frame-duration evidence,
+classification is deferred; no default FPS or playlist duration is substituted.
+The diagnostic remains present for the load once established.
+
+The supported precondition is full fMP4/MAP VOD at media sequence 0, one
+window/period at origin 0, with no alternate renditions/variants. Media3's public
+sniffer establishes the actual container, and its parsed manifest/timeline
+establishes scope. Unsupported container, missing MAP/video, non-VOD or alternate
+renditions stay pending without a guessed adjustment. HLS discontinuity,
+period/timeline mismatch (including gaps or partial/interstitial timing), invalid
+timestamps or simultaneous ambiguous adjusters are terminal unavailable.
+Fixed reasons are `discontinuity`, `period_mismatch`, `invalid_timestamp` and
+`ambiguous_adjuster`. Reasons carry no URI, exception or media identifier.
+
+The engine arms one serial replacement before `Player.seekTo`. A new binding
+without that permission, or while the prior binding is actively extracting,
+is ambiguous. Replaced extractor callbacks are ignored by their retired internal
+binding token. Load generation and retirement fences are unchanged. A replacement
+holds a pending publication barrier before fresh readiness. State transitions
+are protected from ordinary property eviction in the bounded native event queue;
+periodic repeats remain droppable. Exhausting critical queue capacity preserves
+the existing fail-closed overflow behavior.
+
+Clock unavailability is a diagnostic, **not a Player error**; native performs no
+seek, retry or fallback. `time-pos` remains raw Media3 position. T4 consumption
+and alignment policy are not implemented here: the alignment decision uses the
+first ready only, the alignment seek is the only in-session seek, and user seeks
+restart sessions. Post-seek ready(A1) updates position mapping only and must not
+trigger a second alignment seek.
+
+### Android engine failure mapping
 
 | Media3 observation | Native failure code |
 | --- | --- |
@@ -497,8 +656,16 @@ nonfragmented sample seeks retain facts without treating sample bytes as boxes.
 Genuine audio-only/video-only and supported alternative tracks remain
 valid. Subtitles alone never cause an audio/video unsupported-type failure.
 
-Only `ProgressiveMediaSource` and an HTTP-only OkHttp data source are installed;
-there is no manifest, file, nested-reference or external-subtitle resolver.
+For `plexSession`, Media3 selects `HlsMediaSource` over a per-load OkHttp
+client with `OriginPin` before `OriginPolicy` and no default request headers.
+Every playlist, init and media request must retain the load's HTTPS scheme,
+host and port and contain neither userinfo nor a token query. Pin rejection
+maps to `network_error`; manifest parsing maps to `container_error`; child
+HTTP failures retain `http_error` and their bounded status. The following
+original-load restrictions apply to `direct` loads.
+
+Direct loads use `ProgressiveMediaSource` and an HTTP-only OkHttp data source,
+with no manifest, file, nested-reference or external-subtitle resolver.
 OkHttp automatic redirects are disabled. Each manual redirect must retain the
 original HTTPS scheme, normalized host and effective port, with a bounded hop
 count and no userinfo or token query parameter. Credentials are header-only;
@@ -507,9 +674,16 @@ command error includes a URI, token or raw engine exception. The synthetic
 fixture CA is trusted only by debug builds; profile/release have no fixture CA
 or network-security override.
 
-Initial positions use the approved exact Media3 preparation position, avoiding
-a later backward re-seek. Explicit `exact` and `keyframes` map to
-`SeekParameters.EXACT` and `PREVIOUS_SYNC`. This backend choice does not alter
+Initial positions allow a sync point up to 5 seconds before the scheduled target,
+never after it; if none fits, preparation keeps the exact target. The progressive
+source applies this tolerance only at its first track selection, since Media3
+1.11 does not apply player seek parameters to initial preparation. Preparation
+itself chooses the join position, avoiding a later backward re-seek. Session
+loads reject `startSeconds`, including zero, and prepare without an explicit
+position so the HLS start applies. The direct join tolerance does not apply.
+Explicit
+`exact` and `keyframes` seeks still map to `SeekParameters.EXACT` and
+`PREVIOUS_SYNC`. This backend choice does not alter
 the coordinator's join/user-seek policy or desktop behavior.
 
 Presentation uses a default-z-order native video `SurfaceView`, native
@@ -634,6 +808,9 @@ caption channel. Canceled/disposed reads and callbacks cannot publish or send.
   rest to bottom, and negative rows (counted from the bottom) to bottom. On
   desktop, ffmpeg's WebVTT decoder drops cue settings, so WebVTT positions apply
   on Android only. Italic, bold and underline are kept.
+- For ASS/SSA cue conversion on desktop and Android, `\b1` enables bold and `\b0`
+  clears it. Numeric weights from 100 through 900 enable bold at 700 and above
+  and clear it below 700. Other bold arguments reset it like bare `\b`.
 - Cue text is media content: never logged, exported or retained after clearing.
 
 **Separate channel `lineup/device_captions` (Android only).** Not part of
@@ -720,6 +897,10 @@ p0 dialogue and i/b/u/an remain. A failed decorator track falls back to stock
 native drawing even when `lineupDrawsStyled` is true; existing decoded cues also
 fall back without reload or a playback-error event. Native drawing receives
 stock-equivalent cues with private metadata removed.
+SSA samples with excessive override-scan work or more than 128 KiB produce no
+cues. Benign decoration failures still use stock parsing within the same bound.
+Media3 library logging is disabled before player creation in non-debuggable
+builds because stock parser warnings can contain raw subtitle text.
 
 Pinned Media3 1.11.1 can lose overlapping SSA events after a paused same-load
 seek when several events share a start timestamp. A stock parser control

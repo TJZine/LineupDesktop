@@ -261,7 +261,7 @@ void DisplayMatchingEngine::Start() {
   Reconcile();
 }
 void DisplayMatchingEngine::Suspend(Record& record) {
-  if (record.guardian) record.guardian->Disarm();
+  if (record.guardian) record.guardian->StandDown();
   record.Relinquish();
   session_ = "suspended";
   session_reason_ = "external_change";
@@ -426,7 +426,7 @@ void DisplayMatchingEngine::Release(Record& record) {
       return;
     case RestorationDecision::external_change:
       // Preserve L3: disarm is best effort and release sends no report.
-      if (record.guardian) record.guardian->Disarm();
+      if (record.guardian) record.guardian->StandDown();
       record.Relinquish();
       return;
     case RestorationDecision::already_original:

@@ -542,6 +542,81 @@ class NativePlayerControllerTest {
             assertEquals(method, "invalid_argument", call(method, args).error)
         }
     }
+    @Test
+    fun sessionKindValidationAndDefaultDirectAreIndependentOfCredentials() {
+        initialize()
+        load()
+        host.drain()
+        assertEquals(LoadKind.direct, host.engines.last().media!!.kind)
+        load(2, mapOf("kind" to "plexSession"))
+        host.drain()
+        assertEquals(LoadKind.plexSession, host.engines.last().media!!.kind)
+        assertNull(host.engines.last().media!!.token)
+        for (extra in listOf(
+            mapOf("kind" to "unknown"), mapOf("kind" to null), mapOf("kind" to 1),
+            mapOf("kind" to "plexSession", "plexToken" to "synthetic"),
+            mapOf("kind" to "plexSession", "startSeconds" to 0),
+            mapOf("kind" to "plexSession", "startSeconds" to 600.0),
+            mapOf("kind" to "plexSession", "startSeconds" to null),
+            mapOf("kind" to "plexSession", "uri" to "http://media.invalid/a"),
+            mapOf("kind" to "plexSession", "uri" to "https:a"),
+            mapOf("kind" to "plexSession", "uri" to "https://u:p@media.invalid/a"),
+            mapOf("kind" to "plexSession", "uri" to "https://media.invalid/a?%58-pLeX-tOkEn=x"),
+        )) assertEquals("invalid_argument", load(3, extra).error)
+        assertEquals(2, host.engines.size)
+    }
+
+    @Test
+    fun mediaCapabilitiesReturnsCurrentFactsWithoutQueuingPlayerWork() {
+        var calls = 0
+        val current = mapOf<String, Any>(
+            "videoDecoders" to listOf(mapOf("codec" to "h264")),
+            "audioDecoders" to listOf("aac"), "audioPassthrough" to listOf("ac3"),
+            "containers" to listOf("mp4"),
+        )
+        val c = NativePlayerController(host) { calls++; current }
+        fun invoke(method: String, args: Any? = null) = Result().also { c.call(method, args, it) }
+        assertEquals("not_initialized", invoke("mediaCapabilities").error)
+        invoke("initialize")
+        host.drain()
+        assertEquals(current, invoke("mediaCapabilities").value)
+        assertEquals(current, invoke("mediaCapabilities").value)
+        assertEquals(2, calls)
+        assertTrue(host.tasks.isEmpty())
+        assertEquals("invalid_argument", invoke("mediaCapabilities", emptyMap<String, Any>()).error)
+    }
+
+    @Test
+    fun sessionClockIsLoadCorrelatedNonFatalAndCannotLeakFromRetiredEngines() {
+        initialize()
+        load(extra = mapOf("kind" to "plexSession"))
+        host.drain()
+        val first = host.engines.single()
+        first.listener.ready(false)
+        first.listener.sessionClock(SessionHlsClock.State.Pending)
+        first.listener.sessionClock(SessionHlsClock.State.Ready(-10_000_000))
+        repeat(300) { first.listener.property("duration", it.toDouble()) }
+        first.listener.sessionClock(SessionHlsClock.State.Pending)
+        first.listener.sessionClock(SessionHlsClock.State.Ready(-11_000_000, true))
+        first.listener.property("time-pos", 17.0)
+        first.listener.sessionClock(SessionHlsClock.State.Unavailable(SessionHlsClock.Reason.DISCONTINUITY))
+        host.drain()
+        val properties = host.events.filter { it["name"] == "session-clock" }
+        assertEquals(listOf("pending", "ready", "pending", "ready", "unavailable"), properties.map { (it["value"] as Map<*,*>)["state"] })
+        assertEquals("clock_rebased", (properties[3]["value"] as Map<*,*>)["diagnosticCode"])
+        assertEquals("clock_unavailable", (properties.last()["value"] as Map<*,*>)["diagnosticCode"])
+        assertTrue(properties.all { it["loadId"] == 1L })
+        assertEquals(17.0, host.events.last { it["name"] == "time-pos" }["value"])
+        assertFalse(host.events.any { it["state"] == "error" })
+        val before = properties.size
+        load(2, mapOf("kind" to "plexSession")); host.drain()
+        first.listener.sessionClock(SessionHlsClock.State.Ready(0))
+        host.drain()
+        assertEquals(before, host.events.count { it["name"] == "session-clock" })
+        host.engines.last().listener.sessionClock(SessionHlsClock.State.Ready(0)); host.drain()
+        assertEquals(2L, host.events.last { it["name"] == "session-clock" }["loadId"])
+    }
+
     @Test fun presentationBypassesFullQueueAppliesBeforeEngineAndResetsOnDispose() {
         val host = Host()
         val controller = NativePlayerController(host)

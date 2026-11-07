@@ -36,6 +36,14 @@ int main() {
   Check(Segment(cues[0], 1, 1).at("bold") == Value(true), "bold flag");
   Check(Segment(cues[0], 1, 2).at("underline") == Value(true), "underline flag");
   Check(Segment(cues[0], 1, 3).size() == 1, "style toggles off");
+  cues = ParseSubtitleCues(R"({\b700}bold)", false);
+  Check(Text(cues) == "bold" && Segment(cues[0]).at("bold") == Value(true),
+        "weight 700 enables bold");
+  cues = ParseSubtitleCues(R"({\b1}a{\b400}b)", false);
+  Check(Text(cues) == "ab" && List(Lines(cues[0])[0]).size() == 2 &&
+        Segment(cues[0]).at("bold") == Value(true) &&
+        Segment(cues[0], 0, 1).count("bold") == 0,
+        "weight 400 clears prior bold");
   for (int n = 1; n <= 9; ++n) {
     cues = ParseSubtitleCues("{\\an" + std::to_string(n) + "}fixture", false);
     Check(Map(cues[0]).at("align") == Value(n), "all keypad alignments");

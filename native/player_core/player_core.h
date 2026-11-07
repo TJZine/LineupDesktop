@@ -23,6 +23,7 @@
 #include "player_core/mpv_operations.h"
 #include "player_core/native_playback_state.h"
 #include "player_core/value.h"
+#include "player_core/session_playlist.h"
 #include "player_core/subtitle_cues.h"
 
 namespace lineup::player {
@@ -173,6 +174,8 @@ class PlayerCore {
     int64_t load_id;
     std::string uri;
     PlexHeader plex_header;
+    std::shared_ptr<SessionPlaylist> session_playlist;
+    bool plex_session = false;
     bool start_paused = false;
     std::optional<double> start_seconds = std::nullopt;
   };
@@ -215,7 +218,6 @@ class PlayerCore {
                                      VolumeCommand>;
 
   friend struct PlayerCoreTestAccess;
-  friend struct SubtitleCoreTestAccess;
 
   CallResult HandleLoad(ValueMap* arguments);
   std::optional<TrackCommand> ParseTrack(const ValueMap& arguments);
@@ -235,7 +237,13 @@ class PlayerCore {
   void HandleMpvEvent(const mpv_event& event, uint64_t generation);
   void ObserveSeekLanding(mpv_event_id event);
   void ResetSeekObservation();
-  void QueueEvent(uint64_t generation, ValueMap value);
+  void PublishSessionClock(uint64_t generation, bool sample);
+  void ClearSessionClock(uint64_t generation);
+  void RetireFailedSession(std::optional<int64_t> load_id, uint64_t generation);
+  // Only the bounded subtitle publisher marks authored media content. Generic
+  // properties and platform events always retain private-text redaction.
+  void QueueEvent(uint64_t generation, ValueMap value,
+                  bool subtitle_content = false);
   void QueueStopResult(uint64_t generation, int64_t stop_id, bool success);
   void QueueTrackResult(uint64_t generation, int64_t load_id,
                         int64_t request_id, bool success);
@@ -261,6 +269,10 @@ class PlayerCore {
   std::optional<int64_t> subtitle_retired_load_;
   std::map<std::string, double> subtitle_property_values_;
   size_t queued_command_bytes_ = 0;
+  size_t queued_playlist_bytes_ = 0;
+  SessionPlaylistRegistry session_playlists_;
+  std::optional<int64_t> session_clock_load_;
+  bool session_clock_ready_ = false;
   std::mutex event_mutex_;
   std::deque<QueuedEvent> events_;
   NativePlaybackState playback_;
