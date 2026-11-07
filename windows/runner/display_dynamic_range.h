@@ -128,7 +128,7 @@ class DisplayMatchingEngine {
     void MarkGuardianLost() {
       guardian_lost = true;
       if (!owned && guardian) {
-        guardian->Disarm();
+        guardian->StandDown();
         guardian.reset();
       }
     }
