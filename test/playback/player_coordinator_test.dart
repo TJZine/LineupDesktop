@@ -655,6 +655,80 @@ void main() {
       await f.close(tester);
     });
 
+    for (final scenario in [
+      (
+        label: 'uses playback progress',
+        observed: 120,
+        step: -10,
+        target: '110',
+      ),
+      (label: 'uses the mapped lead', observed: 45, step: 10, target: '55'),
+      (
+        label: 'uses the unsampled join',
+        observed: null,
+        step: 10,
+        target: '70',
+      ),
+    ]) {
+      testWidgets('separated relative session seek ${scenario.label}', (
+        tester,
+      ) async {
+        final f = _SessionFixture(android: false);
+        await f.setUp();
+        f.expectSession();
+        f.expectSession();
+        f.expectSession();
+        expect(await f.tune(tester), isTrue);
+
+        final firstSeek = f.coordinator.seekTo(const Duration(seconds: 60));
+        await tester.pump(const Duration(milliseconds: 400));
+        await firstSeek;
+        expect(f.starts.last['offset'], '60');
+
+        if (scenario.observed case final seconds?) {
+          f.player.observe(
+            Duration(seconds: 10),
+            demuxerStartTime: seconds.toDouble(),
+          );
+          await tester.pump();
+          expect(f.coordinator.position, Duration(seconds: seconds));
+        }
+
+        final relative = f.coordinator.seekBy(Duration(seconds: scenario.step));
+        await tester.pump(const Duration(milliseconds: 400));
+        await relative;
+        expect(f.starts.last['offset'], scenario.target);
+        await f.close(tester);
+      });
+    }
+
+    testWidgets('session seek burst survives an older replacement settling', (
+      tester,
+    ) async {
+      final f = _SessionFixture(android: false);
+      await f.setUp();
+      f.expectSession();
+      f.expectSession();
+      f.expectSession();
+      expect(await f.tune(tester), isTrue);
+
+      final hold = f.holdStart = Completer<void>();
+      final first = f.coordinator.seekTo(const Duration(seconds: 60));
+      await tester.pump(const Duration(milliseconds: 400));
+      expect(f.starts.last['offset'], '60');
+
+      final second = f.coordinator.seekBy(const Duration(seconds: 10));
+      hold.complete();
+      await tester.pump();
+      await first;
+      await tester.pump(const Duration(milliseconds: 200));
+      final third = f.coordinator.seekBy(const Duration(seconds: 10));
+      await tester.pump(const Duration(milliseconds: 400));
+      await Future.wait([second, third]);
+      expect(f.starts.map((start) => start['offset']), ['1800', '60', '80']);
+      await f.close(tester);
+    });
+
     testWidgets(
       'session seek burst uses intended target and aligns only the latest restart',
       (tester) async {

@@ -265,9 +265,7 @@ class PlayerCoordinator extends ChangeNotifier with WidgetsBindingObserver {
   int _trackSelectionGeneration = 0;
   int _seekGeneration = 0;
   int? _pendingExplicitSeekGeneration;
-  Timer? _sessionSeekTimer;
-  Completer<void>? _sessionSeekCompletion;
-  Duration? _sessionSeekIntent;
+  _SessionSeek? _sessionSeek;
   final Map<String, DateTime> _reactiveFallbackOccurrences = {};
   int _fullscreenEpoch = 0;
   int _nativeLoadGeneration = 0;
@@ -1073,7 +1071,6 @@ class PlayerCoordinator extends ChangeNotifier with WidgetsBindingObserver {
 
   int _nextTuneGeneration({bool announceChannel = false}) {
     _cancelSessionSeek();
-    _sessionSeekIntent = null;
     _channelTagTimer?.cancel();
     _channelTagTimer = null;
     final generation = ++_tuneGeneration;
@@ -2265,22 +2262,24 @@ class PlayerCoordinator extends ChangeNotifier with WidgetsBindingObserver {
   }
 
   Future<void> seekBy(Duration offset) {
-    final intent = _sessionSeekIntent;
+    final seek = _sessionSeek;
     final load = _activeLoad;
-    final playback = load?.request;
-    final position = load?.sessionClock?.basis == 'raw' && playback != null
-        ? load!.resumePosition +
-              (_usesAggregateCoordinates(playback)
-                  ? _partOffset(load.partIndex)!
-                  : Duration.zero)
-        : _position;
-    final base = intent == null
-        ? position
-        : _sessionSeekTimer != null || _activeLoad?.pending == true
-        ? intent
-        : (offset.isNegative ? intent < position : intent > position)
-        ? intent
-        : position;
+    var base = _position;
+    if (load != null && _ownsLoad(load)) {
+      final clock = load.sessionClock;
+      if (seek != null && identical(seek.load, load)) {
+        base = seek.position;
+      } else if (clock != null &&
+          (load.observedPosition == null || clock.basis == 'raw')) {
+        // A replacement can settle before it publishes a source position.
+        // Keep this load's last usable position or join target until then.
+        base = load.observedPosition ?? clock.requested;
+        final playback = load.request;
+        if (playback != null && _usesAggregateCoordinates(playback)) {
+          base += _partOffset(load.partIndex)!;
+        }
+      }
+    }
     final requested = base + offset;
     final target = requested < Duration.zero
         ? Duration.zero
@@ -2376,11 +2375,9 @@ class PlayerCoordinator extends ChangeNotifier with WidgetsBindingObserver {
     _PlaybackLoad current,
   ) {
     _cancelSessionSeek();
-    _sessionSeekIntent = programPosition;
-    final completion = _sessionSeekCompletion = Completer<void>();
-    _sessionSeekTimer = Timer(const Duration(milliseconds: 400), () async {
-      _sessionSeekTimer = null;
-      _sessionSeekCompletion = null;
+    final seek = _sessionSeek = _SessionSeek(programPosition, current);
+    seek.debounce = Timer(const Duration(milliseconds: 400), () async {
+      seek.debounce = null;
       try {
         if (!_ownsLoad(current)) return;
         final operation = _loadPartAtPosition(
@@ -2391,26 +2388,37 @@ class PlayerCoordinator extends ChangeNotifier with WidgetsBindingObserver {
               ? PlexPartMode.automatic
               : PlexPartMode.restartSession,
         );
+        final replacement = _activeLoad;
+        if (identical(_sessionSeek, seek) &&
+            replacement != null &&
+            identical(replacement.operation, operation)) {
+          seek.load = replacement;
+        }
         final tune = _preparingTuneLoad;
         if (tune?.generation == current.tuneGeneration) tune!.adopt(operation);
         if (await operation != null &&
+            identical(_sessionSeek, seek) &&
             current.tuneGeneration == _tuneGeneration) {
+          _sessionSeek = null;
           showOsd();
         }
       } catch (error, stack) {
-        completion.completeError(error, stack);
+        seek.completion.completeError(error, stack);
       } finally {
-        if (!completion.isCompleted) completion.complete();
+        if (identical(_sessionSeek, seek)) _sessionSeek = null;
+        if (!seek.completion.isCompleted) seek.completion.complete();
       }
     });
-    return completion.future;
+    return seek.completion.future;
   }
 
   void _cancelSessionSeek() {
-    _sessionSeekTimer?.cancel();
-    _sessionSeekTimer = null;
-    _sessionSeekCompletion?.complete();
-    _sessionSeekCompletion = null;
+    final seek = _sessionSeek;
+    _sessionSeek = null;
+    if (seek?.debounce case final timer?) {
+      timer.cancel();
+      seek!.completion.complete();
+    }
   }
 
   Future<void> selectTrack(PlayerTrackType type, int? id) async {
@@ -3402,6 +3410,15 @@ class _PlaybackLoad {
   late final Future<void> readiness;
   Future<LineupPlaybackRequest?>? operation;
   _LoadRecovery? recovery;
+}
+
+class _SessionSeek {
+  _SessionSeek(this.position, this.load);
+
+  final Duration position;
+  _PlaybackLoad load;
+  Timer? debounce;
+  final completion = Completer<void>();
 }
 
 class _LoadRecovery {
