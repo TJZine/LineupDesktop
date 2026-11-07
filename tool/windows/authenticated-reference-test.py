@@ -81,6 +81,10 @@ def media_pass(result, fields, audit, positive):
                                   if positive else (fields["progressed"] == "0" and fields["rejected"] == "1"))))
 
 
+def redirect_pass(result, fields, audit):
+    return media_pass(result, fields, audit, False) and audit["B_requests"] == 0
+
+
 class Server(http.server.ThreadingHTTPServer):
     daemon_threads = True
     block_on_close = False
@@ -441,7 +445,11 @@ def matrix(args, nonzero_start):
                 a.redirect = (f"http://127.0.0.1:{plain.server_port}/media.mp4" if name == "redirect-http"
                               else origin_b + "/media.mp4")
                 result, fields, observed = invoke(name, path, mode="observe" if positive is None else None)
-                record({"case": name, "pass": media_pass(result, fields, observed, positive), **observed, **fields})
+                if name in ("redirect-https", "redirect-http"):
+                    passed = redirect_pass(result, fields, observed)
+                else:
+                    passed = media_pass(result, fields, observed, positive)
+                record({"case": name, "pass": passed, **observed, **fields})
                 if name == "redirect-http":
                     # A real plaintext listener must see the deliberate leak.
                     # Preserve the actual rejected/no-progress media result.
@@ -537,7 +545,8 @@ def session_pass(result, fields, audit, positive, restoration, mode):
               fields["session_progressed"] == str(int(positive)) and
               fields["session_rejected"] == str(int(not positive)) and
               fields["session_override_removed"] == str(int(mode == "session-control-no-references")) and
-              fields["restoration_attempted"] == str(int(restoration)))
+              fields["restoration_attempted"] == str(int(restoration)) and
+              fields["stop_confirmed"] == str(int(mode == "session-stop")))
     restored = ("references", "redirects", "demuxer", "lavf_options", "session_options")
     passed = passed and all(fields[name + "_restored_after"] == "1" for name in restored)
     if positive:
@@ -654,6 +663,7 @@ def session_matrix(args):
                 fields = read_outcomes(result, False)
                 required = {"session_progressed", "session_rejected", "session_override_removed",
                             "restoration_attempted", "restoration_progressed", "restoration_rejected",
+                            "stop_confirmed",
                             "session_options_captured", "nested_forbidden_count", "internal_redirect_count",
                             "end_file_error_count", "session_load_started", "session_structural_failure"}
                 required.update(name + "_restored_" + phase

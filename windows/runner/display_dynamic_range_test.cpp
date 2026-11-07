@@ -28,7 +28,7 @@ struct FakeClock : DisplayClock {
 };
 struct GuardianFacts {
   bool arm = true, update = true, alive = true, disarm = true, execute = true;
-  int arms = 0, updates = 0, disarms = 0;
+  int arms = 0, updates = 0, disarms = 0, stand_downs = 0;
   DisplayOwnership last;
 };
 struct FakeGuardian : DisplayGuardianLink {
@@ -47,6 +47,10 @@ struct FakeGuardian : DisplayGuardianLink {
   bool Disarm() override {
     ++facts->disarms;
     return facts->disarm;
+  }
+  void StandDown() override {
+    ++facts->stand_downs;
+    Disarm();
   }
   bool IsAlive() override { return facts->alive; }
   bool Execute(const std::function<bool()>& action) override {
@@ -163,6 +167,7 @@ void ReleaseDecisionEdges() {
   const auto reports = external.reports.size();
   external.engine.ReleaseAll();
   Check(!external.engine.HasOwnership() && external.guardian->disarms == 1 &&
+            external.guardian->stand_downs == 1 &&
             external.api.writes.size() == 2 && external.reports.size() == reports,
         "L3 relinquishes external state without writes or reports even if Disarm fails");
 
@@ -171,7 +176,7 @@ void ReleaseDecisionEdges() {
   disarm.guardian->disarm = false;
   disarm.engine.ReleaseAll();
   Check(disarm.engine.HasOwnership() && disarm.guardian->disarms == 1 &&
-            disarm.api.writes.size() == 2 &&
+            disarm.guardian->stand_downs == 0 && disarm.api.writes.size() == 2 &&
             Text(disarm.Last().reason, "restore_failed"),
         "L7 retains restored ownership when Disarm fails");
   disarm.engine.Poll(false);
@@ -348,7 +353,8 @@ void ExternalChanges() {
   after.api.displays[1].state = DisplayState::sdr;
   after.engine.Poll(false);
   Check(Text(after.Last().reason, "external_change") &&
-            !after.engine.HasOwnership() && after.guardian->disarms == 1,
+            !after.engine.HasOwnership() && after.guardian->disarms == 1 &&
+            after.guardian->stand_downs == 1,
         "external after write relinquishes ownership");
   after.Request(2, false, DisplayState::unknown);
   Check(after.api.writes.size() == 1, "no restore after external change");
