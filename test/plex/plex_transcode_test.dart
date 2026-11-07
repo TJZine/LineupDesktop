@@ -6,6 +6,8 @@ import 'package:http/testing.dart';
 import 'package:lineup_desktop/plex/plex_client.dart';
 import 'package:lineup_desktop/plex/plex_models.dart';
 import 'package:lineup_desktop/plex/plex_transcode.dart';
+import 'package:lineup_desktop/plex/plex_xml.dart';
+import 'package:xml/xml.dart';
 
 const _session = '00000000-0000-4000-8000-000000000001';
 final _server = Uri.parse('https://synthetic.invalid:32400');
@@ -700,6 +702,162 @@ void main() {
   });
 
   group('decision parsing', () {
+    test('converts repeated XML groups without merging mapped names', () {
+      final root = XmlDocument.parse(
+        '<root><A id="first"/><B id="middle"/><A id="last"/></root>',
+      ).rootElement;
+      expect(plexXmlRecord(root), {
+        'A': [
+          {'id': 'first'},
+          {'id': 'last'},
+        ],
+        'B': [
+          {'id': 'middle'},
+        ],
+      });
+    });
+
+    test('child groups override attributes and map nested Video groups', () {
+      final root = XmlDocument.parse(
+        '<root name="attribute"><name>child</name><Wrapper><Video id="one"/><Other><Video id="two"/></Other></Wrapper></root>',
+      ).rootElement;
+      expect(plexXmlRecord(root, videoAsMetadata: true), {
+        'name': [<String, Object?>{}],
+        'Wrapper': [
+          {
+            'Metadata': [
+              {'id': 'one'},
+            ],
+            'Other': [
+              {
+                'Metadata': [
+                  {'id': 'two'},
+                ],
+              },
+            ],
+          },
+        ],
+      });
+    });
+
+    for (final order in [
+      '<root><Video id="video"/><Metadata id="metadata"/></root>',
+      '<root><Metadata id="metadata"/><Video id="video"/></root>',
+    ]) {
+      test('later Video/Metadata group wins: $order', () {
+        final root = XmlDocument.parse(order).rootElement;
+        final record = plexXmlRecord(root, videoAsMetadata: true);
+        final expectedId = order.indexOf('<Video') < order.indexOf('<Metadata')
+            ? 'metadata'
+            : 'video';
+        expect(record['Metadata'], [
+          {'id': expectedId},
+        ]);
+      });
+    }
+
+    test('parses 50,000 unique XML decision children within the bound', () {
+      final body =
+          '<MediaContainer generalDecisionCode="1001">'
+          '${List.generate(50000, (index) => '<Node$index/>').join()}'
+          '</MediaContainer>';
+      final watch = Stopwatch()..start();
+      final decision = parsePlexDecision(body);
+      expect(decision.generalDecisionCode, 1001);
+      expect(watch.elapsed, lessThan(const Duration(seconds: 5)));
+    });
+
+    for (final malformed in [
+      jsonEncode({
+        'generalDecisionCode': 1001,
+        'Metadata': [
+          {
+            'Media': [
+              {
+                'Part': [
+                  {
+                    'Stream': [
+                      {'streamType': false},
+                    ],
+                  },
+                ],
+              },
+            ],
+          },
+        ],
+      }),
+      jsonEncode({
+        'generalDecisionCode': 1001,
+        'Media': [
+          {
+            'Part': [
+              {'Stream': <String, Object?>{}},
+            ],
+          },
+        ],
+      }),
+      jsonEncode({
+        'generalDecisionCode': 1001,
+        'Media': [
+          {
+            'Part': [
+              {
+                'Stream': [false],
+              },
+            ],
+          },
+        ],
+      }),
+      jsonEncode({
+        'generalDecisionCode': 1001,
+        'directPlayDecisionCode': 'abc',
+      }),
+      jsonEncode({'generalDecisionCode': 1001, 'generalDecisionText': false}),
+      jsonEncode({
+        'generalDecisionCode': 1001,
+        'Metadata': [false],
+      }),
+      jsonEncode({'generalDecisionCode': 1001, 'Media': <String, Object?>{}}),
+      '<MediaContainer generalDecisionCode="1001"><Video><Media><Part><Stream streamType="abc" decision="transcode"/></Part></Media></Video></MediaContainer>',
+    ]) {
+      test('rejects malformed decision field $malformed', () {
+        expect(() => parsePlexDecision(malformed), _error('parse-error'));
+      });
+    }
+
+    test('accepts integral doubles and sparse decision nulls', () {
+      final decision = parsePlexDecision(
+        jsonEncode({
+          'generalDecisionCode': 4999,
+          'generalDecisionText': null,
+          'directPlayDecisionCode': null,
+          'Metadata': [
+            {
+              'Media': [
+                {
+                  'Part': [
+                    {
+                      'Stream': [
+                        {'width': 1920.0},
+                      ],
+                    },
+                  ],
+                },
+              ],
+            },
+          ],
+        }),
+      );
+      expect(decision.generalDecisionCode, 4999);
+      expect(decision.streams.single.width, 1920);
+      expect(
+        parsePlexDecision(
+          '<MediaContainer generalDecisionCode="1001"><Video><Media><Part><Stream width=""/></Part></Media></Video></MediaContainer>',
+        ).streams,
+        hasLength(1),
+      );
+    });
+
     for (final fixture in [
       (1000, 1000, 1000, 'copy', PlexPlaybackMethod.directPlay),
       (1001, 3001, 1000, 'copy', PlexPlaybackMethod.directStream),

@@ -3767,6 +3767,66 @@ void main() {
   });
 
   test(
+    'PMS retry keeps the first duplicate resource token with its origin',
+    () async {
+      final inventory = PlexClient(
+        clientIdentifier: 'lineup-desktop-test-abcdefghijklmnopqrst',
+        httpClient: MockClient(
+          (_) async => http.Response(
+            jsonEncode([
+              {
+                'clientIdentifier': 'same-id',
+                'name': 'First server',
+                'provides': 'server',
+                'accessToken': 'first-token',
+                'connections': [
+                  {'uri': 'https://first.example:32400'},
+                ],
+              },
+              {
+                'clientIdentifier': 'same-id',
+                'name': 'Second server',
+                'provides': 'server',
+                'accessToken': 'second-token',
+                'connections': [
+                  {'uri': 'https://second.example:32400'},
+                ],
+              },
+            ]),
+            200,
+          ),
+        ),
+      );
+      addTearDown(inventory.close);
+      final libraryRequests = <({Uri server, String token})>[];
+      var libraryCalls = 0;
+      final plex = _FakePlex()
+        ..discoverServersHandler = inventory.discoverServers
+        ..librariesHandler = (server, token) async {
+          libraryRequests.add((server: server, token: token));
+          if (++libraryCalls == 1) {
+            throw const PlexException('auth-invalid', 'Expired');
+          }
+          return const [];
+        };
+      final controller = LineupController(
+        store: _MemoryStore(
+          const PersistedState(selectedServerByProfile: {'owner': 'same-id'}),
+        ),
+        credentials: _MemoryCredentials(accountToken: 'cloud-token'),
+        plex: plex,
+      );
+      addTearDown(controller.dispose);
+
+      await controller.initialize();
+
+      expect(libraryRequests, hasLength(2));
+      expect(libraryRequests.last.server.host, 'first.example');
+      expect(libraryRequests.last.token, 'first-token');
+    },
+  );
+
+  test(
     'logout prevents an in-flight PMS refresh from installing access',
     () async {
       final selected = _server('server');

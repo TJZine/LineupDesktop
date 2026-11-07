@@ -10,6 +10,34 @@ import '../app_version.dart';
 import '../channels/channel.dart';
 import 'plex_models.dart';
 import 'plex_transcode.dart';
+import 'plex_xml.dart';
+
+final _credentialPattern = RegExp(r'^[\x21-\x7E]{1,4096}$');
+const _invalidCredential = PlexException(
+  'parse-error',
+  'Plex returned an invalid credential.',
+);
+
+String? _validateCredential(
+  Object? raw, {
+  bool required = false,
+  bool invalidAsMissing = false,
+}) {
+  if (raw is! String) {
+    if (required) throw _invalidCredential;
+    return null;
+  }
+  final value = raw.trim();
+  if (value.isEmpty) {
+    if (required) throw _invalidCredential;
+    return null;
+  }
+  if (!_credentialPattern.hasMatch(value)) {
+    if (invalidAsMissing) return null;
+    throw _invalidCredential;
+  }
+  return value;
+}
 
 class PlexServerAccess {
   PlexServerAccess({required this.server, required String token})
@@ -23,11 +51,7 @@ class PlexServerAccess {
       'PlexServerAccess(server: ${server.id}, token: <redacted>)';
 
   static String _requiredToken(String token) {
-    final value = token.trim();
-    if (value.isEmpty) {
-      throw ArgumentError('A PMS resource token is required.');
-    }
-    return value;
+    return _validateCredential(token, required: true)!;
   }
 }
 
@@ -90,7 +114,7 @@ class PlexClient {
       headers: _headers(),
     );
     final json = _json(response, {200});
-    return _optionalText(json['authToken']);
+    return _validateCredential(json['authToken']);
   }
 
   Future<void> cancelPin(PlexPin pin) async {
@@ -182,7 +206,7 @@ class PlexClient {
       }
       final json = _tryJson(response.body);
       final token = _findToken(json) ?? _findTokenInXml(response.body);
-      if (token != null) return token;
+      if (token != null) return _validateCredential(token, required: true)!;
       if (!path.contains('/v2/')) break;
     }
     throw const PlexException(
@@ -202,13 +226,17 @@ class PlexClient {
     );
     final data = _jsonList(response, {200});
     final servers = <PlexServerAccess>[];
+    final seenServerIds = <String>{};
     for (final raw in data) {
       final json = _record(raw, 'resource');
       final provides = _optionalText(json['provides'])
           ?.split(',')
           .map((item) => item.trim());
       if (provides?.contains('server') != true) continue;
-      final resourceToken = _optionalText(json['accessToken']);
+      final resourceToken = _validateCredential(
+        json['accessToken'],
+        invalidAsMissing: true,
+      );
       if (resourceToken == null) continue;
       final connections = <PlexConnection>[];
       for (final rawConnection in _optionalList(json['connections'])) {
@@ -233,17 +261,14 @@ class PlexClient {
         );
       }
       if (connections.isNotEmpty) {
-        servers.add(
-          PlexServerAccess(
-            server: PlexServer(
-              id: _text(json['clientIdentifier'], 'server id'),
-              name: _text(json['name'], 'server name'),
-              connections: connections,
-              owned: _boolean(json['owned']),
-            ),
-            token: resourceToken,
-          ),
+        final server = PlexServer(
+          id: _text(json['clientIdentifier'], 'server id'),
+          name: _text(json['name'], 'server name'),
+          connections: connections,
+          owned: _boolean(json['owned']),
         );
+        if (!seenServerIds.add(server.id)) continue;
+        servers.add(PlexServerAccess(server: server, token: resourceToken));
       }
     }
     return servers;
@@ -1447,7 +1472,7 @@ class PlexClient {
     if (json != null) return _record(json, 'Plex response');
     try {
       final root = XmlDocument.parse(response.body).rootElement;
-      return {root.name.local: _metadataXmlRecord(root)};
+      return {root.name.local: plexXmlRecord(root, videoAsMetadata: true)};
     } catch (_) {
       throw const PlexException('parse-error', 'Plex response was invalid.');
     }
@@ -1483,6 +1508,11 @@ class PlexClient {
       late final http.StreamedResponse streamed;
       try {
         streamed = await pendingResponse.timeout(limit);
+      } on FormatException {
+        throw const PlexException(
+          'auth-invalid',
+          'Plex authentication is no longer valid.',
+        );
       } on TimeoutException {
         abortRequest();
         unawaited(
@@ -1535,6 +1565,8 @@ class PlexClient {
         'network-timeout',
         'Plex did not respond in time. Try again.',
       );
+    } on FormatException {
+      throw const PlexException('parse-error', 'Plex response was invalid.');
     } on http.RequestAbortedException {
       throw _scanCancelledException;
     } on TlsException {
@@ -1768,27 +1800,6 @@ String? _identityId(String body) {
   }
 }
 
-Map<String, Object?> _metadataXmlRecord(XmlElement element) => {
-  for (final attribute in element.attributes)
-    attribute.name.local: attribute.value,
-  for (final name
-      in element.childElements.map((child) => child.name.local).toSet())
-    if (name == 'Video')
-      'Metadata': [
-        for (final child in element.childElements.where(
-          (child) => child.name.local == name,
-        ))
-          _metadataXmlRecord(child),
-      ]
-    else
-      name: [
-        for (final child in element.childElements.where(
-          (child) => child.name.local == name,
-        ))
-          _metadataXmlRecord(child),
-      ],
-};
-
 PlexMediaItem parseMediaItem(Object? raw, {String? libraryId}) {
   final json = _record(raw, 'media item');
   final cast = _castMembers(json['Role']);
@@ -1797,11 +1808,21 @@ PlexMediaItem parseMediaItem(Object? raw, {String? libraryId}) {
     'Media',
   ).whereType<Map<Object?, Object?>>().firstOrNull;
   final rawParts = _structuralList(media?['Part'], 'Part');
-  final parts = rawParts
-      .whereType<Map<Object?, Object?>>()
-      .map(_parseMediaPart)
-      .nonNulls
-      .toList(growable: false);
+  final parsedParts = <PlexMediaPart>[];
+  var malformedPart = false;
+  for (final rawPart in rawParts) {
+    if (rawPart is! Map<Object?, Object?>) {
+      malformedPart = true;
+      break;
+    }
+    final part = _parseMediaPart(rawPart);
+    if (part == null) {
+      malformedPart = true;
+      break;
+    }
+    parsedParts.add(part);
+  }
+  final parts = malformedPart ? const <PlexMediaPart>[] : parsedParts;
   final firstPart = rawParts.whereType<Map<Object?, Object?>>().firstOrNull;
   return PlexMediaItem(
     id: _id(json['ratingKey'], 'media id'),
