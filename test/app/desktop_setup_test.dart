@@ -282,6 +282,49 @@ void main() {
     expect(find.text('Shape your lineup'), findsOneWidget);
   });
 
+  testWidgets('D4 settled scan commit rebuilds Cancel for held save', (
+    tester,
+  ) async {
+    final controller = _SetupController(
+      scenario: const LineupScenario(channelSetupCanCancel: true),
+      mixedScan: true,
+    );
+    addTearDown(controller.dispose);
+    await _pump(tester, controller, isTv: true);
+
+    final cancel = find.widgetWithText(TextButton, 'Cancel');
+    expect(cancel, findsOneWidget);
+    expect(tester.widget<TextButton>(cancel).onPressed, isNotNull);
+
+    await tester.tap(find.byKey(const ValueKey('scan-selected-libraries')));
+    await tester.pumpAndSettle();
+    expect(find.text('Couldn’t scan · Try again.'), findsOneWidget);
+
+    await tester.tap(find.text('Shows'));
+    await tester.tap(find.text('Long Form Archive'));
+    await tester.pumpAndSettle();
+    expect(
+      find.byKey(const ValueKey('continue-ready-libraries')),
+      findsOneWidget,
+    );
+    expect(tester.widget<TextButton>(cancel).onPressed, isNotNull);
+
+    controller.commitGate = Completer<void>();
+    tester
+        .widget<FilledButton>(
+          find.byKey(const ValueKey('continue-ready-libraries')),
+        )
+        .onPressed!();
+    await tester.pump();
+
+    expect(controller.commitCalls, 1);
+    expect(tester.widget<TextButton>(cancel).onPressed, isNull);
+
+    controller.commitGate!.complete();
+    await tester.pumpAndSettle();
+    expect(find.text('Shape your lineup'), findsOneWidget);
+  });
+
   testWidgets('D4 held library commit claims Back before cancellation', (
     tester,
   ) async {
