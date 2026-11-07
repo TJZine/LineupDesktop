@@ -48,11 +48,10 @@ jobs:
       - uses: ./.github/actions/setup-flutter
       - name: Verify pinned Flutter toolchain
         run: dart tool/check_toolchain.dart
-      - run: flutter pub get
+      - run: flutter pub get --enforce-lockfile
+      # Not flutter create: it replaces pubspec.lock and .metadata and adds a stock activity.
       - name: Generate the local Android Gradle wrapper
-        run: |
-          flutter create --empty --platforms=android --no-overwrite .
-          git diff --exit-code -- android/gradle/verification-metadata.xml
+        run: flutter build apk --config-only --debug
       - name: Check committed Android runtime notices
         run: >-
           python3 tool/android/generate-licenses.py --check
@@ -76,6 +75,8 @@ jobs:
         env:
           LINEUP_ANDROID_SIGNING: debug-key
         run: ./gradlew :app:testDebugUnitTest --no-daemon
+      - name: Check that the build kept the committed pins
+        run: git diff --exit-code -- pubspec.lock .metadata android/gradle/verification-metadata.xml
 
   build-macos:
     name: Verify macOS portable/native build
