@@ -20,6 +20,7 @@ import 'package:flutter/services.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:lineup_desktop/ui/lineup_canvas.dart';
 import 'package:lineup_desktop/app/channel_setup_view.dart';
+import 'package:lineup_desktop/app/channel_setup/review_step.dart';
 import 'package:lineup_desktop/app/lineup_controller.dart';
 import 'package:lineup_desktop/channels/channel.dart';
 import 'package:lineup_desktop/channels/channel_builder.dart';
@@ -254,6 +255,127 @@ void main() {
     controller.commitGate!.complete();
     await tester.pumpAndSettle();
     expect(find.text('Shape your lineup'), findsOneWidget);
+  });
+
+  testWidgets('D4 held library commit disables Cancel until save settles', (
+    tester,
+  ) async {
+    final controller = _SetupController(
+      scenario: const LineupScenario(channelSetupCanCancel: true),
+    )..commitGate = Completer<void>();
+    addTearDown(controller.dispose);
+    await _pump(tester, controller, isTv: true);
+
+    await tester.tap(find.byKey(const ValueKey('scan-selected-libraries')));
+    await tester.pump();
+    expect(controller.commitCalls, 1);
+    final cancel = find.widgetWithText(TextButton, 'Cancel');
+    expect(cancel, findsOneWidget);
+    expect(tester.widget<TextButton>(cancel).onPressed, isNull);
+    expect(
+      find.byKey(const ValueKey('library-selection-list')),
+      findsOneWidget,
+    );
+
+    controller.commitGate!.complete();
+    await tester.pumpAndSettle();
+    expect(find.text('Shape your lineup'), findsOneWidget);
+  });
+
+  testWidgets('D4 settled scan commit rebuilds Cancel for held save', (
+    tester,
+  ) async {
+    final controller = _SetupController(
+      scenario: const LineupScenario(channelSetupCanCancel: true),
+      mixedScan: true,
+    );
+    addTearDown(controller.dispose);
+    await _pump(tester, controller, isTv: true);
+
+    final cancel = find.widgetWithText(TextButton, 'Cancel');
+    expect(cancel, findsOneWidget);
+    expect(tester.widget<TextButton>(cancel).onPressed, isNotNull);
+
+    await tester.tap(find.byKey(const ValueKey('scan-selected-libraries')));
+    await tester.pumpAndSettle();
+    expect(find.text('Couldn’t scan · Try again.'), findsOneWidget);
+
+    await tester.tap(find.text('Shows'));
+    await tester.tap(find.text('Long Form Archive'));
+    await tester.pumpAndSettle();
+    expect(
+      find.byKey(const ValueKey('continue-ready-libraries')),
+      findsOneWidget,
+    );
+    expect(tester.widget<TextButton>(cancel).onPressed, isNotNull);
+
+    controller.commitGate = Completer<void>();
+    tester
+        .widget<FilledButton>(
+          find.byKey(const ValueKey('continue-ready-libraries')),
+        )
+        .onPressed!();
+    await tester.pump();
+
+    expect(controller.commitCalls, 1);
+    expect(tester.widget<TextButton>(cancel).onPressed, isNull);
+
+    controller.commitGate!.complete();
+    await tester.pumpAndSettle();
+    expect(find.text('Shape your lineup'), findsOneWidget);
+  });
+
+  testWidgets('D4 held library commit claims Back before cancellation', (
+    tester,
+  ) async {
+    final controller = _SetupController(
+      scenario: const LineupScenario(channelSetupCanCancel: true),
+    )..commitGate = Completer<void>();
+    addTearDown(controller.dispose);
+    await _pump(tester, controller, isTv: true);
+
+    await tester.tap(find.byKey(const ValueKey('scan-selected-libraries')));
+    await tester.pump();
+    expect(controller.commitCalls, 1);
+    final state = tester.state<UpstreamChannelSetupViewState>(
+      find.byType(UpstreamChannelSetupView),
+    );
+    expect(state.handleBack(), isTrue);
+    expect(controller.cancelCalls, 0);
+
+    controller.commitGate!.complete();
+    await tester.pumpAndSettle();
+    expect(find.text('Shape your lineup'), findsOneWidget);
+  });
+
+  testWidgets('D4 review apply callback rejects unconfirmed removals', (
+    tester,
+  ) async {
+    final controller = _SetupController(channels: [_missingChannel]);
+    addTearDown(controller.dispose);
+    await _pump(tester, controller);
+    await _advanceToReview(tester);
+
+    final choice = find.byKey(const ValueKey('missing-source-choice-missing'));
+    await tester.ensureVisible(choice);
+    await tester.tap(
+      find.descendant(of: choice, matching: find.text('Remove')),
+    );
+    await tester.pumpAndSettle();
+    final review = tester.widget<SetupReviewStep>(find.byType(SetupReviewStep));
+    review.onApply();
+    await tester.pumpAndSettle();
+
+    expect(controller.applyCalls, 0);
+    expect(find.text('Review your lineup'), findsOneWidget);
+    expect(
+      tester
+          .widget<FilledButton>(
+            find.byKey(const ValueKey('apply-reviewed-lineup')),
+          )
+          .onPressed,
+      isNull,
+    );
   });
 
   testWidgets('NAV-I2 desktop picker ignores non-Back navigation keys', (
@@ -4201,6 +4323,7 @@ class _SetupController extends FixtureController {
   final bool failApply;
   final scanStarted = Completer<void>();
   final _cancelled = Completer<void>();
+  int cancelCalls = 0;
   Map<String, LibraryScanFact> facts = const {};
   Set<String> ready = const {};
   Set<String> retry = const {};
@@ -4324,6 +4447,12 @@ class _SetupController extends FixtureController {
     };
     notifyListeners();
     if (!_cancelled.isCompleted) _cancelled.complete();
+  }
+
+  @override
+  void cancelChannelSetup() {
+    cancelCalls++;
+    super.cancelChannelSetup();
   }
 
   @override
