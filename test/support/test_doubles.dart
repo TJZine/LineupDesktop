@@ -2,14 +2,27 @@ import 'dart:async';
 
 import 'package:flutter/foundation.dart';
 
+import 'package:http/http.dart' as http;
 import 'package:http/testing.dart';
 import 'package:lineup_desktop/persistence/app_store.dart';
 import 'package:lineup_desktop/playback/native_player.dart';
 
 const _defaultClientIdentifier = 'lineup-desktop-test-abcdefghijklmnopqrst';
 
-MockClient testPlexHttpClient() =>
-    MockClient((_) async => throw StateError('unexpected HTTP'));
+MockClient testPlexHttpClient({bool allowDirectPlayDecision = false}) =>
+    MockClient((request) async {
+      if (allowDirectPlayDecision &&
+          request.method == 'GET' &&
+          request.url.path == '/video/:/transcode/universal/decision' &&
+          request.url.queryParameters['directPlay'] == '1') {
+        return http.Response(
+          '{"MediaContainer":{"generalDecisionCode":1000,"directPlayDecisionCode":1000}}',
+          200,
+          headers: {'content-type': 'application/json'},
+        );
+      }
+      throw StateError('unexpected HTTP');
+    });
 
 class MemoryAppStore implements AppStore {
   MemoryAppStore({

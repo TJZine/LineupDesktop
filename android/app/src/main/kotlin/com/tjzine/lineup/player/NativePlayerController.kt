@@ -37,8 +37,11 @@ internal class NativePlayerController(
         val epoch: Long,
         val loadId: Long,
         val engine: PlayerEngine,
+        val kind: LoadKind,
     ) {
         var ready = false
+        var alignmentSeekId: Long? = null
+        var alignmentSettled = false
         var terminal = false
         var clockState: SessionHlsClock.State? = null
     }
@@ -187,7 +190,12 @@ internal class NativePlayerController(
                     }
                     try {
                         val session =
-                            Session(generation, epoch, command.media.loadId, host.createEngine())
+                            Session(
+                                generation, epoch, command.media.loadId,
+                                if (command.media.kind == LoadKind.plexSession) host.createSessionEngine()
+                                else host.createEngine(),
+                                command.media.kind,
+                            )
                         current = session
                         state(session, "loading", "Loading media")
                         session.engine.volume(volume)
@@ -234,6 +242,19 @@ internal class NativePlayerController(
                                 ?.takeIf { live(it) }
                                 ?.engine
                                 ?.seek(command.seconds, command.exact)
+                        is PlayerCommand.Align -> {
+                            val s = current
+                            if (s != null && live(s) && s.loadId == command.loadId &&
+                                s.kind == LoadKind.plexSession && s.ready && s.alignmentSeekId == null
+                            ) {
+                                s.alignmentSeekId = command.seekId
+                                try {
+                                    s.engine.alignSession(command.positionMs, command.seekId)
+                                } catch (_: Exception) {
+                                    sessionSeekResult(s, command.seekId, "failed")
+                                }
+                            }
+                        }
                         is PlayerCommand.Volume -> {
                             volume = command.value
                             current?.takeIf { live(it) }?.engine?.volume(volume)
@@ -290,6 +311,11 @@ internal class NativePlayerController(
                 queue(mapOf("type" to "property", "name" to "session-clock",
                     "value" to SessionHlsClock.wire(state), "loadId" to session.loadId),
                     session.epoch, transition)
+            }
+
+            override fun sessionSeekLanded(seekId: Long) {
+                if (live(session) && session.alignmentSeekId == seekId)
+                    sessionSeekResult(session, seekId, "landed")
             }
 
             override fun ready(paused: Boolean) {
@@ -491,6 +517,17 @@ internal class NativePlayerController(
         retire {}
     }
 
+    private fun sessionSeekResult(session: Session, seekId: Long, outcome: String) {
+        if (session.alignmentSettled) return
+        session.alignmentSettled = true
+        queue(
+            mapOf("type" to "sessionSeekResult", "loadId" to session.loadId,
+                "seekId" to seekId, "outcome" to outcome),
+            session.epoch,
+            protectedTransition = true,
+        )
+    }
+
     private fun queue(value: Map<String, Any?>, mediaEpoch: Long? = null, protectedTransition: Boolean = false) {
         events.add(QueuedEvent(generation, mediaEpoch, value, protectedTransition))
         if (!eventPosted) {
@@ -521,6 +558,7 @@ internal class NativePlayerController(
                 "play",
                 "pause",
                 "seek",
+                "alignSession",
                 "stop",
                 "selectTrack",
                 "setVolume",

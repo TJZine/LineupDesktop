@@ -30,10 +30,9 @@ internal class Media3Engine(
     private val subtitles: SubtitleView,
     private val sizeChanged: (VideoSize) -> Unit,
     private val keepScreenOn: (Boolean) -> Unit,
-    createPlayer: (Context) -> ExoPlayer = {
-        ExoPlayer.Builder(it).setLoadControl(PlaybackMemory.loadControl(it)).build()
-    },
+    createPlayer: ((Context) -> ExoPlayer)? = null,
     private val subtitlePresentation: () -> SubtitlePresentation = { SubtitlePresentation() },
+    observeSessionLanding: Boolean = false,
 ) : PlayerEngine {
     private val debug =
         context.applicationInfo.flags and android.content.pm.ApplicationInfo.FLAG_DEBUGGABLE != 0
@@ -45,7 +44,13 @@ internal class Media3Engine(
     // The default builder owns an exclusive playback thread. Media3 quits it only
     // after releaseInternal finishes renderer/source teardown. Keep that public
     // thread handle: release() returning (or isReleased) cannot prove completion.
-    private val player = createPlayer(context).also {
+    private val sessionLanding = if (observeSessionLanding) SessionSeekLanding { seekId ->
+        handler.post { if (!closed) observer?.sessionSeekLanded(seekId) }
+    } else null
+    private val player = (createPlayer?.invoke(context) ?: (
+        if (sessionLanding == null) ExoPlayer.Builder(context)
+        else ExoPlayer.Builder(context, SessionRenderers(context, sessionLanding))
+    ).setLoadControl(PlaybackMemory.loadControl(context)).build()).also {
         it.setAudioAttributes(
             AudioAttributes.Builder()
                 .setUsage(C.USAGE_MEDIA)
@@ -327,6 +332,15 @@ internal class Media3Engine(
         sessionClock?.seeking()
         player.setSeekParameters(if (exact) SeekParameters.EXACT else SeekParameters.PREVIOUS_SYNC)
         player.seekTo(milliseconds(seconds))
+    }
+
+    override fun alignSession(positionMs: Long, seekId: Long) {
+        val landing = checkNotNull(sessionLanding)
+        sessionClock?.seeking()
+        player.setSeekParameters(SeekParameters.EXACT)
+        // PlayerMessage and seekTo enqueue on the same playback looper.
+        player.createMessage { _, _ -> landing.arm(seekId) }.send()
+        player.seekTo(positionMs)
     }
 
     override fun select(type: String, id: Long?): Boolean {

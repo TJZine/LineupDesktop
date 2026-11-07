@@ -265,7 +265,7 @@ class _ProductPlex extends PlexClient {
   _ProductPlex(this.events)
     : super(
         clientIdentifier: 'lineup-desktop-test-abcdefghijklmnopqrst',
-        httpClient: testPlexHttpClient(),
+        httpClient: testPlexHttpClient(allowDirectPlayDecision: true),
       );
 
   static final now = DateTime.utc(2026, 8, 13, 12);

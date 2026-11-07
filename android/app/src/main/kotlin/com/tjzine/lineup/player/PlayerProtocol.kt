@@ -42,6 +42,8 @@ internal sealed interface PlayerCommand {
 
     data class Seek(val seconds: Double, val exact: Boolean) : PlayerCommand
 
+    data class Align(val positionMs: Long, val loadId: Long, val seekId: Long) : PlayerCommand
+
     data class Stop(val id: Long) : PlayerCommand
 
     data class Select(val type: String, val id: Long?, val loadId: Long, val requestId: Long) :
@@ -127,6 +129,16 @@ internal object PlayerProtocol {
                 if (mode !in listOf("exact", "keyframes")) invalid()
                 PlayerCommand.Seek(number(a["seconds"]), mode == "exact")
             }
+            "alignSession" -> {
+                val a = map(value)
+                val positionMs = integer(a["positionMs"], 0)
+                if (positionMs > Long.MAX_VALUE / 1000) invalid()
+                PlayerCommand.Align(
+                    positionMs,
+                    integer(a["loadId"], 1),
+                    integer(a["seekId"], 1),
+                )
+            }
             "stop" -> PlayerCommand.Stop(integer(map(value)["stopId"], 1))
             "selectTrack" -> {
                 val a = map(value)
@@ -188,6 +200,8 @@ internal interface PlayerEngine {
 
         fun sessionClock(state: SessionHlsClock.State) {}
 
+        fun sessionSeekLanded(seekId: Long) {}
+
         fun ready(paused: Boolean)
 
         fun ended()
@@ -204,6 +218,8 @@ internal interface PlayerEngine {
     fun pause()
 
     fun seek(seconds: Double, exact: Boolean)
+
+    fun alignSession(positionMs: Long, seekId: Long) {}
 
     fun select(type: String, id: Long?): Boolean
 
@@ -230,6 +246,8 @@ internal interface PlayerHost {
     fun subtitlePresentation(value: SubtitlePresentation?) {}
 
     fun createEngine(): PlayerEngine
+
+    fun createSessionEngine(): PlayerEngine = createEngine()
 
     fun event(value: Map<String, Any?>)
 }

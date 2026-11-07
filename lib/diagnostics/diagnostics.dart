@@ -38,7 +38,9 @@ enum DiagnosticEvent {
   subtitlePresentationRejected('playback', 'Subtitle presentation rejected'),
   nativePlaybackFailed('playback', 'Native playback failed'),
   playbackRequestFailed('playback', 'Playback request failed'),
-  plexPlaybackSelected('playback', 'Plex playback selected');
+  plexPlaybackSelected('playback', 'Plex playback selected'),
+  plexPlaybackDecision('playback', 'Plex playback decision'),
+  plexSessionAlignment('playback', 'Plex session alignment');
 
   const DiagnosticEvent(this.area, this.message);
 
@@ -330,6 +332,54 @@ class Diagnostics extends ChangeNotifier {
       'transport',
       'shape',
     }),
+    'method': _FixedEnumContextPolicy({
+      'directPlay',
+      'directStream',
+      'transcode',
+    }),
+    'reason': _FixedEnumContextPolicy({
+      'eligible',
+      'capability',
+      'remote',
+      'decodeFailure',
+      'sessionRestart',
+    }),
+    'ceiling': _FixedEnumContextPolicy({'original'}),
+    'connectionClass': _FixedEnumContextPolicy({
+      'directLocal',
+      'directRemote',
+      'relay',
+    }),
+    'fallback': _FixedEnumContextPolicy({'reactive'}),
+    'sessionRestarts': _IntegerContextPolicy(0, 1000),
+    'generalDecisionCode': _IntegerContextPolicy(1000, 4999),
+    'directPlayDecisionCode': _IntegerContextPolicy(1000, 4999),
+    'transcodeDecisionCode': _IntegerContextPolicy(1000, 4999),
+    'generalDecisionText': _FixedEnumContextPolicy(_plexDecisionTexts),
+    'directPlayDecisionText': _FixedEnumContextPolicy(_plexDecisionTexts),
+    'transcodeDecisionText': _FixedEnumContextPolicy(_plexDecisionTexts),
+    'outputVideoCodec': _FixedEnumContextPolicy(_videoCodecs),
+    'outputResolution': _ResolutionContextPolicy(),
+    'targetBitrateKbps': _IntegerContextPolicy(1, 100000000),
+    'hdrOutput': _FixedEnumContextPolicy({
+      'smpte2084',
+      'arib-std-b67',
+      'bt709',
+      ..._dynamicRanges,
+    }),
+    'sessionSubtitles': _FixedEnumContextPolicy({
+      'imageBurnRequested',
+      'textBurnRequested',
+    }),
+    'positionBasis': _FixedEnumContextPolicy({'estimated', 'mapped', 'raw'}),
+    'alignmentOutcome': _FixedEnumContextPolicy({
+      'noneNeeded',
+      'landed',
+      'timedOut',
+      'failed',
+    }),
+    'leadMs': _IntegerContextPolicy(-86400000, 86400000),
+    'landingMs': _IntegerContextPolicy(0, 86400000),
     'code': _CategoricalContextPolicy(_failureCategories),
     'failureCode': _CategoricalContextPolicy(_failureCategories),
     'operation': _CategoricalContextPolicy(_operations),
@@ -350,6 +400,14 @@ class Diagnostics extends ChangeNotifier {
     'collections': _IntegerContextPolicy(0, 1000000),
     'members': _IntegerContextPolicy(0, 1000000),
     'shows': _IntegerContextPolicy(0, 1000000),
+  };
+  // The server can return arbitrary metadata in text. Only known messages
+  // are safe to keep, even after the Plex client's structural redaction.
+  static const _plexDecisionTexts = {
+    'Direct play OK.',
+    'Direct play not available; Conversion OK.',
+    'App cannot direct play this item. Direct play is disabled.',
+    'Conversion OK.',
   };
   static const _scanPaths = {'launch', 'setup'};
   static const _libraryTypes = {'movie', 'show'};
@@ -398,6 +456,8 @@ class Diagnostics extends ChangeNotifier {
     'subtitle_track',
     'fullscreen',
     'scope_cleanup',
+    'session_ping',
+    'session_stop',
     'request',
   };
   static const _failureCategories = {
@@ -451,6 +511,13 @@ class Diagnostics extends ChangeNotifier {
     'native_playback_error',
     'native_error',
     'premature_end',
+    'session-child-unauthorized',
+    'session-capacity',
+    'session-bandwidth',
+    'session-unsupported',
+    'session-unavailable',
+    'session-stop-failed',
+    'session-invalid',
     'stop_timeout',
     'stop_failed',
     'player_unavailable',
@@ -584,4 +651,17 @@ final class _IntegerContextPolicy extends _ContextPolicy {
 
   @override
   String? admitForExport(Object value) => sanitizeForStorage(value)?.toString();
+}
+
+final class _ResolutionContextPolicy extends _ContextPolicy {
+  const _ResolutionContextPolicy();
+
+  static final _format = RegExp(r'^[1-9][0-9]{0,4}x[1-9][0-9]{0,4}$');
+
+  @override
+  String? sanitizeForStorage(Object? value) =>
+      value is String && _format.hasMatch(value) ? value : null;
+
+  @override
+  String? admitForExport(Object value) => sanitizeForStorage(value);
 }

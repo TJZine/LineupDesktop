@@ -396,6 +396,11 @@ String? sanitizePlexDecisionText(Object? raw) {
 }
 
 const maximumPlexMasterBytes = 64 * 1024;
+const maximumPlexVariantBytes = 1024 * 1024;
+
+bool isPlexSessionVariantPath(String path) =>
+    RegExp(r'^/video/:/transcode/universal/session/[^/]+/base/index\.m3u8$')
+        .hasMatch(path);
 const _invalidMaster = PlexException(
   'session-invalid',
   'Plex returned an unsupported session playlist.',
@@ -446,9 +451,7 @@ Uri validatePlexSessionMaster(
         uri.queryParametersAll.keys.any(
           (key) => key.toLowerCase() == 'x-plex-token',
         ) ||
-        !RegExp(
-          r'^/video/:/transcode/universal/session/[^/]+/base/index\.m3u8$',
-        ).hasMatch(uri.path)) {
+        !isPlexSessionVariantPath(uri.path)) {
       throw _invalidMaster;
     }
     return uri;

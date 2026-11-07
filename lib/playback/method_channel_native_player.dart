@@ -6,7 +6,8 @@ import 'package:flutter/foundation.dart';
 
 import 'native_player.dart';
 
-class MethodChannelNativePlayer implements NativePlayer {
+class MethodChannelNativePlayer
+    implements NativePlayer, SessionAlignmentPlayer {
   static const _channel = MethodChannel('lineup/native_player');
   static const _nativePlaybackFailureCodes = {
     'http_error',
@@ -98,6 +99,10 @@ class MethodChannelNativePlayer implements NativePlayer {
   Future<MediaCapabilities>? _mediaCapabilitiesPending;
   int _nextStopId = 0;
   int _nextTrackRequestId = 0;
+  int _nextSessionSeekId = 0;
+  (int, int, Completer<void>)? _pendingSessionSeek;
+  Duration? _sessionAdjustment;
+  LoadKind? _activeKind;
   (int, Completer<void>)? _pendingStop;
   final Map<int, (int, Completer<void>)> _pendingTrackSelections = {};
   Future<void>? _stopOperation;
@@ -294,6 +299,7 @@ class MethodChannelNativePlayer implements NativePlayer {
     await _lifecycle;
     await _stopOperation;
     _requireInitialized();
+    _retireSessionSeek();
     final loadId = ++_nextLoadId;
     final pending = Completer<void>();
     _completePendingTrackSelectionErrors(
@@ -307,6 +313,7 @@ class MethodChannelNativePlayer implements NativePlayer {
     _pendingLoad = pending;
     _activeLoadId = loadId;
     _activeGeneration = generation;
+    _activeKind = kind;
     _resetMediaState(startPaused: startPaused);
     _subtitleCuesActive = true;
     _setStatus(PlayerState.loading, 'Loading media');
@@ -389,6 +396,48 @@ class MethodChannelNativePlayer implements NativePlayer {
         'seconds': position.inMicroseconds / Duration.microsecondsPerSecond,
         'mode': mode.name,
       });
+
+  @override
+  Future<void> alignSession(Duration position) async {
+    final loadId = _activeLoadId;
+    if (loadId == null ||
+        _activeKind != LoadKind.plexSession ||
+        _pendingSessionSeek != null) {
+      throw const PlayerUnavailable('No session alignment is available.');
+    }
+    final seekId = ++_nextSessionSeekId;
+    final landed = Completer<void>();
+    final request = (loadId, seekId, landed);
+    _pendingSessionSeek = request;
+    // Attach the failure handler before command dispatch. A replacement may
+    // retire the seek while the method reply is still in flight.
+    final result = landed.future.then<Object?>(
+      (_) => null,
+      onError: (Object error) => error,
+    );
+    try {
+      await _invoke('alignSession', {
+        'loadId': loadId,
+        'seekId': seekId,
+        'positionMs': position.inMilliseconds,
+      });
+      final failure = await result;
+      // ignore: only_throw_errors
+      if (failure != null) throw failure;
+    } finally {
+      if (identical(_pendingSessionSeek, request)) _pendingSessionSeek = null;
+    }
+  }
+
+  void _retireSessionSeek() {
+    final pending = _pendingSessionSeek;
+    _pendingSessionSeek = null;
+    if (pending != null && !pending.$3.isCompleted) {
+      pending.$3.completeError(
+        const PlayerUnavailable('The session alignment was retired.'),
+      );
+    }
+  }
 
   @override
   Future<void> setVideoRect(PlayerVideoRect rect) => _invoke('setVideoRect', {
@@ -483,6 +532,7 @@ class MethodChannelNativePlayer implements NativePlayer {
 
   @override
   Future<void> stop() {
+    _retireSessionSeek();
     _retireSubtitleCues();
     final existing = _stopOperation;
     if (existing != null) return existing;
@@ -534,6 +584,7 @@ class MethodChannelNativePlayer implements NativePlayer {
 
   @override
   Future<void> dispose() {
+    _retireSessionSeek();
     _retireSubtitleCues();
     return _serializeLifecycle(() async {
       _capabilities = const PlayerCapabilities.unavailable();
@@ -735,6 +786,22 @@ class MethodChannelNativePlayer implements NativePlayer {
     }
     if (!_isCurrentLoadEvent(event)) return;
     switch (event['type']) {
+      case 'sessionSeekResult':
+        final pending = _pendingSessionSeek;
+        if (pending == null ||
+            event['loadId'] != pending.$1 ||
+            event['seekId'] != pending.$2 ||
+            pending.$3.isCompleted) {
+          return;
+        }
+        switch (event['outcome']) {
+          case 'landed':
+            pending.$3.complete();
+          case 'failed':
+            pending.$3.completeError(
+              const PlayerUnavailable('The session alignment seek failed.'),
+            );
+        }
       case 'state':
         _handleState(event);
       case 'property':
@@ -855,6 +922,15 @@ class MethodChannelNativePlayer implements NativePlayer {
         _position = _durationFromSeconds(value);
       case 'duration':
         _duration = _durationFromSeconds(value);
+      case 'session-clock':
+        if (_activeKind != LoadKind.plexSession || value is! Map) return;
+        final adjustment = value['adjustmentUs'];
+        _sessionAdjustment =
+            value['state'] == 'ready' &&
+                adjustment is int &&
+                adjustment.abs() <= 1000000000000
+            ? Duration(microseconds: adjustment)
+            : null;
       case 'demuxer-start-time':
         _telemetry = _copyTelemetry(demuxerStartTime: value);
       case 'track-list':
@@ -1221,6 +1297,7 @@ class MethodChannelNativePlayer implements NativePlayer {
   }
 
   void _resetMediaState({bool startPaused = false}) {
+    _sessionAdjustment = null;
     _clearSubtitleCues();
     _subtitleTracksObserved = false;
     _subtitleTrackId = null;
@@ -1267,6 +1344,7 @@ class MethodChannelNativePlayer implements NativePlayer {
         tracks: _tracks,
         tracksUpdated: tracksUpdated,
         positionUpdated: positionUpdated,
+        sessionAdjustment: _sessionAdjustment,
         generation: _activeGeneration,
       ),
     );

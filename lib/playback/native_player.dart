@@ -438,6 +438,12 @@ class PlayerStatus {
   final int? httpStatus;
 }
 
+/// Optional Android session mechanism. Completion reports a rendered frame
+/// following the exact alignment seek for the current load.
+abstract interface class SessionAlignmentPlayer {
+  Future<void> alignSession(Duration position);
+}
+
 class PlayerEvent {
   const PlayerEvent({
     required this.status,
@@ -447,6 +453,7 @@ class PlayerEvent {
     required this.tracks,
     this.tracksUpdated = false,
     this.positionUpdated = false,
+    this.sessionAdjustment,
     this.generation,
   });
 
@@ -463,6 +470,8 @@ class PlayerEvent {
   /// This event carries a valid current-load native time-pos observation,
   /// including zero. Reset/status snapshots do not establish a landing.
   final bool positionUpdated;
+
+  final Duration? sessionAdjustment;
 
   /// Identifies the media load associated with this event.
   ///

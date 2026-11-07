@@ -237,6 +237,7 @@ class PlexMediaStream {
     this.codec,
     this.profile,
     this.bitDepth,
+    this.level,
     this.width,
     this.height,
     this.bitrate,
@@ -255,6 +256,7 @@ class PlexMediaStream {
   final String? codec;
   final String? profile;
   final int? bitDepth;
+  final int? level;
   final int? width;
   final int? height;
   final int? bitrate;

@@ -43,6 +43,7 @@ The native result is `null` unless a result map is shown.
 | `pause` | None | `null` or `command_queue_full`. |
 | `seek` | `seconds: num`, finite and >= 0; `mode: "exact"` or `"keyframes"`, optional, default `"exact"` | `null`, `invalid_argument`, or `command_queue_full`. |
 | `stop` | `stopId: int > 0` | `null`, `invalid_argument`, or `command_queue_full`. Completion is asynchronous through `stopResult`. |
+| `alignSession` (Android) | `loadId: int > 0`, `seekId: int > 0`, `positionMs: int >= 0` | Asynchronous `sessionSeekResult` for a current, ready session load. |
 | `setVideoRect` | `left`, `top`, `width`, `height`, and `scale` are finite numbers; `width >= 0`, `height >= 0`, `scale > 0`; optional Android `showSubtitles` boolean (omitted means `true`) | `null` or `invalid_argument`. The Windows implementation also returns `invalid_argument` if the host window is missing or `SetWindowPos` fails. |
 | `setFullscreen` | `fullscreen: bool` | `null`, `invalid_argument`, or `window_error`. |
 | `selectTrack` | `type: "video"`, `"audio"`, or `"subtitle"`; `id: int > 0` or null; `loadId: int > 0`; `requestId: int > 0` | `null`, `invalid_argument`, or `command_queue_full`. Completion is asynchronous through `trackResult`. |
@@ -124,7 +125,10 @@ ordinary load-correlated property path, clearing it for a new load and rereading
 it at correlated FILE_LOADED rather than relabeling an old notification payload.
 Dart retains nullable signed finite `PlayerTelemetry.demuxerStartTime`; zero is
 valid, unavailable/invalid values clear it, and existing load/lifetime resets
-apply. `P + D - 10 s` mapping and schedule policy wait for T4. Manifest text and
+apply. The coordinator maps the part position as `P + D - 10 s`, clamped at
+zero. It estimates with the issued offset plus `P` until the first valid sample
+and retains the last valid `D` for that load. Desktop has no alignment seek.
+Manifest text and
 child references are never forwarded through logs, properties, errors or
 Diagnostics; internal libmpv errors are classified into fixed failures.
 Bounded typed subtitle cues are authored media content, so their URL-like text
@@ -623,12 +627,24 @@ are protected from ordinary property eviction in the bounded native event queue;
 periodic repeats remain droppable. Exhausting critical queue capacity preserves
 the existing fail-closed overflow behavior.
 
-Clock unavailability is a diagnostic, **not a Player error**; native performs no
-seek, retry or fallback. `time-pos` remains raw Media3 position. T4 consumption
-and alignment policy are not implemented here: the alignment decision uses the
-first ready only, the alignment seek is the only in-session seek, and user seeks
-restart sessions. Post-seek ready(A1) updates position mapping only and must not
-trigger a second alignment seek.
+Clock unavailability is diagnostic. `time-pos` remains raw Media3 position.
+Dart maps the source part position as `P - A - 10 s`. It loads sessions paused
+and covers video while deciding, using the first qualified adjustment and a
+current-load position observation. It issues one exact alignment seek when the
+initial error exceeds 0.5 seconds. Post-seek ready(A1) updates position mapping
+only. The initial clock wait is bounded to two seconds. User seeks restart
+sessions.
+
+Android's additive `alignSession` command accepts positive `loadId` and
+`seekId` integers and a non-negative integer `positionMs`. It accepts one
+exact alignment seek per current session load. The matching
+`sessionSeekResult` has `loadId`, `seekId` and
+`outcome: "landed" | "failed"`. The session renderer observes the reset
+and first post-reset frame release in playback-looper order.
+Earlier frames, an updated position and command acceptance do not qualify.
+The adapter fences results by load lifetime. Dart releases the cover on a
+matching landing or failure, or after five seconds, and honors the current
+pause intent.
 
 ### Android engine failure mapping
 

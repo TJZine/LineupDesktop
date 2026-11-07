@@ -9,6 +9,7 @@ class NativePlayerControllerTest {
         var media: MediaLoad? = null
         var released = false
         var exact: Boolean? = null
+        var alignment: Pair<Long, Long>? = null
         var selection = true
         var releaseFailures = 0
         var deferRelease = false
@@ -30,6 +31,10 @@ class NativePlayerControllerTest {
 
         override fun seek(seconds: Double, exact: Boolean) {
             this.exact = exact
+        }
+
+        override fun alignSession(positionMs: Long, seekId: Long) {
+            alignment = positionMs to seekId
         }
 
         override fun select(type: String, id: Long?) = selection
@@ -147,6 +152,57 @@ class NativePlayerControllerTest {
 
     private fun load(id: Long = 1, extra: Map<String, Any?> = emptyMap()) =
         call("load", mapOf("uri" to "https://media.invalid/file", "loadId" to id) + extra)
+
+    @Test
+    fun sessionLandingCorrelatesCurrentLoadAndFirstExactSeek() {
+        initialize()
+        load(1, mapOf("kind" to "plexSession", "startPaused" to true))
+        host.drain()
+        val first = host.engines.single()
+        assertEquals(true, first.media?.paused)
+        first.listener.ready(true)
+        host.drain()
+        call("alignSession", mapOf("loadId" to 1, "seekId" to 2, "positionMs" to 4250))
+        host.drain()
+        assertEquals(4250L to 2L, first.alignment)
+        first.listener.property("time-pos", 4.25)
+        first.listener.sessionSeekLanded(1)
+        host.drain()
+        assertFalse(host.events.any { it["type"] == "sessionSeekResult" })
+        first.listener.sessionSeekLanded(2)
+        host.drain()
+        assertEquals(
+            mapOf("type" to "sessionSeekResult", "loadId" to 1L, "seekId" to 2L, "outcome" to "landed"),
+            host.events.last(),
+        )
+        call("alignSession", mapOf("loadId" to 1, "seekId" to 3, "positionMs" to 7000))
+        host.drain()
+        assertEquals(4250L to 2L, first.alignment)
+        load(2, mapOf("kind" to "plexSession"))
+        host.drain()
+        host.events.clear()
+        first.listener.sessionSeekLanded(2)
+        call("alignSession", mapOf("loadId" to 1, "seekId" to 4, "positionMs" to 7000))
+        host.drain()
+        assertNull(host.engines.last().alignment)
+        assertTrue(host.events.isEmpty())
+    }
+
+    @Test
+    fun rendererLandingRequiresPostResetFrameEvenWithBufferedSource() {
+        val landed = mutableListOf<Long>()
+        val landing = SessionSeekLanding(landed::add)
+        landing.positionReset()
+        landing.frameReleased()
+        landing.arm(41)
+        landing.frameReleased() // The queued old frame is released before reset.
+        assertTrue(landed.isEmpty())
+        landing.positionReset() // Buffered seek still resets the renderer.
+        assertTrue(landed.isEmpty())
+        landing.frameReleased() // First frame can be released while still paused.
+        landing.frameReleased()
+        assertEquals(listOf(41L), landed)
+    }
 
     @Test
     fun lifetimeAndPlayerScopedSnapshots() {
