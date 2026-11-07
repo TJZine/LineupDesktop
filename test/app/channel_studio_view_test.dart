@@ -2578,6 +2578,102 @@ void main() {
     },
   );
 
+  for (final recordDraft in [true, false]) {
+    testWidgets(
+      recordDraft
+          ? 'manual rename draft retains the transition with refreshed snapshots'
+          : 'manual rename keeps the frozen cycle while refreshing snapshots',
+      (tester) async {
+        final anchor = DateTime.utc(2026);
+        final media = _media('first');
+        final second = _media('second');
+        const stale = ChannelItem(
+          id: 'first',
+          title: 'Stored title',
+          duration: Duration(hours: 1),
+        );
+        final source = ManualSource([stale, channelItemFor(second)]);
+        final original = Channel(
+          id: 'manual-migration',
+          number: 15,
+          name: 'Migrated',
+          source: source,
+          playbackMode: PlaybackMode.sequential,
+          anchor: anchor,
+          shuffleSeed: 15,
+          scheduleTransition: ScheduleTransition(
+            boundary: anchor.add(stale.duration),
+            legacyCycleItems: const [stale],
+          ),
+        );
+        final scenario = LineupScenario(
+          channels: [original],
+          availableMedia: [media, second],
+        );
+        final controller = recordDraft
+            ? _RecordingSaveController(scenario: scenario)
+            : _RealSaveController(scenario: scenario);
+        addTearDown(controller.dispose);
+        final transition = controller.channels.single.scheduleTransition!;
+        await tester.pumpWidget(
+          _studio(controller, ChannelStudioMode.editCustom, channel: original),
+        );
+        await tester.pumpAndSettle();
+
+        await tester.enterText(find.byKey(const Key('studio-name')), 'Renamed');
+        await _settleAirCheck(tester);
+        await tester.tap(find.text('Save changes'));
+        await tester.pumpAndSettle();
+
+        final saved = switch (controller) {
+          _RecordingSaveController(:final saved) => saved!,
+          _ => controller.channels.single,
+        };
+        expect(saved.name, 'Renamed');
+        expect(saved.scheduleVersion, original.scheduleVersion);
+        expect((saved.source as ManualSource).items.first.title, media.title);
+        if (recordDraft) {
+          expect(saved.scheduleTransition?.toJson(), transition.toJson());
+          return;
+        }
+        expect(saved.scheduleTransition, same(transition));
+
+        final schedule = buildChannelSchedule(saved, [
+          channelItemFor(media),
+          channelItemFor(second),
+        ]);
+        final current = programAt(
+          anchor.add(const Duration(minutes: 1)),
+          anchor,
+          schedule,
+        );
+        expect(current.item.title, stale.title);
+        expect(current.end, transition.boundary);
+
+        tester
+            .widget<IconButton>(
+              find.ancestor(
+                of: find.byTooltip(
+                  'Move ${second.title} earlier in channel Renamed',
+                ),
+                matching: find.byType(IconButton),
+              ),
+            )
+            .onPressed!();
+        await _settleAirCheck(tester);
+        await tester.tap(find.text('Save changes'));
+        await tester.pumpAndSettle();
+
+        final edited = controller.channels.single;
+        expect((edited.source as ManualSource).items.map((item) => item.id), [
+          second.id,
+          media.id,
+        ]);
+        expect(edited.scheduleTransition, isNull);
+      },
+    );
+  }
+
   testWidgets('Library duplicate preserves its unchanged source order', (
     tester,
   ) async {

@@ -131,7 +131,16 @@ void main() {
   });
 
   test('proposal counts preserve resolved duplicates, filters and playlist occurrences', () {
-    final special = _builderEpisode('shared', 0, 'Collection');
+    final special = PlexMediaItem(
+      id: 'shared',
+      title: 'Keyless special',
+      type: 'episode',
+      libraryId: 'tv',
+      duration: const Duration(minutes: 20),
+      seasonNumber: 0,
+      collections: const ['Collection'],
+      parts: [PlexMediaPart(path: '/parts/special')],
+    );
     final regular = _builderEpisode('regular', 1, 'Collection');
     final media = [
       special,

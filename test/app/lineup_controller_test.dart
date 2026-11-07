@@ -2676,8 +2676,22 @@ void main() {
         ChannelPlanApplyResult.stale,
       );
       expect(store.saveCalls, saves);
+      final edited = Channel.fromJson({...first.toJson(), 'name': 'Edited'});
       store.blockNext();
-      final deleting = controller.deleteChannels(expectedChannels: [first]);
+      final editing = controller.saveChannel(edited, expectedBase: first);
+      await store.blockedSaveStarted.future;
+      final queuedBehindEdit = controller.applyReviewedChannelPlan(
+        [generated],
+        mode: ChannelBuildMode.append,
+        expectedBase: List.of(controller.channels),
+      );
+      store.releaseBlockedSave();
+      await editing;
+      expect(await queuedBehindEdit, ChannelPlanApplyResult.stale);
+      expect(store.saveCalls, saves + 1);
+
+      store.blockNext();
+      final deleting = controller.deleteChannels(expectedChannels: [edited]);
       await store.blockedSaveStarted.future;
       final queued = controller.applyReviewedChannelPlan(
         [generated],
@@ -2687,7 +2701,7 @@ void main() {
       store.releaseBlockedSave();
       await deleting;
       expect(await queued, ChannelPlanApplyResult.stale);
-      expect(store.saveCalls, saves + 1);
+      expect(store.saveCalls, saves + 2);
     },
   );
 
@@ -2731,13 +2745,17 @@ void main() {
       ..._channel('third').toJson(),
       'number': 30,
     });
+    final fourth = Channel.fromJson({
+      ..._channel('fourth').toJson(),
+      'number': 40,
+    });
 
     final controller = LineupController(
       store: store,
       credentials: _MemoryCredentials(),
       plex: _FakePlex(),
       scenario: LineupScenario(
-        channels: [first, second, third],
+        channels: [first, second, third, fourth],
         currentChannelId: second.id,
       ),
     );
@@ -2747,7 +2765,7 @@ void main() {
       expectedChannels: [first, second],
     );
     await store.blockedSaveStarted.future;
-    expect(controller.channels, channelValues([first, second, third]));
+    expect(controller.channels, channelValues([first, second, third, fourth]));
     final stale = controller.deleteChannels(expectedChannels: [second]);
     final staleExpectation = expectLater(
       stale,
@@ -2756,9 +2774,20 @@ void main() {
     store.releaseBlockedSave();
     await deleting;
     await staleExpectation;
-    expect(controller.channels, channelValues([third]));
-    expect(controller.currentChannelId, third.id);
+    expect(controller.channels, channelValues([third, fourth]));
+    expect(controller.currentChannelId, fourth.id);
     expect(store.saveCalls, 1);
+
+    final edited = Channel.fromJson({...third.toJson(), 'name': 'Edited'});
+    controller.fixtureActor.replaceChannels([edited, fourth]);
+    await expectLater(
+      controller.deleteChannels(expectedChannels: [third]),
+      throwsA(isA<ChannelStateConflictException>()),
+    );
+    expect(store.saveCalls, 1);
+    await controller.deleteChannels(expectedChannels: [fourth]);
+    expect(controller.channels, channelValues([edited]));
+    expect(store.saveCalls, 2);
   });
 
   test('reorder retains numbers and recipe, and failed save never publishes a draft', () async {
@@ -2807,6 +2836,23 @@ void main() {
       'number': first.number,
     });
     expect(controller.currentChannelId, first.id);
+
+    final captured = List<Channel>.of(controller.channels);
+    final edited = Channel.fromJson({
+      ...captured.first.toJson(),
+      'name': 'Edited',
+    });
+    controller.fixtureActor.replaceChannels([edited, captured.last]);
+    final saves = store.saveCalls;
+    await expectLater(
+      controller.reorderChannels(
+        expectedLineup: captured,
+        orderedChannelIds: [first.id, second.id],
+      ),
+      throwsA(isA<ChannelStateConflictException>()),
+    );
+    expect(store.saveCalls, saves);
+    expect(controller.channels, channelValues([edited, captured.last]));
   });
 
   test(
@@ -4041,6 +4087,94 @@ void main() {
     await controller.artworkForPath(Uri.parse('/old'));
     expect(plex.artworkToken, 'old-pms');
   });
+
+  for (final replaceSelection in [true, false]) {
+    test(
+      replaceSelection
+          ? 'obsolete selection cannot clear a newer target for the same server'
+          : 'obsolete selection releases its target when there is no replacement',
+      () async {
+        final old = _server('old');
+        final next = _server('next');
+        final obsoleteRefresh = Completer<List<PlexServerAccess>>();
+        final currentRefresh = Completer<List<PlexServerAccess>>();
+        List<PlexServerAccess> access(int generation) => [
+          PlexServerAccess(server: old, token: 'old-pms-$generation'),
+          PlexServerAccess(server: next, token: 'next-pms-$generation'),
+        ];
+        var discoveries = 0;
+        final plex = _FakePlex()
+          ..discoverServersHandler = (_) {
+            return switch (++discoveries) {
+              1 => Future.value(access(1)),
+              2 => obsoleteRefresh.future,
+              3 => currentRefresh.future,
+              _ => throw StateError('Unexpected discovery'),
+            };
+          }
+          ..selectConnectionHandler = (server, token) async {
+            if (token == 'next-pms-1') {
+              throw const PlexException('auth-required', 'Expired');
+            }
+            return server.connections.single;
+          }
+          ..artworkHandler = (_, token, _) async {
+            if (token == 'old-pms-1') {
+              throw const PlexException('auth-required', 'Expired');
+            }
+            return Uint8List.fromList([8]);
+          };
+        final store = _ControlledSaveStore(
+          const PersistedState(selectedServerByProfile: {'owner': 'old'}),
+        );
+        final controller = LineupController(
+          store: store,
+          credentials: _MemoryCredentials(accountToken: 'cloud-token'),
+          plex: plex,
+        );
+        addTearDown(controller.dispose);
+        await controller.initialize();
+        final baseline = store.saveCalls;
+        controller
+          ..fixtureActor.present(LineupPresentation(stage: SetupStage.ready))
+          ..showServers();
+
+        final obsolete = controller.selectServer(next);
+        await Future<void>.delayed(Duration.zero);
+        expect(discoveries, 2);
+        if (replaceSelection) {
+          controller
+            ..cancelServerSelection()
+            ..showServers();
+          final replacement = controller.selectServer(next);
+          await Future<void>.delayed(Duration.zero);
+          expect(discoveries, 3);
+
+          obsoleteRefresh.complete(access(2));
+          await obsolete;
+          currentRefresh.complete(access(3));
+          await replacement;
+
+          expect(controller.error, isNull);
+          expect(controller.server?.id, next.id);
+          expect(controller.connection?.uri, next.connections.single.uri);
+          expect(store.saveCalls, baseline + 1);
+        } else {
+          controller
+            ..showServers()
+            ..cancelServerSelection();
+          obsoleteRefresh.complete(access(2));
+          await obsolete;
+
+          currentRefresh.complete(access(3));
+          expect(await controller.artworkForPath(Uri.parse('/old')), [8]);
+          expect(plex.artworkToken, 'old-pms-3');
+          expect(discoveries, 3);
+          expect(store.saveCalls, baseline);
+        }
+      },
+    );
+  }
 
   test('playback requests remove Plex tokens without an empty query', () {
     final tokenOnly = LineupPlaybackRequest.parts([
@@ -7691,6 +7825,7 @@ void main() {
       await expectLater(settings, throwsStateError);
       await current;
       expect(controller.settings.diagnosticsEnabled, isFalse);
+      expect(store.savedStates.last.settings.diagnosticsEnabled, isFalse);
       expect(controller.currentChannelId, second.id);
       expect(
         store.state.currentChannelByProfileServer['owner']!['server'],
@@ -7810,6 +7945,8 @@ void main() {
     await selection;
 
     expect(controller.profile, child);
+    expect(controller.settings.nowWatchingBanner, isFalse);
+    expect(store.savedStates.last.settings.nowWatchingBanner, isFalse);
     expect(store.savedStates[store.savedStates.length - 2].profileId, owner.id);
     expect(store.savedStates.last.profileId, child.id);
   });
@@ -7851,6 +7988,8 @@ void main() {
     await selection;
 
     expect(controller.server?.id, nextServer.id);
+    expect(controller.settings.nowWatchingBanner, isFalse);
+    expect(store.savedStates.last.settings.nowWatchingBanner, isFalse);
     expect(
       store.savedStates[store.savedStates.length - 2].selectedServerByProfile,
       {'owner': oldServer.id},

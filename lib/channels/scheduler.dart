@@ -163,17 +163,16 @@ bool scheduleIncludesItem(
   if (mode != PlaybackMode.block || scheduleVersion < 2 || includeSpecials) {
     return true;
   }
-  return _seriesKey(item) == null || item.seasonNumber != 0;
+  return !_isEpisode(item) || item.seasonNumber != 0;
 }
 
-String? _seriesKey(ChannelItem item) {
-  final isEpisode =
-      item.mediaKind == ChannelMediaKind.episode ||
-      (item.mediaKind == ChannelMediaKind.unknown &&
-          (item.showTitle != null || item.showThumb != null));
-  if (!isEpisode) return null;
-  return item.seriesId ?? item.showThumb ?? item.showTitle;
-}
+bool _isEpisode(ChannelItem item) =>
+    item.mediaKind == ChannelMediaKind.episode ||
+    (item.mediaKind == ChannelMediaKind.unknown &&
+        (item.showTitle != null || item.showThumb != null));
+
+String? _seriesKey(ChannelItem item) =>
+    _isEpisode(item) ? item.seriesId ?? item.showThumb ?? item.showTitle : null;
 
 ScheduleIndex buildSchedule(
   List<ChannelItem> content, {
@@ -379,15 +378,20 @@ _CycleIndex _shuffleCycle(ScheduleIndex schedule, int cycle) {
     _cycleSeed(schedule.seed, schedule.scheduleVersion, cycle),
   );
   if (items.length > 2) {
-    final previous = seededShuffle(
-      schedule.items,
-      _cycleSeed(schedule.seed, schedule.scheduleVersion, cycle - 1),
-    );
-    if (items.first.id == previous.last.id) {
+    final legacyPredecessor = cycle == 0
+        ? schedule.transition?.legacyCycleItems.last
+        : null;
+    final previousId =
+        legacyPredecessor?.id ??
+        seededShuffle(
+          schedule.items,
+          _cycleSeed(schedule.seed, schedule.scheduleVersion, cycle - 1),
+        ).last.id;
+    if (items.first.id == previousId) {
       final swap = Iterable<int>.generate(
         items.length - 2,
         (index) => index + 1,
-      ).where((index) => items[index].id != previous.last.id).firstOrNull;
+      ).where((index) => items[index].id != previousId).firstOrNull;
       if (swap != null) {
         final first = items.first;
         items[0] = items[swap];
@@ -476,19 +480,19 @@ List<ChannelItem> blockOrder(
   final groups = <String, List<_MarathonRun>>{};
   var occurrence = 0;
   for (final item in items) {
-    final seriesId = _seriesKey(item);
-    if (seriesId == null) {
-      groups['item:$occurrence'] = [
-        _MarathonRun([(item: item, occurrence: occurrence)], season: null),
-      ];
-      occurrence++;
-      continue;
-    }
     if (!scheduleIncludesItem(
       item,
       mode: PlaybackMode.block,
       includeSpecials: includeSpecials,
     )) {
+      occurrence++;
+      continue;
+    }
+    final seriesId = _seriesKey(item);
+    if (seriesId == null) {
+      groups['item:$occurrence'] = [
+        _MarathonRun([(item: item, occurrence: occurrence)], season: null),
+      ];
       occurrence++;
       continue;
     }

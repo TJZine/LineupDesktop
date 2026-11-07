@@ -273,7 +273,7 @@ class ChannelStudioDraft {
   bool _retainsSchedule(ContentSource programming) {
     final base = expectedBase;
     return base != null &&
-        canonicalSourceEquals(base.source, programming) &&
+        scheduleProgrammingSourceEquals(base.source, programming) &&
         base.playbackMode == playbackMode &&
         (playbackMode != PlaybackMode.block ||
             (base.blockSize ?? 3) == effectiveBlockSize) &&
