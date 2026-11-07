@@ -486,8 +486,9 @@ document in the same commit.
 archives and Git snapshots; it never fetches, builds or signs. Its small committed
 `assets/licenses/` snapshot contains exact source pins (including resolved nested
 runtime dependencies), recipe/helper texts and the macOS engine patches. Regenerate
-it after changing an included input, with the pinned SDK and prepared runtime
-sources available:
+it after changing an included input, including any file in `HELPERS` in
+`tool/macos/source_materials.py`. The `assets` command needs the pinned Flutter SDK's
+`LICENSE` file. The **Verify Dart** job checks that the mirrors are current:
 
 ```sh
 python3 tool/macos/source_materials.py assets --flutter-sdk "$FLUTTER_ROOT"

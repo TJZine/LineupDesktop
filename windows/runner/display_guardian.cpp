@@ -66,12 +66,12 @@ public:
   bool Disarm() override {
     if (!recovery_->Resolve(identity_))
       return false;
-    if (IsAlive())
-      Send(GuardianKind::disarm, ownership_);
-    disarmed_ = true;
-    commands_.Reset();
-    acknowledgments_.Reset();
+    StopGuardian();
     return true;
+  }
+  void StandDown() override {
+    recovery_->Resolve(identity_);
+    StopGuardian();
   }
   bool IsAlive() override {
     return !lost_ && !disarmed_ && process_.Get() &&
@@ -83,6 +83,14 @@ public:
   }
 
 private:
+  void StopGuardian() {
+    if (IsAlive())
+      Send(GuardianKind::disarm, ownership_);
+    disarmed_ = true;
+    commands_.Reset();
+    acknowledgments_.Reset();
+  }
+
   bool Launch() {
     SECURITY_ATTRIBUTES security{sizeof(security), nullptr, TRUE};
     HANDLE read = nullptr, write = nullptr;
@@ -247,6 +255,11 @@ int RunDisplayGuardian(HANDLE commands, HANDLE acknowledgments, HANDLE parent,
     if (!safe)
       return EXIT_FAILURE;
   }
+
+  // The ack is already sent. Resolve is idempotent: if the parent removed
+  // the entry, this takes the gate without writing the journal.
+  if (session.Disarmed() && recovery && !recovery->Resolve(session.Identity()))
+    return EXIT_FAILURE;
 
   return 0;
 }

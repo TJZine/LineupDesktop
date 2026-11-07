@@ -118,6 +118,99 @@ and `LINEUP_ANDROID_KEY_ALIAS` can override those non-secret defaults.
 **Back up the keystore securely.** Losing it prevents in-place updates and forces
 an uninstall, deleting on-device lineups and sign-in.
 
+Gradle verifies downloaded Maven metadata and artifacts against the committed
+SHA-256 digests in `android/gradle/verification-metadata.xml`. After an Android
+dependency or Flutter SDK change, regenerate it on macOS using a clean Gradle
+user home, a disposable copy of the pinned Flutter SDK and Gradle's
+`--write-verification-metadata sha256` option. Resolve both ARM APK variants
+(debug and release), `:app:testDebugUnitTest` and the notice generator's Gradle
+report. Review the updated digests and use **Verify Android TV build** to
+identify any Linux-only artifacts. The root metadata also covers Flutter's
+included Gradle build. Robolectric fetches its Android runtime JARs at test time
+outside Gradle's verification. Those JARs do not ship.
+
+### Regenerate Gradle verification metadata on macOS
+
+Start from a clean checkout with the intended dependency pins. Set
+`FLUTTER_SDK` to the pinned SDK directory and `JAVA_HOME` to the JDK 17
+directory before running these commands from the repository root in Bash.
+The temporary Gradle home starts empty, and the Flutter copy keeps Gradle
+writes out of the original SDK.
+
+```bash
+set -euo pipefail
+: "${FLUTTER_SDK:?Set FLUTTER_SDK to the pinned Flutter SDK directory}"
+: "${JAVA_HOME:?Set JAVA_HOME to the JDK 17 directory}"
+sdk="${ANDROID_SDK_ROOT:-${ANDROID_HOME:-$HOME/Library/Android/sdk}}"
+scratch="$(mktemp -d)"
+trap 'rm -rf "$scratch"' EXIT
+cp -R "$FLUTTER_SDK" "$scratch/flutter"
+export PATH="$scratch/flutter/bin:$JAVA_HOME/bin:$PATH"
+export GRADLE_USER_HOME="$scratch/gradle"
+export GRADLE_OPTS=-Dorg.gradle.project.android.builder.sdkDownload=false
+
+flutter pub get
+flutter create --empty --platforms=android --no-overwrite .
+flutter --version
+dart tool/check_toolchain.dart
+
+apk_properties=(
+  -Ptarget-platform=android-arm,android-arm64
+  -Ptarget=lib/main.dart
+  -Pbase-application-name=android.app.Application
+  -Pdart-obfuscation=false
+  -Ptrack-widget-creation=true
+)
+(
+  cd android
+  LINEUP_ANDROID_SIGNING=debug-key ./gradlew --write-verification-metadata sha256 \
+    --no-daemon :app:assembleDebug :app:testDebugUnitTest \
+    "${apk_properties[@]}" -Ptree-shake-icons=false
+)
+
+# Wrapper generation can update the Dart lockfile. Restore the intended pins.
+git restore -- pubspec.lock
+flutter pub get --enforce-lockfile
+
+# Use a disposable key for this metadata-generation APK.
+keytool -genkeypair -keystore "$scratch/throwaway.p12" -alias metadata-only \
+  -storepass metadata-only -keyalg RSA -keysize 2048 -dname 'CN=Metadata only' -validity 1
+(
+  cd android
+  unset LINEUP_ANDROID_SIGNING
+  LINEUP_ANDROID_KEYSTORE="$scratch/throwaway.p12" \
+    LINEUP_ANDROID_KEY_ALIAS=metadata-only LINEUP_ANDROID_KEY_PASSWORD=metadata-only \
+    ./gradlew --write-verification-metadata sha256 --no-daemon :app:assembleRelease \
+    "${apk_properties[@]}" -Ptree-shake-icons=true \
+    "-Pflutter.androidSdkRoot=$sdk" -Pflutter.installedNdkVersions=28.2.13676358 \
+    "-Pflutter.sdkManagerPath=$sdk/cmdline-tools/latest/bin/sdkmanager"
+)
+rm -f "$scratch/throwaway.p12" build/app/outputs/apk/release/app-release.apk \
+  build/app/outputs/flutter-apk/app-release.apk
+
+# Inject metadata generation into the notice generator's exact Gradle command.
+python3 - <<'PYTHON'
+import importlib.util
+from pathlib import Path
+from unittest.mock import patch
+
+spec = importlib.util.spec_from_file_location('notices', 'tool/android/generate-licenses.py')
+generator = importlib.util.module_from_spec(spec)
+spec.loader.exec_module(generator)
+run = generator.subprocess.run
+
+def record(command, **kwargs):
+    return run([command[0], '--write-verification-metadata', 'sha256', *command[1:]], **kwargs)
+
+with patch.object(generator.subprocess, 'run', record):
+    print(generator.run_gradle_report(Path('android').resolve(), 'releaseRuntimeClasspath'))
+PYTHON
+```
+
+Review the metadata diff and exclude any unrelated files produced by wrapper
+generation. For a Linux-only artifact such as AAPT2, download the matching
+classifier from the same Maven repository and add its SHA-256 to the metadata.
+
 ## Release packaging and runtime notices
 
 Run the release recipe from the repository root:

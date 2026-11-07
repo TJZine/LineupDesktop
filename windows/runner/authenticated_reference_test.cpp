@@ -285,11 +285,21 @@ class TestMessenger final : public flutter::BinaryMessenger {
     if (mode == "session-nested-hls" && ++event_count > 4096) session_structural_failure = true;
     const auto load_id = map->find(Value("loadId"));
     if (load_id != map->end() && !(load_id->second == Value(active_load_id))) return;
+    const auto type = map->find(Value("type"));
+    if (type != map->end() && type->second == Value("stopResult")) {
+      const auto stop_id = map->find(Value("stopId"));
+      const auto success = map->find(Value("success"));
+      if (stop_id != map->end() && stop_id->second == Value(int64_t{1}) &&
+          success != map->end() && success->second == Value(true)) {
+        stop_succeeded = true;
+      }
+    }
     const auto state = map->find(Value("state"));
     if (state != map->end()) {
       const auto* text = std::get_if<std::string>(&state->second);
       if (text && (*text == "ended" || *text == "stopped" || *text == "error")) {
         finished = true;
+        terminal_state = *text;
         failed = failed || (*text == "error");
         if (mode == "session-nested-hls" && *text == "error") {
           const auto code = map->find(Value("failureCode"));
@@ -304,6 +314,11 @@ class TestMessenger final : public flutter::BinaryMessenger {
     }
     const auto name = map->find(Value("name"));
     const auto value = map->find(Value("value"));
+    if (type != map->end() && type->second == Value("property") &&
+        name != map->end() && name->second == Value("pause") &&
+        value != map->end()) {
+      if (const auto* flag = std::get_if<bool>(&value->second)) paused = *flag;
+    }
     if (name != map->end() && name->second == Value("time-pos") &&
         value != map->end()) {
       const auto* seconds = std::get_if<double>(&value->second);
@@ -331,6 +346,9 @@ class TestMessenger final : public flutter::BinaryMessenger {
   PlaybackObservation* playback_observation = nullptr;
   flutter::BinaryMessageHandler handler;
   mutable bool finished = false;
+  mutable bool paused = false;
+  mutable bool stop_succeeded = false;
+  mutable std::string terminal_state;
   mutable bool failed = false;
   mutable bool progressed = false;
   mutable int event_count = 0;
@@ -497,6 +515,7 @@ int main(int argc, char** argv) {
   bool initialized = false;
   bool session_progressed = false;
   bool session_rejected = false;
+  bool stop_confirmed = false;
   bool restoration_attempted = false;
   bool restoration_rejected = false;
   bool restoration_progressed = false;
@@ -554,22 +573,31 @@ int main(int argc, char** argv) {
       if (!timed_out && session_progressed && !session_rejected &&
           (mode == "session-complete" || mode == "session-stop" || mode == "session-replace")) {
         if (mode == "session-stop") {
-          messenger.finished = false;
-          if (!messenger.Call("stop", {{Value("stopId"), Value(int64_t{1})}})) {
-            timed_out = true;
-          }
-          const auto stop_deadline = std::chrono::steady_clock::now() + std::chrono::seconds(3);
-          while (!messenger.finished && !timed_out && std::chrono::steady_clock::now() < stop_deadline) {
-            MSG message;
-            while (PeekMessageW(&message, nullptr, 0, 0, PM_REMOVE)) {
-              if (!player.HandleWindowMessage(message.message)) {
-                TranslateMessage(&message);
-                DispatchMessageW(&message);
+          const auto pump_until = [&](auto done) {
+            const auto deadline = std::chrono::steady_clock::now() + std::chrono::seconds(3);
+            while (!done() && std::chrono::steady_clock::now() < deadline) {
+              MSG message;
+              while (PeekMessageW(&message, nullptr, 0, 0, PM_REMOVE)) {
+                if (!player.HandleWindowMessage(message.message)) {
+                  TranslateMessage(&message);
+                  DispatchMessageW(&message);
+                }
               }
+              MsgWaitForMultipleObjects(0, nullptr, FALSE, 20, QS_ALLINPUT);
             }
-            MsgWaitForMultipleObjects(0, nullptr, FALSE, 20, QS_ALLINPUT);
+            return done();
+          };
+          messenger.paused = false;
+          if (!messenger.Call("pause") ||
+              !pump_until([&] { return messenger.paused || messenger.finished; }) ||
+              messenger.finished) {
+            timed_out = true;
+          } else {
+            messenger.finished = false;
+            timed_out = !messenger.Call("stop", {{Value("stopId"), Value(int64_t{1})}}) ||
+                        !pump_until([&] { return messenger.finished && messenger.stop_succeeded; });
+            stop_confirmed = messenger.stop_succeeded && messenger.terminal_state == "stopped";
           }
-          timed_out = timed_out || !messenger.finished;
           session_rejected = session_rejected || messenger.failed;
         }
         if (!timed_out && !session_rejected) {
@@ -637,6 +665,7 @@ int main(int argc, char** argv) {
             << " session_load_started=" << (playback.files_started == 1)
             << " session_progressed=" << session_progressed
             << " session_rejected=" << session_rejected
+            << " stop_confirmed=" << stop_confirmed
             << " session_override_removed=" << ignored_references
             << " restoration_attempted=" << restoration_attempted
             << " restoration_rejected=" << restoration_rejected

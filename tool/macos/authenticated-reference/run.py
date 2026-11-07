@@ -177,6 +177,10 @@ def media_pass(result, fields, audit, positive):
                                   if positive else (fields["progressed"] == "0" and fields["rejected"] == "1"))))
 
 
+def redirect_pass(result, fields, audit):
+    return media_pass(result, fields, audit, False) and audit["B_requests"] == 0
+
+
 class Server(http.server.ThreadingHTTPServer):
     daemon_threads = True
     block_on_close = False
@@ -442,7 +446,11 @@ def matrix(args, harness, nonzero_start):
                 a.redirect = (f"http://127.0.0.1:{plain.server_port}/media.mp4" if name == "redirect-http"
                               else origin_b + "/media.mp4")
                 result, fields, observed = invoke(name, path, mode="observe" if positive is None else None)
-                record(name, media_pass(result, fields, observed, positive), fields, observed,
+                if name in ("redirect-https", "redirect-http"):
+                    passed = redirect_pass(result, fields, observed)
+                else:
+                    passed = media_pass(result, fields, observed, positive)
+                record(name, passed, fields, observed,
                        scope="bounded-observation" if positive is None else
                              "ordinary-media-positive" if positive else "reference-fails-closed")
 

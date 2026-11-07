@@ -45,6 +45,7 @@ struct Effects {
   LONG reject_recovery = 0;
   LONG target_missing = 0;
   LONG unobserved_attempt = 0;
+  LONG stand_down = 0;
   DWORD guardian_pid[2]{};
   RecoveryIdentity identity[2]{};
   int targets = 1;
@@ -276,14 +277,16 @@ int Predecessor(const std::wstring &journal, const std::wstring &gate,
   Wait(handles[clean_disarm], "predecessor waits for crash or normal release",
        15000);
   for (int i = 0; i < effects.targets; ++i) {
-    Check(recovery->Execute(effects.identity[i],
-                            [&] {
-                              return api.Set(own[i].target, own[i].route,
-                                             own[i].original);
-                            }),
-          "normal restoration");
-    Check(recovery->Resolve(effects.identity[i]),
-          "verified normal release resolves journal");
+    if (!Read(effects.stand_down)) {
+      Check(recovery->Execute(effects.identity[i],
+                              [&] {
+                                return api.Set(own[i].target, own[i].route,
+                                               own[i].original);
+                              }),
+            "normal restoration");
+      Check(recovery->Resolve(effects.identity[i]),
+            "verified normal release resolves journal");
+    }
     Send(commands[i].Get(), acknowledgments[i].Get(),
          MakeGuardianRecord(GuardianKind::disarm, 4, own[i],
                             effects.identity[i]));
@@ -577,6 +580,22 @@ void CleanDisarmAndExternalChange() {
     f.Finish(successor);
     Check(Read(f.EffectsState().guardian_writes) == 0,
           "external original respected without writes");
+  }
+  {
+    Fixture f;
+    f.EffectsState().stand_down = 1;
+    HANDLE predecessor = f.Start(L"predecessor");
+    f.Ready();
+    // Leave the display at Lineup's written state, where recovery would write.
+    f.Disarm();
+    ExitSuccess(predecessor);
+    HANDLE successor = f.Start(L"successor");
+    f.Reported();
+    Check(!Read(f.EffectsState().successor_unavailable),
+          "helper finished the resolve the parent could not");
+    f.Finish(successor);
+    Check(Read(f.EffectsState().guardian_writes) == 0,
+          "disarm path never touches the display");
   }
 }
 void DelayedResolvedGuardian() {
