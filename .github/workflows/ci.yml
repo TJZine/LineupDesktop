@@ -307,13 +307,13 @@ jobs:
         run: |
           $ErrorActionPreference = 'Stop'
           $PSNativeCommandUseErrorActionPreference = $true
-          $python = Get-Command python -CommandType Application -ErrorAction Stop
-          $openssl = Get-Command openssl -CommandType Application -ErrorAction SilentlyContinue
+          $python = Get-Command python -CommandType Application -ErrorAction Stop | Select-Object -First 1
+          $openssl = Get-Command openssl -CommandType Application -ErrorAction SilentlyContinue | Select-Object -First 1
           if (-not $openssl) {
             $gitBin = Join-Path $env:ProgramFiles 'Git\usr\bin'
             if (Test-Path -LiteralPath (Join-Path $gitBin 'openssl.exe')) {
               $env:PATH = "$gitBin;$env:PATH"
-              $openssl = Get-Command openssl -CommandType Application -ErrorAction SilentlyContinue
+              $openssl = Get-Command openssl -CommandType Application -ErrorAction SilentlyContinue | Select-Object -First 1
             }
           }
           if (-not $openssl) {
