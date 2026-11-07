@@ -631,12 +631,6 @@ class PlayerCoordinator extends ChangeNotifier with WidgetsBindingObserver {
     if (event.generation != _activeLoadGeneration) return;
     final load = _activeLoad;
     final sessionClock = load?.sessionClock;
-    final partPosition = sessionClock?.observe(event) ?? event.position;
-    final sourcePositionAvailable = sessionClock?.basis != 'raw';
-    if (sessionClock != null && event.positionUpdated) {
-      if (sessionClock.mapped) load!.lastMappedPosition = partPosition;
-      _recordSessionAlignment(sessionClock);
-    }
     final terminal = const {
       PlayerState.error,
       PlayerState.ended,
@@ -644,14 +638,20 @@ class PlayerCoordinator extends ChangeNotifier with WidgetsBindingObserver {
       PlayerState.idle,
       PlayerState.unsupported,
     }.contains(event.status.state);
+    final partPosition =
+        sessionClock?.observe(event, active: !terminal) ?? event.position;
+    if (sessionClock != null && event.positionUpdated) {
+      if (sessionClock.mapped) load!.lastMappedPosition = partPosition;
+      _recordSessionAlignment(sessionClock);
+    }
     if (terminal &&
         (event.status.state == PlayerState.error || load?.replacing != true)) {
       _displayMatching.cancelLoad();
     }
-    if (!terminal && event.positionUpdated && sourcePositionAvailable) {
+    if (!terminal && event.positionUpdated) {
       load?.observedPosition = partPosition;
     }
-    if (partPosition > Duration.zero && sourcePositionAvailable) {
+    if (partPosition > Duration.zero) {
       load?.lastPositivePosition = partPosition;
     }
     if (sessionClock == null && event.duration > Duration.zero) {
@@ -684,11 +684,8 @@ class PlayerCoordinator extends ChangeNotifier with WidgetsBindingObserver {
         (event.status.state != PlayerState.error ||
             event.position > Duration.zero ||
             load.resumePosition == Duration.zero)) {
-      if (sourcePositionAvailable) {
-        load.resumePosition = partPosition;
-      } else if (load.resumePosition == Duration.zero) {
-        load.resumePosition = sessionClock?.requested ?? Duration.zero;
-      }
+      load.resumePosition =
+          sessionClock?.seekBase(alignmentHeld: false) ?? partPosition;
     }
     final playback = _activeLoad?.request ?? _active?.request;
     if (playback != null &&
@@ -789,6 +786,10 @@ class PlayerCoordinator extends ChangeNotifier with WidgetsBindingObserver {
           return;
         }
         if (session && load.sessionRestarts == 0) {
+          _status = const PlayerStatus(
+            state: PlayerState.loading,
+            message: 'Preparing playback',
+          );
           _startLoadRecovery(
             load,
             playback,
@@ -796,6 +797,7 @@ class PlayerCoordinator extends ChangeNotifier with WidgetsBindingObserver {
             mode: PlexPartMode.restartSession,
             sessionRestarts: 1,
           );
+          notifyListeners();
           return;
         }
         if (reactive && _claimReactiveFallback()) {
@@ -2280,11 +2282,8 @@ class PlayerCoordinator extends ChangeNotifier with WidgetsBindingObserver {
       final clock = load.sessionClock;
       if (seek != null && identical(seek.load, load)) {
         base = seek.position;
-      } else if (clock != null &&
-          (load.observedPosition == null || clock.basis == 'raw')) {
-        // A replacement can settle before it publishes a source position.
-        // Keep this load's last usable position or join target until then.
-        base = load.observedPosition ?? clock.requested;
+      } else if (clock != null) {
+        base = clock.seekBase(alignmentHeld: sessionAlignmentHeld);
         final playback = load.request;
         if (playback != null && _usesAggregateCoordinates(playback)) {
           base += _partOffset(load.partIndex)!;
@@ -3153,7 +3152,7 @@ class PlayerCoordinator extends ChangeNotifier with WidgetsBindingObserver {
     late final Future<void> operation;
     operation = Future<void>.sync(player.stop)
         .timeout(
-          issuedNativeSession ? const Duration(seconds: 1) : _nativeStopTimeout,
+          _nativeStopTimeout,
           onTimeout: () => throw const PlayerUnavailable(
             'Native playback did not stop in time.',
             failureCode: 'stop_timeout',

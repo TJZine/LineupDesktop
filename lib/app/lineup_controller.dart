@@ -337,7 +337,8 @@ class LineupController extends ChangeNotifier {
   int _mutationScope = 0;
   int _mutationEligibility = 0;
   _ControllerPlexSession? _livePlexSession;
-  Future<void> _sessionStarts = Future.value();
+  final _issuedPlexSessions = <_ControllerPlexSession>{};
+  final _playbackDetails = <String, PlexMediaItem>{};
   Future<PlexConnection>? _playbackRefresh;
   int? _playbackRefreshScope;
   Set<String> get _unavailableCollectionLibraryIds =>
@@ -2157,19 +2158,73 @@ class LineupController extends ChangeNotifier {
         : await mediaCapabilities();
     checkCurrent();
     final profile = buildProfile(capabilities, desktop: desktop);
-    final streams = item.parts[partIndex].streams;
+    var route = connection ?? initialConnection;
+    Future<T> authorize<T>(Future<T> Function(String, PlexConnection) action) =>
+        _withPmsAuthorization(
+          _epoch,
+          serverId,
+          (token, refreshed) {
+            checkCurrent();
+            route = refreshed ?? route;
+            return action(token, route);
+          },
+          connectionOverride: route,
+          playbackScope: scope,
+          isCurrent: current,
+        );
+
+    final part = item.parts[partIndex];
+    var streams = part.streams;
+    var container = item.container;
+    Future<void> fillStreams() async {
+      if (streams.isNotEmpty) return;
+      try {
+        final details =
+            _playbackDetails[item.id] ??
+            await authorize<PlexMediaItem>(
+              (token, route) => plex.itemPlaybackDetails(
+                route.uri,
+                token,
+                item.id,
+                cancelled: cancellation.cancelled,
+              ),
+            );
+        checkCurrent();
+        _playbackDetails[item.id] = details;
+        final matchingPart = details.parts
+            .where(
+              (candidate) => part.id != null
+                  ? candidate.id == part.id
+                  : candidate.path == part.path,
+            )
+            .firstOrNull;
+        if (matchingPart != null) {
+          streams = matchingPart.streams;
+          container = details.container ?? container;
+        }
+      } on PlexException catch (error) {
+        checkCurrent();
+        if (error.isAuthorizationFailure) rethrow;
+        // The decision and Direct Play paths still work without detail.
+      }
+    }
+
+    if (!desktop && capabilities.known && streams.isEmpty) {
+      await fillStreams();
+      checkCurrent();
+    }
     final video = streams.where((stream) => stream.streamType == 1).firstOrNull;
     final audio = streams.where((stream) => stream.streamType == 2);
     final selectedAudio =
         audio.where((stream) => stream.selected).firstOrNull ??
         audio.where((stream) => stream.isDefault).firstOrNull ??
         audio.firstOrNull;
-    final subtitle = streams
+    PlexMediaStream? selectedSubtitle() => streams
         .where((stream) => stream.streamType == 3 && stream.selected)
         .firstOrNull;
     final eligible = profile.eligible(
       PlexMediaFacts(
-        container: item.container?.toLowerCase(),
+        container: container?.toLowerCase(),
         videoCodec: video?.codec,
         videoProfile: video?.profile,
         bitDepth: video?.bitDepth,
@@ -2180,7 +2235,6 @@ class LineupController extends ChangeNotifier {
         audioCodec: selectedAudio?.codec,
       ),
     );
-    var route = connection ?? initialConnection;
     final forceSession = mode != PlexPartMode.automatic;
     final local = plexConnectionKind(route) == PlexConnectionKind.directLocal;
     final reason = switch (mode) {
@@ -2206,13 +2260,18 @@ class LineupController extends ChangeNotifier {
       return DirectPartLoad(parts[partIndex].uri, token);
     }
 
-    void record(PlexPlaybackMethod method, [PlexDecision? decision]) {
+    void record(
+      PlexPlaybackMethod method, {
+      PlexDecision? decision,
+      String? fallbackReason,
+    }) {
+      final subtitle = selectedSubtitle();
       final output = decision?.streams
           .where((stream) => stream.streamType == 1)
           .firstOrNull;
       diagnostics.add(DiagnosticEvent.plexPlaybackDecision, {
         'method': method.name,
-        'reason': reason,
+        'reason': fallbackReason ?? reason,
         'ceiling': _playbackCeiling,
         'connectionClass': plexConnectionKind(route).name,
         'sessionRestarts': restarts,
@@ -2236,13 +2295,21 @@ class LineupController extends ChangeNotifier {
       });
     }
 
+    if (!capabilities.known) {
+      record(
+        PlexPlaybackMethod.directPlay,
+        fallbackReason: 'capabilitiesUnknown',
+      );
+      return direct();
+    }
     if (!forceSession && local && eligible) {
       record(PlexPlaybackMethod.directPlay);
       return direct();
     }
 
+    if (desktop && forceSession) await fillStreams();
     var id = _newPlexSessionId();
-    PlexSessionRequest request() => PlexSessionRequest(
+    PlexSessionRequest request({required bool session}) => PlexSessionRequest(
       ratingKey: item.id,
       sessionId: id,
       profile: profile,
@@ -2251,63 +2318,64 @@ class LineupController extends ChangeNotifier {
       location: plexConnectionKind(route) == PlexConnectionKind.directLocal
           ? PlexTranscodeLocation.lan
           : PlexTranscodeLocation.wan,
-      subtitles: subtitle == null
+      subtitles: !session || selectedSubtitle() == null
           ? PlexSessionSubtitles.none
           : PlexSessionSubtitles.burn,
     );
 
-    Future<T> authorize<T>(Future<T> Function(String, PlexConnection) action) =>
-        _withPmsAuthorization(
-          _epoch,
-          serverId,
-          (token, refreshed) {
-            checkCurrent();
-            route = refreshed ?? route;
-            return action(token, route);
-          },
-          connectionOverride: route,
-          playbackScope: scope,
-          isCurrent: current,
-        );
-
-    final decision = await authorize(
-      (token, route) => plex.transcodeDecision(
-        route.uri,
-        request(),
-        token,
-        directPlay: !forceSession,
-        cancelled: cancellation.cancelled,
-      ),
-    );
-    checkCurrent();
-    record(decision.method, decision);
-    if (!forceSession && decision.directPlayDecisionCode == 1000) {
+    final PlexDecision decision;
+    try {
+      decision = await authorize(
+        (token, route) => plex.transcodeDecision(
+          route.uri,
+          request(session: forceSession),
+          token,
+          directPlay: !forceSession,
+          cancelled: cancellation.cancelled,
+        ),
+      );
+    } on PlexException catch (error) {
+      checkCurrent();
+      if (error.isAuthorizationFailure) rethrow;
+      record(
+        PlexPlaybackMethod.directPlay,
+        fallbackReason: 'decisionUnavailable',
+      );
       return direct();
     }
-    if (decision.generalDecisionCode != 1001 ||
-        decision.directPlayDecisionCode == 1000) {
-      throw _sessionDecisionError(decision.generalDecisionCode);
-    }
+    checkCurrent();
+    final directPlay = decision.directPlayDecisionCode == 1000;
+    final sessionAccepted = decision.generalDecisionCode == 1001 && !directPlay;
     final target = profile.transcodeTarget;
-    if (target == null ||
-        decision.streams.any(
+    final targetSupported =
+        target != null &&
+        !decision.streams.any(
           (stream) =>
               stream.streamType == 1 &&
               stream.codec != null &&
               !target.videoCodecs.contains(stream.codec!.toLowerCase()),
-        )) {
+        );
+    if (desktop && !forceSession && sessionAccepted && targetSupported) {
+      await fillStreams();
+    }
+    record(decision.method, decision: decision);
+    if (!forceSession && directPlay) return direct();
+    if (!sessionAccepted) {
+      throw _sessionDecisionError(decision.generalDecisionCode);
+    }
+    if (!targetSupported) {
       throw const PlexException(
         'session-unsupported',
         "This server can't convert this program for this device.",
       );
     }
 
-    final operation = _sessionStarts.then((_) async {
-      // Stops already dispatched by the coordinator can run alongside decision
-      // requests and Direct Play. Only session admission waits for retirement.
-      await _livePlexSession?.stopped;
+    try {
+      // Only PMS session admission waits for retirement. Cleanup continues
+      // after the admission deadline, including an abandoned HTTP start.
+      await _livePlexSession?.admission;
       checkCurrent();
-      return authorize((token, route) async {
+      return await authorize((token, route) async {
         checkCurrent();
         final session = _ControllerPlexSession(
           plex: plex,
@@ -2332,12 +2400,16 @@ class LineupController extends ChangeNotifier {
               ),
         );
         _livePlexSession = session;
+        _issuedPlexSessions.add(session);
+        unawaited(
+          cancellation.cancelled.then((_) => session.limitAdmissionWait()),
+        );
         try {
           // Leave this request running to a bounded response if retired. PMS
           // may have allocated the issued ID before returning the master.
           final started = await plex.startTranscodeSession(
             route.uri,
-            request(),
+            request(session: true),
             token,
           );
           checkCurrent();
@@ -2364,24 +2436,23 @@ class LineupController extends ChangeNotifier {
             playlist: playlist,
           );
         } catch (_) {
-          await session.stop();
+          final stopping = session.stop();
+          if (current()) {
+            await session.admission;
+          } else {
+            unawaited(stopping);
+          }
           id = _newPlexSessionId();
           rethrow;
         } finally {
           unawaited(
             session.stopped.then((_) {
+              _issuedPlexSessions.remove(session);
               if (identical(_livePlexSession, session)) _livePlexSession = null;
             }),
           );
         }
       });
-    });
-    _sessionStarts = operation.then<void>(
-      (_) {},
-      onError: (Object _, StackTrace _) {},
-    );
-    try {
-      return await operation;
     } on PlexException catch (error) {
       if (const {
         'server-unreachable',
@@ -2808,6 +2879,7 @@ class LineupController extends ChangeNotifier {
     _scenarioOpen = false;
     _mutationScope++;
     _mutationEligibility++;
+    _playbackDetails.clear();
     _retireAuthorizationScope();
   }
 
@@ -3109,13 +3181,13 @@ class LineupController extends ChangeNotifier {
     _clearServerTarget();
     _invalidatePmsRefresh();
     final pin = activePin;
-    if (_livePlexSession != null) {
+    if (_issuedPlexSessions.isNotEmpty) {
       unawaited(
-        _sessionStarts.then((_) async {
-          await _livePlexSession?.stopped;
-          if (pin != null) await plex.cancelPin(pin).onError((_, _) {});
-          plex.close();
-        }),
+        Future.wait(_issuedPlexSessions.map((session) => session.stopped))
+            .then((_) async {
+              if (pin != null) await plex.cancelPin(pin).onError((_, _) {});
+              plex.close();
+            }),
       );
     } else if (pin == null) {
       plex.close();
@@ -3153,9 +3225,22 @@ final class _ControllerPlexSession implements PlexSessionHandle {
   })
   reopen;
   final _stopped = Completer<void>();
+  final _admission = Completer<void>();
+  Timer? _admissionDeadline;
   Timer? _heartbeat;
   bool _stopping = false;
   Future<void> get stopped => _stopped.future;
+  Future<void> get admission => _admission.future;
+
+  void limitAdmissionWait() {
+    if (_admission.isCompleted) return;
+    _admissionDeadline ??= Timer(const Duration(seconds: 2), _releaseAdmission);
+  }
+
+  void _releaseAdmission() {
+    _admissionDeadline?.cancel();
+    if (!_admission.isCompleted) _admission.complete();
+  }
 
   @override
   Future<PartLoad> restartAt(
@@ -3183,6 +3268,7 @@ final class _ControllerPlexSession implements PlexSessionHandle {
   Future<void> stop({Future<void>? nativeStop}) {
     if (_stopping) return stopped;
     _stopping = true;
+    limitAdmissionWait();
     _heartbeat?.cancel();
     unawaited(() async {
       try {
@@ -3196,15 +3282,14 @@ final class _ControllerPlexSession implements PlexSessionHandle {
           id,
           token,
           profile: profile,
-          budget: nativeStop == null
-              ? const Duration(seconds: 2)
-              : const Duration(seconds: 1),
+          budget: plex.requestTimeout,
           onFailure: (code) => diagnostics.add(
             DiagnosticEvent.playbackRequestFailed,
             {'operation': 'session_stop', 'code': code},
           ),
         );
       } finally {
+        _releaseAdmission();
         _stopped.complete();
       }
     }());

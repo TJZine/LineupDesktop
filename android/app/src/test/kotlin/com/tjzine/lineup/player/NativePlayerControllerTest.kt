@@ -189,19 +189,20 @@ class NativePlayerControllerTest {
     }
 
     @Test
-    fun rendererLandingRequiresPostResetFrameEvenWithBufferedSource() {
-        val landed = mutableListOf<Long>()
-        val landing = SessionSeekLanding(landed::add)
-        landing.positionReset()
-        landing.frameReleased()
-        landing.arm(41)
-        landing.frameReleased() // The queued old frame is released before reset.
-        assertTrue(landed.isEmpty())
-        landing.positionReset() // Buffered seek still resets the renderer.
-        assertTrue(landed.isEmpty())
-        landing.frameReleased() // First frame can be released while still paused.
-        landing.frameReleased()
-        assertEquals(listOf(41L), landed)
+    fun rendererLandingRequiresSeekMarkerAndQualifyingFrameInBothDirections() {
+        for (oldPts in listOf(6_950_000L, 9_000_000L)) {
+            val landed = mutableListOf<Long>()
+            val landing = SessionSeekLanding(landed::add)
+            // An old frame can satisfy the timestamp bound in either direction.
+            landing.frame(oldPts, 20f)
+            assertTrue(landed.isEmpty())
+            landing.reachedSeekTarget(41, 7_000_000)
+            landing.frame(6_949_999, 20f)
+            assertTrue(landed.isEmpty())
+            landing.frame(6_950_000, 20f)
+            landing.frame(7_000_000, 20f)
+            assertEquals(listOf(41L), landed)
+        }
     }
 
     @Test

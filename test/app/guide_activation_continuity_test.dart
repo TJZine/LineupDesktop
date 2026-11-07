@@ -279,7 +279,10 @@ class _SyntheticPlex extends PlexClient {
   _SyntheticPlex()
     : super(
         clientIdentifier: 'lineup-desktop-test-abcdefghijklmnopqrst',
-        httpClient: testPlexHttpClient(allowDirectPlayDecision: true),
+        httpClient: testPlexHttpClient(
+          allowDirectPlayDecision: true,
+          unavailablePlaybackDetails: {'program'},
+        ),
       );
   final syntheticServer = PlexServer(
     id: 'server',

@@ -22,6 +22,7 @@ final class PlexSessionClock {
   Duration? _adjustment;
   Duration? _firstAdjustment;
   Duration? _demuxerStart;
+  Duration? _observedPosition;
   Duration? lead;
   SessionAlignmentOutcome? outcome;
   int? landingMs;
@@ -36,7 +37,10 @@ final class PlexSessionClock {
       ? 'estimated'
       : 'raw';
 
-  Duration observe(PlayerEvent event) {
+  Duration seekBase({required bool alignmentHeld}) =>
+      alignmentHeld ? requested : _observedPosition ?? requested;
+
+  Duration observe(PlayerEvent event, {required bool active}) {
     if (desktop) {
       final sample = event.telemetry.demuxerStartTime;
       if (sample != null && sample.isFinite && sample.abs() <= 1000000) {
@@ -45,12 +49,12 @@ final class PlexSessionClock {
         );
       }
     } else {
-      _adjustment = event.sessionAdjustment;
+      _adjustment = event.sessionAdjustment ?? _adjustment;
       _firstAdjustment ??= _adjustment;
       final first = _firstAdjustment;
       if (!_ready.isCompleted &&
           first != null &&
-          _adjustment != null &&
+          event.sessionAdjustment != null &&
           event.positionUpdated &&
           const {
             PlayerState.playing,
@@ -78,6 +82,9 @@ final class PlexSessionClock {
         ? event.position - adjustment - _origin
         : event.position;
     final position = unbounded.isNegative ? Duration.zero : unbounded;
+    if (active && (event.positionUpdated || _observedPosition != null)) {
+      _observedPosition = position;
+    }
     if (mapped && event.positionUpdated) lead ??= requested - position;
     return position;
   }
@@ -85,20 +92,22 @@ final class PlexSessionClock {
   Future<void> align(NativePlayer player, Future<void> cancelled) async {
     if (desktop) return;
     try {
-      final target = await Future.any([
-        _ready.future.timeout(const Duration(seconds: 2)),
-        cancelled.then<Duration?>((_) => null),
-      ]);
+      final (current, target) = await Future.any([
+        _ready.future.then((target) => (true, target)),
+        cancelled.then((_) => (false, null)),
+      ]).timeout(const Duration(seconds: 2));
+      if (!current) return;
       if (target == null) {
         outcome = SessionAlignmentOutcome.noneNeeded;
       } else if (player is SessionAlignmentPlayer) {
         final watch = Stopwatch()..start();
-        await Future.any([
+        final landed = await Future.any([
           (player as SessionAlignmentPlayer)
               .alignSession(target)
-              .timeout(const Duration(seconds: 5)),
-          cancelled,
-        ]);
+              .then((_) => true),
+          cancelled.then((_) => false),
+        ]).timeout(const Duration(seconds: 5));
+        if (!landed) return;
         landingMs = watch.elapsedMilliseconds;
         outcome = SessionAlignmentOutcome.landed;
       } else {

@@ -43,7 +43,7 @@ The native result is `null` unless a result map is shown.
 | `pause` | None | `null` or `command_queue_full`. |
 | `seek` | `seconds: num`, finite and >= 0; `mode: "exact"` or `"keyframes"`, optional, default `"exact"` | `null`, `invalid_argument`, or `command_queue_full`. |
 | `stop` | `stopId: int > 0` | `null`, `invalid_argument`, or `command_queue_full`. Completion is asynchronous through `stopResult`. |
-| `alignSession` (Android) | `loadId: int > 0`, `seekId: int > 0`, `positionMs: int >= 0` | Asynchronous `sessionSeekResult` for a current, ready session load. |
+| `alignSession` (Android) | `loadId: int > 0`, `seekId: int > 0`, `positionMs: int` from 0 through `9223372036854775` | `null` on queue admission, `invalid_argument` for malformed input, `not_initialized`, or `command_queue_full`. The worker ignores stale, unready, non-session, and duplicate alignment commands without emitting a result. |
 | `setVideoRect` | `left`, `top`, `width`, `height`, and `scale` are finite numbers; `width >= 0`, `height >= 0`, `scale > 0`; optional Android `showSubtitles` boolean (omitted means `true`) | `null` or `invalid_argument`. The Windows implementation also returns `invalid_argument` if the host window is missing or `SetWindowPos` fails. |
 | `setFullscreen` | `fullscreen: bool` | `null`, `invalid_argument`, or `window_error`. |
 | `selectTrack` | `type: "video"`, `"audio"`, or `"subtitle"`; `id: int > 0` or null; `loadId: int > 0`; `requestId: int > 0` | `null`, `invalid_argument`, or `command_queue_full`. Completion is asynchronous through `trackResult`. |
@@ -235,6 +235,13 @@ The stable native status messages are `Native libmpv player ready`, `Loading
 media`, `Playing`, `Playback ended`, and `Playback stopped`. Dart preserves
 native error messages where appropriate and uses its existing safe status
 messages for command, timeout, and local lifecycle failures.
+
+### `sessionSeekResult` (Android)
+
+`{type: "sessionSeekResult", loadId: int, seekId: int, outcome: "landed" | "failed"}`
+settles the matching alignment seek of the current session load. A qualified
+frame released after the seek marker produces `landed`. A failure during native
+seek dispatch produces `failed`. Dart bounds its wait for a matching event.
 
 ### `property`
 
@@ -637,11 +644,10 @@ sessions.
 
 Android's additive `alignSession` command accepts positive `loadId` and
 `seekId` integers and a non-negative integer `positionMs`. It accepts one
-exact alignment seek per current session load. The matching
-`sessionSeekResult` has `loadId`, `seekId` and
-`outcome: "landed" | "failed"`. The session renderer observes the reset
-and first post-reset frame release in playback-looper order.
-Earlier frames, an updated position and command acceptance do not qualify.
+exact alignment seek per current session load. Media3's default renderer
+reports frame metadata on the playback looper. A positioned marker arms the
+paused seek at the target before rendering. The first qualifying frame must
+be at or after the target minus one frame.
 The adapter fences results by load lifetime. Dart releases the cover on a
 matching landing or failure, or after five seconds, and honors the current
 pause intent.

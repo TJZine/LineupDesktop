@@ -20,6 +20,7 @@ import 'package:lineup_desktop/guide/guide_controller.dart';
 import 'package:lineup_desktop/playback/native_player.dart';
 import 'package:lineup_desktop/playback/native_video_surface.dart';
 import 'package:lineup_desktop/playback/player_view.dart';
+import 'package:lineup_desktop/playback/plex_session_clock.dart';
 import 'package:lineup_desktop/playback/subtitle_layer.dart';
 import 'package:lineup_desktop/persistence/app_store.dart';
 import 'package:lineup_desktop/playback/player_coordinator.dart';
@@ -39,6 +40,37 @@ void main() {
   group('Plex session playback', () {
     const live = Duration(minutes: 30);
     const adjustment = Duration(seconds: -2);
+
+    test('superseded alignment has no landing outcome', () async {
+      final player = _SessionNative();
+      addTearDown(player.dispose);
+      final clock = PlexSessionClock(
+        desktop: false,
+        requested: live,
+        offset: live,
+      );
+      clock.observe(
+        const PlayerEvent(
+          status: PlayerStatus(state: PlayerState.paused, message: 'Paused'),
+          position: live,
+          duration: Duration(hours: 1),
+          telemetry: PlayerTelemetry(),
+          tracks: [],
+          positionUpdated: true,
+          sessionAdjustment: adjustment,
+        ),
+        active: true,
+      );
+      final retired = Completer<void>();
+      final aligning = clock.align(player, retired.future);
+      await pumpEventQueue(times: 2);
+      expect(player.alignments, [live + const Duration(seconds: 8)]);
+      retired.complete();
+      await aligning;
+      player.landing!.complete();
+      expect(clock.outcome, isNull);
+      expect(clock.landingMs, isNull);
+    });
 
     test('transport accepts only the matching rendered-frame result', () async {
       const channel = MethodChannel('lineup/native_player');
@@ -255,6 +287,11 @@ void main() {
       await tester.pump();
       expect(f.coordinator.sessionAlignmentHeld, isTrue);
       expect(f.player.plays, 0);
+      f.player.observe(
+        live + const Duration(seconds: 8),
+        state: PlayerState.paused,
+      );
+      expect(f.coordinator.position, live);
       f.player.landing!.complete();
       await tester.pump();
       expect(await tune, isTrue);
@@ -371,7 +408,7 @@ void main() {
           await tester.pump();
           expect(f.stops, isEmpty);
           if (nativeOutcome == 'timeout') {
-            await tester.pump(const Duration(milliseconds: 999));
+            await tester.pump(const Duration(milliseconds: 9999));
             expect(f.stops, isEmpty);
             await tester.pump(const Duration(milliseconds: 1));
           } else {
@@ -389,6 +426,139 @@ void main() {
         },
       );
     }
+
+    testWidgets('session tune shares the admission budget with slow cleanup', (
+      tester,
+    ) async {
+      final f = _SessionFixture(android: false);
+      await f.setUp();
+      f.expectSession();
+      f.expectSession();
+      expect(await f.tune(tester), isTrue);
+      f.player.holdStop = Completer<void>();
+      f.holdPmsStop = Completer<void>();
+      final next = f.coordinator.tune('two');
+      await tester.pump(const Duration(milliseconds: 1500));
+      expect(f.stops, isEmpty);
+      f.player.holdStop!.complete();
+      await tester.pump();
+      expect(f.stops, [f.startIds.first]);
+      await tester.pump(const Duration(milliseconds: 499));
+      expect(f.startIds, hasLength(1));
+      await tester.pump(const Duration(milliseconds: 1));
+      expect(await next, isTrue);
+      expect(f.startIds, hasLength(2));
+      await tester.pump(const Duration(seconds: 2));
+      expect(
+        f.lineup.diagnostics.entries.where(
+          (entry) => entry.context['operation'] == 'session_stop',
+        ),
+        isEmpty,
+      );
+      f.holdPmsStop!.complete();
+      await tester.pump();
+      await f.close(tester);
+    });
+
+    testWidgets(
+      'abandoned start bounds admission and cleans up when it returns',
+      (tester) async {
+        final f = _SessionFixture(android: false)
+          ..allowPendingStartOverlap = true;
+        await f.setUp();
+        f.expected.addAll(['decision', 'start.m3u8']);
+        final held = f.holdStart = Completer<void>();
+        final first = f.coordinator.tune('one');
+        await tester.pump();
+        expect(f.startIds, hasLength(1));
+        f.holdStart = null;
+        f.expected.addAll([
+          'decision',
+          'start.m3u8',
+          'variant',
+          'stop',
+          'stop',
+        ]);
+        final next = f.coordinator.tune('two');
+        await tester.pump();
+        await tester.pump(const Duration(milliseconds: 1999));
+        expect(f.startIds, hasLength(1));
+        await tester.pump(const Duration(milliseconds: 1));
+        final startedOnTime = f.startIds.length == 2;
+        held.complete();
+        await tester.pump();
+        expect(startedOnTime, isTrue);
+        expect(await first, isFalse);
+        expect(await next, isTrue);
+        expect(f.stops, [f.startIds.first]);
+        expect(f.player.loads, hasLength(1));
+        await f.close(tester);
+      },
+    );
+
+    for (final logout in [false, true]) {
+      testWidgets('session stops on ${logout ? 'logout' : 'server switch'}', (
+        tester,
+      ) async {
+        final f = _SessionFixture(android: false, secondServer: !logout);
+        await f.setUp();
+        f.expectSession();
+        expect(await f.tune(tester), isTrue);
+        if (logout) {
+          final operation = f.coordinator.logout();
+          await tester.pump();
+          expect(await operation, isTrue);
+        } else {
+          final operation = f.lineup.selectServer(f.lineup.servers.last);
+          await tester.pump();
+          await operation;
+          expect(f.lineup.server?.id, 'other-server');
+          await tester.pump();
+        }
+        expect(f.stops, f.startIds);
+        expect(f.player.stops, 1);
+        await f.close(tester);
+      });
+    }
+
+    testWidgets('automatic session restart keeps preparing surface mounted', (
+      tester,
+    ) async {
+      final f = _SessionFixture(android: false);
+      await f.setUp();
+      f.expectSession();
+      f.expectSession();
+      Widget surface() => MaterialApp(
+        home: PlayerSurface(
+          controller: f.coordinator,
+          fullPlayer: true,
+          showErrors: true,
+        ),
+      );
+      expect(await f.tune(tester), isTrue);
+      f.player.observe(const Duration(seconds: 10), demuxerStartTime: 1800);
+      await tester.pumpWidget(surface());
+      final finder = find.byType(NativeVideoSurface);
+      final element = tester.element(finder);
+      f.holdStart = Completer<void>();
+      f.player.observe(
+        Duration.zero,
+        state: PlayerState.error,
+        failureCode: 'source_open_error',
+      );
+      await tester.pumpWidget(surface());
+      final preparing = find
+          .bySemanticsLabel('Preparing playback')
+          .evaluate()
+          .isNotEmpty;
+      final preserved = finder.evaluate().singleOrNull == element;
+      f.holdStart!.complete();
+      await tester.pump();
+      await tester.pumpWidget(const SizedBox.shrink());
+      await f.close(tester);
+      expect(preparing, isTrue);
+      expect(preserved, isTrue);
+    });
 
     testWidgets('Direct Play continues while PMS stop is pending', (
       tester,
@@ -426,6 +596,155 @@ void main() {
         await f.close(tester);
       },
     );
+
+    for (final trigger in ['forward', 'backward', 'recovery', 'held']) {
+      testWidgets('session seek base uses current clock ($trigger)', (
+        tester,
+      ) async {
+        final f = _SessionFixture(android: true);
+        await f.setUp();
+        f.expectSession();
+        f.expectSession();
+        final tune = f.coordinator.tune('one');
+        await f.waitForNativeLoads(tester, 1);
+        Future<void>? seek;
+        if (trigger == 'held') {
+          f.player.observe(live, adjustment: adjustment);
+          await tester.pump();
+          final oldLanding = f.player.landing!;
+          seek = f.coordinator.seekBy(const Duration(seconds: 30));
+          await tester.pump(const Duration(milliseconds: 400));
+          await f.waitForNativeLoads(tester, 2);
+          oldLanding.complete();
+        } else {
+          await tester.pump(const Duration(seconds: 2));
+          expect(await tune, isTrue);
+          f.player.observe(const Duration(minutes: 50));
+          if (trigger == 'recovery') {
+            f.player.observe(
+              Duration.zero,
+              state: PlayerState.error,
+              failureCode: 'source_open_error',
+            );
+            await tester.pump();
+          } else {
+            seek = f.coordinator.seekBy(
+              Duration(seconds: trigger == 'forward' ? 30 : -30),
+            );
+            await tester.pump(const Duration(milliseconds: 400));
+          }
+          await f.waitForNativeLoads(tester, 2);
+        }
+        final issued = f.starts.last['offset']!;
+        f.player.observe(
+          Duration(seconds: int.parse(issued) + 8),
+          adjustment: adjustment,
+        );
+        await tester.pump();
+        expect(await tune, isTrue);
+        await seek;
+        await f.close(tester);
+        expect(issued, switch (trigger) {
+          'forward' => '3030',
+          'backward' => '2970',
+          'recovery' => '3000',
+          _ => '1830',
+        });
+      });
+    }
+
+    testWidgets('Android fills listing stream facts once for a Home tune', (
+      tester,
+    ) async {
+      final f = _SessionFixture(android: true, local: true, listingShape: true);
+      await f.setUp();
+      expect(await f.tune(tester), isTrue);
+      await f.coordinator.stop();
+      expect(await f.tune(tester), isTrue);
+      await f.close(tester);
+      expect(f.metadata, ['one']);
+      expect(f.decisions, isEmpty);
+      expect(f.player.kinds, [LoadKind.direct, LoadKind.direct]);
+    });
+
+    for (final local in [false, true]) {
+      testWidgets(
+        'desktop reads listing stream facts only for a session ($local)',
+        (tester) async {
+          final f = _SessionFixture(
+            android: false,
+            local: local,
+            listingShape: true,
+          );
+          await f.setUp();
+          if (!local) {
+            f.decisionCode = 1000;
+            f.expected.add('decision');
+          }
+          expect(await f.tune(tester), isTrue);
+          expect(f.metadata, isEmpty);
+          f.decisionCode = 1001;
+          f.expected.addAll(['decision', 'start.m3u8', 'variant', 'stop']);
+          if (local) {
+            f.player.observe(
+              live,
+              state: PlayerState.error,
+              failureCode: 'audio_decode_error',
+            );
+            await tester.pump();
+          } else {
+            expect(await f.tune(tester, 'two'), isTrue);
+          }
+          await f.close(tester);
+          expect(f.metadata, [local ? 'one' : 'two']);
+          expect(f.decisions.last['subtitles'], local ? 'burn' : 'none');
+          expect(f.starts.single['subtitles'], 'burn');
+        },
+      );
+    }
+
+    testWidgets('subtitles burn only on forced decisions and session starts', (
+      tester,
+    ) async {
+      final f = _SessionFixture(android: false, selectedSubtitle: true);
+      await f.setUp();
+      f.expectSession();
+      f.expectSession();
+      expect(await f.tune(tester), isTrue);
+      final seek = f.coordinator.seekTo(const Duration(seconds: 80));
+      await tester.pump(const Duration(milliseconds: 400));
+      await seek;
+      await f.close(tester);
+      expect(f.decisions.map((query) => query['subtitles']), ['none', 'burn']);
+      expect(f.starts.map((query) => query['subtitles']), ['burn', 'burn']);
+    });
+
+    for (final unknown in [false, true]) {
+      testWidgets(
+        'Original uses Direct Play when ${unknown ? 'capabilities are unknown' : 'decision fails'}',
+        (tester) async {
+          final f = _SessionFixture(android: true, local: true);
+          await f.setUp();
+          f.player.unknownCapabilities = unknown;
+          if (!unknown) {
+            f.decisionStatus = 503;
+            f.expected.add('decision');
+          }
+          final tuned = await f.tune(tester);
+          final kinds = List.of(f.player.kinds);
+          final reasons = f.lineup.diagnostics.entries
+              .map((entry) => entry.context['reason'])
+              .toList();
+          await f.close(tester);
+          expect(tuned, isTrue);
+          expect(kinds, [LoadKind.direct]);
+          expect(
+            reasons,
+            contains(unknown ? 'capabilitiesUnknown' : 'decisionUnavailable'),
+          );
+        },
+      );
+    }
 
     testWidgets('capacity decision surfaces Retry without issuing a session', (
       tester,
@@ -12447,6 +12766,9 @@ class _SessionFixture {
     this.eligible = false,
     this.multipart = false,
     this.suspendInBackground = false,
+    this.selectedSubtitle = false,
+    this.secondServer = false,
+    this.listingShape = false,
   });
 
   static const _base = '/video/:/transcode/universal';
@@ -12466,7 +12788,13 @@ class _SessionFixture {
   final pings = <String>[];
   final expected = <String>[];
   final active = <String>{};
+  final bool selectedSubtitle;
+  final bool secondServer;
+  final bool listingShape;
+  final metadata = <String>[];
+  bool allowPendingStartOverlap = false;
   int decisionCode = 1001;
+  int decisionStatus = 200;
   int startStatus = 200;
   int variantStatus = 200;
   String playlistText = playlist;
@@ -12501,40 +12829,51 @@ class _SessionFixture {
     lineup.diagnostics.enabled = true;
     final inventory = [
       for (final id in ['one', 'two', 'three', 'four', 'five'])
-        PlexMediaItem(
-          id: id,
-          title: id,
-          type: 'movie',
-          duration: multipart && id == 'one' ? partDuration * 2 : partDuration,
-          container: 'mp4',
-          parts: [
-            for (
-              var part = 0;
-              part < (multipart && id == 'one' ? 2 : 1);
-              part++
-            )
-              PlexMediaPart(
-                path: '/library/parts/$id/$part.mp4',
-                duration: partDuration,
-                streams: [
-                  const PlexMediaStream(
-                    streamType: 1,
-                    codec: 'h264',
-                    profile: 'high',
-                    bitDepth: 8,
-                    level: 40,
-                    width: 1920,
-                    height: 1080,
-                  ),
-                  PlexMediaStream(
-                    streamType: 2,
-                    codec: eligible ? 'aac' : 'truehd',
-                    selected: true,
-                  ),
-                ],
-              ),
-          ],
-        ),
+        if (listingShape)
+          parseMediaItem(_listingRow(id))
+        else
+          PlexMediaItem(
+            id: id,
+            title: id,
+            type: 'movie',
+            duration: multipart && id == 'one'
+                ? partDuration * 2
+                : partDuration,
+            container: 'mp4',
+            parts: [
+              for (
+                var part = 0;
+                part < (multipart && id == 'one' ? 2 : 1);
+                part++
+              )
+                PlexMediaPart(
+                  path: '/library/parts/$id/$part.mp4',
+                  duration: partDuration,
+                  streams: [
+                    const PlexMediaStream(
+                      streamType: 1,
+                      codec: 'h264',
+                      profile: 'high',
+                      bitDepth: 8,
+                      level: 40,
+                      width: 1920,
+                      height: 1080,
+                    ),
+                    PlexMediaStream(
+                      streamType: 2,
+                      codec: eligible ? 'aac' : 'truehd',
+                      selected: true,
+                    ),
+                    if (selectedSubtitle)
+                      const PlexMediaStream(
+                        streamType: 3,
+                        codec: 'pgs',
+                        selected: true,
+                      ),
+                  ],
+                ),
+            ],
+          ),
     ];
     lineup.fixtureActor.publishInventory(media: inventory);
     lineup.fixtureActor.replaceChannels([
@@ -12605,11 +12944,69 @@ class _SessionFixture {
     debugDefaultTargetPlatformOverride = null;
   }
 
+  Map<String, Object?> _listingRow(String id, {bool includeStreams = false}) =>
+      {
+        'ratingKey': id,
+        'title': id,
+        'type': 'movie',
+        'duration': partDuration.inMilliseconds,
+        'Media': [
+          {
+            'container': 'mp4',
+            'videoCodec': 'h264',
+            'audioCodec': 'aac',
+            'Part': [
+              {
+                'id': 'part-$id',
+                'key': '/library/parts/$id/0.mp4',
+                'duration': partDuration.inMilliseconds,
+                if (includeStreams)
+                  'Stream': [
+                    {
+                      'streamType': 1,
+                      'codec': 'h264',
+                      'profile': 'high',
+                      'bitDepth': 8,
+                      'level': 40,
+                      'width': 1920,
+                      'height': 1080,
+                    },
+                    {'streamType': 2, 'codec': 'truehd', 'default': true},
+                    {'streamType': 2, 'codec': 'aac', 'selected': true},
+                    {'streamType': 3, 'codec': 'pgs', 'selected': true},
+                  ],
+              },
+            ],
+          },
+        ],
+      };
+
   Future<http.Response> _respond(http.Request request) async {
     final path = request.url.path;
     expectSync(request.method, 'GET');
+    if (listingShape && path.startsWith('/library/metadata/')) {
+      final id = request.url.pathSegments.last;
+      expectSync(request.followRedirects, isFalse);
+      expectSync(request.headers['x-plex-token'], 'fixture-pms');
+      expectSync(request.url.hasQuery, isFalse);
+      metadata.add(id);
+      return _response({
+        'MediaContainer': {
+          'Metadata': [_listingRow(id, includeStreams: true)],
+        },
+      });
+    }
     if (path.startsWith('$_base/')) {
       final step = path == variant ? 'variant' : request.url.pathSegments.last;
+      if (listingShape && android && step == 'decision') {
+        decisions.add(request.url.queryParameters);
+        return _response({
+          'MediaContainer': {
+            'generalDecisionCode': 1000,
+            'directPlayDecisionCode': 1000,
+          },
+        });
+      }
       expectSync(
         expected,
         isNotEmpty,
@@ -12627,6 +13024,7 @@ class _SessionFixture {
       switch (step) {
         case 'decision':
           decisions.add(query);
+          if (decisionStatus != 200) return http.Response('', decisionStatus);
           expectSync(isPlexSessionId(session!), isTrue);
           expectSync(request.headers['x-plex-session-identifier'], session);
           return _response({
@@ -12640,7 +13038,7 @@ class _SessionFixture {
           expectSync(query['directPlay'], '0');
           expectSync(isPlexSessionId(session!), isTrue);
           expectSync(request.headers['x-plex-session-identifier'], session);
-          expectSync(active, isEmpty);
+          if (!allowPendingStartOverlap) expectSync(active, isEmpty);
           expectSync(startIds, isNot(contains(session)));
           startIds.add(session);
           active.add(session);
@@ -12683,9 +13081,23 @@ class _SessionFixture {
             {'uri': 'https://fixture.invalid:32400', 'local': local},
           ],
         },
+        if (secondServer)
+          {
+            'name': 'Other server',
+            'clientIdentifier': 'other-server',
+            'provides': 'server',
+            'accessToken': 'fixture-other',
+            'connections': [
+              {'uri': 'https://other.invalid:32400', 'local': true},
+            ],
+          },
       ],
       '/identity' => {
-        'MediaContainer': {'machineIdentifier': 'server'},
+        'MediaContainer': {
+          'machineIdentifier': request.url.host == 'other.invalid'
+              ? 'other-server'
+              : 'server',
+        },
       },
       '/library/sections' => {
         'MediaContainer': {
@@ -12719,24 +13131,27 @@ class _SessionNative extends FakeNativePlayer
   @override
   Stream<PlayerEvent> get events => _sessionEvents.stream;
 
+  bool unknownCapabilities = false;
+
   @override
-  Future<MediaCapabilities> mediaCapabilities() async =>
-      MediaCapabilities.fromWire({
-        'videoDecoders': [
-          {
-            'codec': 'h264',
-            'profiles': ['baseline', 'main', 'high', 'high 4:2:2'],
-            'maxLevel': '5.1',
-            'maxWidth': 1920,
-            'maxHeight': 1080,
-            'hdr': <String>[],
-            'dolbyVisionProfiles': <int>[],
-          },
-        ],
-        'audioDecoders': ['aac'],
-        'audioPassthrough': <String>[],
-        'containers': ['mp4', 'mkv'],
-      });
+  Future<MediaCapabilities> mediaCapabilities() async => unknownCapabilities
+      ? MediaCapabilities.unknown
+      : MediaCapabilities.fromWire({
+          'videoDecoders': [
+            {
+              'codec': 'h264',
+              'profiles': ['baseline', 'main', 'high', 'high 4:2:2'],
+              'maxLevel': '5.1',
+              'maxWidth': 1920,
+              'maxHeight': 1080,
+              'hdr': <String>[],
+              'dolbyVisionProfiles': <int>[],
+            },
+          ],
+          'audioDecoders': ['aac'],
+          'audioPassthrough': <String>[],
+          'containers': ['mp4', 'mkv'],
+        });
 
   @override
   Future<void> load(

@@ -343,6 +343,8 @@ class Diagnostics extends ChangeNotifier {
       'remote',
       'decodeFailure',
       'sessionRestart',
+      'capabilitiesUnknown',
+      'decisionUnavailable',
     }),
     'ceiling': _FixedEnumContextPolicy({'original'}),
     'connectionClass': _FixedEnumContextPolicy({
