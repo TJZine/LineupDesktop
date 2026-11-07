@@ -25,6 +25,7 @@ notices outside a file's leading comments, or in generated files, need review.
 import argparse
 import os
 import re
+import stat
 import subprocess
 import sys
 import tempfile
@@ -77,10 +78,8 @@ COMPONENTS = {
 
 def parse_make_deps(path):
     """Prerequisites listed in a make-style dependency file."""
-    try:
-        text = open(path, encoding="utf-8", errors="replace").read()
-    except OSError:
-        return []
+    with open(path, encoding="utf-8", errors="replace") as deps_file:
+        text = deps_file.read()
     text = text.replace("\\\n", " ")
     files = []
     for line in text.splitlines():
@@ -100,12 +99,12 @@ def ninja_files(build):
     """Sources and headers from ninja's dependency log and build graph."""
     files = []
     out = subprocess.run(["ninja", "-C", build, "-t", "deps"], capture_output=True,
-                         text=True).stdout
+                         text=True, check=True).stdout
     for line in out.splitlines():
         if line.startswith("    "):
             files.append(line.strip())
     out = subprocess.run(["ninja", "-C", build, "-t", "inputs"], capture_output=True,
-                         text=True).stdout
+                         text=True, check=True).stdout
     files += [line.strip() for line in out.splitlines() if line.strip()]
     return files
 
@@ -117,8 +116,12 @@ def archive_members(archive):
         result = subprocess.run(["lipo", archive, "-thin", "arm64", "-output", thin],
                                 capture_output=True)
         source = thin if result.returncode == 0 else archive
-        out = subprocess.run(["ar", "-t", source], capture_output=True, text=True).stdout
+        out = subprocess.run(["ar", "-t", source], capture_output=True, text=True, check=True).stdout
     return [m for m in out.split() if m.endswith(".o")]
+
+
+def raise_walk_error(error):
+    raise error
 
 
 def collect(build_dirs, archives, source_root):
@@ -141,17 +144,19 @@ def collect(build_dirs, archives, source_root):
             found.add(path)
 
     for build in build_dirs:
+        if not stat.S_ISDIR(os.stat(build).st_mode):
+            raise NotADirectoryError(f"Build input is not a directory: {build}")
         if os.path.isfile(os.path.join(build, "build.ninja")):
             for f in ninja_files(build):
                 add(f, build)
-        for dirpath, _, names in os.walk(build):
+        for dirpath, _, names in os.walk(build, onerror=raise_walk_error):
             for name in names:
                 if name.endswith((".d", ".Plo", ".Po")):
                     for f in parse_make_deps(os.path.join(dirpath, name)):
                         add(f, build, os.path.dirname(dirpath), dirpath)
     if archives:
         stems = {}
-        for dirpath, _, names in os.walk(source_root):
+        for dirpath, _, names in os.walk(source_root, onerror=raise_walk_error):
             for name in names:
                 stem, ext = os.path.splitext(name)
                 if ext in SOURCE_EXTENSIONS - {".h", ".hh", ".hpp", ".hxx"}:

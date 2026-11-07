@@ -91,6 +91,11 @@ void WindowsNativePlayer::HandleMethodCall(
     std::unique_ptr<flutter::MethodResult<flutter::EncodableValue>> result) {
   const std::string& method = call.method_name();
   if (method == "initialize") {
+    if (window_close_requested_) {
+      SendResult(*result,
+                 CallResult::Failure("initialize_failed", "The native player is closing."));
+      return;
+    }
     display_->ResetRevision();
     core_.DiscardQueuedEvents("display");
     core_.DiscardQueuedEvents("fullscreen");
