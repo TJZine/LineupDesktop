@@ -621,8 +621,9 @@ void GuardianGates() {
   update.guardian->update = false;
   update.Request(1, true, DisplayState::hdr);
   Check(update.api.writes.empty() && update.guardian->disarms == 1 &&
+            update.guardian->stand_downs == 1 &&
             Text(update.Last().reason, "guardian_unavailable"),
-        "update gate");
+        "not-owned guardian loss stands down");
   Fixture lost;
   lost.Request(1, true, DisplayState::hdr);
   lost.guardian->alive = false;
