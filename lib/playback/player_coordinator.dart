@@ -1760,10 +1760,13 @@ class PlayerCoordinator extends ChangeNotifier with WidgetsBindingObserver {
     SeekMode seekMode = SeekMode.exact,
     bool authorizationRetried = false,
     _LoadRecovery? recovery,
+    _SessionSeek? sessionSeek,
     PlexPartMode mode = PlexPartMode.automatic,
     int sessionRestarts = 0,
   }) {
     if (recovery == null) _invalidateLoadRecovery();
+    final previous = _activeLoad;
+    final seek = recovery == null ? sessionSeek : _sessionSeek;
     final load = _startLoad(
       request.parts[partIndex].uri,
       request: request,
@@ -1776,6 +1779,14 @@ class PlayerCoordinator extends ChangeNotifier with WidgetsBindingObserver {
       sessionRestarts: sessionRestarts,
     );
     if (recovery != null) recovery.replacement = load;
+    // A recovery can replace the load while the seek is still pending.
+    // Transfer only the current intent owned by the load being replaced.
+    if (seek != null &&
+        identical(_sessionSeek, seek) &&
+        identical(seek.load, previous) &&
+        _ownsLoad(load)) {
+      seek.load = load;
+    }
     final operation = _completePartLoad(load);
     load.operation = operation;
     return operation;
@@ -2372,28 +2383,24 @@ class PlayerCoordinator extends ChangeNotifier with WidgetsBindingObserver {
     LineupPlaybackRequest request,
     (int, Duration) target,
     Duration programPosition,
-    _PlaybackLoad current,
+    _PlaybackLoad load,
   ) {
     _cancelSessionSeek();
-    final seek = _sessionSeek = _SessionSeek(programPosition, current);
+    final seek = _sessionSeek = _SessionSeek(programPosition, load);
     seek.debounce = Timer(const Duration(milliseconds: 400), () async {
       seek.debounce = null;
       try {
+        final current = seek.load;
         if (!_ownsLoad(current)) return;
         final operation = _loadPartAtPosition(
-          request,
+          current.request ?? request,
           target.$1,
           target.$2,
+          sessionSeek: seek,
           mode: current.session == null
               ? PlexPartMode.automatic
               : PlexPartMode.restartSession,
         );
-        final replacement = _activeLoad;
-        if (identical(_sessionSeek, seek) &&
-            replacement != null &&
-            identical(replacement.operation, operation)) {
-          seek.load = replacement;
-        }
         final tune = _preparingTuneLoad;
         if (tune?.generation == current.tuneGeneration) tune!.adopt(operation);
         if (await operation != null &&

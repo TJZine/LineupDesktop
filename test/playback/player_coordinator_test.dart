@@ -702,6 +702,66 @@ void main() {
       });
     }
 
+    for (final newerQueued in [false, true]) {
+      testWidgets(
+        newerQueued
+            ? 'newer queued session seek survives recovery of the previous load'
+            : 'pending session seek keeps its intended target through recovery',
+        (tester) async {
+          final f = _SessionFixture(android: true);
+          await f.setUp();
+          for (var i = 0; i < 4; i++) {
+            f.expectSession();
+          }
+          final tune = f.coordinator.tune('one');
+          await f.waitForNativeLoads(tester, 1);
+          f.player.observe(
+            live + const Duration(seconds: 8),
+            adjustment: adjustment,
+          );
+          await tester.pump();
+          expect(await tune, isTrue);
+
+          final first = f.coordinator.seekTo(const Duration(seconds: 60));
+          await tester.pump(const Duration(milliseconds: 400));
+          await f.waitForNativeLoads(tester, 2);
+          f.player.observe(const Duration(seconds: 53), adjustment: adjustment);
+          await tester.pump();
+          final firstLanding = f.player.landing!;
+          final queued = newerQueued
+              ? f.coordinator.seekBy(const Duration(seconds: 10))
+              : null;
+          f.player.observe(
+            const Duration(seconds: 53),
+            state: PlayerState.error,
+            failureCode: 'source_open_error',
+          );
+          firstLanding.complete();
+          await f.waitForNativeLoads(tester, 3);
+          expect(f.starts.last['offset'], '60');
+
+          f.player.observe(const Duration(seconds: 53), adjustment: adjustment);
+          await tester.pump();
+          expect(f.coordinator.position, const Duration(seconds: 45));
+          expect(f.coordinator.sessionAlignmentHeld, isTrue);
+          final recoveryLanding = f.player.landing!;
+          final relative = f.coordinator.seekBy(const Duration(seconds: 10));
+          await tester.pump(const Duration(milliseconds: 400));
+          await f.waitForNativeLoads(tester, 4);
+          recoveryLanding.complete();
+          final issued = f.starts.last['offset']!;
+          f.player.observe(
+            Duration(seconds: int.parse(issued) + 8),
+            adjustment: adjustment,
+          );
+          await tester.pump();
+          await Future.wait([first, ?queued, relative]);
+          await f.close(tester);
+          expect(issued, newerQueued ? '80' : '70');
+        },
+      );
+    }
+
     testWidgets('session seek burst survives an older replacement settling', (
       tester,
     ) async {
