@@ -302,6 +302,26 @@ jobs:
       - run: dart tool/check_toolchain.dart
       - name: Run Windows engine tooling fixtures (native Mac skips visible)
         run: python tool/flutter_engine/desktop_accessibility_test.py
+      - name: Run authenticated-reference fixture controls
+        shell: pwsh
+        run: |
+          $ErrorActionPreference = 'Stop'
+          $PSNativeCommandUseErrorActionPreference = $true
+          $python = Get-Command python -CommandType Application -ErrorAction Stop
+          $openssl = Get-Command openssl -CommandType Application -ErrorAction SilentlyContinue
+          if (-not $openssl) {
+            $gitBin = Join-Path $env:ProgramFiles 'Git\usr\bin'
+            if (Test-Path -LiteralPath (Join-Path $gitBin 'openssl.exe')) {
+              $env:PATH = "$gitBin;$env:PATH"
+              $openssl = Get-Command openssl -CommandType Application -ErrorAction SilentlyContinue
+            }
+          }
+          if (-not $openssl) {
+            throw 'Required authenticated-reference fixture tool is unavailable: openssl'
+          }
+          & $python.Source --version
+          & $openssl.Source version
+          & $python.Source tool/windows/authenticated-reference-fixture-test.py
       - name: Verify portable UI on Windows
         run: >-
           flutter test
