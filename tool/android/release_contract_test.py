@@ -25,6 +25,15 @@ generator = module('licenses', 'generate-licenses.py')
 manifest = module('manifest', 'check-manifest.py')
 
 
+def commit_lockfile(root):
+    (root / 'pubspec.lock').write_text('packages: pinned\n')
+    git = ['git', '-C', str(root), '-c', 'user.name=fixture', '-c', 'user.email=fixture@example.invalid',
+           '-c', 'commit.gpgsign=false', '-c', 'core.hooksPath=/dev/null']
+    subprocess.run([*git, 'init', '-q'], check=True)
+    subprocess.run([*git, 'add', 'pubspec.lock'], check=True)
+    subprocess.run([*git, 'commit', '-q', '-m', 'fixture'], check=True)
+
+
 class ReleaseContractTest(unittest.TestCase):
     def test_notice_check_fetches_current_terms_without_trusting_disk_cache(self):
         with tempfile.TemporaryDirectory() as directory:
@@ -207,12 +216,40 @@ class ReleaseContractTest(unittest.TestCase):
             generator.generate('+--- io.flutter:flutter_embedding_release:1.0.0', assets, [], sdk, None, 'fixture')
             notice = assets / 'licenses/flutter/Flutter-SDK-LICENSE.txt'
             notice.write_text('stale SDK terms\n')
+            commit_lockfile(root)
             result = subprocess.run(['bash', str(tools / 'build-release.sh')],
                 env={**os.environ, 'PATH': str(sdk / 'bin') + os.pathsep + os.environ['PATH']},
                 capture_output=True, text=True)
             self.assertNotEqual(0, result.returncode)
             self.assertEqual('stale SDK terms\n', notice.read_text())
             self.assertIn('notices differ', result.stderr)
+            self.assertFalse((tools / 'signing-called').exists())
+
+    def test_release_refuses_changed_lockfile_before_packaging(self):
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            tools = root / 'tool/android'
+            tools.mkdir(parents=True)
+            shutil.copy(Path(__file__).with_name('build-release.sh'), tools)
+            signing = tools / 'with-signing.sh'
+            signing.write_text('#!/bin/sh\ntouch "$(dirname "$0")/signing-called"\n')
+            signing.chmod(0o755)
+            wrapper = root / 'android/gradlew'
+            wrapper.parent.mkdir()
+            wrapper.write_text('#!/bin/sh\n')
+            wrapper.chmod(0o755)
+            sdk_bin = root / 'flutter/bin'
+            sdk_bin.mkdir(parents=True)
+            flutter = sdk_bin / 'flutter'
+            flutter.write_text('#!/bin/sh\n')
+            flutter.chmod(0o755)
+            commit_lockfile(root)
+            (root / 'pubspec.lock').write_text('packages: floated\n')
+            result = subprocess.run(['bash', str(tools / 'build-release.sh')],
+                env={**os.environ, 'PATH': str(sdk_bin) + os.pathsep + os.environ['PATH']},
+                capture_output=True, text=True)
+            self.assertNotEqual(0, result.returncode)
+            self.assertIn('pubspec.lock differs', result.stderr)
             self.assertFalse((tools / 'signing-called').exists())
 
     def test_notice_check_detects_all_drift_without_writing(self):

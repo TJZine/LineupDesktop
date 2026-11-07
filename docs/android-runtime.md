@@ -135,7 +135,9 @@ Start from a clean checkout with the intended dependency pins. Set
 `FLUTTER_SDK` to the pinned SDK directory and `JAVA_HOME` to the JDK 17
 directory before running these commands from the repository root in Bash.
 The temporary Gradle home starts empty, and the Flutter copy keeps Gradle
-writes out of the original SDK.
+writes out of the original SDK. Generate the wrapper with
+`flutter build apk --config-only`, not `flutter create`, which replaces
+`pubspec.lock` and `.metadata` and adds a stock activity.
 
 ```bash
 set -euo pipefail
@@ -149,8 +151,8 @@ export PATH="$scratch/flutter/bin:$JAVA_HOME/bin:$PATH"
 export GRADLE_USER_HOME="$scratch/gradle"
 export GRADLE_OPTS=-Dorg.gradle.project.android.builder.sdkDownload=false
 
-flutter pub get
-flutter create --empty --platforms=android --no-overwrite .
+flutter pub get --enforce-lockfile
+flutter build apk --config-only --debug
 flutter --version
 dart tool/check_toolchain.dart
 
@@ -167,10 +169,6 @@ apk_properties=(
     --no-daemon :app:assembleDebug :app:testDebugUnitTest \
     "${apk_properties[@]}" -Ptree-shake-icons=false
 )
-
-# Wrapper generation can update the Dart lockfile. Restore the intended pins.
-git restore -- pubspec.lock
-flutter pub get --enforce-lockfile
 
 # Use a disposable key for this metadata-generation APK.
 keytool -genkeypair -keystore "$scratch/throwaway.p12" -alias metadata-only \
@@ -207,9 +205,9 @@ with patch.object(generator.subprocess, 'run', record):
 PYTHON
 ```
 
-Review the metadata diff and exclude any unrelated files produced by wrapper
-generation. For a Linux-only artifact such as AAPT2, download the matching
-classifier from the same Maven repository and add its SHA-256 to the metadata.
+Review the metadata diff. For a Linux-only artifact such as AAPT2, download the
+matching classifier from the same Maven repository and add its SHA-256 to the
+metadata.
 
 ## Release packaging and runtime notices
 

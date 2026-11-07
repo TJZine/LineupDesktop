@@ -8,7 +8,12 @@ if [[ -z "$flutter_bin" ]]; then
   exit 1
 fi
 if [[ ! -x "$root/android/gradlew" ]]; then
-  echo 'Android Gradle wrapper is missing. Run flutter create --empty --platforms=android --no-overwrite .' >&2
+  echo 'Android Gradle wrapper is missing. Run flutter build apk --config-only --debug' >&2
+  exit 1
+fi
+# flutter build keeps whatever lockfile it finds, so a changed one would ship.
+if ! git -C "$root" diff --quiet HEAD -- pubspec.lock; then
+  echo 'pubspec.lock differs from the committed pins. Run git restore -- pubspec.lock' >&2
   exit 1
 fi
 
