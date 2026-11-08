@@ -195,30 +195,16 @@ foreach ($entry in $descriptiveRevisions.GetEnumerator()) {
     throw "Prepared production runtime provenance does not match $($entry.Key)."
   }
 }
-$licenseMetadata = @{
-  'mpv-LICENSE.LGPL' = @{
-    Provenance = 'LINEUP_MPV_MPV_LICENSE_SHA256'
-    Sha256 = '72B672113D642CBB8EF5DCC76938DB801983C56E50B1400AB930F1A64D6DC8D9'
-  }
-  'FFmpeg-COPYING.LGPLv3' = @{
-    Provenance = 'LINEUP_MPV_FFMPEG_LICENSE_SHA256'
-    Sha256 = 'DA7EABB7BAFDF7D3AE5E9F223AA5BDC1EECE45AC569DC21B3B037520B4464768'
-  }
-  'FFmpeg-COPYING.GPLv3' = @{
-    Provenance = 'LINEUP_MPV_FFMPEG_GPL_LICENSE_SHA256'
-    Sha256 = '8CEB4B9EE5ADEDDE47B31E975C1D90C73AD27B6B165A1DCD80C7C545EB65B903'
-  }
-  'libplacebo-LICENSE' = @{
-    Provenance = 'LINEUP_MPV_LIBPLACEBO_LICENSE_SHA256'
-    Sha256 = 'B3AA400ACA6D2BA1F0BD03BD98D03D1FE7489A3BBB26969D72016360AF8A5C9D'
-  }
+$noticeManifest = Join-Path $repository 'third_party/libmpv/notice-hashes.psd1'
+$licenseHashes = Import-PowerShellDataFile -LiteralPath $noticeManifest
+if ((Get-ProvenanceValue 'LINEUP_MPV_NOTICE_MANIFEST_SHA256') -ne
+  (Get-FileHash -Algorithm SHA256 -LiteralPath $noticeManifest).Hash) {
+  Throw-PackageFailure 'runtime-license-mismatch' 'Prepared production runtime notice manifest differs. Prepare libmpv again.'
 }
-foreach ($entry in $licenseMetadata.GetEnumerator()) {
+foreach ($entry in $licenseHashes.GetEnumerator()) {
   $license = Join-Path $env:LINEUP_MPV_ROOT "licenses/$($entry.Key)"
-  $expectedHash = $entry.Value.Sha256.ToUpperInvariant()
-  if ((Get-ProvenanceValue $entry.Value.Provenance).ToUpperInvariant() -ne $expectedHash -or
-    -not (Test-Path -LiteralPath $license) -or
-    (Get-FileHash -Algorithm SHA256 -LiteralPath $license).Hash.ToUpperInvariant() -ne $expectedHash) {
+  if (-not (Test-Path -LiteralPath $license -PathType Leaf) -or
+    (Get-FileHash -Algorithm SHA256 -LiteralPath $license).Hash -ne $entry.Value) {
     Throw-PackageFailure 'runtime-license-mismatch' "Prepared production runtime license does not match $($entry.Key)."
   }
 }
@@ -272,7 +258,7 @@ $licenses = Join-Path $Destination 'licenses'
 Copy-Item -LiteralPath (Join-Path $repository 'LICENSE') -Destination (Join-Path $licenses 'Lineup-Desktop-Apache-2.0.txt')
 Copy-Item -LiteralPath (Join-Path $repository 'tool/flutter_engine/NOTICE') -Destination (Join-Path $licenses 'Flutter-engine-patch-NOTICE.txt')
 Copy-Item -LiteralPath (Join-Path $repository 'docs/windows-runtime.md') -Destination (Join-Path $licenses 'Windows-runtime-provenance.md')
-foreach ($file in $licenseMetadata.Keys) {
+foreach ($file in $licenseHashes.Keys) {
   Copy-Item -LiteralPath (Join-Path $env:LINEUP_MPV_ROOT "licenses/$file") -Destination $licenses
 }
 
