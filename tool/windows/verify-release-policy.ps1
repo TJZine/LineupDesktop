@@ -109,18 +109,20 @@ foreach ($relative in @(
   }
 }
 
-$licenseHashes = @{
-  'FFmpeg-COPYING.GPLv3' = '8CEB4B9EE5ADEDDE47B31E975C1D90C73AD27B6B165A1DCD80C7C545EB65B903'
-  'FFmpeg-COPYING.LGPLv3' = 'DA7EABB7BAFDF7D3AE5E9F223AA5BDC1EECE45AC569DC21B3B037520B4464768'
-  'libplacebo-LICENSE' = 'B3AA400ACA6D2BA1F0BD03BD98D03D1FE7489A3BBB26969D72016360AF8A5C9D'
-  'mpv-LICENSE.LGPL' = '72B672113D642CBB8EF5DCC76938DB801983C56E50B1400AB930F1A64D6DC8D9'
-}
+$noticeManifest = Join-Path $repository 'third_party/libmpv/notice-hashes.psd1'
+$licenseHashes = Import-PowerShellDataFile -LiteralPath $noticeManifest
+$licenseDirectory = Join-Path $repository 'third_party/libmpv/licenses'
 foreach ($entry in $licenseHashes.GetEnumerator()) {
-  $license = Join-Path $repository "third_party/libmpv/licenses/$($entry.Key)"
+  $license = Join-Path $licenseDirectory $entry.Key
   if (-not (Test-Path -LiteralPath $license -PathType Leaf) -or
     (Get-FileHash -Algorithm SHA256 -LiteralPath $license).Hash.ToUpperInvariant() -ne
     $entry.Value) {
     throw "Pinned runtime license does not match $($entry.Key)."
+  }
+}
+foreach ($license in Get-ChildItem -LiteralPath $licenseDirectory -Force) {
+  if (-not $licenseHashes.ContainsKey($license.Name)) {
+    throw "Unpinned runtime license: $($license.Name)."
   }
 }
 $manifest = Get-Content -Raw -LiteralPath (Join-Path $repository 'tool/flutter_engine/desktop-accessibility.json') | ConvertFrom-Json
