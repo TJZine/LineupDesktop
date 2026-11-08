@@ -496,18 +496,26 @@ void main() {
       },
     );
 
-    for (final logout in [false, true]) {
-      testWidgets('session stops on ${logout ? 'logout' : 'server switch'}', (
-        tester,
-      ) async {
-        final f = _SessionFixture(android: false, secondServer: !logout);
+    for (final transition in ['logout', 'server switch', 'profile switch']) {
+      testWidgets('session stops on $transition', (tester) async {
+        final f = _SessionFixture(
+          android: false,
+          secondServer: transition == 'server switch',
+          secondProfile: transition == 'profile switch',
+        );
         await f.setUp();
         f.expectSession();
         expect(await f.tune(tester), isTrue);
-        if (logout) {
+        if (transition == 'logout') {
           final operation = f.coordinator.logout();
           await tester.pump();
           expect(await operation, isTrue);
+        } else if (transition == 'profile switch') {
+          final operation = f.lineup.selectProfile(f.lineup.profiles.last);
+          await tester.pump();
+          expect(await operation, isTrue);
+          expect(f.lineup.profile?.id, 'other-profile');
+          await tester.pump();
         } else {
           final operation = f.lineup.selectServer(f.lineup.servers.last);
           await tester.pump();
@@ -12768,6 +12776,7 @@ class _SessionFixture {
     this.suspendInBackground = false,
     this.selectedSubtitle = false,
     this.secondServer = false,
+    this.secondProfile = false,
     this.listingShape = false,
   });
 
@@ -12790,6 +12799,7 @@ class _SessionFixture {
   final active = <String>{};
   final bool selectedSubtitle;
   final bool secondServer;
+  final bool secondProfile;
   final bool listingShape;
   final metadata = <String>[];
   bool allowPendingStartOverlap = false;
@@ -12983,6 +12993,11 @@ class _SessionFixture {
 
   Future<http.Response> _respond(http.Request request) async {
     final path = request.url.path;
+    if (secondProfile && path == '/api/v2/home/users/other-profile/switch') {
+      expectSync(request.method, 'POST');
+      expectSync(request.headers['x-plex-token'], 'fixture-account');
+      return _response({'authToken': 'fixture-other-profile'});
+    }
     expectSync(request.method, 'GET');
     if (listingShape && path.startsWith('/library/metadata/')) {
       final id = request.url.pathSegments.last;
@@ -13069,6 +13084,12 @@ class _SessionFixture {
       '/api/v2/home/users' => {
         'User': [
           {'id': 'owner', 'title': 'Owner', 'protected': false},
+          if (secondProfile)
+            {
+              'id': 'other-profile',
+              'title': 'Other profile',
+              'protected': false,
+            },
         ],
       },
       '/api/v2/resources' => [

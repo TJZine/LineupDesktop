@@ -346,12 +346,12 @@ internal class Media3Engine(
 
     override fun alignSession(positionMs: Long, seekId: Long) {
         val landing = checkNotNull(sessionLanding)
+        check(!player.playWhenReady && positionMs != player.currentPosition)
         sessionClock?.seeking()
         player.setSeekParameters(SeekParameters.EXACT)
         // The paused, single-period session cannot play across the marker.
         // Media3 delivers a positioned message at the discontinuity target
         // in updatePlaybackPositions, before it invokes the renderers.
-        check(!player.playWhenReady && positionMs != player.currentPosition)
         player.createMessage { _, _ ->
             landing.reachedSeekTarget(seekId, positionMs * 1000)
         }.setPosition(positionMs).send()
