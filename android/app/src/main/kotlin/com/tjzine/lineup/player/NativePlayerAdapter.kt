@@ -138,7 +138,11 @@ class NativePlayerAdapter(private val activity: Activity, messenger: BinaryMesse
                     }
                 }
 
-                override fun createEngine(): PlayerEngine {
+                override fun createEngine(): PlayerEngine = buildEngine(false)
+
+                override fun createSessionEngine(): PlayerEngine = buildEngine(true)
+
+                private fun buildEngine(session: Boolean): PlayerEngine {
                     updateSubtitles {
                         subtitles.setStyle(CaptionStyleCompat(
                             Color.WHITE, Color.TRANSPARENT, Color.TRANSPARENT,
@@ -157,6 +161,7 @@ class NativePlayerAdapter(private val activity: Activity, messenger: BinaryMesse
                         },
                         ::keepScreenOn,
                         subtitlePresentation = { presentation },
+                        observeSessionLanding = session,
                     ).also { engine = it }
                 }
 

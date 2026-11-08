@@ -147,7 +147,10 @@ class FixtureControls(unittest.TestCase):
             self.assertEqual(server.requests, [])
             self.assertFalse(server.failed)
             self.assertEqual(server.errors[0]["phase"], "tls_accept")
-            self.assertEqual(server.errors[0]["code"], "certificate_rejected")
+            # TLS backends may close after client verification fails without
+            # sending a certificate alert to the server.
+            self.assertIn(server.errors[0]["code"],
+                          ("certificate_rejected", "peer_disconnect"))
             self.assert_healthy(server, self.trusted)
 
     def test_handler_runtime_fault_is_sanitized_and_sticky(self):

@@ -387,6 +387,42 @@ class PlexClient {
       'cast-detail-invalid',
       'Plex returned invalid cast detail.',
     );
+    final row = await _itemMetadataRow(
+      server,
+      token,
+      ratingKey,
+      invalid,
+      cancelled,
+    );
+    if (row['Role'] != null && row['Role'] is! List) throw invalid;
+    return _castMembers(row['Role']);
+  }
+
+  Future<PlexMediaItem> itemPlaybackDetails(
+    Uri server,
+    String token,
+    String ratingKey, {
+    Future<void>? cancelled,
+  }) async => parseMediaItem(
+    await _itemMetadataRow(
+      server,
+      token,
+      ratingKey,
+      const PlexException(
+        'parse-error',
+        'Plex returned invalid playback detail.',
+      ),
+      cancelled,
+    ),
+  );
+
+  Future<Map<Object?, Object?>> _itemMetadataRow(
+    Uri server,
+    String token,
+    String ratingKey,
+    PlexException invalid,
+    Future<void>? cancelled,
+  ) async {
     if (ratingKey.trim().isEmpty) throw invalid;
     final uri = server
         .resolve('/library/metadata/')
@@ -397,12 +433,11 @@ class PlexClient {
     final rows = container['Metadata'];
     if (rows is! List || rows.length != 1) throw invalid;
     final row = rows.single;
-    if (row is! Map ||
-        _optionalId(row['ratingKey']) != ratingKey ||
-        (row['Role'] != null && row['Role'] is! List)) {
+    if (row is! Map<Object?, Object?> ||
+        _optionalId(row['ratingKey']) != ratingKey) {
       throw invalid;
     }
-    return _castMembers(row['Role']);
+    return row;
   }
 
   Future<List<PlexLibrary>> libraries(Uri server, String token) async {
@@ -1304,16 +1339,19 @@ class PlexClient {
   Future<PlexDecision> transcodeDecision(
     Uri server,
     PlexSessionRequest request,
-    String token,
-  ) async {
+    String token, {
+    bool directPlay = true,
+    Future<void>? cancelled,
+  }) async {
     final response = await _send(
       'GET',
       _sessionUri(
         server,
         '/video/:/transcode/universal/decision',
-        request.query(directPlay: true),
+        request.query(directPlay: directPlay),
       ),
       headers: _sessionHeaders(token, request.profile, request.sessionId),
+      cancelled: cancelled,
     );
     if (response.statusCode != 200) _throwResponse(response);
     return parsePlexDecision(response.body);
@@ -1354,6 +1392,52 @@ class PlexClient {
     );
   }
 
+  Future<String> fetchTranscodePlaylist(
+    Uri server,
+    PlexSessionStart session,
+    String token, {
+    required PlexProfile profile,
+    Future<void>? cancelled,
+  }) async {
+    // Recheck the origin at the credential-bearing request boundary.
+    _requireSessionId(session.sessionId);
+    final variant = session.variant;
+    if (!_isSameServerUri(server, variant) ||
+        variant.scheme != 'https' ||
+        variant.host.isEmpty ||
+        variant.authority.contains('@') ||
+        variant.fragment.isNotEmpty ||
+        variant.queryParametersAll.keys.any(
+          (key) => key.toLowerCase() == 'x-plex-token',
+        ) ||
+        !isPlexSessionVariantPath(variant.path)) {
+      throw const PlexException(
+        'session-invalid',
+        'Plex returned an unsupported session playlist.',
+      );
+    }
+    final response = await _send(
+      'GET',
+      variant,
+      headers: _sessionHeaders(token, profile, session.sessionId),
+      cancelled: cancelled,
+      maximumBytes: maximumPlexVariantBytes,
+      oversizedCode: 'session-invalid',
+      oversizedMessage: 'Plex returned an unsupported session playlist.',
+    );
+    if (response.statusCode != 200) _throwResponse(response);
+    try {
+      final text = utf8.decode(response.bodyBytes);
+      if (text.isEmpty) throw const FormatException();
+      return text;
+    } on FormatException {
+      throw const PlexException(
+        'session-invalid',
+        'Plex returned an unsupported session playlist.',
+      );
+    }
+  }
+
   Future<void> pingTranscodeSession(
     Uri server,
     String sessionId,
@@ -1377,6 +1461,8 @@ class PlexClient {
     String sessionId,
     String token, {
     PlexProfile? profile,
+    Duration budget = const Duration(seconds: 2),
+    void Function(String code)? onFailure,
   }) async {
     try {
       _requireSessionId(sessionId);
@@ -1386,16 +1472,18 @@ class PlexClient {
           'session': sessionId,
         }),
         headers: _sessionHeaders(token, profile),
-        timeout: _sessionTimeout(const Duration(seconds: 2)),
+        timeout: _sessionTimeout(budget),
       );
       if (response.statusCode != 200 && response.statusCode != 404) {
         _throwResponse(response);
       }
     } catch (error) {
       try {
-        onTranscodeStopFailure?.call(
-          error is PlexException ? error.code : 'session-stop-failed',
-        );
+        final code = error is PlexException
+            ? error.code
+            : 'session-stop-failed';
+        onFailure?.call(code);
+        onTranscodeStopFailure?.call(code);
       } catch (_) {
         // Teardown remains best-effort even when a diagnostic consumer fails.
       }
@@ -1880,6 +1968,7 @@ PlexMediaPart? _parseMediaPart(Map<Object?, Object?> raw) {
           codec: _optionalText(stream['codec'])?.toLowerCase(),
           profile: _optionalText(stream['profile'])?.toLowerCase(),
           bitDepth: _optionalInteger(stream['bitDepth']),
+          level: _optionalInteger(stream['level']),
           width: _optionalInteger(stream['width']),
           height: _optionalInteger(stream['height']),
           bitrate: _optionalInteger(stream['bitrate']),

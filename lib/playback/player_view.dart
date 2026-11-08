@@ -248,6 +248,7 @@ class PlayerViewState extends State<PlayerView> with WidgetsBindingObserver {
       controller.cursorVisible,
       controller.channelTagWindowActive,
       controller.displayHoldActive,
+      controller.sessionAlignmentHeld,
       controller.tuning,
       controller.hasPlaybackIntent,
       controller.lineup.settings,
@@ -1151,7 +1152,9 @@ class PlayerSurface extends StatelessWidget {
             player: controller.player,
             showSubtitles: showSubtitles,
           ),
-        if (showSubtitles)
+        if (controller.sessionAlignmentHeld)
+          ColoredBox(color: roles.deepBackground),
+        if (showSubtitles && !controller.sessionAlignmentHeld)
           SubtitleLayer(
             avoidance: fullPlayer ? subtitleAvoidance : null,
             cues: controller.subtitleCues,

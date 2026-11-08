@@ -11,7 +11,10 @@ import '../channels/channel.dart';
 import '../diagnostics/diagnostics.dart';
 import '../guide/guide_controller.dart';
 import '../plex/plex_models.dart';
+import '../plex/plex_transcode.dart';
 import 'native_player.dart';
+import 'plex_part_load.dart';
+import 'plex_session_clock.dart';
 import 'display_matching.dart';
 import 'subtitle_appearance_source.dart';
 
@@ -262,6 +265,8 @@ class PlayerCoordinator extends ChangeNotifier with WidgetsBindingObserver {
   int _trackSelectionGeneration = 0;
   int _seekGeneration = 0;
   int? _pendingExplicitSeekGeneration;
+  _SessionSeek? _sessionSeek;
+  final Map<String, DateTime> _reactiveFallbackOccurrences = {};
   int _fullscreenEpoch = 0;
   int _nativeLoadGeneration = 0;
   _PlaybackLoad? _activeLoad;
@@ -283,7 +288,7 @@ class PlayerCoordinator extends ChangeNotifier with WidgetsBindingObserver {
   bool _republish = false;
   bool _initialMediaRequested = false;
   _ActiveProgram? _active;
-  _AuthorizationRecovery? _authorizationRecovery;
+  _LoadRecovery? _loadRecovery;
   String? _retryChannelId;
   List<Channel> _indexedChannels = const [];
   late int _contentGeneration;
@@ -291,7 +296,19 @@ class PlayerCoordinator extends ChangeNotifier with WidgetsBindingObserver {
   Map<String, int> _channelIndexById = const {};
   Map<int, Channel> _channelByNumber = const {};
 
-  PlayerStatus get status => _status;
+  bool get sessionAlignmentHeld {
+    final load = _activeLoad;
+    return load != null &&
+        load.sessionClock?.desktop == false &&
+        !load.alignmentReleased;
+  }
+
+  PlayerStatus get status => sessionAlignmentHeld
+      ? const PlayerStatus(
+          state: PlayerState.loading,
+          message: 'Preparing playback',
+        )
+      : _status;
 
   /// The action offered by the transport button and keyboard playback toggle.
   /// Before a load exists (or while it is pending/held), controls toggle intent;
@@ -305,7 +322,14 @@ class PlayerCoordinator extends ChangeNotifier with WidgetsBindingObserver {
   PlayerTelemetry get telemetry => _telemetry;
   PlaybackDiagnosticSnapshot get diagnosticPlaybackSnapshot =>
       PlaybackDiagnosticSnapshot(
-        state: _status.state,
+        state: status.state,
+        method: switch (_activeLoad?.part?.method) {
+          PlexPlaybackMethod.directPlay => DiagnosticPlaybackMethod.directPlay,
+          PlexPlaybackMethod.directStream =>
+            DiagnosticPlaybackMethod.directStream,
+          PlexPlaybackMethod.transcode => DiagnosticPlaybackMethod.transcode,
+          null => DiagnosticPlaybackMethod.unknown,
+        },
         displayReport: displayReport,
         receivedTelemetry:
             _activeLoadGeneration != null &&
@@ -606,6 +630,7 @@ class PlayerCoordinator extends ChangeNotifier with WidgetsBindingObserver {
     if (_disposed || _backgroundSuspended) return;
     if (event.generation != _activeLoadGeneration) return;
     final load = _activeLoad;
+    final sessionClock = load?.sessionClock;
     final terminal = const {
       PlayerState.error,
       PlayerState.ended,
@@ -613,17 +638,23 @@ class PlayerCoordinator extends ChangeNotifier with WidgetsBindingObserver {
       PlayerState.idle,
       PlayerState.unsupported,
     }.contains(event.status.state);
+    final partPosition =
+        sessionClock?.observe(event, active: !terminal) ?? event.position;
+    if (sessionClock != null && event.positionUpdated) {
+      if (sessionClock.mapped) load!.lastMappedPosition = partPosition;
+      _recordSessionAlignment(sessionClock);
+    }
     if (terminal &&
         (event.status.state == PlayerState.error || load?.replacing != true)) {
       _displayMatching.cancelLoad();
     }
     if (!terminal && event.positionUpdated) {
-      load?.observedPosition = event.position;
+      load?.observedPosition = partPosition;
     }
-    if (event.position > Duration.zero) {
-      load?.lastPositivePosition = event.position;
+    if (partPosition > Duration.zero) {
+      load?.lastPositivePosition = partPosition;
     }
-    if (event.duration > Duration.zero) {
+    if (sessionClock == null && event.duration > Duration.zero) {
       load?.lastPositiveDuration = event.duration;
     }
     final previousFacts = _eventVisibleFacts;
@@ -653,18 +684,21 @@ class PlayerCoordinator extends ChangeNotifier with WidgetsBindingObserver {
         (event.status.state != PlayerState.error ||
             event.position > Duration.zero ||
             load.resumePosition == Duration.zero)) {
-      load.resumePosition = event.position;
+      load.resumePosition =
+          sessionClock?.seekBase(alignmentHeld: false) ?? partPosition;
     }
     final playback = _activeLoad?.request ?? _active?.request;
     if (playback != null &&
         _activePartIndex < playback.parts.length &&
         _usesAggregateCoordinates(playback)) {
       final offset = _partOffset(_activePartIndex)!;
-      _position = offset + event.position;
+      _position = offset + partPosition;
       _duration = _partDurations.values.fold(Duration.zero, (a, b) => a + b);
     } else {
-      _position = event.position;
-      _duration = event.duration;
+      _position = partPosition;
+      _duration = sessionClock == null
+          ? event.duration
+          : playback?.parts[load!.partIndex].duration ?? Duration.zero;
     }
     if (event.tracksUpdated) {
       _subtitleCuesSuppressed = !event.tracks.any(
@@ -688,7 +722,7 @@ class PlayerCoordinator extends ChangeNotifier with WidgetsBindingObserver {
     _telemetry = event.telemetry;
     _tracks = event.tracks;
     if (event.generation case final generation? when !terminal) {
-      _displayMatching.observe(generation, event.telemetry, event.position);
+      _displayMatching.observe(generation, event.telemetry, partPosition);
       if (event.tracksUpdated) {
         _displayMatching.tracksUpdated(
           generation,
@@ -731,31 +765,74 @@ class PlayerCoordinator extends ChangeNotifier with WidgetsBindingObserver {
         }.contains(event.status.state)) {
       _activeLoad?.replacing = false;
     }
+    if (!terminal && sessionAlignmentHeld) {
+      if (previousFacts != _eventVisibleFacts) notifyListeners();
+      return;
+    }
     if (event.status.state == PlayerState.error) {
-      if (_isAuthorizationFailure(event.status) &&
-          _activeLoadGeneration != null &&
-          playback != null) {
-        final rejectedGeneration = _activeLoadGeneration!;
-        final pending = _authorizationRecoveryFor(playback, rejectedGeneration);
-        if (pending != null) return;
-        final load = _activeLoad!;
-        if (!load.authorizationRetried) {
-          final recover = playback.authorizationRecovery;
-          if (recover != null) {
-            final recovery = _AuthorizationRecovery(load);
-            _authorizationRecovery = recovery;
-            load.recovery = recovery;
-            recovery.result = _recoverAuthorization(
-              recovery,
-              identical(playback, _active?.request),
-              load.target ?? load.resumePosition,
-              Future.sync(recover),
-            );
-            if (!load.pending) {
-              unawaited(_settleActiveAuthorization(recovery));
-            }
+      if (load != null && playback != null) {
+        final unauthorized = _isAuthorizationFailure(event.status);
+        final session = load.session != null;
+        final reactive =
+            !session &&
+            const {
+              'video_decode_error',
+              'audio_decode_error',
+              'container_error',
+            }.contains(event.status.failureCode) &&
+            event.status.httpStatus == null &&
+            playback.openPart != null;
+        if (_loadRecoveryFor(playback, load.generation) != null) {
+          return;
+        }
+        if (session && load.sessionRestarts == 0) {
+          _status = const PlayerStatus(
+            state: PlayerState.loading,
+            message: 'Preparing playback',
+          );
+          _startLoadRecovery(
+            load,
+            playback,
+            Future.value(playback),
+            mode: PlexPartMode.restartSession,
+            sessionRestarts: 1,
+          );
+          notifyListeners();
+          return;
+        }
+        if (reactive && _claimReactiveFallback()) {
+          _startLoadRecovery(
+            load,
+            playback,
+            Future.value(playback),
+            mode: PlexPartMode.reactiveFallback,
+          );
+          return;
+        }
+        if (!session && unauthorized && !load.authorizationRetried) {
+          if (playback.authorizationRecovery case final recover?) {
+            _startLoadRecovery(load, playback, Future.sync(recover));
             return;
           }
+        }
+        if (session && unauthorized) {
+          final failure = const PlayerUnavailable(
+            "Lineup can't stream converted video on this connection.",
+            failureCode: 'session-child-unauthorized',
+          );
+          load.policyFailure = failure;
+          _status = PlayerStatus(
+            state: PlayerState.error,
+            message: 'Playback error',
+            recoverable: true,
+            failureCode: failure.failureCode,
+          );
+          if (load.pending) {
+            load.cancellation.cancel();
+            return;
+          }
+          unawaited(_failTransition(failure, load.tuneGeneration));
+          return;
         }
       }
       _displayMatching.cancelLoad();
@@ -775,7 +852,7 @@ class PlayerCoordinator extends ChangeNotifier with WidgetsBindingObserver {
       });
       _resumeAfterBackground = false;
       unawaited(_stopQuietly());
-      _invalidateAuthorizationRecovery();
+      _invalidateLoadRecovery();
       _error = 'Playback failed. Retry or choose another channel.';
       _tuning = false;
       _canRetry = event.status.recoverable && _retryChannelId != null;
@@ -854,8 +931,13 @@ class PlayerCoordinator extends ChangeNotifier with WidgetsBindingObserver {
               ? load.lastPositivePosition
               : load.startTarget ?? Duration.zero;
           final target = load.target ?? Duration.zero;
-          final observedProgress = position > target ? position : target;
+          final observedProgress = sessionClock == null
+              ? (position > target ? position : target)
+              : sessionClock.mapped
+              ? load.lastMappedPosition
+              : null;
           if (knownDuration != null &&
+              observedProgress != null &&
               observedProgress < knownDuration - _prematureEndTolerance) {
             unawaited(_failPrematureEnd(load.tuneGeneration));
             break;
@@ -968,7 +1050,7 @@ class PlayerCoordinator extends ChangeNotifier with WidgetsBindingObserver {
         _error == null &&
         !_scopeCleanupPending &&
         _nativeStopOperation == null &&
-        _authorizationRecovery == null &&
+        _loadRecovery == null &&
         _advancingGeneration == null &&
         !load.pending &&
         !load.replacing &&
@@ -990,6 +1072,7 @@ class PlayerCoordinator extends ChangeNotifier with WidgetsBindingObserver {
   }
 
   int _nextTuneGeneration({bool announceChannel = false}) {
+    _cancelSessionSeek();
     _channelTagTimer?.cancel();
     _channelTagTimer = null;
     final generation = ++_tuneGeneration;
@@ -1027,7 +1110,7 @@ class PlayerCoordinator extends ChangeNotifier with WidgetsBindingObserver {
     );
     _continuationGeneration = endedProgram == null ? null : generation;
     ++_controlGeneration;
-    _invalidateAuthorizationRecovery();
+    _invalidateLoadRecovery();
     _tuning = true;
     _canRetry = false;
     _error = null;
@@ -1172,7 +1255,7 @@ class PlayerCoordinator extends ChangeNotifier with WidgetsBindingObserver {
     Future<bool> fail(Object error) async {
       if (!ownsTune()) return false;
       _resumeAfterBackground = false;
-      _invalidateAuthorizationRecovery();
+      _invalidateLoadRecovery();
       if (active != null && identical(_active, active)) _releaseActive();
       if (request != null) _releaseActive(ifRequest: request);
       if (replaced != null) _releaseActive(ifRequest: replaced);
@@ -1193,9 +1276,8 @@ class PlayerCoordinator extends ChangeNotifier with WidgetsBindingObserver {
       request = await _loadPlayback(
         tuneLoad,
         request,
-        initialPosition: !fromBeginning && elapsed > const Duration(seconds: 2)
-            ? elapsed
-            : null,
+        initialPosition: fromBeginning ? null : elapsed,
+        allowShortDirectJoin: true,
       );
       if (endedProgram == null) {
         final joined = await _reconcileLiveJoin(
@@ -1222,7 +1304,7 @@ class PlayerCoordinator extends ChangeNotifier with WidgetsBindingObserver {
       }
       _preparingTuneLoad = null;
       if (!ownsTune()) return false;
-      _invalidateAuthorizationRecovery();
+      _invalidateLoadRecovery();
       if (replaced != null) _releaseActive(ifRequest: replaced);
       active = _commitActive(request!, program, channelId);
       await lineup.setCurrentChannel(channelId);
@@ -1295,6 +1377,9 @@ class PlayerCoordinator extends ChangeNotifier with WidgetsBindingObserver {
       }
       final load = _activeLoad;
       if (load == null || !_ownsLoad(load)) throw const _PlaybackSuperseded();
+      // The session has already admitted its media. Natural EOF owns rollover,
+      // including when session preparation crossed the Guide boundary.
+      if (load.session != null) return (program, request);
       final now = _clock();
       final current = guide.currentProgram(channelId, now);
       if (current == null) {
@@ -1437,47 +1522,43 @@ class PlayerCoordinator extends ChangeNotifier with WidgetsBindingObserver {
     LineupPlaybackRequest? request,
     int partIndex = 0,
     Duration? target,
+    Duration? sessionTarget,
     SeekMode seekMode = SeekMode.exact,
     bool authorizationRetried = false,
+    PlexPartMode mode = PlexPartMode.automatic,
+    int sessionRestarts = 0,
   }) {
     if (_disposed || _backgroundSuspended) throw const _PlaybackSuperseded();
-    if (_nativeStopOperation != null) {
+    final previous = _activeLoad;
+    final replacing = previous != null;
+    final nativeStop = previous?.session != null
+        ? _beginNativeStop(preserveProgram: true)
+        : _nativeStopOperation;
+    if (nativeStop != null && request?.openPart == null) {
       throw const PlayerUnavailable('Playback stop is still pending.');
     }
+    previous?.cancellation.cancel();
     final load = _PlaybackLoad(
       generation: ++_nativeLoadGeneration,
       tuneGeneration: _tuneGeneration,
       request: request,
       partIndex: partIndex,
       target: target,
+      sessionTarget: sessionTarget ?? target,
       seekMode: seekMode,
-      replacing: _activeLoad != null,
+      replacing: replacing,
+      sessionRestarts: sessionRestarts,
       authorizationRetried: authorizationRetried,
     );
     _activeLoad = load;
-    _displayMatching.cancelLoad();
-    _updateDisplaySession();
-    final startPaused = _displayMatching.beginLoad(
-      load.generation,
-      target,
-      userPaused: _userPaused,
-    );
-    _nativeCleanupRequired = true;
-    _telemetry = const PlayerTelemetry();
-    _tracks = const [];
-    _clearTrackSelection();
-    _clearSubtitleCues();
-    _subtitleCuesSuppressed = false;
-    _sendSubtitlePresentation(beforeLoad: true);
-    load.readiness = Future<void>.sync(
-      () => player.load(
-        media,
-        plexToken: request?.plexToken,
-        generation: load.generation,
-        startPaused: startPaused,
-        startPosition: load.nativeStartPosition,
-      ),
-    );
+    final open = request?.openPart;
+    final restart =
+        mode == PlexPartMode.restartSession && previous?.partIndex == partIndex
+        ? previous?.session?.handle
+        : null;
+    load.readiness = open == null
+        ? _dispatchNativeLoad(load, DirectPartLoad(media, request?.plexToken))
+        : _openPart(load, open, nativeStop, mode, restart);
     unawaited(
       load.readiness.then(
         (_) {
@@ -1493,10 +1574,160 @@ class PlayerCoordinator extends ChangeNotifier with WidgetsBindingObserver {
     return load;
   }
 
+  Future<void> _openPart(
+    _PlaybackLoad load,
+    OpenPlexPart open,
+    Future<void>? nativeStop,
+    PlexPartMode mode,
+    PlexSessionHandle? restart,
+  ) async {
+    await nativeStop;
+    if (!_ownsLoad(load)) throw const _PlaybackSuperseded();
+    final desktop = defaultTargetPlatform != TargetPlatform.android;
+    final requested = load.target ?? load.sessionTarget;
+    final opening =
+        (restart == null
+                ? open(
+                    load.partIndex,
+                    requested,
+                    load.cancellation,
+                    desktop: desktop,
+                    mediaCapabilities: player.mediaCapabilities,
+                    mode: mode,
+                    restarts: load.sessionRestarts,
+                  )
+                : restart.restartAt(
+                    requested ?? Duration.zero,
+                    load.cancellation,
+                    restarts: load.sessionRestarts,
+                  ))
+            .then<PartLoad?>((part) {
+              if (_ownsLoad(load)) return part;
+              if (part is SessionPartLoad) unawaited(part.handle.stop());
+              return null;
+            });
+    final part = await Future.any([
+      opening,
+      load.cancellation.cancelled.then<PartLoad?>((_) => null),
+    ]);
+    if (part == null || !_ownsLoad(load)) {
+      if (part is SessionPartLoad) unawaited(part.handle.stop());
+      throw const _PlaybackSuperseded();
+    }
+    if (part is SessionPartLoad) {
+      load.sessionClock = PlexSessionClock(
+        desktop: desktop,
+        requested: requested ?? Duration.zero,
+        offset: part.offset,
+      );
+      if (!desktop) {
+        notifyListeners();
+        // Submit the opaque Flutter cover before Media3 can render its
+        // initial paused frame into the already mounted native surface.
+        await Future.any([
+          WidgetsBinding.instance.endOfFrame,
+          load.cancellation.cancelled,
+        ]);
+      }
+    }
+    if (!_ownsLoad(load)) {
+      if (part is SessionPartLoad) unawaited(part.handle.stop());
+      throw const _PlaybackSuperseded();
+    }
+    await _dispatchNativeLoad(load, part);
+    if (!_ownsLoad(load)) return;
+    final clock = load.sessionClock;
+    if (clock == null || desktop) return;
+    if (load.policyFailure != null) return;
+    await clock.align(player, load.cancellation.cancelled);
+    if (!_ownsLoad(load) || load.policyFailure != null) return;
+    _recordSessionAlignment(clock);
+    load.alignmentReleased = true;
+    if (!_userPaused) {
+      if (_status.state == PlayerState.paused) {
+        _status = const PlayerStatus(
+          state: PlayerState.ready,
+          message: 'Ready',
+        );
+      }
+      await player.play();
+    }
+    if (_ownsLoad(load)) notifyListeners();
+  }
+
+  Future<void> _dispatchNativeLoad(_PlaybackLoad load, PartLoad part) {
+    load.part = part;
+    _displayMatching.cancelLoad();
+    _updateDisplaySession();
+    final startPaused = _displayMatching.beginLoad(
+      load.generation,
+      load.startTarget,
+      userPaused: _userPaused,
+    );
+    if (!_ownsLoad(load)) {
+      return Future<void>.error(const _PlaybackSuperseded());
+    }
+    _telemetry = const PlayerTelemetry();
+    _tracks = const [];
+    _clearTrackSelection();
+    _clearSubtitleCues();
+    _subtitleCuesSuppressed = false;
+    _sendSubtitlePresentation(beforeLoad: true);
+    if (!_ownsLoad(load)) {
+      return Future<void>.error(const _PlaybackSuperseded());
+    }
+    _nativeCleanupRequired = true;
+    load.nativeDispatched = true;
+    final session = load.session;
+    return Future<void>.sync(
+      () => player.load(
+        part.uri,
+        plexToken: part is DirectPartLoad ? part.token : null,
+        generation: load.generation,
+        startPaused: startPaused || sessionAlignmentHeld,
+        startPosition: session == null ? load.nativeStartPosition : null,
+        kind: session == null ? LoadKind.direct : LoadKind.plexSession,
+        sessionPlaylist: session?.playlist,
+      ),
+    );
+  }
+
+  void _recordSessionAlignment(PlexSessionClock clock) {
+    if (!clock.loggedEstimate && clock.basis == 'estimated') {
+      clock.loggedEstimate = true;
+      lineup.diagnostics.add(DiagnosticEvent.plexSessionAlignment, {
+        'positionBasis': 'estimated',
+      });
+    }
+    final outcome = clock.outcome;
+    final lead = clock.lead;
+    if (outcome == null) return;
+    if (clock.loggedAlignment) {
+      if (!clock.loggedLead && lead != null) {
+        clock.loggedLead = true;
+        lineup.diagnostics.add(DiagnosticEvent.plexSessionAlignment, {
+          'positionBasis': 'mapped',
+          'leadMs': lead.inMilliseconds,
+        });
+      }
+      return;
+    }
+    if (clock.desktop && lead == null) return;
+    clock.loggedAlignment = true;
+    clock.loggedLead = lead != null;
+    lineup.diagnostics.add(DiagnosticEvent.plexSessionAlignment, {
+      'positionBasis': clock.basis,
+      'alignmentOutcome': outcome.name,
+      'leadMs': lead?.inMilliseconds,
+      'landingMs': clock.landingMs,
+    });
+  }
+
   Future<LineupPlaybackRequest> _loadPlayback(
     _TuneLoad tuneLoad,
     LineupPlaybackRequest request, {
     Duration? initialPosition,
+    bool allowShortDirectJoin = false,
   }) async {
     _partDurations
       ..clear()
@@ -1508,11 +1739,16 @@ class PlayerCoordinator extends ChangeNotifier with WidgetsBindingObserver {
     final target = initialPosition == null
         ? null
         : _partForPosition(request, initialPosition);
+    final shortDirectJoin =
+        allowShortDirectJoin &&
+        target?.$1 == 0 &&
+        initialPosition! <= const Duration(seconds: 2);
     return tuneLoad.waitFor(
       _loadPartAtPosition(
         request,
         target?.$1 ?? 0,
-        target?.$2,
+        shortDirectJoin ? null : target?.$2,
+        sessionTarget: target?.$2,
         seekMode: SeekMode.keyframes,
       ),
     );
@@ -1522,20 +1758,37 @@ class PlayerCoordinator extends ChangeNotifier with WidgetsBindingObserver {
     LineupPlaybackRequest request,
     int partIndex,
     Duration? position, {
+    Duration? sessionTarget,
     SeekMode seekMode = SeekMode.exact,
     bool authorizationRetried = false,
-    _AuthorizationRecovery? recovery,
+    _LoadRecovery? recovery,
+    _SessionSeek? sessionSeek,
+    PlexPartMode mode = PlexPartMode.automatic,
+    int sessionRestarts = 0,
   }) {
-    if (recovery == null) _invalidateAuthorizationRecovery();
+    if (recovery == null) _invalidateLoadRecovery();
+    final previous = _activeLoad;
+    final seek = recovery == null ? sessionSeek : _sessionSeek;
     final load = _startLoad(
       request.parts[partIndex].uri,
       request: request,
       partIndex: partIndex,
       target: position,
+      sessionTarget: sessionTarget,
       seekMode: seekMode,
       authorizationRetried: authorizationRetried,
+      mode: mode,
+      sessionRestarts: sessionRestarts,
     );
     if (recovery != null) recovery.replacement = load;
+    // A recovery can replace the load while the seek is still pending.
+    // Transfer only the current intent owned by the load being replaced.
+    if (seek != null &&
+        identical(_sessionSeek, seek) &&
+        identical(seek.load, previous) &&
+        _ownsLoad(load)) {
+      seek.load = load;
+    }
     final operation = _completePartLoad(load);
     load.operation = operation;
     return operation;
@@ -1565,10 +1818,11 @@ class PlayerCoordinator extends ChangeNotifier with WidgetsBindingObserver {
         return await _completeLoadRecovery(recovery);
       }
       if (!_ownsLoad(load)) return null;
+      if (load.policyFailure case final policyFailure?) throw policyFailure;
       if (failure != null) {
         Error.throwWithStackTrace(failure, failureStack!);
       }
-      while (load.target != null) {
+      while (load.target != null && load.session == null) {
         var target = load.target!;
         final mode = load.seekMode;
         var scheduledCorrection = false;
@@ -1607,12 +1861,13 @@ class PlayerCoordinator extends ChangeNotifier with WidgetsBindingObserver {
         load.resumePosition = target;
         if (load.target == target && load.seekMode == mode) load.target = null;
       }
+      if (load.session != null) load.target = null;
       return load.request;
     } catch (error) {
       final recovery = load.recovery;
       final ownsFailure = recovery == null
           ? _ownsLoad(load)
-          : identical(_authorizationRecovery, recovery) &&
+          : identical(_loadRecovery, recovery) &&
                 _ownsLoad(recovery.replacement ?? recovery.rejected);
       if (!ownsFailure) return null;
       if (identical(_active?.request, load.request)) {
@@ -1632,26 +1887,60 @@ class PlayerCoordinator extends ChangeNotifier with WidgetsBindingObserver {
     }
   }
 
+  bool _claimReactiveFallback() {
+    final program = _resolvingProgram ?? _active?.program;
+    if (program == null) return false;
+    final now = _clock();
+    final occurrence = program.id;
+    _reactiveFallbackOccurrences.removeWhere(
+      (id, end) => id != occurrence && end.isBefore(now),
+    );
+    if (_reactiveFallbackOccurrences.containsKey(occurrence)) return false;
+    _reactiveFallbackOccurrences[occurrence] = program.scheduled.end;
+    return true;
+  }
+
+  void _startLoadRecovery(
+    _PlaybackLoad load,
+    LineupPlaybackRequest request,
+    Future<LineupPlaybackRequest> replacement, {
+    PlexPartMode mode = PlexPartMode.automatic,
+    int sessionRestarts = 0,
+  }) {
+    final recovery = _LoadRecovery(load, mode);
+    _loadRecovery = recovery;
+    load.recovery = recovery;
+    recovery.result = _recoverLoad(
+      recovery,
+      identical(request, _active?.request),
+      load.target ?? load.resumePosition,
+      replacement,
+      sessionRestarts: sessionRestarts,
+    );
+    if (!load.pending) unawaited(_settleActiveLoadRecovery(recovery));
+  }
+
   Future<LineupPlaybackRequest> _completeLoadRecovery(
-    _AuthorizationRecovery recovery,
+    _LoadRecovery recovery,
   ) async {
     final next = await recovery.result;
     if (!_disposed && recovery.rejected.tuneGeneration == _tuneGeneration) {
-      _clearAuthorizationRecovery(recovery);
+      _clearLoadRecovery(recovery);
     }
     return next;
   }
 
-  Future<LineupPlaybackRequest> _recoverAuthorization(
-    _AuthorizationRecovery recovery,
+  Future<LineupPlaybackRequest> _recoverLoad(
+    _LoadRecovery recovery,
     bool wasActive,
     Duration localPosition,
-    Future<LineupPlaybackRequest> replacement,
-  ) async {
+    Future<LineupPlaybackRequest> replacement, {
+    required int sessionRestarts,
+  }) async {
     final rejected = recovery.rejected;
     final next = await replacement;
     if (!_ownsLoad(rejected) ||
-        !identical(_authorizationRecovery, recovery) ||
+        !identical(_loadRecovery, recovery) ||
         (wasActive && !identical(_active?.request, rejected.request))) {
       throw const _PlaybackSuperseded();
     }
@@ -1662,6 +1951,8 @@ class PlayerCoordinator extends ChangeNotifier with WidgetsBindingObserver {
       seekMode: rejected.target != null ? rejected.seekMode : recovery.seekMode,
       authorizationRetried: true,
       recovery: recovery,
+      mode: recovery.mode,
+      sessionRestarts: sessionRestarts,
     );
     if (loaded == null ||
         !_ownsLoad(recovery.replacement!) ||
@@ -1676,11 +1967,11 @@ class PlayerCoordinator extends ChangeNotifier with WidgetsBindingObserver {
       status.failureCode == 'http_error' &&
       (status.httpStatus == 401 || status.httpStatus == 403);
 
-  Future<LineupPlaybackRequest>? _authorizationRecoveryFor(
+  Future<LineupPlaybackRequest>? _loadRecoveryFor(
     LineupPlaybackRequest request,
     int generation,
   ) {
-    final recovery = _authorizationRecovery;
+    final recovery = _loadRecovery;
     return recovery != null &&
             identical(request, recovery.rejected.request) &&
             generation == recovery.rejected.generation
@@ -1688,43 +1979,43 @@ class PlayerCoordinator extends ChangeNotifier with WidgetsBindingObserver {
         : null;
   }
 
-  void _clearAuthorizationRecovery(_AuthorizationRecovery recovery) {
-    if (identical(_authorizationRecovery, recovery)) {
-      _invalidateAuthorizationRecovery();
+  void _clearLoadRecovery(_LoadRecovery recovery) {
+    if (identical(_loadRecovery, recovery)) {
+      _invalidateLoadRecovery();
     }
   }
 
-  void _invalidateAuthorizationRecovery() {
-    _authorizationRecovery = null;
+  void _invalidateLoadRecovery() {
+    _loadRecovery = null;
   }
 
-  Future<void> _settleActiveAuthorization(
-    _AuthorizationRecovery recovery,
-  ) async {
+  Future<void> _settleActiveLoadRecovery(_LoadRecovery recovery) async {
     Future<void> fail(Object error) async {
-      if (!_ownsAuthorizationRecoveryFailure(recovery)) return;
+      if (!_ownsLoadRecoveryFailure(recovery)) return;
       await _failTransition(error, recovery.rejected.tuneGeneration);
     }
 
     try {
       await recovery.result;
-      _clearAuthorizationRecovery(recovery);
+      _clearLoadRecovery(recovery);
       if (!_disposed) notifyListeners();
     } on _PlaybackSuperseded catch (error) {
       await fail(error);
     } catch (error) {
-      if (_ownsAuthorizationRecoveryFailure(recovery)) {
+      if (_ownsLoadRecoveryFailure(recovery)) {
         _reportUnexpectedPlaybackFailure(
           error,
-          'while recovering playback authorization',
+          recovery.mode == PlexPartMode.automatic
+              ? 'while recovering playback authorization'
+              : 'while recovering a Plex session',
         );
       }
       await fail(error);
     }
   }
 
-  bool _ownsAuthorizationRecoveryFailure(_AuthorizationRecovery recovery) =>
-      identical(_authorizationRecovery, recovery) &&
+  bool _ownsLoadRecoveryFailure(_LoadRecovery recovery) =>
+      identical(_loadRecovery, recovery) &&
       identical(_active?.request, recovery.rejected.request) &&
       _ownsLoad(recovery.replacement ?? recovery.rejected);
 
@@ -1817,7 +2108,11 @@ class PlayerCoordinator extends ChangeNotifier with WidgetsBindingObserver {
   }
 
   void _retireEndedPlayback() {
-    _retirePlaybackIntent();
+    if (_activeLoad?.session != null) {
+      unawaited(_stopQuietly());
+    } else {
+      _retirePlaybackIntent();
+    }
     _cancelOverlayTimer();
     if (_overlay != PlayerOverlay.error) _presentOverlay(PlayerOverlay.none);
     notifyListeners();
@@ -1840,7 +2135,7 @@ class PlayerCoordinator extends ChangeNotifier with WidgetsBindingObserver {
     if (_disposed || tuneGeneration != _tuneGeneration) return;
     _resumeAfterBackground = false;
     final nativeStop = _beginNativeStop();
-    _invalidateAuthorizationRecovery();
+    _invalidateLoadRecovery();
     if (nativeStop != null) {
       try {
         await nativeStop;
@@ -1909,7 +2204,8 @@ class PlayerCoordinator extends ChangeNotifier with WidgetsBindingObserver {
     ++_controlGeneration;
     _tuning = false;
     _canRetry = false;
-    _invalidateAuthorizationRecovery();
+    _invalidateLoadRecovery();
+    final session = _activeLoad?.session;
     final nativeStop = _beginNativeStop(
       force: !forBackground || hasPlaybackIntent,
     );
@@ -1935,7 +2231,11 @@ class PlayerCoordinator extends ChangeNotifier with WidgetsBindingObserver {
       notifyListeners();
     });
     _tuneOperations = operation.catchError((_) {});
-    await operation;
+    try {
+      await operation;
+    } finally {
+      await session?.handle.stop();
+    }
   }
 
   Future<void> requestStop() async {
@@ -1960,13 +2260,37 @@ class PlayerCoordinator extends ChangeNotifier with WidgetsBindingObserver {
   }
 
   Future<bool> logout() async {
+    final load = _activeLoad;
+    if (load?.session != null ||
+        (load?.part == null && load?.request?.openPart != null)) {
+      try {
+        await _stop();
+      } catch (_) {
+        // PMS cleanup has already been dispatched after native retirement.
+      }
+    }
     if (!await lineup.logout()) return false;
     await _scopeCleanup;
     return true;
   }
 
   Future<void> seekBy(Duration offset) {
-    final requested = _position + offset;
+    final seek = _sessionSeek;
+    final load = _activeLoad;
+    var base = _position;
+    if (load != null && _ownsLoad(load)) {
+      final clock = load.sessionClock;
+      if (seek != null && identical(seek.load, load)) {
+        base = seek.position;
+      } else if (clock != null) {
+        base = clock.seekBase(alignmentHeld: sessionAlignmentHeld);
+        final playback = load.request;
+        if (playback != null && _usesAggregateCoordinates(playback)) {
+          base += _partOffset(load.partIndex)!;
+        }
+      }
+    }
+    final requested = base + offset;
     final target = requested < Duration.zero
         ? Duration.zero
         : _duration > Duration.zero && requested > _duration
@@ -1996,6 +2320,11 @@ class PlayerCoordinator extends ChangeNotifier with WidgetsBindingObserver {
 
     try {
       if (playback != null && target != null && load != null) {
+        if (load.session != null ||
+            (load.part == null && playback.openPart != null)) {
+          await _queueSessionSeek(playback, target, position, load);
+          return;
+        }
         load.seekMode = SeekMode.exact;
         if (target.$1 != load.partIndex) {
           final operation = _loadPartAtPosition(playback, target.$1, target.$2);
@@ -2006,9 +2335,9 @@ class PlayerCoordinator extends ChangeNotifier with WidgetsBindingObserver {
             tuneLoad.adopt(operation);
           }
           if (await operation == null) return;
-        } else if (load.pending || _authorizationRecovery != null) {
+        } else if (load.pending || _loadRecovery != null) {
           load.target = target.$2;
-          final recovery = _authorizationRecovery;
+          final recovery = _loadRecovery;
           if (load.pending) {
             if (await load.operation == null) return;
           } else if (recovery != null) {
@@ -2047,6 +2376,55 @@ class PlayerCoordinator extends ChangeNotifier with WidgetsBindingObserver {
       load.resumePosition = target?.$2 ?? position;
     }
     showOsd();
+  }
+
+  Future<void> _queueSessionSeek(
+    LineupPlaybackRequest request,
+    (int, Duration) target,
+    Duration programPosition,
+    _PlaybackLoad load,
+  ) {
+    _cancelSessionSeek();
+    final seek = _sessionSeek = _SessionSeek(programPosition, load);
+    seek.debounce = Timer(const Duration(milliseconds: 400), () async {
+      seek.debounce = null;
+      try {
+        final current = seek.load;
+        if (!_ownsLoad(current)) return;
+        final operation = _loadPartAtPosition(
+          current.request ?? request,
+          target.$1,
+          target.$2,
+          sessionSeek: seek,
+          mode: current.session == null
+              ? PlexPartMode.automatic
+              : PlexPartMode.restartSession,
+        );
+        final tune = _preparingTuneLoad;
+        if (tune?.generation == current.tuneGeneration) tune!.adopt(operation);
+        if (await operation != null &&
+            identical(_sessionSeek, seek) &&
+            current.tuneGeneration == _tuneGeneration) {
+          _sessionSeek = null;
+          showOsd();
+        }
+      } catch (error, stack) {
+        seek.completion.completeError(error, stack);
+      } finally {
+        if (identical(_sessionSeek, seek)) _sessionSeek = null;
+        if (!seek.completion.isCompleted) seek.completion.complete();
+      }
+    });
+    return seek.completion.future;
+  }
+
+  void _cancelSessionSeek() {
+    final seek = _sessionSeek;
+    _sessionSeek = null;
+    if (seek?.debounce case final timer?) {
+      timer.cancel();
+      seek!.completion.complete();
+    }
   }
 
   Future<void> selectTrack(PlayerTrackType type, int? id) async {
@@ -2218,7 +2596,7 @@ class PlayerCoordinator extends ChangeNotifier with WidgetsBindingObserver {
         identical(load, _activeLoad);
     try {
       if (!paused && await _expireSleepIfNeeded()) return;
-      if (!current()) return;
+      if (!current() || sessionAlignmentHeld) return;
       if (!paused && load?.transientPause == true) {
         load!.transientPause = false;
         final channelId = _active?.channel?.id;
@@ -2473,7 +2851,7 @@ class PlayerCoordinator extends ChangeNotifier with WidgetsBindingObserver {
     ++_controlGeneration;
     _tuning = false;
     _canRetry = false;
-    _invalidateAuthorizationRecovery();
+    _invalidateLoadRecovery();
     final nativeStop = _beginNativeStop(force: true)!;
     try {
       await nativeStop;
@@ -2619,7 +2997,7 @@ class PlayerCoordinator extends ChangeNotifier with WidgetsBindingObserver {
         _nextTuneGeneration();
         _tuning = false;
         _canRetry = false;
-        _invalidateAuthorizationRecovery();
+        _invalidateLoadRecovery();
         _resetScopeState();
         if (!_scopeCleanupPending) {
           _scopeCleanupPending = true;
@@ -2748,20 +3126,36 @@ class PlayerCoordinator extends ChangeNotifier with WidgetsBindingObserver {
     } catch (_) {}
   }
 
-  Future<void>? _beginNativeStop({bool force = false}) {
+  Future<void>? _beginNativeStop({
+    bool force = false,
+    bool preserveProgram = false,
+  }) {
     final pending = _nativeStopOperation;
     if (pending != null) {
       return pending;
     }
+    final retiring = _activeLoad;
+    final session = retiring?.session;
+    final issuedNativeSession = session != null && retiring!.nativeDispatched;
+    retiring?.cancellation.cancel();
+    if (session != null && !issuedNativeSession) {
+      unawaited(session.handle.stop());
+    }
+    if (!preserveProgram) {
+      if (retiring != null) _retirePlaybackIntent();
+    } else {
+      _activeLoad = null;
+    }
     if (!force && !_nativeCleanupRequired) return null;
     _nativeCleanupRequired = true;
-    _retirePlaybackIntent();
+    if (!preserveProgram && retiring == null) _retirePlaybackIntent();
     late final Future<void> operation;
     operation = Future<void>.sync(player.stop)
         .timeout(
           _nativeStopTimeout,
           onTimeout: () => throw const PlayerUnavailable(
-            'Native playback did not stop within 10 seconds.',
+            'Native playback did not stop in time.',
+            failureCode: 'stop_timeout',
           ),
         )
         .then((_) {
@@ -2774,14 +3168,18 @@ class PlayerCoordinator extends ChangeNotifier with WidgetsBindingObserver {
         });
     unawaited(operation.catchError((_) {}));
     _nativeStopOperation = operation;
+    if (issuedNativeSession) {
+      unawaited(session.handle.stop(nativeStop: operation));
+    }
     return operation;
   }
 
   void _retirePlaybackIntent() {
+    _activeLoad?.cancellation.cancel();
+    _activeLoad = null;
     _displayMatching.cancelLoad();
     ++_trackSelectionGeneration;
     _clearTrackSelection();
-    _activeLoad = null;
     _resolvingProgram = null;
     _advancingGeneration = null;
     _releaseActive();
@@ -2825,6 +3223,11 @@ class PlayerCoordinator extends ChangeNotifier with WidgetsBindingObserver {
 
   static String _safePlaybackError(Object error) => switch (error) {
     PlexException(:final message) => message,
+    PlayerUnavailable(
+      failureCode: 'session-child-unauthorized',
+      :final message,
+    ) =>
+      message,
     PlayerUnavailable(failureCode: 'premature_end') =>
       'Playback ended before the program finished.',
     PlayerUnavailable() =>
@@ -2849,6 +3252,11 @@ class PlayerCoordinator extends ChangeNotifier with WidgetsBindingObserver {
     _clearTransientStatus();
     if (_disposed) return;
     final fullscreenReset = _queueFullscreenReset();
+    if (_activeLoad?.session != null) {
+      unawaited(_beginNativeStop());
+    } else {
+      _activeLoad?.cancellation.cancel();
+    }
     _disposed = true;
     subtitleAppearance.removeListener(_subtitleAppearanceChanged);
     _releaseSubtitleAppearance();
@@ -2966,9 +3374,11 @@ class _PlaybackLoad {
     required this.request,
     required this.partIndex,
     required this.target,
+    required this.sessionTarget,
     required this.seekMode,
     required this.replacing,
     required this.authorizationRetried,
+    required this.sessionRestarts,
   }) : startTarget = target,
        nativeStartPosition = seekMode == SeekMode.keyframes ? target : null;
 
@@ -2977,7 +3387,18 @@ class _PlaybackLoad {
   final LineupPlaybackRequest? request;
   final int partIndex;
   final bool authorizationRetried;
+  final int sessionRestarts;
+  final cancellation = PlaybackCancellation();
+  PartLoad? part;
+  PlexSessionClock? sessionClock;
+  SessionPartLoad? get session =>
+      part is SessionPartLoad ? part as SessionPartLoad : null;
+  Duration? lastMappedPosition;
+  bool alignmentReleased = false;
+  bool nativeDispatched = false;
+  PlayerUnavailable? policyFailure;
   final Duration? startTarget;
+  final Duration? sessionTarget;
   // Immutable record of the initial target passed to NativePlayer.load.
   final Duration? nativeStartPosition;
   Duration? observedPosition;
@@ -2994,13 +3415,23 @@ class _PlaybackLoad {
   bool liveJoinCorrected = false;
   late final Future<void> readiness;
   Future<LineupPlaybackRequest?>? operation;
-  _AuthorizationRecovery? recovery;
+  _LoadRecovery? recovery;
 }
 
-class _AuthorizationRecovery {
-  _AuthorizationRecovery(this.rejected) : seekMode = rejected.seekMode;
+class _SessionSeek {
+  _SessionSeek(this.position, this.load);
+
+  final Duration position;
+  _PlaybackLoad load;
+  Timer? debounce;
+  final completion = Completer<void>();
+}
+
+class _LoadRecovery {
+  _LoadRecovery(this.rejected, this.mode) : seekMode = rejected.seekMode;
 
   final _PlaybackLoad rejected;
+  final PlexPartMode mode;
   final SeekMode seekMode;
   _PlaybackLoad? replacement;
   late final Future<LineupPlaybackRequest> result;

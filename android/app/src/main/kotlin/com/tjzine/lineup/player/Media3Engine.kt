@@ -2,6 +2,7 @@ package com.tjzine.lineup.player
 
 import android.content.Context
 import android.os.Handler
+import android.os.Looper
 import android.view.SurfaceView
 import androidx.media3.common.*
 import androidx.media3.common.text.Cue
@@ -30,10 +31,9 @@ internal class Media3Engine(
     private val subtitles: SubtitleView,
     private val sizeChanged: (VideoSize) -> Unit,
     private val keepScreenOn: (Boolean) -> Unit,
-    createPlayer: (Context) -> ExoPlayer = {
-        ExoPlayer.Builder(it).setLoadControl(PlaybackMemory.loadControl(it)).build()
-    },
+    createPlayer: ((Context) -> ExoPlayer)? = null,
     private val subtitlePresentation: () -> SubtitlePresentation = { SubtitlePresentation() },
+    observeSessionLanding: Boolean = false,
 ) : PlayerEngine {
     private val debug =
         context.applicationInfo.flags and android.content.pm.ApplicationInfo.FLAG_DEBUGGABLE != 0
@@ -45,7 +45,11 @@ internal class Media3Engine(
     // The default builder owns an exclusive playback thread. Media3 quits it only
     // after releaseInternal finishes renderer/source teardown. Keep that public
     // thread handle: release() returning (or isReleased) cannot prove completion.
-    private val player = createPlayer(context).also {
+    private val player = (
+        createPlayer?.invoke(context) ?: ExoPlayer.Builder(context)
+            .setLoadControl(PlaybackMemory.loadControl(context))
+            .build()
+    ).also {
         it.setAudioAttributes(
             AudioAttributes.Builder()
                 .setUsage(C.USAGE_MEDIA)
@@ -55,6 +59,14 @@ internal class Media3Engine(
         )
         it.setVideoSurfaceView(video)
     }
+    private val playbackHandler = Handler(player.playbackLooper)
+    private val sessionLanding = if (observeSessionLanding) SessionSeekLanding { seekId ->
+        // Metadata precedes the renderer's buffer release. Let that render
+        // operation return before posting its result to the adapter looper.
+        playbackHandler.post {
+            handler.post { if (!closed) observer?.sessionSeekLanded(seekId) }
+        }
+    } else null
     // Transient focus loss suppresses playback without clearing playWhenReady.
     // Report the observed pause through the existing Dart event contract; Media3
     // alone owns ducking/resumption, while Dart retains scheduling policy.
@@ -159,11 +171,14 @@ internal class Media3Engine(
         if (media.kind == LoadKind.direct && media.token != null)
             source.setDefaultRequestProperties(mapOf("X-Plex-Token" to media.token))
         http = source
-        if (debug) {
+        if (debug || sessionLanding != null) {
             var lastTimestamp: Long? = null
-            player.setVideoFrameMetadataListener { ptsUs, _, _, _ ->
+            player.setVideoFrameMetadataListener { ptsUs, _, format, _ ->
+                if (Looper.myLooper() == player.playbackLooper) {
+                    sessionLanding?.frame(ptsUs, format.frameRate)
+                }
                 val previous = lastTimestamp
-                if (previous == null || ptsUs < previous || ptsUs - previous >= 5_000_000) {
+                if (debug && (previous == null || ptsUs < previous || ptsUs - previous >= 5_000_000)) {
                     lastTimestamp = ptsUs
                     handler.post { if (!closed) listener.frameTimestamp(ptsUs) }
                 }
@@ -327,6 +342,20 @@ internal class Media3Engine(
         sessionClock?.seeking()
         player.setSeekParameters(if (exact) SeekParameters.EXACT else SeekParameters.PREVIOUS_SYNC)
         player.seekTo(milliseconds(seconds))
+    }
+
+    override fun alignSession(positionMs: Long, seekId: Long) {
+        val landing = checkNotNull(sessionLanding)
+        check(!player.playWhenReady && positionMs != player.currentPosition)
+        sessionClock?.seeking()
+        player.setSeekParameters(SeekParameters.EXACT)
+        // The paused, single-period session cannot play across the marker.
+        // Media3 delivers a positioned message at the discontinuity target
+        // in updatePlaybackPositions, before it invokes the renderers.
+        player.createMessage { _, _ ->
+            landing.reachedSeekTarget(seekId, positionMs * 1000)
+        }.setPosition(positionMs).send()
+        player.seekTo(positionMs)
     }
 
     override fun select(type: String, id: Long?): Boolean {

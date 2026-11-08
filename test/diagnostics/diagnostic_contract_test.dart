@@ -57,6 +57,8 @@ Recent events:
 2026-10-15T11:59:00.000Z playback: Native playback failed
 2026-10-15T11:59:00.000Z playback: Playback request failed
 2026-10-15T11:59:00.000Z playback: Plex playback selected
+2026-10-15T11:59:00.000Z playback: Plex playback decision
+2026-10-15T11:59:00.000Z playback: Plex session alignment
 2026-10-15T11:59:00.000Z playback: Playback request failed
 2026-10-15T11:59:00.000Z playback: Playback request failed
 2026-10-15T11:59:00.000Z playback: Playback request failed
@@ -82,6 +84,8 @@ const _eventPairs = <(String, String)>[
   ('playback', 'Native playback failed'),
   ('playback', 'Playback request failed'),
   ('playback', 'Plex playback selected'),
+  ('playback', 'Plex playback decision'),
+  ('playback', 'Plex session alignment'),
 ];
 
 const _mixedCaseContext = <String, Object>{
