@@ -38,7 +38,7 @@ whole-asset digest.
 
 | ID | Class | One-pass observation |
 | --- | --- | --- |
-| W-01 | blocker · device | Record Smart App Control state and Windows version. |
+| W-01 | blocker · device | Record Smart App Control state and Windows version. If Smart App Control is on, record the block, leave it on, and run W-02 through W-08 on a host where it is off. |
 | W-02 | blocker · device | Download the exact draft ZIP in Edge while signed in to GitHub. Verify `Get-FileHash -Algorithm SHA256 .\FILE.zip` against the release `.sha256` asset and notes; inspect the ZIP's `Zone.Identifier`. |
 | W-03 | blocker · device | Use Explorer **Extract All**. Confirm the extracted EXE has `Zone.Identifier`, record the SmartScreen dialog and **Run anyway** path, and confirm Defender does not quarantine a file. Smart App Control blocks unknown unsigned code by default and has no per-app exception. |
 | W-04 | blocker · device | Complete first run, including browser sign-in at `plex.tv/link`, protected-profile PIN, server selection, library scan, channel setup, and Guide. |

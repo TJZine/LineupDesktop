@@ -91,8 +91,8 @@ The package needs its adjacent DLLs, `data` directory, and a GPU driver or
 Vulkan Runtime providing `vulkan-1.dll`. Windows may show “Windows protected
 your PC” because the MVP package is unsigned. Choose **More info → Run anyway**
 only for a ZIP downloaded from the official release page. [Smart App Control](https://learn.microsoft.com/en-us/windows/apps/develop/smart-app-control/overview)
-blocks unknown unsigned code by default and provides no per-app exception. Run
-Lineup Desktop as a standard user.
+has no per-app exception. If Smart App Control is on, this unsigned version
+cannot run on that PC. Leave it on. Run Lineup Desktop as a standard user.
 
 To update, extract the new ZIP into a new folder and then delete the old
 application folder. Settings and lineups are kept in app data. To uninstall,

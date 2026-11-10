@@ -41,8 +41,8 @@ are part of the application. Do not run Lineup Desktop as Administrator.
 The MVP Windows package is unsigned. Windows may show “Windows protected your
 PC”. Choose **More info → Run anyway** only for a ZIP downloaded from the
 official release page. [Smart App Control](https://learn.microsoft.com/en-us/windows/apps/develop/smart-app-control/overview)
-blocks unknown unsigned apps by default and provides no per-app exception. Do
-not disable it to run an unofficial file.
+has no per-app exception. If Smart App Control is on, this unsigned version
+cannot run on that PC. Leave it on.
 
 To update, extract the new release into a new folder and delete the old
 application folder after confirming the new copy works. Settings and lineups
@@ -642,7 +642,7 @@ vulnerabilities only through the private process in
 | No Plex servers found | Confirm the server is online and reachable, retry discovery, switch profile, choose another server, or use the server picker's confirmed **Sign out** action to link Plex again. |
 | A portable macOS build reports playback unsupported | Use the [native macOS development build](macos-runtime.md) to test playback. |
 | Windows reports that `vulkan-1.dll` is missing | Install or update the GPU vendor's current driver or an appropriate Vulkan Runtime. Do not copy a driver DLL from another machine into the package. |
-| Smart App Control blocks the Windows app | [Smart App Control](https://learn.microsoft.com/en-us/windows/apps/develop/smart-app-control/overview) blocks unknown unsigned apps by default and has no per-app exception. Confirm that the ZIP came from the official release page and leave the protection enabled. |
+| Smart App Control blocks the Windows app | If Smart App Control is on, this unsigned version cannot run on that PC. Leave it on. |
 | Audio plays but video is black or hidden | Record the exact window size, display scaling, fullscreen state, Guide layout, whether audio continues, and whether the problem follows a resize/minimize/restore transition. Treat this as a native-composition failure and report it with the current commit. |
 | A replacement channel leaves stale audio/video | Stop testing that scenario, record both channel transitions and timestamps, and report it as a native playback-lifetime failure. |
 | A setting or lineup change fails | The previous state should remain. Retry after confirming the Plex server and local storage are available. |
