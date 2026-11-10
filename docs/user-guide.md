@@ -46,7 +46,8 @@ cannot run on that PC. Leave it on.
 
 To update, extract the new release into a new folder and delete the old
 application folder after confirming the new copy works. Settings and lineups
-are kept in app data. To uninstall, delete the application folder. Saved data
+are kept in app data. To uninstall, sign out first to remove your Plex sign-in
+from this PC. Then delete the application folder. Saved data
 remains until you separately remove it, which permanently deletes settings
 and lineups.
 
@@ -611,16 +612,15 @@ matching**, and **Renderer output**, with normalized values. Display state is
 reported by Windows; it does not verify the TV's picture. Source HDR metadata,
 renderer output, and Windows display state are separate observations.
 
+When diagnostics are enabled, a completed or failed library scan can add the
+numeric **Library scan budget usage** entry with `bytes`, `entries`, `requests`,
+and `elapsedMs`. The entry measures admitted scan work.
+
 The application stores diagnostic context only from a small allowlist of
 bounded structured facts; arbitrary exception and native message text is not
 recorded. It also redacts known credentials, authorization headers,
 token-bearing URLs, and private paths as defense in depth. Diagnostics may
 still describe private activity, so review them before sharing anything:
-
-When diagnostics are enabled, a completed or failed library scan can add the
-numeric **Library scan budget usage** entry with `bytes`, `entries`, `requests`,
-and `elapsedMs`. It is support information about admitted scan work, not a
-measurement of heap usage.
 
 1. Inspect every line and screenshot.
 2. Remove private media titles or account details that are not needed.

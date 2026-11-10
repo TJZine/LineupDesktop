@@ -114,7 +114,7 @@ without production signing material or usable backups.
 Development-key APKs cannot upgrade production-key installations. Use a separate
 disposable emulator/device and preserve existing production installations and
 data. Keep the authorized production key and protected backups in the isolated
-signing context for P5. Losing that key prevents in-place production updates.
+signing context. Losing that key prevents in-place production updates.
 
 The wrapper scripts and JAR are committed official Gradle 9.3.1 bytes.
 `python3 tool/android/check-wrapper.py` checks their published identities and the
@@ -230,7 +230,7 @@ Prepare a fresh full checkout at the reviewed commit, with every source input
 committed and no untracked build inputs. Use non-shallow, non-sparse source
 with no prior `build/` output or Android project cache. Run in a credential-free build context.
 Supply the full 40-character reviewed commit and the applicable GitHub CI run URL.
-P5 independently verifies that run and its downloaded artifact digest.
+The release verifier independently checks that run and its artifact digest.
 
 ```sh
 export PATH="$HOME/.cache/lineup-flutter/3.47.7/flutter/bin:$HOME/Library/Android/sdk/platform-tools:$PATH"
@@ -290,15 +290,16 @@ The aligned handoff is `build/android-release/lineup-unsigned-aligned.apk`, with
 ordinary `SHA256SUMS`, resolved dependency reports and `build-evidence.txt` in the
 same directory. Evidence records full source commit, supplied CI run URL,
 application/version identity and tool versions. The CI run URL is a recorded
-input. P5 independently checks GitHub run identity and artifact digest before
+input. The release verifier checks GitHub run identity and artifact digest before
 accepting transfer. A local working-diff build establishes build behavior only.
 The reviewed clean candidate gate stays mandatory.
 
-Production signing uses maintained installed Android tools in an isolated
-context approved at Gate 2. Candidate scripts and build tools execute only in
-the build context. P5 verifies unsigned identity/alignment, authorized production
-certificate, application/version identity and final signature, then hashes the
-final bytes. Physical Android TV/Fire TV upgrade and playback are Gate 3.
+Production signing uses maintained Android tools in a separate signing context.
+Candidate scripts and build tools execute only in the build context. The release
+verifier checks unsigned identity and alignment, the authorized production
+certificate, the application and version, and the final signature and digest.
+See [release acceptance](release-acceptance.md) for physical Android TV and Fire
+TV upgrade and playback checks.
 
 
 ## Install, launch and logs

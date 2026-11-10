@@ -10,8 +10,10 @@ is [Release acceptance](release-acceptance.md).
 ## One-page release checklist
 
 Use a fresh scratch directory and stop on any failed command. Replace uppercase
-placeholders with the selected values. Keep credentials, token-bearing URLs,
-private media details, and unredacted diagnostics out of release evidence.
+placeholders with the selected values. Use bare 64-character hexadecimal
+digests for `*_SHA256` placeholders, without a `sha256:` prefix. Keep
+credentials, token-bearing URLs, private media details, and unredacted
+diagnostics out of release evidence.
 
 ### Android APK
 
@@ -35,7 +37,15 @@ private media details, and unredacted diagnostics out of release evidence.
      --artifact CI_ARTIFACT_ID --extract ci-input
    ```
 
-3. Dispatch **Sign Android candidate** on protected `main`, using the selected
+3. Run the Gradle inventory advisory scan and review `runtime-dependencies.txt`
+   from the verified CI artifact. Record dispositions for the resolved
+   dependencies as described in [Manual advisory review](#manual-advisory-review).
+
+   ```sh
+   tool/security/osv-scan.sh --lockfile=android/gradle/verification-metadata.xml
+   ```
+
+4. Dispatch **Sign Android candidate** on protected `main`, using the selected
    source, CI run, attempt, and artifact. Do not use a signing-workflow rerun:
 
    ```sh
@@ -48,7 +58,7 @@ private media details, and unredacted diagnostics out of release evidence.
    `android-production-signing` environment. The signed artifact is retained
    for **1 day**.
 
-4. Select the signed artifact by numeric ID from the approved signing run.
+5. Select the signed artifact by numeric ID from the approved signing run.
    Obtain its API SHA-256 digest, compare the extracted manifest with the
    approved manifest, and verify the APK against the independently recorded
    final hash and certificate. Delete the public handoff artifact immediately
@@ -68,7 +78,7 @@ private media details, and unredacted diagnostics out of release evidence.
    gh api -X DELETE repos/TJZine/LineupDesktop/actions/artifacts/SIGNED_ARTIFACT_ID
    ```
 
-5. Run [Release acceptance](release-acceptance.md) against this exact signed
+6. Run [Release acceptance](release-acceptance.md) against this exact signed
    APK. Record the asset SHA-256, signer, versionCode, devices, results, and
    any blocker or limitation before drafting a release.
 
@@ -84,7 +94,7 @@ private media details, and unredacted diagnostics out of release evidence.
 
    ```sh
    gh workflow run ci.yml -R TJZine/LineupDesktop --ref main
-   gh run list -w ci.yml -R TJZine/LineupDesktop -b main -L 10
+   gh run list -w ci.yml -R TJZine/LineupDesktop -b main -e workflow_dispatch -c SOURCE_SHA -L 10
    gh run view WINDOWS_CI_RUN_ID -R TJZine/LineupDesktop --attempt WINDOWS_CI_ATTEMPT --log
    gh api repos/TJZine/LineupDesktop/actions/runs/WINDOWS_CI_RUN_ID
    gh api repos/TJZine/LineupDesktop/actions/runs/WINDOWS_CI_RUN_ID/artifacts
@@ -113,9 +123,10 @@ private media details, and unredacted diagnostics out of release evidence.
 
 4. Windows is unsigned for the MVP. Follow the
    [draft and publication procedure](#draft-physical-acceptance-and-immutable-publication)
-   to upload the exact ZIP and checksum for acceptance. Retire the draft's
-   version if you reject it. On the assigned clean host, download the ZIP from
-   the draft and run [Release acceptance](release-acceptance.md) before publication.
+   to upload the exact ZIP and checksum for acceptance. On the assigned clean
+   host, download the ZIP from the draft and run [Release acceptance](release-acceptance.md)
+   before publication. If Windows fails acceptance, remove its ZIP and checksum
+   from the draft. Retire the version only if no platform ships.
 
 ## Rules that apply to both platforms
 
@@ -138,11 +149,11 @@ release packaging requires the manual CI dispatch on `main` described above.
 
 ### Immutable versions and releases
 
-Use one shared `vX.Y.Z` tag line (DP8). A release includes only the platforms
+Use one shared `vX.Y.Z` tag line. A release includes only the platforms
 cleared for that version. A platform that ships later uses the next version.
 Draft releases remain mutable. A published release permanently consumes its tag
-name, even if the release is later deleted. Create the tag only after acceptance,
-or treat a rejected draft version as retired. Follow GitHub's
+name, even if the release is later deleted. If a tag is created for draft
+acceptance, retire that version only if no platform ships. Follow GitHub's
 [immutable release guidance](https://docs.github.com/en/code-security/concepts/supply-chain-security/immutable-releases).
 
 Require GitHub CLI 2.81.0 or newer for the verification commands introduced in
@@ -321,13 +332,8 @@ remaining gaps. Do not make a failing or unavailable scan appear clean.
 
 ## Code-scanning caveat
 
-Security currently analyzes GitHub Actions and Python helpers with CodeQL
-`build-mode: none`, and retains the C/C++ and Java/Kotlin jobs. The Kotlin job
-builds the Android source, while the hosted CodeQL Kotlin extractor's current
-documented support ends at KGP 2.4.20 and this application uses KGP 2.4.21 for
-the CVE fix. If hosted extraction warns or fails, retain KGP 2.4.21, keep that
-job outside required merge checks, and record the gap in
-[repository security](repository-security.md).
+See [repository security](repository-security.md#code-scanning-coverage-and-caveats)
+for CodeQL coverage and the Kotlin extraction caveat.
 
 ## Windows release route
 
@@ -359,8 +365,9 @@ behavior, Windows runtime behavior, or publication.
 
 Override `LINEUP_RELEASE_TEST_BUILD_TOOLS` or `LINEUP_RELEASE_TEST_PLATFORM`
 only for another independently installed SDK. See [Android signing tools](https://developer.android.com/tools/apksigner).
-The pre-F5 transport rehearsal verified run `42431596198` attempt `1` and
-artifact `13601346363` (`windows-engine-tests-debug`). Its API ZIP digest
+The transport rehearsal before the main-branch provenance restriction verified
+run `42431596198` attempt `1` and artifact `13601346363`
+(`windows-engine-tests-debug`). Its API ZIP digest
 matched, and all 11 entries passed bounded CRC inspection. That historical
 fixture did not exercise public-release selection or clean-host acceptance.
 
@@ -370,8 +377,9 @@ Prepare release notes with the source SHA, run and attempt links, platform and
 toolchain identities, signer or unsigned status, and exact asset digests.
 After the artifact checks, the maintainer can reserve a version and create a
 draft for exact-download acceptance. This procedure creates the protected tag
-before the draft, so retire the version if you reject the draft. Include only
-the intended platforms' asset and checksum pairs.
+before the draft. Include only the intended platforms' asset and checksum pairs.
+If a platform fails acceptance, remove only its assets from the draft. Retire
+the version if no platform ships.
 
 ```sh
 git tag RELEASE_TAG SOURCE_SHA

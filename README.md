@@ -58,7 +58,7 @@ still required before broader release claims.
 
 ## First run
 
-A private test build guides the user through:
+The app guides you through these steps.
 
 1. Link a Plex account with a QR code or four-character PIN.
 2. Choose a Plex Home profile, including protected-profile PIN entry.
@@ -96,7 +96,8 @@ cannot run on that PC. Leave it on. Run Lineup Desktop as a standard user.
 
 To update, extract the new ZIP into a new folder and then delete the old
 application folder. Settings and lineups are kept in app data. To uninstall,
-delete the application folder. Saved data remains until you separately remove
+sign out first to remove your Plex sign-in from this PC. Then delete the
+application folder. Saved data remains until you separately remove
 it, which permanently deletes settings and lineups.
 
 On Android TV, Google TV or Android-based Fire TV, enable installation from

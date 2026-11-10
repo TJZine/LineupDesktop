@@ -19,9 +19,9 @@ Do not open public issues for vulnerabilities or secret exposure.
 Preferred reporting path:
 
 1. Use the repository's private [GitHub vulnerability reporting form](https://github.com/TJZine/LineupDesktop/security/advisories/new).
-2. If that private form is unavailable, do not include secret material in a
-   public issue. Contact the maintainer privately and report only that the
-   private reporting channel is unavailable.
+2. If that private form is unavailable, use the contact listed on the
+   [maintainer's GitHub profile](https://github.com/TJZine) to request a private
+   reporting channel. Keep vulnerability details and secrets private.
 
 Include:
 
@@ -43,10 +43,6 @@ Include:
 - insecure storage fallback behavior
 - packaging or update behavior that weakens binary trust
 
-Use checksum verification to confirm the downloaded bytes and release
-attestation to confirm their provenance. Software safety requires separate
-evidence.
-
 ## Out Of Scope
 
 - vulnerabilities in Plex Media Server itself
@@ -63,3 +59,6 @@ evidence.
 - Download public builds only from the official GitHub Releases page. Follow the
   [Windows installation instructions](docs/user-guide.md#install-a-windows-release-or-private-build)
   for the unsigned MVP package.
+- Use checksum verification to confirm the downloaded bytes and release
+  attestation to confirm their provenance. Software safety requires separate
+  evidence.
