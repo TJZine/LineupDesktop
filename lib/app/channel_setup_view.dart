@@ -515,6 +515,8 @@ class UpstreamChannelSetupViewState extends State<UpstreamChannelSetupView> {
       canSwitchServer: widget.controller.canSwitchServer,
       channelSetupCanCancel: widget.controller.channelSetupCanCancel,
       error: widget.controller.error,
+      profileCredentialRecoveryNotice:
+          widget.controller.profileCredentialRecoveryNotice,
       collectionRecoveryByLibrary: Map.unmodifiable({
         for (final library in widget.controller.libraries)
           library.id: ?widget.controller.collectionScaleRecovery({library.id}),

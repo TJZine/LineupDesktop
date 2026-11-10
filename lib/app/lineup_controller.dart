@@ -326,9 +326,11 @@ class LineupController extends ChangeNotifier {
   static const _profileCredentialRecoveryMessage =
       'Lineup could not restore a profile credential. Retry the profile selection or sign out to clear stored credentials.';
   final _unrestoredProfileCredentials = <String>{};
-  String? get error => _unrestoredProfileCredentials.isNotEmpty
-      ? _profileCredentialRecoveryMessage
-      : _error;
+  String? get error => _error;
+  String? get profileCredentialRecoveryNotice =>
+      _unrestoredProfileCredentials.isEmpty
+      ? null
+      : _profileCredentialRecoveryMessage;
   String? get libraryScanLimitError => switch (_scan.failure) {
     PlexScanLimitException(:final message) when _error == message => message,
     _ => null,

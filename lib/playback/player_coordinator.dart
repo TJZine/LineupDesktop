@@ -272,6 +272,8 @@ class PlayerCoordinator extends ChangeNotifier with WidgetsBindingObserver {
   String? _authorizationTransitionError;
 
   bool get authorizationTransitionPending => _authorizationTransitionPending;
+  bool get authorizationStopPending =>
+      _authorizationTransitionPending && _authorizationStopUnconfirmed;
   String? get authorizationTransitionError => _authorizationTransitionError;
   bool get _authorizationPlaybackBlocked =>
       _authorizationTransitionPending || _authorizationStopUnconfirmed;
@@ -983,9 +985,12 @@ class PlayerCoordinator extends ChangeNotifier with WidgetsBindingObserver {
     GuideProgram? endedProgram,
     bool channelStep = false,
   }) {
-    if (_disposed || _backgroundSuspended || _authorizationPlaybackBlocked) {
+    if (_disposed) return Future.value(false);
+    if (_authorizationPlaybackBlocked) {
+      if (_restoreAuthorizationStopError()) notifyListeners();
       return Future.value(false);
     }
+    if (_backgroundSuspended) return Future.value(false);
     _resumeAfterBackground = null;
     final continuingStep = channelStep && _channelStepWindowTimer != null;
     _cancelPendingChannelStep(clearTarget: !channelStep);
@@ -1815,9 +1820,7 @@ class PlayerCoordinator extends ChangeNotifier with WidgetsBindingObserver {
         if (_disposed) return false;
         _recordPlaybackFailure(error, operation: 'authorization_stop');
         _authorizationTransitionError = 'Playback could not be stopped. Retry or exit Lineup before continuing.';
-        _error = _authorizationTransitionError;
-        _canRetry = true;
-        _setOverlay(PlayerOverlay.error, timed: false);
+        _restoreAuthorizationStopError();
         return false;
       }
       if (_disposed) return false;
@@ -2464,7 +2467,9 @@ class PlayerCoordinator extends ChangeNotifier with WidgetsBindingObserver {
       ++_controlGeneration;
       ++_seekGeneration;
       final fullscreenCleanup = _queueFullscreenReset();
-      if (_active != null || _tuning || _nativeCleanupRequired) {
+      // The authorization transition (or its explicit Retry) owns this stop.
+      if (!_authorizationStopUnconfirmed &&
+          (_active != null || _tuning || _nativeCleanupRequired)) {
         _nextTuneGeneration();
         _tuning = false;
         _canRetry = false;
@@ -2585,6 +2590,20 @@ class PlayerCoordinator extends ChangeNotifier with WidgetsBindingObserver {
     _retryChannelId = null;
     _releaseActive();
     _error = null;
+    _restoreAuthorizationStopError();
+  }
+
+  bool _restoreAuthorizationStopError() {
+    final error = _authorizationTransitionError;
+    if (!_authorizationStopUnconfirmed || error == null) return false;
+    if (_error == error && _canRetry && _overlay == PlayerOverlay.error) {
+      return false;
+    }
+    _error = error;
+    _canRetry = true;
+    _cancelOverlayTimer();
+    if (_overlay != PlayerOverlay.error) _presentOverlay(PlayerOverlay.error);
+    return true;
   }
 
   void _requestMiniGuideRows() {

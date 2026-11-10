@@ -224,7 +224,7 @@ void main() {
           expect(fixture.store.state.profileId, 'other');
           expect(fixture.controller.profile?.id, 'other');
           expect(
-            fixture.controller.error,
+            fixture.controller.profileCredentialRecoveryNotice,
             contains('could not restore a profile credential'),
           );
           expect(
@@ -257,9 +257,63 @@ void main() {
             expect(fixture.credentials.accountToken, isNull);
           }
           expect(fixture.controller.error, isNull);
+          expect(fixture.controller.profileCredentialRecoveryNotice, isNull);
         },
       );
     }
+
+    test('credential recovery notice survives server selection and a separate scan error', () async {
+      final fixture = await _profileCredentialFixture(hadPrevious: false);
+      final controller = fixture.controller;
+      fixture.store.blockNext(fail: true);
+      fixture.credentials.onDelete = (_) async =>
+          throw StateError('Synthetic failure');
+      final selection = controller.selectProfile(child, pin: '1234');
+      await fixture.store.blockedSaveStarted.future;
+      fixture.store.releaseBlockedSave();
+      expect(await selection, isFalse);
+      final notice = controller.profileCredentialRecoveryNotice;
+      expect(notice, contains('could not restore a profile credential'));
+
+      final server = _server('server');
+      fixture.plex
+        ..serversResult = [server]
+        ..connectionResult = server.connections.single
+        ..librariesResult = const [
+          PlexLibrary(
+            id: 'movies',
+            title: 'Movies',
+            type: PlexLibraryType.movie,
+          ),
+        ]
+        ..scanLibraryHandler = (_, _, _, _, _, _, _) async {
+          final budget = PlexScanBudget.current!;
+          budget.retain(budget.limits.retainedEntries + 1);
+          throw StateError('Expected scan budget exhaustion');
+        };
+      await controller.refreshServers();
+      final guide = GuideController(lineup: controller);
+      final player = FakeNativePlayer();
+      final coordinator = PlayerCoordinator(
+        player: player,
+        lineup: controller,
+        guide: guide,
+      );
+      addTearDown(guide.dispose);
+      addTearDown(player.dispose);
+      addTearDown(coordinator.dispose);
+
+      expect(await coordinator.selectServer(server), isTrue);
+      expect(controller.server?.id, 'server');
+      expect(controller.error, isNull);
+      expect(controller.profileCredentialRecoveryNotice, notice);
+      expect(await controller.scanLibraries({'movies'}), isFalse);
+      expect(
+        controller.error,
+        const PlexScanLimitException('retained-entries').message,
+      );
+      expect(controller.profileCredentialRecoveryNotice, notice);
+    });
 
     test('staleness during prior read prevents candidate write', () async {
       final fixture = await _profileCredentialFixture(hadPrevious: true);

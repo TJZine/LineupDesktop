@@ -33,6 +33,7 @@ class SetupLibraryData {
     required this.canSwitchServer,
     required this.channelSetupCanCancel,
     required this.error,
+    required this.profileCredentialRecoveryNotice,
     required Map<String, String> collectionRecoveryByLibrary,
     required this.selectionCollectionRecovery,
     required this.progress,
@@ -62,6 +63,7 @@ class SetupLibraryData {
   final bool canSwitchServer;
   final bool channelSetupCanCancel;
   final String? error;
+  final String? profileCredentialRecoveryNotice;
   final Map<String, String> collectionRecoveryByLibrary;
   final String? selectionCollectionRecovery;
   final LibraryScanProgress progress;
@@ -364,6 +366,11 @@ class SetupLibraryStep extends StatelessWidget {
                     style: bodyStyle,
                   ),
                 ),
+              ),
+            if (data.profileCredentialRecoveryNotice case final notice?)
+              Padding(
+                padding: const EdgeInsets.only(top: 16),
+                child: LineupNotice(message: notice),
               ),
             if (!DeviceProfile.of(context).isTv) ...[
               const SizedBox(height: 24),

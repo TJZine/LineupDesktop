@@ -59,6 +59,7 @@ class UpstreamOnboardingView extends StatefulWidget {
     required this.onSelectProfile,
     required this.onSelectServer,
     this.authorizationTransitionPending = false,
+    this.authorizationStopPending = false,
     this.authorizationTransitionError,
     this.onRequestLogout,
     this.openBrowser = openPlexLink,
@@ -73,6 +74,7 @@ class UpstreamOnboardingView extends StatefulWidget {
   final Future<bool> Function(PlexHomeUser user, {String? pin}) onSelectProfile;
   final Future<bool> Function(PlexServer server) onSelectServer;
   final bool authorizationTransitionPending;
+  final bool authorizationStopPending;
   // Submission can finish before the shell rebuilds with the latest error.
   final String? Function()? authorizationTransitionError;
   final Future<void> Function() onLogout;
@@ -98,6 +100,7 @@ class UpstreamOnboardingViewState extends State<UpstreamOnboardingView>
   final _navigationFocus = FocusNode(debugLabel: 'Onboarding navigation');
   final _linkActionFocus = FocusNode(debugLabel: 'Retry secure cancellation');
   final _profileCancelFocus = FocusNode(debugLabel: 'Cancel profile selection');
+  final _serverCancelFocus = FocusNode(debugLabel: 'Cancel server selection');
   final _profileReturnFocus = FocusNode(debugLabel: 'Return to profiles');
   final _profilePinKey = GlobalKey<_ProfilePinStepState>();
   late bool _linkingStopped;
@@ -200,32 +203,45 @@ class UpstreamOnboardingViewState extends State<UpstreamOnboardingView>
         !_wasLinking &&
         controller.stage == SetupStage.linking &&
         controller.pinUsable;
-    final cancelNeedsFocus =
-        !_busy &&
-        nextBusy &&
-        _pinUser == null &&
-        controller.stage == SetupStage.profiles &&
-        controller.profileSelectionCanCancel;
+    final becameBusy = !_busy && nextBusy;
     setState(() {
       _linkingStopped = nextLinkingStopped;
       _wasLinking = controller.stage == SetupStage.linking;
       _busy = nextBusy;
       if (controller.stage != SetupStage.profiles) _pinUser = null;
     });
-    final target = retryNeedsFocus || linkNeedsFocus
-        ? _linkActionFocus
-        : cancelNeedsFocus
-        ? _profileCancelFocus
-        : null;
-    if (target != null) {
+    if (retryNeedsFocus || linkNeedsFocus || becameBusy) {
       WidgetsBinding.instance.addPostFrameCallback((_) {
+        if (!mounted || widget.controller != controller) return;
         if (linkNeedsFocus &&
             (controller.stage != SetupStage.linking || !controller.pinUsable)) {
           return;
         }
-        if (mounted && target.canRequestFocus) target.requestFocus();
+        final target = retryNeedsFocus || linkNeedsFocus
+            ? _linkActionFocus
+            : _busyCancelFocus;
+        if (target != null &&
+            target.context?.mounted == true &&
+            target.canRequestFocus) {
+          target.requestFocus();
+        }
       });
     }
+  }
+
+  FocusNode? get _busyCancelFocus {
+    final controller = widget.controller;
+    if (!controller.busy || widget.authorizationStopPending) return null;
+    return switch (controller.stage) {
+      SetupStage.profiles
+          when _pinUser == null && controller.profileSelectionCanCancel =>
+        _profileCancelFocus,
+      SetupStage.servers
+          when controller.serverSelectionCanCancel &&
+              controller.canSwitchServer =>
+        _serverCancelFocus,
+      _ => null,
+    };
   }
 
   static bool _isLinkingStopped(LineupController controller) =>
@@ -242,6 +258,7 @@ class UpstreamOnboardingViewState extends State<UpstreamOnboardingView>
     _navigationFocus.dispose();
     _linkActionFocus.dispose();
     _profileCancelFocus.dispose();
+    _serverCancelFocus.dispose();
     _profileReturnFocus.dispose();
     super.dispose();
   }
@@ -270,7 +287,7 @@ class UpstreamOnboardingViewState extends State<UpstreamOnboardingView>
   /// temporarily unavailable child state are claimed so a press cannot race
   /// an asynchronous owner or fall through to task backgrounding.
   bool handleBack() {
-    if (widget.authorizationTransitionPending) return true;
+    if (widget.authorizationStopPending) return true;
     final controller = widget.controller;
     if (_pinUser != null) {
       return _profilePinKey.currentState?.handleBack() ?? true;
@@ -278,9 +295,9 @@ class UpstreamOnboardingViewState extends State<UpstreamOnboardingView>
 
     switch (controller.stage) {
       case SetupStage.welcome:
-        return controller.busy;
+        return _actionsBusy;
       case SetupStage.linking:
-        if (controller.busy) return true;
+        if (_actionsBusy) return true;
         unawaited(controller.cancelLinking());
         return true;
       case SetupStage.profiles:
@@ -289,7 +306,7 @@ class UpstreamOnboardingViewState extends State<UpstreamOnboardingView>
           _focusNavigation();
           return true;
         }
-        return controller.busy;
+        return _actionsBusy;
       case SetupStage.servers:
         if (!controller.canSwitchServer) return true;
         if (controller.serverSelectionCanCancel) {
@@ -297,7 +314,7 @@ class UpstreamOnboardingViewState extends State<UpstreamOnboardingView>
           _focusNavigation();
           return true;
         }
-        return controller.busy;
+        return _actionsBusy;
       case SetupStage.channelSetup || SetupStage.ready:
         return false;
     }
@@ -307,7 +324,7 @@ class UpstreamOnboardingViewState extends State<UpstreamOnboardingView>
   // shell calls handleBack() directly; desktop has no new implicit linking or
   // root-exit policy in this leaf.
   void _handleBack() {
-    if (widget.authorizationTransitionPending) return;
+    if (widget.authorizationStopPending) return;
     if (_pinUser != null) {
       _profilePinKey.currentState?.handleBack();
       return;
@@ -346,13 +363,13 @@ class UpstreamOnboardingViewState extends State<UpstreamOnboardingView>
   }
 
   void _cancelProfileSelection() {
-    if (widget.authorizationTransitionPending) return;
+    if (widget.authorizationStopPending) return;
     widget.controller.cancelProfileSelection();
     _focusNavigation();
   }
 
   void _cancelServerSelection() {
-    if (widget.authorizationTransitionPending) return;
+    if (widget.authorizationStopPending) return;
     widget.controller.cancelServerSelection();
     _focusNavigation();
   }
@@ -495,7 +512,21 @@ class UpstreamOnboardingViewState extends State<UpstreamOnboardingView>
             SetupStage.channelSetup ||
             SetupStage.ready => const SizedBox.shrink(),
           };
-    return Theme(key: key, data: Theme.of(context), child: content);
+    final notice = controller.profileCredentialRecoveryNotice;
+    return Theme(
+      key: key,
+      data: Theme.of(context),
+      child: Column(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          content,
+          if (notice != null) ...[
+            const SizedBox(height: 12),
+            LineupNotice(message: notice),
+          ],
+        ],
+      ),
+    );
   }
 
   Widget _welcome() {
@@ -512,7 +543,7 @@ class UpstreamOnboardingViewState extends State<UpstreamOnboardingView>
           mainAxisSize: MainAxisSize.min,
           children: [
             FilledButton.icon(
-              autofocus: true,
+              autofocus: enabled,
               onPressed: enabled ? widget.controller.startLinking : null,
               icon: const Icon(Icons.link),
               label: const Text('Sign in to Plex'),
@@ -721,7 +752,7 @@ class UpstreamOnboardingViewState extends State<UpstreamOnboardingView>
           )
         : FilledButton(
             focusNode: _linkActionFocus,
-            autofocus: true,
+            autofocus: !controller.busy,
             onPressed: controller.busy
                 ? null
                 : controller.secureCancellationRequired
@@ -980,9 +1011,9 @@ class UpstreamOnboardingViewState extends State<UpstreamOnboardingView>
                                           .profiles[start + column]
                                           .id ==
                                       widget.controller.profile?.id,
-                                  autofocus: _profileReturnTarget(
-                                    start + column,
-                                  ),
+                                  autofocus:
+                                      !_actionsBusy &&
+                                      _profileReturnTarget(start + column),
                                   focusNode:
                                       _profileReturnTarget(start + column)
                                       ? _profileReturnFocus
@@ -1016,7 +1047,7 @@ class UpstreamOnboardingViewState extends State<UpstreamOnboardingView>
           SizedBox(height: 12),
           TextButton(
             focusNode: _profileCancelFocus,
-            onPressed: widget.authorizationTransitionPending
+            onPressed: widget.authorizationStopPending
                 ? null
                 : _cancelProfileSelection,
             child: Text(
@@ -1113,7 +1144,7 @@ class UpstreamOnboardingViewState extends State<UpstreamOnboardingView>
           alignment: WrapAlignment.center,
           children: [
             OutlinedButton.icon(
-              autofocus: widget.controller.servers.isEmpty,
+              autofocus: !_actionsBusy && widget.controller.servers.isEmpty,
               onPressed: _actionsBusy ? null : _refreshServers,
               icon: const Icon(Icons.refresh),
               label: const Text('Refresh servers'),
@@ -1131,7 +1162,8 @@ class UpstreamOnboardingViewState extends State<UpstreamOnboardingView>
               ),
             if (widget.controller.serverSelectionCanCancel)
               TextButton(
-                onPressed: widget.authorizationTransitionPending
+                focusNode: _serverCancelFocus,
+                onPressed: widget.authorizationStopPending
                     ? null
                     : _cancelServerSelection,
                 child: Text(
@@ -1996,7 +2028,7 @@ class _ProfilePinStepState extends State<_ProfilePinStep> {
                             _PinKey(
                               digit: digit,
                               focusNode: digit == 1 ? _firstDigitFocus : null,
-                              autofocus: digit == 1,
+                              autofocus: digit == 1 && !_submitting,
                               onPressed: _submitting
                                   ? null
                                   : () => _digit(digit),

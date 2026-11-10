@@ -157,6 +157,7 @@ void main() {
         expect(lineup.mutations, [action]);
         expect(coordinator.status.state, PlayerState.stopped);
         expect(coordinator.authorizationTransitionPending, isTrue);
+        expect(coordinator.authorizationStopPending, isFalse);
         expect(await coordinator.tune('channel-0'), isFalse);
         expect(await coordinator.selectProfile(transitionProfile), isFalse);
         expect(await coordinator.selectServer(transitionServer), isFalse);
@@ -170,6 +171,58 @@ void main() {
       },
     );
   }
+
+  testWidgets(
+    'scope reset and tune restore Retry after an authorization stop failure',
+    (tester) async {
+      final lineup = _AuthorizationLineup();
+      final guide = GuideController(
+        lineup: lineup,
+        loadSchedule: (channel) async => _schedule(channel),
+      );
+      final player = _AuthorizationStopPlayer();
+      final coordinator = PlayerCoordinator(
+        player: player,
+        lineup: lineup,
+        guide: guide,
+      );
+      addTearDown(lineup.dispose);
+      addTearDown(guide.dispose);
+      addTearDown(coordinator.dispose);
+      await coordinator.tune('channel-b');
+      final loadCount = player.loads.length;
+      final selection = coordinator.selectServer(transitionServer);
+      expect(coordinator.authorizationStopPending, isTrue);
+      player.stopResults.single.completeError(
+        const PlayerUnavailable('Synthetic stop failure.'),
+      );
+      expect(await selection, isFalse);
+      expect(coordinator.authorizationStopPending, isFalse);
+      final error = coordinator.authorizationTransitionError;
+      expect(error, contains('Playback could not be stopped'));
+
+      lineup.changeContentScope();
+      expect(coordinator.overlay, PlayerOverlay.error);
+      expect(coordinator.error, error);
+      expect(coordinator.canRetry, isTrue);
+      expect(player.stopResults, hasLength(1));
+      coordinator.closeOverlay();
+      expect(await coordinator.tune('channel-0'), isFalse);
+      expect(coordinator.overlay, PlayerOverlay.error);
+      expect(coordinator.error, error);
+      expect(coordinator.canRetry, isTrue);
+      expect(player.loads, hasLength(loadCount));
+
+      final retry = coordinator.retry();
+      expect(coordinator.authorizationStopPending, isTrue);
+      expect(player.stopResults, hasLength(2));
+      player.stopResults.last.complete();
+      await retry;
+      expect(coordinator.canRetry, isFalse);
+      expect(coordinator.error, isNull);
+      expect(lineup.mutations, isEmpty);
+    },
+  );
 
   for (final lateWork in ['load', 'authorization recovery']) {
     test(

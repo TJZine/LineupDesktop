@@ -176,6 +176,120 @@ void main() {
     );
   }
 
+  for (final picker in ['server', 'profile']) {
+    testWidgets('TV can cancel a slow $picker selection after native stop', (
+      tester,
+    ) async {
+      final selectingServer = picker == 'server';
+      tester.view.physicalSize = const Size(1920, 1080);
+      tester.view.devicePixelRatio = 1;
+      addTearDown(tester.view.reset);
+      final store = _ProfileRecoveryStore('none')
+        ..state = PersistedState(
+          settings: const LineupSettings(reduceMotion: true),
+          profileId: 'owner',
+          selectedServerByProfile: const {'owner': 'server'},
+          selectedLibraryIdsByProfileServer: const {
+            'owner': {
+              'server': ['movies'],
+            },
+          },
+          channelsByProfileServer: {
+            'owner': {
+              'server': [
+                Channel(
+                  id: 'saved',
+                  number: 1,
+                  name: 'Saved channel',
+                  source: const LibrarySource(
+                    libraryId: 'movies',
+                    libraryType: PlexLibraryType.movie,
+                  ),
+                  playbackMode: PlaybackMode.sequential,
+                  anchor: DateTime.utc(2026),
+                  shuffleSeed: 1,
+                ),
+              ],
+            },
+          },
+        );
+      final plex = _SlowAuthorizationPlex();
+      final controller = LineupController(
+        store: store,
+        credentials: MemoryCredentialStore(accountToken: 'synthetic-account'),
+        plex: plex,
+      );
+      final player = _AuthorizationGatePlayer();
+      addTearDown(controller.dispose);
+      addTearDown(player.dispose);
+      await controller.initialize();
+      expect(controller.stage, SetupStage.ready);
+      final before = store.state;
+      if (selectingServer) {
+        controller.showServers();
+      } else {
+        controller.showProfiles();
+      }
+      await tester.pumpWidget(
+        MaterialApp(
+          builder: LineupCanvas.builder,
+          home: LineupShell(
+            controller: controller,
+            player: player,
+            profile: tvProfile,
+            initialMediaPath: 'https://example.invalid/synthetic.mp4',
+          ),
+        ),
+      );
+      await tester.pumpAndSettle();
+      if (selectingServer) {
+        await tester.tap(find.widgetWithText(OutlinedButton, 'Connect'));
+      } else {
+        await tester.tap(find.byKey(const ValueKey('profile-card-guest')));
+      }
+      await tester.pump();
+      final cancel = find.widgetWithText(TextButton, 'Back');
+      final view = find.byType(UpstreamOnboardingView);
+      expect(
+        tester.widget<UpstreamOnboardingView>(view).authorizationStopPending,
+        isTrue,
+      );
+      expect(tester.widget<TextButton>(cancel).onPressed, isNull);
+      await tester.binding.handlePopRoute();
+      await tester.pump();
+      expect(find.byType(UpstreamOnboardingView), findsOneWidget);
+      expect(plex.gatedRequestStarted, isFalse);
+
+      player.stopResults.single.complete();
+      await tester.pumpAndSettle();
+      expect(plex.gatedRequestStarted, isTrue);
+      expect(controller.busy, isTrue);
+      final onboarding = tester.widget<UpstreamOnboardingView>(view);
+      expect(onboarding.authorizationStopPending, isFalse);
+      expect(onboarding.authorizationTransitionPending, isTrue);
+      final button = tester.widget<TextButton>(cancel);
+      expect(button.onPressed, isNotNull);
+      expect(button.focusNode?.hasPrimaryFocus, isTrue);
+
+      if (selectingServer) {
+        await tester.tap(cancel);
+      } else {
+        await tester.binding.handlePopRoute();
+      }
+      await tester.pumpAndSettle();
+      expect(controller.stage, SetupStage.ready);
+      expect(controller.busy, isFalse);
+      expect(plex.gate.isCompleted, isFalse);
+
+      plex.gate.complete();
+      await tester.pumpAndSettle();
+      expect(controller.server?.id, 'server');
+      expect(controller.profile?.id, 'owner');
+      expect(store.state, same(before));
+      expect(player.loads, hasLength(1));
+    }, variant: const TargetPlatformVariant({TargetPlatform.android}));
+  }
+
   for (final picker in ['profiles', 'servers']) {
     for (final fail in [false, true]) {
       testWidgets('NAV-I2 cancellable $picker real save fail=$fail', (
@@ -720,6 +834,23 @@ void main() {
     );
     await tester.pump(const Duration(milliseconds: 200));
   }
+
+  testWidgets(
+    'onboarding shows a credential recovery notice alongside the current error',
+    (tester) async {
+      final controller = _AuthorizationController(
+        scenario: const LineupScenario(
+          stage: SetupStage.servers,
+          error: 'Synthetic server failure',
+        ),
+        profileCredentialRecoveryNotice: 'Synthetic credential recovery notice',
+      );
+      addTearDown(controller.dispose);
+      await show(tester, controller);
+      expect(find.text('Synthetic server failure'), findsOneWidget);
+      expect(find.text('Synthetic credential recovery notice'), findsOneWidget);
+    },
+  );
 
   testWidgets(
     'NAV-I2 onboarding roots are side-effect-free and pickers cancel',
@@ -2417,6 +2548,42 @@ class _PickerBoundaryPlex extends _ProfileRecoveryPlex {
   );
 }
 
+class _SlowAuthorizationPlex extends _PickerBoundaryPlex {
+  @override
+  Future<List<PlexServerAccess>> discoverServers(String token) async => [
+    ...await super.discoverServers(token),
+    PlexServerAccess(
+      server: const PlexServer(
+        id: 'alternate',
+        name: 'Alternate server',
+        connections: [],
+      ),
+      token: 'synthetic-alternate-access',
+    ),
+  ];
+
+  @override
+  Future<PlexConnection> selectConnection(
+    PlexServer server,
+    String token,
+  ) async {
+    if (server.id == 'alternate') {
+      gatedRequestStarted = true;
+      await gate.future;
+    }
+    return super.selectConnection(server, token);
+  }
+
+  @override
+  Future<String> switchHomeUser(String token, String id, String? pin) async {
+    if (id == 'guest') {
+      gatedRequestStarted = true;
+      await gate.future;
+    }
+    return super.switchHomeUser(token, id, pin);
+  }
+}
+
 class _ProfileRecoveryPlex extends PlexClient {
   _ProfileRecoveryPlex(this.failure)
     : super(
@@ -2512,7 +2679,12 @@ class _ProfileRecoveryPlex extends PlexClient {
 }
 
 class _AuthorizationController extends FixtureController {
-  _AuthorizationController({super.scenario});
+  _AuthorizationController({
+    super.scenario,
+    this.profileCredentialRecoveryNotice,
+  });
+  @override
+  final String? profileCredentialRecoveryNotice;
   final selections = <String>[];
 
   @override

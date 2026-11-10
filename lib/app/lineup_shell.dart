@@ -136,6 +136,7 @@ class _LineupShellState extends State<LineupShell> {
     _player.hasPlaybackIntent,
     _player.tuning,
     _player.authorizationTransitionPending,
+    _player.authorizationStopPending,
     _player.authorizationTransitionError,
     _player.error,
     _player.canRetry,
@@ -843,12 +844,23 @@ class _LineupShellState extends State<LineupShell> {
           title: const Text('Could not sign out'),
           content: Semantics(
             liveRegion: true,
-            child: Text(
-              _player.authorizationTransitionPending
-                  ? 'Stopping playback…'
-                  : _player.authorizationTransitionError ??
-                        widget.controller.error ??
-                        'Sign out did not complete.',
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text(
+                  _player.authorizationTransitionPending
+                      ? 'Stopping playback…'
+                      : _player.authorizationTransitionError ??
+                            widget.controller.error ??
+                            'Sign out did not complete.',
+                ),
+                if (widget.controller.profileCredentialRecoveryNotice
+                    case final notice?) ...[
+                  const SizedBox(height: 12),
+                  Text(notice),
+                ],
+              ],
             ),
           ),
           actions: [
@@ -1161,6 +1173,7 @@ class _LineupShellState extends State<LineupShell> {
               onSelectServer: _player.selectServer,
               authorizationTransitionPending:
                   _player.authorizationTransitionPending,
+              authorizationStopPending: _player.authorizationStopPending,
               authorizationTransitionError: () =>
                   _player.authorizationTransitionError,
               onRequestLogout: _requestLogout,
