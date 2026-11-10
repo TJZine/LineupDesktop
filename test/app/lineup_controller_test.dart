@@ -6954,62 +6954,75 @@ void main() {
     },
   );
 
-  test('cancelling a scan schedules no queued fifth library', () async {
-    final selected = _server('server');
-    final fourStarted = Completer<void>();
-    final release = Completer<void>();
-    final started = <String>[];
-    final plex = _FakePlex()
-      ..serversResult = [selected]
-      ..connectionResult = selected.connections.single
-      ..librariesResult = [
-        for (var index = 0; index < 5; index++)
-          PlexLibrary(
-            id: 'library-$index',
-            title: 'Library $index',
-            type: PlexLibraryType.movie,
-          ),
-      ]
-      ..libraryItemsScanHandler = (_, _, libraryId, _, isCurrent, _) async {
-        started.add(libraryId);
-        if (started.length == 4) fourStarted.complete();
-        await release.future;
-        if (!isCurrent()) {
-          throw const PlexException('cancelled', 'cancelled');
-        }
-        return const [];
-      };
-    final controller = LineupController(
-      store: _MemoryStore(
-        const PersistedState(selectedServerByProfile: {'owner': 'server'}),
-      ),
-      credentials: _MemoryCredentials(accountToken: 'token'),
-      plex: plex,
-    );
-    addTearDown(controller.dispose);
-    await controller.initialize();
-
-    final scan = controller.scanLibraries({
-      for (var index = 0; index < 5; index++) 'library-$index',
-    });
-    await fourStarted.future;
-    controller.cancelLibraryScan();
-    release.complete();
-
-    expect(await scan, isFalse);
-    expect(started, [for (var index = 0; index < 4; index++) 'library-$index']);
-    expect(controller.libraryScanStatus, LibraryScanStatus.cancelled);
-    for (var index = 0; index < 4; index++) {
-      expect(
-        controller.libraryScanFacts['library-$index']!.status,
-        LibraryScanStatus.cancelled,
+  test(
+    'explicit scan cancellation starts no fifth library and reports no usage',
+    () async {
+      final selected = _server('server');
+      final fourStarted = Completer<void>();
+      final release = Completer<void>();
+      final started = <String>[];
+      final plex = _FakePlex()
+        ..serversResult = [selected]
+        ..connectionResult = selected.connections.single
+        ..librariesResult = [
+          for (var index = 0; index < 5; index++)
+            PlexLibrary(
+              id: 'library-$index',
+              title: 'Library $index',
+              type: PlexLibraryType.movie,
+            ),
+        ]
+        ..libraryItemsScanHandler = (_, _, libraryId, _, isCurrent, _) async {
+          PlexScanBudget.current!.retain(1);
+          started.add(libraryId);
+          if (started.length == 4) fourStarted.complete();
+          await release.future;
+          if (!isCurrent()) {
+            throw const PlexException('cancelled', 'cancelled');
+          }
+          return const [];
+        };
+      final controller = LineupController(
+        store: _MemoryStore(
+          const PersistedState(selectedServerByProfile: {'owner': 'server'}),
+        ),
+        credentials: _MemoryCredentials(accountToken: 'token'),
+        plex: plex,
       );
-    }
-    expect(
-      controller.libraryScanFacts['library-4']!.status,
-      LibraryScanStatus.idle,
-    );
-  });
+      addTearDown(controller.dispose);
+      await controller.initialize();
+      controller.diagnostics.enabled = true;
+
+      final scan = controller.scanLibraries({
+        for (var index = 0; index < 5; index++) 'library-$index',
+      });
+      await fourStarted.future;
+      controller.cancelLibraryScan();
+      release.complete();
+
+      expect(await scan, isFalse);
+      expect(
+        controller.diagnostics.entries.where(
+          (entry) => entry.message == 'Library scan budget usage',
+        ),
+        isEmpty,
+      );
+      expect(started, [
+        for (var index = 0; index < 4; index++) 'library-$index',
+      ]);
+      expect(controller.libraryScanStatus, LibraryScanStatus.cancelled);
+      for (var index = 0; index < 4; index++) {
+        expect(
+          controller.libraryScanFacts['library-$index']!.status,
+          LibraryScanStatus.cancelled,
+        );
+      }
+      expect(
+        controller.libraryScanFacts['library-4']!.status,
+        LibraryScanStatus.idle,
+      );
+    },
+  );
 
   test(
     'library scan distinguishes empty unsupported and transient failures',

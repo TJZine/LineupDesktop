@@ -1038,15 +1038,20 @@ void main() {
           ], total: 5);
       }
     }, limits: const PlexScanLimits(retainedEntries: 26));
-    final scanned = await client.scanLibrary(
-      _server,
-      'token',
-      'tv',
-      PlexLibraryType.show,
-      isCurrent: () => true,
-      onProgress: progress.add,
-      onPhase: phases.add,
-    );
+    final scanned = await client.runScan((budget) async {
+      final result = await client.scanLibrary(
+        _server,
+        'token',
+        'tv',
+        PlexLibraryType.show,
+        isCurrent: () => true,
+        onProgress: progress.add,
+        onPhase: phases.add,
+      );
+      // 20 page rows and raw tags, plus five new memberships and one genre.
+      expect(budget.usage.entries, 26);
+      return result;
+    });
     expect(phases, PlexLibraryScanPhase.values);
     expect(scanned.items.map((i) => i.collections).toList(), <List<String>>[
       ['Shared'],
