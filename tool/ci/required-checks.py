@@ -7,7 +7,7 @@ import sys
 
 UNCONDITIONAL = (
     'verify', 'android', 'build-macos', 'macos-player-core',
-    'windows-release-policy', 'build-windows', 'release-inputs', 'advisories',
+    'windows-release-policy', 'build-windows', 'release-inputs',
 )
 CONDITIONAL = ('windows-engine-tests', 'build-windows-engine')
 

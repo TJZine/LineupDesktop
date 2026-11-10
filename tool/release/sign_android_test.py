@@ -14,9 +14,24 @@ from pathlib import Path
 import verify
 
 
-@unittest.skipUnless(os.environ.get('LINEUP_RELEASE_TEST_SDK'),
+def _sdk_rehearsal_enabled():
+    return bool(os.environ.get('LINEUP_RELEASE_TEST_SDK') or
+                os.environ.get('LINEUP_RELEASE_TEST_REQUIRE_SDK'))
+
+
+@unittest.skipUnless(_sdk_rehearsal_enabled(),
                      'set LINEUP_RELEASE_TEST_SDK and JAVA_HOME for disposable SDK signing rehearsal')
 class HostedSigningRehearsal(unittest.TestCase):
+    @classmethod
+    def setUpClass(cls):
+        if os.environ.get('LINEUP_RELEASE_TEST_REQUIRE_SDK'):
+            missing = [name for name in ('LINEUP_RELEASE_TEST_SDK', 'JAVA_HOME')
+                       if not os.environ.get(name)]
+            if missing:
+                raise AssertionError('required SDK rehearsal environment is missing: ' +
+                                     ', '.join(missing))
+        super().setUpClass()
+
     def test_approval_binding_and_disposable_signing(self):
         sdk = Path(os.environ['LINEUP_RELEASE_TEST_SDK'])
         tools = sdk / 'build-tools' / os.environ.get('LINEUP_RELEASE_TEST_BUILD_TOOLS', '36.0.0')

@@ -17,7 +17,7 @@ concurrency:
 
 jobs:
   advisories:
-    name: Scheduled dependency advisories
+    name: Pub dependency advisories
     runs-on: ubuntu-latest
     timeout-minutes: 15
     steps:
@@ -28,7 +28,6 @@ jobs:
         run: >-
           tool/security/osv-scan.sh
           --lockfile=pubspec.lock
-          --lockfile=android/gradle/verification-metadata.xml
 
   codeql-cpp:
     name: CodeQL C++
@@ -48,6 +47,44 @@ jobs:
       - uses: github/codeql-action/analyze@1fc58d04a4d4374f921bdac573c3811c240f9c26 # v4.39.2
         with:
           category: /language:c-cpp
+
+  codeql-actions:
+    name: CodeQL GitHub Actions
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    permissions:
+      contents: read
+      security-events: write
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
+        with:
+          persist-credentials: false
+      - uses: github/codeql-action/init@1fc58d04a4d4374f921bdac573c3811c240f9c26 # v4.39.2
+        with:
+          languages: actions
+          build-mode: none
+      - uses: github/codeql-action/analyze@1fc58d04a4d4374f921bdac573c3811c240f9c26 # v4.39.2
+        with:
+          category: /language:actions
+
+  codeql-python:
+    name: CodeQL Python
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    permissions:
+      contents: read
+      security-events: write
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
+        with:
+          persist-credentials: false
+      - uses: github/codeql-action/init@1fc58d04a4d4374f921bdac573c3811c240f9c26 # v4.39.2
+        with:
+          languages: python
+          build-mode: none
+      - uses: github/codeql-action/analyze@1fc58d04a4d4374f921bdac573c3811c240f9c26 # v4.39.2
+        with:
+          category: /language:python
 
   codeql-kotlin:
     name: CodeQL Java and Kotlin

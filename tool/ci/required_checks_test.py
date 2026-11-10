@@ -61,8 +61,9 @@ class RequiredChecksTest(unittest.TestCase):
         aggregate = workflow.split('\n  required-checks:\n')[1]
         self.assertIn('if: always()', aggregate)
         self.assertIn('CI_NEEDS: ${{ toJSON(needs) }}', aggregate)
-        for job in checks.UNCONDITIONAL + checks.CONDITIONAL:
-            self.assertRegex(aggregate, rf'(?m)^      - {job}$')
+        dependencies = set(re.findall(r'^      - ([a-z][a-z0-9-]+)$',
+                                      aggregate, re.MULTILINE))
+        self.assertEqual(set(checks.UNCONDITIONAL + checks.CONDITIONAL), dependencies)
 
 
 if __name__ == '__main__':

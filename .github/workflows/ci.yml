@@ -31,7 +31,6 @@ jobs:
       - name: Run portable engine tooling fixtures (platform skips visible)
         run: python3 tool/flutter_engine/desktop_accessibility_test.py
       - run: python3 -m unittest discover -s tool/ci -p '*_test.py'
-      - run: python3 -m unittest discover -s tool/release -p '*_test.py' -v
       - run: flutter pub get
       - run: dart tool/format.dart --check
       - run: flutter analyze
@@ -41,7 +40,7 @@ jobs:
 
   android:
     name: Verify Android TV build
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04
     timeout-minutes: 60
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
@@ -70,6 +69,12 @@ jobs:
       - name: Run Android JVM unit tests
         working-directory: android
         run: ./gradlew :app:testDebugUnitTest --no-daemon
+      - name: Run release helper rehearsal with runner SDK
+        run: |
+          LINEUP_RELEASE_TEST_SDK="$ANDROID_HOME" \
+          JAVA_HOME="$JAVA_HOME_17_X64" \
+          LINEUP_RELEASE_TEST_REQUIRE_SDK=1 \
+            python3 -m unittest discover -s tool/release -p '*_test.py' -v
       - name: Check committed build inputs
         run: git diff --exit-code -- pubspec.lock .metadata android/gradle/verification-metadata.xml android/app/src/main/assets
       - name: Retain unsigned candidate and build evidence
@@ -880,19 +885,7 @@ jobs:
           name: LineupDesktop-windows-x64
           path: build/package/LineupDesktop-*-windows-x64.zip
           if-no-files-found: error
-
-  advisories:
-    name: Dependency advisories
-    runs-on: ubuntu-latest
-    timeout-minutes: 15
-    steps:
-      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
-        with:
-          persist-credentials: false
-      - name: Scan current Pub lockfile
-        run: >-
-          tool/security/osv-scan.sh
-          --lockfile=pubspec.lock
+          retention-days: 30
 
   required-checks:
     name: Required CI checks
@@ -905,7 +898,6 @@ jobs:
       - windows-release-policy
       - build-windows
       - release-inputs
-      - advisories
       - windows-engine-tests
       - build-windows-engine
     runs-on: ubuntu-latest
