@@ -4,21 +4,16 @@ import 'plex_models.dart';
 
 /// Finite work limits for one complete inventory attempt, including recovery.
 ///
-/// Existing pagers allow 100,000 rows per endpoint. These aggregate ceilings
-/// admit multiple such libraries with collections and playlists, while bounding
-/// their combined cost. Entries conservatively count raw rows, tag memberships
-/// and staged output (including reused output), rather than estimating heap
-/// bytes. Compatibility fixtures include two 5,000-item libraries, five
-/// overlapping collections per library, three genres per item and a 500-item
-/// playlist, including the controller's staging charges (608 requests). Existing
-/// sparse-page and large-collection boundary fixtures also remain supported.
-/// Representative minimum-TV compatibility remains physical acceptance.
+/// Received bytes bound network work. Each retained page row and its raw tags
+/// are charged once, with only new tags charged during annotation. Reused
+/// staged rows are charged when incorporated into an attempt. These counts do
+/// not estimate heap use.
 class PlexScanLimits {
   const PlexScanLimits({
-    this.receivedBytes = 128 * 1024 * 1024,
-    this.retainedEntries = 500000,
-    this.requests = 10000,
-    this.elapsed = const Duration(minutes: 10),
+    this.receivedBytes = 1024 * 1024 * 1024,
+    this.retainedEntries = 1500000,
+    this.requests = 20000,
+    this.elapsed = const Duration(minutes: 30),
     this.concurrentRequests = 8,
   }) : assert(receivedBytes > 0),
        assert(retainedEntries > 0),

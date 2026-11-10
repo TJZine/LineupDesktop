@@ -1206,7 +1206,7 @@ class PlexClient {
       knownTotal = validated.knownTotal;
       final metadata = validated.metadata;
       validateEntries(rawConsumed + metadata.length);
-      // Charge before parsing/retaining a page, including tags in its rows.
+      // Count each page row and its raw tags here, once, before retaining it.
       final budget = PlexScanBudget.current;
       budget?.retain(metadata.length);
       for (final raw in metadata) {
@@ -1896,24 +1896,21 @@ PlexMediaItem _annotateLibraryItem(
   Map<String, List<String>> showGenres,
 ) {
   final budget = PlexScanBudget.current;
+  final rawCollections = item.collections.toSet();
   final collections = <String>{};
   for (final id in [item.id, item.parentRatingKey, item.grandparentRatingKey]) {
     for (final title in titlesByMember[id] ?? const <String>{}) {
-      budget?.retain(1);
-      collections.add(title);
+      if (collections.add(title) && !rawCollections.contains(title)) {
+        budget?.retain(1);
+      }
     }
   }
-  final genres = <String>{};
-  void addGenres(Iterable<String> source) {
-    for (final genre in source) {
-      budget?.retain(1);
-      genres.add(genre);
-    }
-  }
-
-  addGenres(item.genres);
+  final genres = item.genres.toSet();
   if (item.type == 'episode') {
-    addGenres(showGenres[item.grandparentRatingKey] ?? const []);
+    for (final genre
+        in showGenres[item.grandparentRatingKey] ?? const <String>[]) {
+      if (genres.add(genre)) budget?.retain(1);
+    }
   }
   return PlexMediaItem.withTags(
     item,

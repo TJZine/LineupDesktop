@@ -530,6 +530,7 @@ void main() {
               ),
             ]
             ..scanLibraryHandler = (_, _, _, _, _, _, _) async {
+              PlexScanBudget.current!.retain(1);
               return PlexLibraryScan(items: [_scanMovie('movies')]);
             }
             ..playlistsScanHandler = (server, token, current, cancelled) =>
@@ -697,6 +698,12 @@ void main() {
           '/identity',
         ]);
         expect(controller.libraryScanReadyIds, isEmpty);
+        expect(controller.stage, SetupStage.channelSetup);
+        expect(controller.restoringSavedLineup, isFalse);
+        if (restoring) {
+          expect(controller.channels.single.id, 'saved');
+          expect(controller.selectedLibraryIds, {'movies'});
+        }
         expect(controller.availableMedia, isEmpty);
         expect(store.state, same(saved));
         expect(
@@ -783,7 +790,7 @@ void main() {
   });
 
   test(
-    'same-scope retry charges reused staged inventory before new results',
+    'same-scope retry charges reused staged inventory alongside new results',
     () async {
       final selected = _server('server');
       var retry = false;
@@ -801,6 +808,7 @@ void main() {
               if (id == 'b' && !retry) {
                 throw const PlexException('offline', 'Retry');
               }
+              PlexScanBudget.current!.retain(2);
               return PlexLibraryScan(
                 items: [_scanMovie('$id-1'), _scanMovie('$id-2')],
               );
@@ -834,6 +842,48 @@ void main() {
         'a-1-item',
         'a-2-item',
       ]);
+    },
+  );
+
+  test(
+    'full rescan admits a large committed inventory at the attempt limit',
+    () async {
+      const count = 40000;
+      final selected = _server('server');
+      var reads = 0;
+      final plex =
+          _FakePlex(scanLimits: const PlexScanLimits(retainedEntries: count))
+            ..serversResult = [selected]
+            ..connectionResult = selected.connections.single
+            ..librariesResult = const [
+              PlexLibrary(
+                id: 'movies',
+                title: 'Movies',
+                type: PlexLibraryType.movie,
+              ),
+            ]
+            ..scanLibraryHandler = (_, _, _, _, _, _, _) async {
+              final read = ++reads;
+              PlexScanBudget.current!.retain(count);
+              return PlexLibraryScan(
+                items: List.generate(count, (i) => _scanMovie('$read-$i')),
+              );
+            };
+      final controller = LineupController(
+        store: _MemoryStore(
+          const PersistedState(selectedServerByProfile: {'owner': 'server'}),
+        ),
+        credentials: _MemoryCredentials(accountToken: 'token'),
+        plex: plex,
+      );
+      addTearDown(controller.dispose);
+      await controller.initialize();
+      for (final read in [1, 2]) {
+        expect(await controller.scanLibraries({'movies'}), isTrue);
+        expect(await controller.commitLibraryScan({'movies'}), isTrue);
+        expect(controller.availableMedia, hasLength(count));
+        expect(controller.availableMedia.first.id, '$read-0-item');
+      }
     },
   );
 

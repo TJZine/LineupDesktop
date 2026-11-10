@@ -329,6 +329,10 @@ class LineupController extends ChangeNotifier {
   String? get error => _unrestoredProfileCredentials.isNotEmpty
       ? _profileCredentialRecoveryMessage
       : _error;
+  String? get libraryScanLimitError => switch (_scan.failure) {
+    PlexScanLimitException(:final message) when _error == message => message,
+    _ => null,
+  };
   int _epoch = 0;
   int _authorizationScope = 0;
   int _mutationScope = 0;
@@ -1029,6 +1033,7 @@ class LineupController extends ChangeNotifier {
       },
       operation: operation,
       fallbackStage: SetupStage.servers,
+      scanLimitFallbackStage: SetupStage.channelSetup,
     );
     if (_isCurrent(operation)) _restoringSavedLineup = false;
     if (_serverTargetId == selected.id && _serverTargetOperation == operation) {
@@ -1217,8 +1222,11 @@ class LineupController extends ChangeNotifier {
           ),
           cancelled: cancelled.future,
         );
-      } on PlexScanLimitException {
-        if (_isCurrent(operation)) _scan.failAttempt(_mutationScope);
+      } on PlexScanLimitException catch (exception) {
+        if (_isCurrent(operation)) {
+          _scan.failAttempt(_mutationScope);
+          _scan.failure = exception;
+        }
         rethrow;
       } finally {
         _scan.finishIo(cancelled);
@@ -1249,7 +1257,6 @@ class LineupController extends ChangeNotifier {
     );
     notifyListeners();
     try {
-      _scan.chargeRetained(budget);
       final selected = libraries
           .where((library) => ids.contains(library.id))
           .toList(growable: false);
@@ -1291,7 +1298,6 @@ class LineupController extends ChangeNotifier {
             );
             if (!_isCurrent(operation)) return;
             budget.check();
-            budget.retainMedia(scanned.items);
             final items = scanned.items;
             if (scanned.timing case final timing?) {
               diagnostics.add(DiagnosticEvent.libraryScanTiming, {
@@ -1343,6 +1349,7 @@ class LineupController extends ChangeNotifier {
           status: LibraryScanStatus.cancelled,
         );
       }
+      _scan.chargeReusedRows(budget, retainedIds);
       final items = _scan.inventoryFor(selected.map((library) => library.id));
       _scan.playlistProgress = const PlexPlaylistProgress();
       notifyListeners();
@@ -1394,10 +1401,6 @@ class LineupController extends ChangeNotifier {
         );
       }
       budget.check();
-      for (final playlist in catalog.playlists) {
-        budget.retain(1);
-        budget.retainMedia(playlist.items);
-      }
       _scan.playlistProgress = null;
       _scan.completeCatalog(catalog, unavailable: catalogUnavailable);
       if (catalog.failedIds.isNotEmpty) {
@@ -2816,6 +2819,7 @@ class LineupController extends ChangeNotifier {
     Future<void> Function() body, {
     required int operation,
     required SetupStage fallbackStage,
+    SetupStage? scanLimitFallbackStage,
   }) async {
     if (!_isCurrent(operation)) return false;
     _busyOperation = operation;
@@ -2836,7 +2840,9 @@ class LineupController extends ChangeNotifier {
           ? exception.message
           : 'Lineup could not complete that request.';
       _restoringSavedLineup = false;
-      _stage = fallbackStage;
+      _stage = exception is PlexScanLimitException
+          ? scanLimitFallbackStage ?? fallbackStage
+          : fallbackStage;
       diagnostics.add(DiagnosticEvent.operationFailed, {
         'code': exception is PlexException ? exception.code : 'unexpected',
       });

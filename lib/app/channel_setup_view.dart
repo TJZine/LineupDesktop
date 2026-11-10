@@ -528,7 +528,7 @@ class UpstreamChannelSetupViewState extends State<UpstreamChannelSetupView> {
     onCancelSetup: widget.controller.cancelChannelSetup,
     onCancelScan: widget.controller.cancelLibraryScan,
     selectedLibraryIds: Set.unmodifiable(_selectedLibraries),
-    error: _error,
+    error: _error ?? widget.controller.libraryScanLimitError,
     onScan: _scan,
     onCommit: _commitLibraries,
     onToggleLibrary: (id) => setState(() {

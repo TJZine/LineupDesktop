@@ -327,19 +327,12 @@ class _LibraryScanState {
     return retainedIds;
   }
 
-  void chargeRetained(PlexScanBudget budget) {
-    // Baseline rows remain available as fallback even when requested for retry.
-    final retained = Set<List<PlexMediaItem>>.identity();
-    for (final row in [...rows.values, ...?_attempt?.previous?.rows.values]) {
-      if (row.items case final items?) retained.add(items);
-    }
-    for (final items in retained) {
-      budget.retainMedia(items);
-    }
-    for (final playlist
-        in _attempt?.previous?.result.playlists ?? const <PlexPlaylist>[]) {
-      budget.retain(1);
-      budget.retainMedia(playlist.items);
+  void chargeReusedRows(PlexScanBudget budget, Set<String> skippedIds) {
+    for (final entry in rows.entries) {
+      final row = entry.value;
+      if (skippedIds.contains(entry.key) || row.retainedAfterFailure) {
+        if (row.items case final items?) budget.retainMedia(items);
+      }
     }
   }
 
