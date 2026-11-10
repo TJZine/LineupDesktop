@@ -74,10 +74,11 @@ private media details, and unredacted diagnostics out of release evidence.
 
 ### Windows portable ZIP
 
-1. Select the release commit on `main`. The only release input is the
+1. Dispatch only while `SOURCE_SHA` is the tip of `main`. The only release input is the
    `LineupDesktop-windows-x64` artifact from a manually dispatched CI run at
    that commit. Ordinary pushes skip the package job unless package inputs
-   changed.
+   changed. If a later merge cancels the release commit's push run, use
+   **Re-run all jobs** on that push run or release the later commit.
 
 2. Start the package run and inspect the actual run and artifact IDs:
 
