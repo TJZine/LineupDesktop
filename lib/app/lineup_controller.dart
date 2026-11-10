@@ -1277,8 +1277,9 @@ class LineupController extends ChangeNotifier {
       retryFailedOnly: retryFailedOnly,
       retryLibraryIds: retryLibraryIds,
     );
-    notifyListeners();
     try {
+      _scan.chargeReusedRows(budget, retainedIds);
+      notifyListeners();
       final selected = libraries
           .where((library) => ids.contains(library.id))
           .toList(growable: false);
@@ -1371,7 +1372,7 @@ class LineupController extends ChangeNotifier {
           status: LibraryScanStatus.cancelled,
         );
       }
-      _scan.chargeReusedRows(budget, retainedIds);
+      _scan.chargeFailedRetryRows(budget, retainedIds);
       final items = _scan.inventoryFor(selected.map((library) => library.id));
       _scan.playlistProgress = const PlexPlaylistProgress();
       notifyListeners();

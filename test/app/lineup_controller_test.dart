@@ -974,6 +974,51 @@ void main() {
   );
 
   test(
+    'over-limit reused rows fail before the retry requests a page',
+    () async {
+      final selected = _server('server');
+      final pages = <String>[];
+      final plex =
+          _FakePlex(scanLimits: const PlexScanLimits(retainedEntries: 2))
+            ..serversResult = [selected]
+            ..connectionResult = selected.connections.single
+            ..librariesResult = [
+              for (final id in ['a', 'b'])
+                PlexLibrary(id: id, title: id, type: PlexLibraryType.movie),
+            ]
+            ..scanLibraryHandler = (_, _, id, _, _, _, _) async {
+              pages.add(id);
+              if (id == 'b') throw const PlexException('offline', 'Retry');
+              PlexScanBudget.current!.retain(2);
+              return PlexLibraryScan(
+                items: [_scanMovie('a-1'), _scanMovie('a-2')],
+              );
+            };
+      final controller = LineupController(
+        store: _MemoryStore(
+          const PersistedState(selectedServerByProfile: {'owner': 'server'}),
+        ),
+        credentials: _MemoryCredentials(accountToken: 'token'),
+        plex: plex,
+      );
+      addTearDown(controller.dispose);
+      await controller.initialize();
+      expect(await controller.scanLibraries({'a', 'b'}), isTrue);
+      expect(controller.libraryScanReadyIds, {'a'});
+      expect(pages, ['a', 'b']);
+      pages.clear();
+      plex.scanLimitsOverride = const PlexScanLimits(retainedEntries: 1);
+
+      expect(await controller.retryLibraryScan({'a', 'b'}, {'b'}), isFalse);
+      expect(
+        controller.error,
+        const PlexScanLimitException('retained-entries').message,
+      );
+      expect(pages, isEmpty);
+    },
+  );
+
+  test(
     'full rescan admits a large committed inventory at the attempt limit',
     () async {
       const count = 40000;
@@ -10913,6 +10958,10 @@ class _FakePlex extends PlexClient {
         clientIdentifier: 'lineup-desktop-test-abcdefghijklmnopqrst',
         httpClient: testPlexHttpClient(),
       );
+
+  PlexScanLimits? scanLimitsOverride;
+  @override
+  PlexScanLimits get scanLimits => scanLimitsOverride ?? super.scanLimits;
 
   PlexAccount accountResult = const PlexAccount(
     id: 'owner',

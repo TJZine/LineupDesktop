@@ -327,14 +327,19 @@ class _LibraryScanState {
     return retainedIds;
   }
 
-  void chargeReusedRows(PlexScanBudget budget, Set<String> skippedIds) {
-    for (final entry in rows.entries) {
-      final row = entry.value;
-      if (skippedIds.contains(entry.key) || row.retainedAfterFailure) {
-        if (row.items case final items?) budget.retainMedia(items);
-      }
+  void chargeReusedRows(PlexScanBudget budget, Iterable<String> ids) {
+    for (final id in ids) {
+      if (rows[id]?.items case final items?) budget.retainMedia(items);
     }
   }
+
+  void chargeFailedRetryRows(PlexScanBudget budget, Set<String> skippedIds) =>
+      chargeReusedRows(budget, [
+        for (final entry in rows.entries)
+          if (entry.value.retainedAfterFailure &&
+              !skippedIds.contains(entry.key))
+            entry.key,
+      ]);
 
   void failAttempt(int contentScope) {
     _retainPrevious(contentScope);
