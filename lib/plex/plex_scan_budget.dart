@@ -65,6 +65,12 @@ class PlexScanBudget {
   Future<void> get stopped => _stopped.future;
   Duration get remaining => limits.elapsed - _watch.elapsed;
   bool get isActive => !_closed && !_stopped.isCompleted;
+  ({int bytes, int entries, int requests, int elapsedMs}) get usage => (
+    bytes: _bytes,
+    entries: _entries,
+    requests: _requests,
+    elapsedMs: _watch.elapsedMilliseconds,
+  );
 
   Future<T> run<T>(Future<T> Function() body) =>
       runZoned(body, zoneValues: {_zoneKey: this});
@@ -145,6 +151,7 @@ class PlexScanBudget {
 
   void close() {
     _closed = true;
+    _watch.stop();
     _timer.cancel();
     cancel();
   }

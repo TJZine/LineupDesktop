@@ -1210,26 +1210,37 @@ class LineupController extends ChangeNotifier {
         throw const PlexException('cancelled', 'Library scan cancelled.');
       }
       final cancelled = _scan.startIo();
+      PlexScanBudget? attempt;
       try {
-        return await plex.runScan(
-          (budget) => _loadLibrariesInBudget(
+        return await plex.runScan((budget) {
+          attempt = budget;
+          return _loadLibrariesInBudget(
             operation,
             ids,
             budget,
             retryFailedOnly: retryFailedOnly,
             retryLibraryIds: retryLibraryIds,
             settleFailures: settleFailures,
-          ),
-          cancelled: cancelled.future,
-        );
-      } on PlexScanLimitException catch (exception) {
-        if (_isCurrent(operation)) {
+          );
+        }, cancelled: cancelled.future);
+      } on PlexException catch (exception) {
+        if (exception.code == 'cancelled') attempt = null;
+        if (exception is PlexScanLimitException && _isCurrent(operation)) {
           _scan.failAttempt(_mutationScope);
           _scan.failure = exception;
         }
         rethrow;
       } finally {
         _scan.finishIo(cancelled);
+        if (attempt case final budget? when diagnostics.enabled) {
+          final usage = budget.usage;
+          diagnostics.add(DiagnosticEvent.libraryScanBudgetUsage, {
+            'bytes': usage.bytes,
+            'entries': usage.entries,
+            'requests': usage.requests,
+            'elapsedMs': usage.elapsedMs,
+          });
+        }
       }
     } finally {
       retired.complete();
@@ -2845,6 +2856,7 @@ class LineupController extends ChangeNotifier {
           : fallbackStage;
       diagnostics.add(DiagnosticEvent.operationFailed, {
         'code': exception is PlexException ? exception.code : 'unexpected',
+        if (exception is PlexScanLimitException) 'limit': exception.limit,
       });
       return false;
     } finally {

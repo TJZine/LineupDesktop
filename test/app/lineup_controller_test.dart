@@ -557,6 +557,28 @@ void main() {
       expect(controller.libraryScanReadyIds, isEmpty);
       expect(await controller.commitLibraryScan({'movies'}), isFalse);
       expect(store.state, same(saved));
+      final events = controller.diagnostics.entries;
+      expect(
+        events.where(
+          (e) =>
+              e.message == 'Playlist discovery unavailable' ||
+              e.message == 'Some playlists could not be loaded',
+        ),
+        isEmpty,
+      );
+      expect(
+        events.singleWhere((e) => e.message == 'Operation failed').context,
+        {'code': 'scan-limit-exceeded', 'limit': 'retained-entries'},
+      );
+      final usage = events.singleWhere(
+        (e) => e.message == 'Library scan budget usage',
+      );
+      expect(usage.context, {
+        'bytes': isPositive,
+        'entries': 2,
+        'requests': 2,
+        'elapsedMs': isNonNegative,
+      });
       expect(
         controller.diagnostics.entries.where(
           (e) =>
@@ -883,7 +905,20 @@ void main() {
         expect(await controller.commitLibraryScan({'movies'}), isTrue);
         expect(controller.availableMedia, hasLength(count));
         expect(controller.availableMedia.first.id, '$read-0-item');
+        if (read == 1) {
+          expect(controller.diagnostics.entries, isEmpty);
+          controller.diagnostics.enabled = true;
+        }
       }
+      final usage = controller.diagnostics.entries.singleWhere(
+        (e) => e.message == 'Library scan budget usage',
+      );
+      expect(usage.context, {
+        'bytes': 0,
+        'entries': count,
+        'requests': 0,
+        'elapsedMs': isNonNegative,
+      });
     },
   );
 
@@ -3945,11 +3980,10 @@ void main() {
         },
     ];
     expect(diagnosticSnapshot.toString(), isNot(contains('sentinel')));
-    expect(
-      controller.diagnostics.entries.single.message,
-      'Plex playback selected',
+    final playbackEvent = controller.diagnostics.entries.singleWhere(
+      (entry) => entry.message == 'Plex playback selected',
     );
-    expect(controller.diagnostics.entries.single.context, {
+    expect(playbackEvent.context, {
       'container': 'mp4',
       'videoCodec': 'h264',
       'audioCodec': 'aac',
@@ -6062,11 +6096,12 @@ void main() {
     expect(controller.libraryScanRetryIds, {'movies'});
     expect(controller.stage, SetupStage.channelSetup);
     expect(controller.error, 'opaque-secret-sentinel');
-    expect(controller.diagnostics.entries.single.message, 'Operation failed');
-    expect(controller.diagnostics.entries.single.context, {'code': 'offline'});
+    final events = controller.diagnostics.entries;
+    expect(events.singleWhere((e) => e.message == 'Operation failed').context, {
+      'code': 'offline',
+    });
     expect(
-      '${controller.diagnostics.entries.single.message}'
-      '${controller.diagnostics.entries.single.context}',
+      events.map((e) => e.context).toString(),
       isNot(contains('opaque-secret-sentinel')),
     );
   });
@@ -7530,20 +7565,22 @@ void main() {
         ..diagnostics.enabled = true;
 
       expect(await controller.scanLibraries({'movies'}), isTrue);
-      var entry = controller.diagnostics.entries.single;
-      expect(entry.message, 'Playlist discovery unavailable');
-      expect(entry.context, {'code': 'playlist-failed'});
+      final unavailable = controller.diagnostics.entries.singleWhere(
+        (entry) => entry.message == 'Playlist discovery unavailable',
+      );
+      expect(unavailable.context, {'code': 'playlist-failed'});
       expect(
-        '${entry.message}${entry.context}',
+        '${unavailable.message}${unavailable.context}',
         isNot(contains('opaque-secret-sentinel')),
       );
 
       controller.diagnostics.enabled = false;
       controller.diagnostics.enabled = true;
       expect(await controller.scanLibraries({'movies'}), isTrue);
-      entry = controller.diagnostics.entries.single;
-      expect(entry.message, 'Some playlists could not be loaded');
-      expect(entry.context, {'count': 2});
+      final partial = controller.diagnostics.entries.singleWhere(
+        (entry) => entry.message == 'Some playlists could not be loaded',
+      );
+      expect(partial.context, {'count': 2});
     },
   );
 

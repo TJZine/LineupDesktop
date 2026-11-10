@@ -28,6 +28,7 @@ enum DiagnosticEvent {
     'Collection discovery unavailable',
   ),
   libraryScanTiming('plex-library', 'Library scan timing'),
+  libraryScanBudgetUsage('plex-library', 'Library scan budget usage'),
   castEnrichment('plex', 'Cast enrichment'),
   castPortraitUnavailable('plex', 'Cast portrait unavailable'),
   guideCurrentProgramWaitTimedOut(
@@ -309,6 +310,12 @@ class Diagnostics extends ChangeNotifier {
     'code': _CategoricalContextPolicy(_failureCategories),
     'failureCode': _CategoricalContextPolicy(_failureCategories),
     'operation': _CategoricalContextPolicy(_operations),
+    'limit': _FixedEnumContextPolicy({
+      'received-bytes',
+      'retained-entries',
+      'requests',
+      'elapsed',
+    }),
     'container': _CategoricalContextPolicy(_containers),
     'videoCodec': _CategoricalContextPolicy(_videoCodecs),
     'audioCodec': _CategoricalContextPolicy(_audioCodecs),
@@ -326,7 +333,12 @@ class Diagnostics extends ChangeNotifier {
     'collections': _IntegerContextPolicy(0, 1000000),
     'members': _IntegerContextPolicy(0, 1000000),
     'shows': _IntegerContextPolicy(0, 1000000),
+    'bytes': _scanUsagePolicy,
+    'entries': _scanUsagePolicy,
+    'requests': _scanUsagePolicy,
+    'elapsedMs': _scanUsagePolicy,
   };
+  static const _scanUsagePolicy = _IntegerContextPolicy(0, 0x1fffffffffffff);
   static const _scanPaths = {'launch', 'setup'};
   static const _libraryTypes = {'movie', 'show'};
   static final _safeToken = RegExp(r'^[A-Za-z0-9._+-]{1,64}$');
@@ -374,6 +386,7 @@ class Diagnostics extends ChangeNotifier {
     'subtitle_track',
     'fullscreen',
     'scope_cleanup',
+    'authorization_stop',
     'request',
   };
   static const _failureCategories = {
@@ -397,6 +410,7 @@ class Diagnostics extends ChangeNotifier {
     'collection-unavailable',
     'collection-scale-exceeded',
     'response-too-large',
+    'scan-limit-exceeded',
     'library-page-invalid',
     'library-page-too-large',
     'library-page-not-progressing',
@@ -518,7 +532,7 @@ sealed class _ContextPolicy {
   String? admitForExport(Object value);
 }
 
-/// Cast enrichment records only closed outcome/failure enums, even in memory.
+/// Records only closed enums, even in memory.
 final class _FixedEnumContextPolicy extends _ContextPolicy {
   const _FixedEnumContextPolicy(this.values);
   final Set<String> values;
