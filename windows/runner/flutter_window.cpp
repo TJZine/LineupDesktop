@@ -1,6 +1,7 @@
 #include "flutter_window.h"
 
 #include <optional>
+#include <flutter/standard_method_codec.h>
 
 #include "flutter/generated_plugin_registrant.h"
 
@@ -21,6 +22,14 @@ bool FlutterWindow::OnCreate() {
   if (!flutter_controller_->engine() || !flutter_controller_->view()) {
     return false;
   }
+  platform_channel_ =
+      std::make_unique<flutter::MethodChannel<flutter::EncodableValue>>(
+          flutter_controller_->engine()->messenger(), "lineup/platform",
+          &flutter::StandardMethodCodec::GetInstance());
+  platform_channel_->SetMethodCallHandler(
+      [this](const auto& call, auto result) {
+        HandlePlatformMethod(call, std::move(result));
+      });
   RegisterPlugins(flutter_controller_->engine());
   const HWND flutter_view = flutter_controller_->view()->GetNativeWindow();
   SetChildContent(flutter_view);
@@ -40,6 +49,10 @@ bool FlutterWindow::OnCreate() {
 }
 
 void FlutterWindow::OnDestroy() {
+  if (platform_channel_) {
+    platform_channel_->SetMethodCallHandler(nullptr);
+    platform_channel_.reset();
+  }
   native_player_.reset();
   if (flutter_controller_) {
     flutter_controller_ = nullptr;
@@ -89,4 +102,24 @@ FlutterWindow::MessageHandler(HWND hwnd, UINT const message,
   }
 
   return Win32Window::MessageHandler(hwnd, message, wparam, lparam);
+}
+
+void FlutterWindow::HandlePlatformMethod(
+    const flutter::MethodCall<flutter::EncodableValue>& call,
+    std::unique_ptr<flutter::MethodResult<flutter::EncodableValue>> result,
+    decltype(&::ShellExecuteW) open) {
+  if (call.method_name() != "openPlexLink") {
+    result->NotImplemented();
+    return;
+  }
+  if (call.arguments() &&
+      !std::holds_alternative<std::monostate>(*call.arguments())) {
+    result->Error("invalid_arguments", "This method accepts no arguments.");
+    return;
+  }
+  // No caller-controlled URL, executable name, working directory or parameters.
+  const auto outcome = open(GetHandle(), L"open", L"https://plex.tv/link",
+                            nullptr, nullptr, SW_SHOWNORMAL);
+  result->Success(flutter::EncodableValue(
+      reinterpret_cast<INT_PTR>(outcome) > 32));
 }

@@ -560,7 +560,9 @@ void main() {
           await tester.pumpAndSettle();
           expect(fixture.controller.restoringSavedLineup, isTrue);
           expect(find.text('Loading your lineup…'), findsOneWidget);
-          expect(fixture.plex.scans, 2);
+          // The replacement restore remains visible, but cannot admit IO until
+          // the obsolete, cancellation-ignoring fixture has actually retired.
+          expect(fixture.plex.scans, 1);
           expect(fixture.plex.completedScans, 0);
           expect(
             find.byKey(const ValueKey('library-selection-list')),
@@ -570,11 +572,17 @@ void main() {
         }
         fixture.plex.finish.complete();
         await tester.pumpAndSettle();
+        expect(fixture.plex.scans, cancelPicker ? 2 : 1);
+        expect(fixture.plex.completedScans, cancelPicker ? 2 : 1);
         expect(
           fixture.controller.stage,
           cancelPicker ? SetupStage.ready : SetupStage.servers,
         );
-        if (!cancelPicker) expect(find.text('Choose a server'), findsOneWidget);
+        if (!cancelPicker) {
+          expect(find.text('Choose a server'), findsOneWidget);
+          expect(fixture.controller.availableMedia, isEmpty);
+          expect(fixture.controller.libraryScanReadyIds, isEmpty);
+        }
         expect(
           fixture
               .store

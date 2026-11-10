@@ -570,6 +570,10 @@ Settings save immediately. The edited control is temporarily disabled while its
 save is pending. When persistence fails, the previous value remains active and
 the screen shows an error.
 
+Sign-out stops playback and removes Plex sign-in credentials. Saved lineup and
+media metadata remain in local app data. Removing that data through the operating
+system is destructive and removes saved local setup and preferences as well.
+
 ## Diagnostics and safe support reports
 
 Diagnostics are disabled by default. Enable **Record redacted diagnostics** in

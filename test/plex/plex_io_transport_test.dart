@@ -8,8 +8,156 @@ import 'package:lineup_desktop/plex/plex_transcode.dart';
 import 'package:lineup_desktop/channels/channel.dart';
 import 'package:lineup_desktop/plex/plex_client.dart';
 import 'package:lineup_desktop/plex/plex_models.dart';
+import 'package:lineup_desktop/plex/plex_scan_budget.dart';
 
 void main() {
+  test(
+    'aggregate bytes stop and drain every active response before completion',
+    () async {
+      final streams = <StreamController<List<int>>>[];
+      final drained = Completer<void>();
+      var cancellations = 0;
+      final started = Completer<void>();
+      final client = PlexClient(
+        clientIdentifier: 'synthetic',
+        scanLimits: const PlexScanLimits(receivedBytes: 10),
+        httpClient: _ScanStreamTransport((request) async {
+          final stream = StreamController<List<int>>(
+            onCancel: () async {
+              cancellations++;
+              await drained.future;
+            },
+          );
+          streams.add(stream);
+          if (streams.length == 2) started.complete();
+          return http.StreamedResponse(stream.stream, 200);
+        }),
+      );
+      addTearDown(client.close);
+      var finished = false;
+      final attempt = client
+          .runScan(
+            (_) => Future.wait([
+              for (final id in ['a', 'b'])
+                client.libraryItems(
+                  Uri.parse('https://synthetic.invalid'),
+                  'token',
+                  id,
+                  PlexLibraryType.movie,
+                  isCurrent: () => true,
+                  onProgress: (_) {},
+                ),
+            ]),
+          )
+          .whenComplete(() => finished = true);
+      final assertion = expectLater(
+        attempt,
+        throwsA(
+          isA<PlexScanLimitException>().having(
+            (e) => e.limit,
+            'limit',
+            'received-bytes',
+          ),
+        ),
+      );
+      await started.future;
+      // Individually valid chunks exceed only the aggregate ceiling.
+      streams[0].add(List.filled(6, 32));
+      streams[1].add(List.filled(6, 32));
+      await Future<void>.delayed(const Duration(milliseconds: 20));
+      expect(cancellations, 2);
+      expect(finished, isFalse);
+      drained.complete();
+      await assertion;
+      for (final stream in streams) {
+        await stream.close();
+      }
+    },
+  );
+
+  test(
+    'one pool bounds headers and bodies across independent scan calls',
+    () async {
+      final release = Completer<void>();
+      final full = Completer<void>();
+      var active = 0;
+      var peak = 0;
+      var requests = 0;
+      final client = PlexClient(
+        clientIdentifier: 'synthetic',
+        scanLimits: const PlexScanLimits(concurrentRequests: 2),
+        httpClient: _ScanStreamTransport((request) async {
+          active++;
+          requests++;
+          if (active > peak) peak = active;
+          if (active == 2 && !full.isCompleted) full.complete();
+          final stream = StreamController<List<int>>(onCancel: () => active--);
+          unawaited(
+            release.future.then((_) async {
+              stream.add(
+                utf8.encode('{"MediaContainer":{"Metadata":[],"size":0}}'),
+              );
+              await stream.close();
+            }),
+          );
+          return http.StreamedResponse(stream.stream, 200);
+        }),
+      );
+      addTearDown(client.close);
+      final attempt = client.runScan(
+        (_) => Future.wait([
+          for (var i = 0; i < 9; i++)
+            client.libraryItems(
+              Uri.parse('https://synthetic.invalid'),
+              'token',
+              '$i',
+              PlexLibraryType.movie,
+              isCurrent: () => true,
+              onProgress: (_) {},
+            ),
+        ]),
+      );
+      await full.future;
+      expect(requests, 2);
+      release.complete();
+      await attempt;
+      expect(peak, 2);
+      expect(active, 0);
+      expect(requests, 9);
+    },
+  );
+
+  test(
+    'attempt elapsed limit also bounds a transport ignoring abortion',
+    () async {
+      final client = PlexClient(
+        clientIdentifier: 'synthetic',
+        scanLimits: const PlexScanLimits(elapsed: Duration(milliseconds: 50)),
+        requestTimeout: const Duration(seconds: 10),
+        httpClient: _ScanStreamTransport(
+          (_) => Completer<http.StreamedResponse>().future,
+        ),
+      );
+      addTearDown(client.close);
+      await expectLater(
+        client
+            .playlists(
+              Uri.parse('https://synthetic.invalid'),
+              'token',
+              isCurrent: () => true,
+            )
+            .timeout(const Duration(seconds: 1)),
+        throwsA(
+          isA<PlexScanLimitException>().having(
+            (e) => e.limit,
+            'limit',
+            'elapsed',
+          ),
+        ),
+      );
+    },
+  );
+
   test(
     'session stop deadline aborts pending transport and never throws',
     () async {
@@ -333,4 +481,12 @@ List<int> _corruptGzipBytes() {
   final bytes = gzip.encode(utf8.encode('{"MediaContainer":{}}'));
   bytes[bytes.length - 1] ^= 0xff;
   return bytes;
+}
+
+class _ScanStreamTransport extends http.BaseClient {
+  _ScanStreamTransport(this.handler);
+  final Future<http.StreamedResponse> Function(http.BaseRequest) handler;
+  @override
+  Future<http.StreamedResponse> send(http.BaseRequest request) =>
+      handler(request);
 }

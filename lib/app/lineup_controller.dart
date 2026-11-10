@@ -11,6 +11,7 @@ import '../diagnostics/diagnostics.dart';
 import '../persistence/app_store.dart';
 import '../plex/plex_client.dart';
 import '../plex/plex_models.dart';
+import '../plex/plex_scan_budget.dart';
 import '../settings/lineup_settings.dart';
 
 part 'library_scan_state.dart';
@@ -322,7 +323,12 @@ class LineupController extends ChangeNotifier {
   int? get libraryScanTotalItems => _scan.totalItems;
   PlexPlaylistProgress? get playlistScanProgress => _scan.playlistProgress;
   String? _error;
-  String? get error => _error;
+  static const _profileCredentialRecoveryMessage =
+      'Lineup could not restore a profile credential. Retry the profile selection or sign out to clear stored credentials.';
+  final _unrestoredProfileCredentials = <String>{};
+  String? get error => _unrestoredProfileCredentials.isNotEmpty
+      ? _profileCredentialRecoveryMessage
+      : _error;
   int _epoch = 0;
   int _authorizationScope = 0;
   int _mutationScope = 0;
@@ -456,6 +462,7 @@ class LineupController extends ChangeNotifier {
   Future<PlexConnection>? _pmsRefresh;
   int? _pmsRefreshOperation;
   String? _pmsRefreshServerId;
+  PlexScanBudget? _pmsRefreshBudget;
   PersistedState _persisted = PersistedState.empty;
   Timer? _pinTimer;
   int? _busyOperation;
@@ -777,35 +784,8 @@ class LineupController extends ChangeNotifier {
             ? accountToken
             : await plex.switchHomeUser(accountToken, selected.id, pin);
         if (operation != _epoch) return;
-        if (!await _writeCredential(
-          operation,
-          () => credentials.writeProfileToken(selected.id, token),
-        )) {
-          return;
-        }
         await _queueStateOperation(operation, () async {
-          final oldCanCancel = profileSelectionCanCancel;
-          final oldProfileOrigin = _profilePickerOrigin;
-          _profileSelectionCanCancel = false;
-          _profilePickerOrigin = null;
-          notifyListeners();
-          final selection = _ProfileSelection(
-            state: _persisted.withSettings(settings).withProfile(selected.id),
-            profile: selected,
-            token: token,
-          );
-          try {
-            await _persistState(selection.state);
-          } catch (_) {
-            _profileSelectionCanCancel = oldCanCancel;
-            _profilePickerOrigin = oldProfileOrigin;
-            rethrow;
-          }
-          if (_disposed) return;
-          _publishProfileSelection(selection);
-          accepted = true;
-          _stage = SetupStage.servers;
-          notifyListeners();
+          accepted = await _commitProfileSelection(operation, selected, token);
         });
       },
       operation: operation,
@@ -819,6 +799,74 @@ class LineupController extends ChangeNotifier {
       );
     }
     return accepted;
+  }
+
+  // Called inside the state queue. Keep credential serialization through the
+  // save and any compensation, without enqueueing another state operation.
+  Future<bool> _commitProfileSelection(
+    int operation,
+    PlexHomeUser selected,
+    String token,
+  ) {
+    final transaction = _credentialOperations.then((_) async {
+      if (!_isCurrent(operation)) return false;
+      final previous = await credentials.readProfileToken(selected.id);
+      if (!_isCurrent(operation)) return false;
+      final oldCanCancel = profileSelectionCanCancel;
+      final oldProfileOrigin = _profilePickerOrigin;
+      var cancellationHidden = false;
+      var committed = false;
+      try {
+        // A throwing backend may already have changed the key.
+        await credentials.writeProfileToken(selected.id, token);
+        if (!_isCurrent(operation)) throw const LineupScopeSuperseded();
+        final selection = _ProfileSelection(
+          state: _persisted.withSettings(settings).withProfile(selected.id),
+          profile: selected,
+          token: token,
+        );
+        _profileSelectionCanCancel = false;
+        _profilePickerOrigin = null;
+        cancellationHidden = true;
+        notifyListeners();
+        if (!_isCurrent(operation)) throw const LineupScopeSuperseded();
+        await _persistState(selection.state);
+        committed = true;
+        _unrestoredProfileCredentials.remove(selected.id);
+        if (_disposed) return false;
+        _publishProfileSelection(selection);
+        _stage = SetupStage.servers;
+        notifyListeners();
+        return true;
+      } catch (_) {
+        if (!committed) {
+          if (cancellationHidden) {
+            _profileSelectionCanCancel = oldCanCancel;
+            _profilePickerOrigin = oldProfileOrigin;
+          }
+          try {
+            if (previous == null) {
+              await credentials.deleteProfileToken(selected.id);
+            } else {
+              await credentials.writeProfileToken(selected.id, previous);
+            }
+          } catch (_) {
+            // Record while still holding the credential queue, so successful
+            // logout cleanup or a later same-key commit can resolve this notice.
+            _unrestoredProfileCredentials.add(selected.id);
+            if (!_disposed) {
+              diagnostics.add(DiagnosticEvent.credentialCleanupFailed, {
+                'code': 'credential-cleanup-failed',
+              });
+            }
+            throw const _ProfileCredentialCompensationFailed();
+          }
+        }
+        rethrow;
+      }
+    });
+    _credentialOperations = transaction.then<void>((_) {}, onError: (_, _) {});
+    return transaction;
   }
 
   void _publishProfileSelection(_ProfileSelection selection) {
@@ -1138,9 +1186,52 @@ class LineupController extends ChangeNotifier {
     return committed && _isCurrent(operation);
   }
 
+  Future<void> _scanRetirement = Future<void>.value();
+
   Future<_LibraryScanResult> _loadLibraries(
     int operation,
     Set<String> ids, {
+    bool retryFailedOnly = false,
+    Set<String>? retryLibraryIds,
+    bool settleFailures = false,
+  }) async {
+    final previous = _scanRetirement;
+    final retired = Completer<void>();
+    _scanRetirement = retired.future;
+    try {
+      // Cancelled IO and its workers must retire before another budget starts.
+      await previous;
+      if (!_isCurrent(operation)) {
+        throw const PlexException('cancelled', 'Library scan cancelled.');
+      }
+      final cancelled = _scan.startIo();
+      try {
+        return await plex.runScan(
+          (budget) => _loadLibrariesInBudget(
+            operation,
+            ids,
+            budget,
+            retryFailedOnly: retryFailedOnly,
+            retryLibraryIds: retryLibraryIds,
+            settleFailures: settleFailures,
+          ),
+          cancelled: cancelled.future,
+        );
+      } on PlexScanLimitException {
+        if (_isCurrent(operation)) _scan.failAttempt(_mutationScope);
+        rethrow;
+      } finally {
+        _scan.finishIo(cancelled);
+      }
+    } finally {
+      retired.complete();
+    }
+  }
+
+  Future<_LibraryScanResult> _loadLibrariesInBudget(
+    int operation,
+    Set<String> ids,
+    PlexScanBudget budget, {
     bool retryFailedOnly = false,
     Set<String>? retryLibraryIds,
     bool settleFailures = false,
@@ -1149,7 +1240,6 @@ class LineupController extends ChangeNotifier {
     if (selectedServer == null || connection == null) {
       throw const PlexException('server-unreachable', 'Select a server first.');
     }
-    final cancelled = _scan.startIo();
     final retainedIds = _scan.prepare(
       ids,
       (profileId: profile?.id ?? account?.id, serverId: selectedServer.id),
@@ -1159,6 +1249,7 @@ class LineupController extends ChangeNotifier {
     );
     notifyListeners();
     try {
+      _scan.chargeRetained(budget);
       final selected = libraries
           .where((library) => ids.contains(library.id))
           .toList(growable: false);
@@ -1166,7 +1257,7 @@ class LineupController extends ChangeNotifier {
       Object? firstFailure;
       StackTrace? firstFailureStack;
       Future<void> loadNext() async {
-        while (_isCurrent(operation)) {
+        while (_isCurrent(operation) && budget.isActive) {
           final index = nextLibrary++;
           if (index >= selected.length) return;
           final library = selected[index];
@@ -1184,21 +1275,23 @@ class LineupController extends ChangeNotifier {
                 token,
                 library.id,
                 library.type,
-                isCurrent: () => _isCurrent(operation),
-                cancelled: cancelled.future,
+                isCurrent: () => _isCurrent(operation) && budget.isActive,
+                cancelled: budget.stopped,
                 onPhase: (phase) {
-                  if (!_isCurrent(operation)) return;
+                  if (!_isCurrent(operation) || !budget.isActive) return;
                   _scan.setPhase(library.id, phase);
                   notifyListeners();
                 },
                 onProgress: (progress) {
-                  if (!_isCurrent(operation)) return;
+                  if (!_isCurrent(operation) || !budget.isActive) return;
                   _scan.reportProgress(library.id, progress);
                   notifyListeners();
                 },
               ),
             );
             if (!_isCurrent(operation)) return;
+            budget.check();
+            budget.retainMedia(scanned.items);
             final items = scanned.items;
             if (scanned.timing case final timing?) {
               diagnostics.add(DiagnosticEvent.libraryScanTiming, {
@@ -1217,6 +1310,13 @@ class LineupController extends ChangeNotifier {
             notifyListeners();
           } catch (exception, stack) {
             if (!_isCurrent(operation)) return;
+            if (exception is PlexScanLimitException) {
+              firstFailure = exception;
+              firstFailureStack = stack;
+              budget.cancel();
+              return;
+            }
+            if (!budget.isActive) return;
             _scan.failLibrary(library.id);
             firstFailure ??= exception;
             firstFailureStack ??= stack;
@@ -1228,6 +1328,7 @@ class LineupController extends ChangeNotifier {
       await Future.wait(
         List.generate(selected.length.clamp(0, 4), (_) => loadNext()),
       );
+      if (_isCurrent(operation)) budget.check();
       if (_isCurrent(operation)) _scan.failure = firstFailure;
       if (firstFailure != null && !settleFailures) {
         Error.throwWithStackTrace(firstFailure!, firstFailureStack!);
@@ -1255,7 +1356,7 @@ class LineupController extends ChangeNotifier {
             (refreshedConnection ?? connection!).uri,
             token,
             isCurrent: () => _isCurrent(operation),
-            cancelled: cancelled.future,
+            cancelled: budget.stopped,
             onProgress: (progress) {
               if (!_isCurrent(operation)) return;
               _scan.playlistProgress = progress;
@@ -1265,6 +1366,7 @@ class LineupController extends ChangeNotifier {
         );
       } on PlexException catch (exception) {
         if (!_isCurrent(operation) ||
+            exception is PlexScanLimitException ||
             exception.code == 'cancelled' ||
             _isPmsAuthorizationError(exception)) {
           rethrow;
@@ -1290,6 +1392,11 @@ class LineupController extends ChangeNotifier {
           playlists: const <PlexPlaylist>[],
           status: LibraryScanStatus.cancelled,
         );
+      }
+      budget.check();
+      for (final playlist in catalog.playlists) {
+        budget.retain(1);
+        budget.retainMedia(playlist.items);
       }
       _scan.playlistProgress = null;
       _scan.completeCatalog(catalog, unavailable: catalogUnavailable);
@@ -1323,8 +1430,6 @@ class LineupController extends ChangeNotifier {
         notifyListeners();
       }
       rethrow;
-    } finally {
-      _scan.finishIo(cancelled);
     }
   }
 
@@ -2319,6 +2424,9 @@ class LineupController extends ChangeNotifier {
     _busy = true;
     notifyListeners();
     try {
+      // Earlier state work may own a profile credential transaction. Let it
+      // commit or compensate before enqueueing the logout clear.
+      await stateBeforeLogout;
       try {
         await _clearCredentials();
       } catch (exception) {
@@ -2329,8 +2437,6 @@ class LineupController extends ChangeNotifier {
         });
         return false;
       }
-      if (_disposed) return false;
-      await stateBeforeLogout;
       if (_disposed) return false;
       _invalidateOperation();
       _mutationScope++;
@@ -2514,7 +2620,10 @@ class LineupController extends ChangeNotifier {
   }
 
   Future<void> _clearCredentials() {
-    final next = _credentialOperations.then((_) => credentials.clear());
+    final next = _credentialOperations.then((_) async {
+      await credentials.clear();
+      _unrestoredProfileCredentials.clear();
+    });
     _credentialOperations = next.catchError((_) {});
     return next;
   }
@@ -2551,6 +2660,7 @@ class LineupController extends ChangeNotifier {
     Future<T> Function(String token, PlexConnection? connection) request, {
     PlexConnection? connectionOverride,
   }) async {
+    PlexScanBudget.current?.check();
     final access = _serverAccess[serverId];
     if (access == null || access.token.isEmpty) {
       throw const PlexException(
@@ -2563,6 +2673,7 @@ class LineupController extends ChangeNotifier {
     try {
       return await request(access.token, connectionOverride);
     } on PlexException catch (exception) {
+      PlexScanBudget.current?.check();
       if (!_isPmsAuthorizationError(exception)) rethrow;
       final currentAccess = _serverAccess[serverId];
       final currentConnection = server?.id == serverId ? connection : null;
@@ -2589,6 +2700,7 @@ class LineupController extends ChangeNotifier {
         );
       }
     }
+    PlexScanBudget.current?.check();
     return request(retryAccess.token, retryConnection);
   }
 
@@ -2596,6 +2708,7 @@ class LineupController extends ChangeNotifier {
     _pmsRefresh = null;
     _pmsRefreshOperation = null;
     _pmsRefreshServerId = null;
+    _pmsRefreshBudget = null;
   }
 
   Future<PlexConnection> _refreshPlaybackAccess(int scope, String serverId) {
@@ -2631,13 +2744,17 @@ class LineupController extends ChangeNotifier {
     final active = _pmsRefresh;
     if (active != null &&
         _pmsRefreshOperation == operation &&
-        _pmsRefreshServerId == serverId) {
+        _pmsRefreshServerId == serverId &&
+        identical(_pmsRefreshBudget, PlexScanBudget.current)) {
       return active;
     }
     final refresh = _performPmsRefresh(operation, serverId);
     _pmsRefresh = refresh;
     _pmsRefreshOperation = operation;
     _pmsRefreshServerId = serverId;
+    // A scan cannot borrow uncharged recovery from artwork/cast work, and
+    // unrelated callers must not inherit a scan's deadline or fatal failure.
+    _pmsRefreshBudget = PlexScanBudget.current;
     return refresh.whenComplete(() {
       if (identical(_pmsRefresh, refresh)) {
         _invalidatePmsRefresh();
@@ -2683,6 +2800,7 @@ class LineupController extends ChangeNotifier {
         'Plex server authorization is unavailable.',
       );
     }
+    PlexScanBudget.current?.check();
     _serverAccess = {for (final access in discovered) access.server.id: access};
     _publishServers = List.unmodifiable(
       discovered.map((access) => access.server),
@@ -2708,7 +2826,12 @@ class LineupController extends ChangeNotifier {
       await body();
       return _isCurrent(operation);
     } catch (exception) {
-      if (!_isCurrent(operation)) return false;
+      if (!_isCurrent(operation)) {
+        if (exception is _ProfileCredentialCompensationFailed) {
+          notifyListeners();
+        }
+        return false;
+      }
       _error = exception is PlexException
           ? exception.message
           : 'Lineup could not complete that request.';
@@ -2774,4 +2897,8 @@ class LineupController extends ChangeNotifier {
     if (_ownsDiagnostics) diagnostics.dispose();
     super.dispose();
   }
+}
+
+final class _ProfileCredentialCompensationFailed implements Exception {
+  const _ProfileCredentialCompensationFailed();
 }

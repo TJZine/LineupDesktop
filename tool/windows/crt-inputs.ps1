@@ -1,0 +1,88 @@
+#Requires -Version 7.4
+
+# Use the Visual Studio instance/toolset that CMake actually compiled with.
+# Do not select an unrelated newest installation or arbitrary redist directory.
+function Get-LineupCrtSelection {
+  param([Parameter(Mandatory)] [string] $CmakeDirectory)
+
+  $compilerFiles = @(Get-ChildItem -Path (Join-Path $CmakeDirectory 'CMakeFiles/*/CMakeCXXCompiler.cmake') -File)
+  if ($compilerFiles.Count -ne 1) { throw 'Expected one CMake C++ compiler identity; rebuild in a fresh directory.' }
+  $compiler = Get-Content -Raw -LiteralPath $compilerFiles[0].FullName
+  if ($compiler -notmatch 'set\(CMAKE_CXX_COMPILER "([^"\r\n]+/VC/Tools/MSVC/(14\.[0-9]+\.[0-9]+)/bin/Hostx64/x64/cl\.exe)"\)') {
+    throw 'Release compiler must be the supported MSVC v14 x64 toolchain.'
+  }
+  $compilerPath = $Matches[1]
+  $toolset = [version] $Matches[2]
+  $vs = $compilerPath.Substring(0, $compilerPath.IndexOf('/VC/Tools/MSVC/'))
+  $default = Join-Path $vs 'VC/Auxiliary/Build/Microsoft.VCRedistVersion.default.txt'
+  $redistVersion = (Get-Content -Raw -LiteralPath $default).Trim()
+  # VS2022 17.14 (14.44) is the supported VC143 servicing baseline.
+  # A newer toolset generation requires an explicit compatibility policy update.
+  if ($redistVersion -notmatch '^14\.44\.[0-9]+$' -or
+    ([version] $redistVersion) -lt $toolset) {
+    throw 'The selected VC143 redistributable is unsupported or older than the build toolset.'
+  }
+  [pscustomobject]@{
+    Directory = Join-Path $vs "VC/Redist/MSVC/$redistVersion/x64/Microsoft.VC143.CRT"
+    Version = $redistVersion
+    Toolset = $toolset
+  }
+}
+
+function Assert-LineupCrtIdentity {
+  param(
+    [Parameter(Mandatory)] $Signature,
+    [Parameter(Mandatory)] [version] $Version,
+    [Parameter(Mandatory)] [version] $Toolset
+  )
+  # Windows trust validation must succeed, including digest/chain validation.
+  # A Microsoft-looking filename or version resource is not signature proof.
+  if ($Signature.Status.ToString() -cne 'Valid' -or -not $Signature.SignerCertificate -or
+    $Signature.SignerCertificate.GetNameInfo([Security.Cryptography.X509Certificates.X509NameType]::SimpleName, $false) -cne 'Microsoft Corporation') {
+    throw 'CRT requires a valid Microsoft Corporation Authenticode signature.'
+  }
+  if ($Version.Major -ne 14 -or $Version.Minor -ne 44 -or
+    $Version -lt $Toolset) {
+    throw 'CRT file version is unsupported or older than the build toolset.'
+  }
+}
+
+function Assert-LineupCrtImage {
+  param([Parameter(Mandatory)] [byte[]] $Bytes)
+  if ($Bytes.Length -lt 64 -or [BitConverter]::ToUInt16($Bytes, 0) -ne 0x5a4d) {
+    throw 'CRT must be an AMD64 PE image.'
+  }
+  $offset = [BitConverter]::ToInt32($Bytes, 0x3c)
+  if ($offset -lt 64 -or $offset -gt $Bytes.Length - 6 -or
+    [BitConverter]::ToUInt32($Bytes, $offset) -ne 0x4550 -or
+    [BitConverter]::ToUInt16($Bytes, $offset + 4) -ne 0x8664) {
+    throw 'CRT must be an AMD64 PE image.'
+  }
+}
+
+function Copy-LineupVerifiedCrt {
+  param(
+    [Parameter(Mandatory)] $Selection,
+    [Parameter(Mandatory)] [string] $Destination
+  )
+  if (-not $IsWindows) { throw 'CRT Authenticode verification requires Windows.' }
+  foreach ($name in @('msvcp140.dll', 'vcruntime140.dll', 'vcruntime140_1.dll')) {
+    $source = Join-Path $Selection.Directory $name
+    $hash = (Get-FileHash -Algorithm SHA256 -LiteralPath $source).Hash
+    Assert-LineupCrtImage -Bytes ([IO.File]::ReadAllBytes($source))
+    $file = Get-Item -LiteralPath $source
+    $version = [version]::new($file.VersionInfo.FileMajorPart, $file.VersionInfo.FileMinorPart,
+      $file.VersionInfo.FileBuildPart, $file.VersionInfo.FilePrivatePart)
+    $signature = Microsoft.PowerShell.Security\Get-AuthenticodeSignature -LiteralPath $source -ErrorAction Stop
+    Assert-LineupCrtIdentity -Signature $signature -Version $version -Toolset $Selection.Toolset
+    $target = Join-Path $Destination $name
+    Copy-Item -LiteralPath $source -Destination $target
+    # Bind the checked input to the actual copied bytes, failing on substitution.
+    if ((Get-FileHash -Algorithm SHA256 -LiteralPath $target).Hash -cne $hash) {
+      throw 'CRT changed while copying into the package.'
+    }
+    $copiedSignature = Microsoft.PowerShell.Security\Get-AuthenticodeSignature -LiteralPath $target -ErrorAction Stop
+    Assert-LineupCrtIdentity -Signature $copiedSignature -Version $version -Toolset $Selection.Toolset
+    "$name=$version sha256=$hash signer=Microsoft Corporation"
+  }
+}

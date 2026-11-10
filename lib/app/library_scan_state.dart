@@ -327,6 +327,39 @@ class _LibraryScanState {
     return retainedIds;
   }
 
+  void chargeRetained(PlexScanBudget budget) {
+    // Baseline rows remain available as fallback even when requested for retry.
+    final retained = Set<List<PlexMediaItem>>.identity();
+    for (final row in [...rows.values, ...?_attempt?.previous?.rows.values]) {
+      if (row.items case final items?) retained.add(items);
+    }
+    for (final items in retained) {
+      budget.retainMedia(items);
+    }
+    for (final playlist
+        in _attempt?.previous?.result.playlists ?? const <PlexPlaylist>[]) {
+      budget.retain(1);
+      budget.retainMedia(playlist.items);
+    }
+  }
+
+  void failAttempt(int contentScope) {
+    _retainPrevious(contentScope);
+    if (_ready == null) {
+      rows = Map.unmodifiable({
+        for (final entry in rows.entries)
+          entry.key: _LibraryScanRow(
+            fact: LibraryScanFact(status: LibraryScanStatus.transientFailure),
+          ),
+      });
+      status = LibraryScanStatus.transientFailure;
+    }
+    // Never offer partial output from an exhausted attempt for Continue/retry.
+    _retainedRetry = null;
+    _retryBaseline = const {};
+    _attempt = null;
+  }
+
   void _setFact(String id, LibraryScanFact fact) {
     rows = Map.unmodifiable({...rows, id: rows[id]!.withFact(fact)});
   }

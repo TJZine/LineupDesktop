@@ -267,6 +267,14 @@ class PlayerCoordinator extends ChangeNotifier with WidgetsBindingObserver {
   Future<void> _tuneOperations = Future.value();
   Future<void>? _nativeStopOperation;
   bool _nativeCleanupRequired = false;
+  bool _authorizationTransitionPending = false;
+  bool _authorizationStopUnconfirmed = false;
+  String? _authorizationTransitionError;
+
+  bool get authorizationTransitionPending => _authorizationTransitionPending;
+  String? get authorizationTransitionError => _authorizationTransitionError;
+  bool get _authorizationPlaybackBlocked =>
+      _authorizationTransitionPending || _authorizationStopUnconfirmed;
   Future<void> _scopeCleanup = Future.value();
   Future<void> _fullscreenOperations = Future.value();
   bool _scopeCleanupPending = false;
@@ -975,7 +983,9 @@ class PlayerCoordinator extends ChangeNotifier with WidgetsBindingObserver {
     GuideProgram? endedProgram,
     bool channelStep = false,
   }) {
-    if (_disposed || _backgroundSuspended) return Future.value(false);
+    if (_disposed || _backgroundSuspended || _authorizationPlaybackBlocked) {
+      return Future.value(false);
+    }
     _resumeAfterBackground = null;
     final continuingStep = channelStep && _channelStepWindowTimer != null;
     _cancelPendingChannelStep(clearTarget: !channelStep);
@@ -1038,7 +1048,12 @@ class PlayerCoordinator extends ChangeNotifier with WidgetsBindingObserver {
   }
 
   Future<void> loadInitialMedia(Uri media) async {
-    if (_disposed || _backgroundSuspended || _initialMediaRequested) return;
+    if (_disposed ||
+        _backgroundSuspended ||
+        _authorizationPlaybackBlocked ||
+        _initialMediaRequested) {
+      return;
+    }
     _initialMediaRequested = true;
     _resumeAfterBackground = null;
     _userPaused = false;
@@ -1237,6 +1252,13 @@ class PlayerCoordinator extends ChangeNotifier with WidgetsBindingObserver {
   }
 
   Future<void> retry() async {
+    if (_authorizationTransitionPending) return;
+    if (_authorizationStopUnconfirmed) {
+      // A retry only settles cleanup. A profile/PIN/server choice must be
+      // submitted again by its current owner after this succeeds.
+      await _transitionAuthorization(() async => true);
+      return;
+    }
     final id = _retryChannelId ?? currentChannel?.id;
     if (id != null) await tune(id);
   }
@@ -1251,7 +1273,9 @@ class PlayerCoordinator extends ChangeNotifier with WidgetsBindingObserver {
     SeekMode seekMode = SeekMode.exact,
     bool authorizationRetried = false,
   }) {
-    if (_disposed || _backgroundSuspended) throw const _PlaybackSuperseded();
+    if (_disposed || _backgroundSuspended || _authorizationPlaybackBlocked) {
+      throw const _PlaybackSuperseded();
+    }
     if (_nativeStopOperation != null) {
       throw const PlayerUnavailable('Playback stop is still pending.');
     }
@@ -1280,15 +1304,18 @@ class PlayerCoordinator extends ChangeNotifier with WidgetsBindingObserver {
     _clearSubtitleCues();
     _subtitleCuesSuppressed = false;
     _sendSubtitlePresentation(beforeLoad: true);
-    load.readiness = Future<void>.sync(
-      () => player.load(
+    load.readiness = Future<void>.sync(() {
+      // Display/presentation updates above can synchronously publish a newer
+      // authorization transition before the native load is dispatched.
+      if (!_ownsLoad(load)) throw const _PlaybackSuperseded();
+      return player.load(
         media,
         plexToken: request?.plexToken,
         generation: load.generation,
         startPaused: startPaused,
         startPosition: load.nativeStartPosition,
-      ),
-    );
+      );
+    });
     unawaited(
       load.readiness.then(
         (_) {
@@ -1356,6 +1383,7 @@ class PlayerCoordinator extends ChangeNotifier with WidgetsBindingObserver {
   bool _ownsLoad(_PlaybackLoad load) =>
       !_disposed &&
       !_backgroundSuspended &&
+      !_authorizationPlaybackBlocked &&
       load.tuneGeneration == _tuneGeneration &&
       identical(_activeLoad, load);
 
@@ -1744,10 +1772,69 @@ class PlayerCoordinator extends ChangeNotifier with WidgetsBindingObserver {
     }
   }
 
-  Future<bool> logout() async {
-    if (!await lineup.logout()) return false;
-    await _scopeCleanup;
-    return true;
+  Future<bool> logout() => _transitionAuthorization(lineup.logout);
+
+  Future<bool> selectProfile(PlexHomeUser profile, {String? pin}) =>
+      _transitionAuthorization(() => lineup.selectProfile(profile, pin: pin));
+
+  Future<bool> selectServer(PlexServer server) =>
+      _transitionAuthorization(() async {
+        await lineup.selectServer(server);
+        return lineup.server?.id == server.id && lineup.error == null;
+      });
+
+  Future<bool> _transitionAuthorization(Future<bool> Function() mutate) async {
+    if (_disposed || _authorizationTransitionPending) return false;
+    // Retire every playback entry point synchronously, before stop or UI
+    // notifications can reenter. Failed stop keeps this admission fence closed.
+    _authorizationTransitionPending = true;
+    _authorizationStopUnconfirmed = true;
+    _authorizationTransitionError = null;
+    _subtitleCuesSuppressed = true;
+    _clearSubtitleCues();
+    _resumeAfterBackground = false;
+    _nextTuneGeneration();
+    ++_controlGeneration;
+    ++_seekGeneration;
+    _tuning = false;
+    _canRetry = false;
+    _invalidateAuthorizationRecovery();
+    _resetScopeState();
+    final nativeStop = _beginNativeStop(force: true)!;
+    // Presentation cleanup cannot establish or invalidate media cessation.
+    unawaited(
+      _queueFullscreenReset().catchError((Object error) {
+        if (!_disposed) _recordPlaybackFailure(error, operation: 'fullscreen');
+      }),
+    );
+    notifyListeners();
+    try {
+      try {
+        await nativeStop;
+      } catch (error) {
+        if (_disposed) return false;
+        _recordPlaybackFailure(error, operation: 'authorization_stop');
+        _authorizationTransitionError = 'Playback could not be stopped. Retry or exit Lineup before continuing.';
+        _error = _authorizationTransitionError;
+        _canRetry = true;
+        _setOverlay(PlayerOverlay.error, timed: false);
+        return false;
+      }
+      if (_disposed) return false;
+      _authorizationStopUnconfirmed = false;
+      _status = const PlayerStatus(
+        state: PlayerState.stopped,
+        message: 'Stopped',
+      );
+      _telemetry = const PlayerTelemetry();
+      _tracks = const [];
+      notifyListeners();
+      if (_disposed) return false;
+      return await mutate();
+    } finally {
+      _authorizationTransitionPending = false;
+      if (!_disposed) notifyListeners();
+    }
   }
 
   Future<void> seekBy(Duration offset) {
@@ -1761,6 +1848,7 @@ class PlayerCoordinator extends ChangeNotifier with WidgetsBindingObserver {
   }
 
   Future<void> seekTo(Duration position) async {
+    if (_authorizationPlaybackBlocked) return;
     final seekGeneration = ++_seekGeneration;
     _pendingExplicitSeekGeneration = seekGeneration;
     final tuneGeneration = _tuneGeneration;
@@ -1970,6 +2058,7 @@ class PlayerCoordinator extends ChangeNotifier with WidgetsBindingObserver {
   }
 
   Future<void> _setPlaybackPaused(bool paused) async {
+    if (_authorizationPlaybackBlocked) return;
     if (_disposed || _backgroundSuspended) return;
     final intentRevision = ++_playbackIntentRevision;
     final controlGeneration = ++_controlGeneration;
@@ -2431,7 +2520,9 @@ class PlayerCoordinator extends ChangeNotifier with WidgetsBindingObserver {
         _miniGuideChannelId = _indexedChannels[fallback].id;
       }
     }
-    if (currentChannel == null && lineup.channels.isNotEmpty) {
+    if (!_authorizationPlaybackBlocked &&
+        currentChannel == null &&
+        lineup.channels.isNotEmpty) {
       _error = null;
     }
     if (_overlay == PlayerOverlay.miniGuide) _requestMiniGuideRows();

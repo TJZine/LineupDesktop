@@ -229,29 +229,10 @@ if (Test-Path -LiteralPath $nativeAssets -PathType Leaf) {
 Copy-Item -LiteralPath (Join-Path $BuildDirectory 'data') -Destination $Destination -Recurse
 Copy-Item -LiteralPath $buildMarkerPath -Destination (Join-Path $Destination 'BUILD-PROVENANCE.json')
 
-$vswhere = "${env:ProgramFiles(x86)}\Microsoft Visual Studio\Installer\vswhere.exe"
-if (-not (Test-Path -LiteralPath $vswhere)) {
-  throw 'Visual Studio Installer vswhere.exe was not found.'
-}
-$vsOutput = @(& $vswhere -latest -products * -requires Microsoft.VisualStudio.Component.VC.Tools.x86.x64 -property installationPath)
-$vsExit = $LASTEXITCODE
-$vs = $vsOutput | Where-Object { -not [string]::IsNullOrWhiteSpace($_) } | Select-Object -First 1
-if ($vsExit -or -not $vs) {
-  throw 'Visual Studio with the MSVC x64 tools component was not found.'
-}
-$redistRoot = Join-Path $vs.Trim() 'VC/Redist/MSVC'
-if (-not (Test-Path -LiteralPath $redistRoot)) {
-  throw "MSVC redistributable directory was not found: $redistRoot"
-}
-$redistVersion = Get-ChildItem -LiteralPath $redistRoot -Directory |
-  Where-Object { Test-Path -LiteralPath (Join-Path $_.FullName 'x64/Microsoft.VC143.CRT') } |
-  Sort-Object { [version]$_.Name } -Descending |
-  Select-Object -First 1
-if (-not $redistVersion) { throw 'The retail x64 VC143 runtime is not installed.' }
-$redist = Join-Path $redistVersion.FullName 'x64/Microsoft.VC143.CRT'
-foreach ($file in @('msvcp140.dll', 'vcruntime140.dll', 'vcruntime140_1.dll')) {
-  Copy-Item -LiteralPath (Join-Path $redist $file) -Destination $Destination
-}
+# Resolve from CMake's actual compiler identity, not PATH or the latest VS install.
+. (Join-Path $PSScriptRoot 'crt-inputs.ps1')
+$crtSelection = Get-LineupCrtSelection -CmakeDirectory ([IO.Path]::GetFullPath((Join-Path $BuildDirectory '../..')))
+$vcVersions = @(Copy-LineupVerifiedCrt -Selection $crtSelection -Destination $Destination)
 
 $licenses = Join-Path $Destination 'licenses'
 [IO.Directory]::CreateDirectory($licenses) | Out-Null
@@ -262,10 +243,6 @@ foreach ($file in $licenseHashes.Keys) {
   Copy-Item -LiteralPath (Join-Path $env:LINEUP_MPV_ROOT "licenses/$file") -Destination $licenses
 }
 
-$vcVersions = @('msvcp140.dll', 'vcruntime140.dll', 'vcruntime140_1.dll') | ForEach-Object {
-  $file = Get-Item -LiteralPath (Join-Path $Destination $_)
-  "$($file.Name)=$($file.VersionInfo.FileVersion)"
-}
 @(
   "Lineup Desktop $pubspecVersion Windows x64",
   "source-commit=$buildSourceCommit",
@@ -277,6 +254,8 @@ $vcVersions = @('msvcp140.dll', 'vcruntime140.dll', 'vcruntime140_1.dll') | ForE
   "ffmpeg=$($metadata.FfmpegVersion)",
   "libplacebo=$($metadata.LibplaceboVersion)",
   'system-requirement=vulkan-1.dll supplied by a current GPU driver or Vulkan Runtime',
+  "msvc-toolset=$($crtSelection.Toolset)",
+  "msvc-redist=$($crtSelection.Version)",
   $vcVersions
 ) | Set-Content -LiteralPath (Join-Path $Destination 'BUILD-INFO.txt') -Encoding ascii
 @(

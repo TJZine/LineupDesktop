@@ -255,6 +255,8 @@ class _HarnessStore implements AppStore {
 
 class _HarnessCredentials implements CredentialStore {
   @override
+  Future<void> deleteProfileToken(String profileId) async {}
+  @override
   Future<void> clear() async {}
   @override
   Future<String?> readAccountToken() async => null;

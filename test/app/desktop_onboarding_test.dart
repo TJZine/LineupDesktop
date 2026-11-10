@@ -15,6 +15,7 @@ import 'package:lineup_desktop/ui/lineup_canvas.dart';
 import 'package:lineup_desktop/app/lineup_controller.dart';
 import 'package:lineup_desktop/app/onboarding_view.dart';
 import 'package:lineup_desktop/plex/plex_models.dart';
+import 'package:lineup_desktop/playback/native_player.dart';
 import 'package:lineup_desktop/settings/lineup_settings.dart';
 import 'package:lineup_desktop/ui/app_theme.dart';
 import 'package:lineup_desktop/ui/app_ui.dart';
@@ -22,6 +23,159 @@ import 'package:lineup_desktop/ui/app_ui.dart';
 import '../support/ui_fixture.dart';
 
 void main() {
+  for (final action in ['profile', 'pin', 'server', 'logout']) {
+    testWidgets(
+      'shell $action waits for stop and retries from a current choice',
+      (tester) async {
+        const targetProfile = PlexHomeUser(
+          id: 'target',
+          name: 'Target',
+          protected: false,
+        );
+        const protectedProfile = PlexHomeUser(
+          id: 'protected',
+          name: 'Protected',
+          protected: true,
+        );
+        const targetServer = PlexServer(
+          id: 'target',
+          name: 'Target server',
+          connections: [],
+        );
+        final controller = _AuthorizationController(
+          scenario: LineupScenario(
+            stage: action == 'server'
+                ? SetupStage.servers
+                : SetupStage.profiles,
+            account: const PlexAccount(id: 'owner', name: 'Owner', email: ''),
+            profile: const PlexHomeUser(
+              id: 'owner',
+              name: 'Owner',
+              protected: false,
+            ),
+            profiles: const [targetProfile, protectedProfile],
+            servers: const [targetServer],
+          ),
+        );
+        final player = _AuthorizationGatePlayer();
+        addTearDown(controller.dispose);
+        addTearDown(player.dispose);
+        await tester.pumpWidget(
+          MaterialApp(
+            builder: LineupCanvas.builder,
+            home: LineupShell(
+              controller: controller,
+              player: player,
+              profile: desktopProfile,
+              initialMediaPath: 'https://example.invalid/synthetic.mp4',
+            ),
+          ),
+        );
+        await tester.pumpAndSettle();
+        expect(player.loads, hasLength(1));
+        Future<void> choose() async {
+          switch (action) {
+            case 'profile':
+              await tester.tap(
+                find.byKey(const ValueKey('profile-card-target')),
+              );
+            case 'pin':
+              if (find
+                  .byKey(const Key('profile-pin-sheet'))
+                  .evaluate()
+                  .isEmpty) {
+                await tester.tap(
+                  find.byKey(const ValueKey('profile-card-protected')),
+                );
+                await tester.pumpAndSettle();
+              }
+              for (final key in [
+                LogicalKeyboardKey.digit1,
+                LogicalKeyboardKey.digit2,
+                LogicalKeyboardKey.digit3,
+                LogicalKeyboardKey.digit4,
+              ]) {
+                await tester.sendKeyEvent(key);
+              }
+            case 'server':
+              await tester.tap(
+                find.widgetWithText(
+                  OutlinedButton,
+                  player.stopResults.isEmpty ? 'Connect' : 'Retry',
+                ),
+              );
+            case 'logout':
+              await tester.tap(find.text('Sign out'));
+          }
+          await tester.pump();
+        }
+
+        await choose();
+        expect(player.stopResults, hasLength(1));
+        expect(controller.selections, isEmpty);
+        expect(controller.busy, isFalse);
+        final onboarding = tester.widget<UpstreamOnboardingView>(
+          find.byType(UpstreamOnboardingView),
+        );
+        expect(onboarding.authorizationTransitionPending, isTrue);
+        expect(
+          tester
+              .state<UpstreamOnboardingViewState>(
+                find.byType(UpstreamOnboardingView),
+              )
+              .handleBack(),
+          isTrue,
+        );
+        player.stopResults.single.completeError(
+          const PlayerUnavailable('Synthetic stop failure.'),
+        );
+        await tester.pumpAndSettle();
+        expect(controller.selections, isEmpty);
+        expect(
+          find.textContaining('Playback could not be stopped'),
+          findsWidgets,
+        );
+        if (action == 'logout') {
+          await tester.tap(find.widgetWithText(TextButton, 'Retry'));
+          await tester.pump();
+          expect(player.stopResults, hasLength(2));
+          expect(controller.selections, isEmpty);
+          expect(
+            tester
+                .widget<TextButton>(find.widgetWithText(TextButton, 'Retry'))
+                .onPressed,
+            isNull,
+          );
+          player.stopResults.last.complete();
+          await tester.pumpAndSettle();
+          expect(find.text('Could not sign out'), findsNothing);
+          expect(controller.selections, isEmpty);
+        }
+        if (action == 'pin') {
+          expect(
+            find.bySemanticsLabel('0 of 4 digits entered'),
+            findsOneWidget,
+          );
+        }
+        await choose();
+        expect(player.stopResults, hasLength(action == 'logout' ? 3 : 2));
+        expect(controller.selections, isEmpty);
+        player.stopResults.last.complete();
+        await tester.pumpAndSettle();
+        expect(controller.selections, [
+          action == 'pin'
+              ? 'profile:1234'
+              : action == 'profile'
+              ? 'profile:'
+              : action,
+        ]);
+        expect(player.loads, hasLength(1));
+        expect(tester.takeException(), isNull);
+        await tester.pumpWidget(const SizedBox.shrink());
+      },
+    );
+  }
+
   for (final picker in ['profiles', 'servers']) {
     for (final fail in [false, true]) {
       testWidgets('NAV-I2 cancellable $picker real save fail=$fail', (
@@ -84,6 +238,11 @@ void main() {
               ),
               home: UpstreamOnboardingView(
                 controller: controller,
+                onSelectProfile: controller.selectProfile,
+                onSelectServer: (server) async {
+                  await controller.selectServer(server);
+                  return controller.error == null;
+                },
                 onLogout: () async {},
                 openBrowser: () async {},
               ),
@@ -382,6 +541,11 @@ void main() {
         builder: LineupCanvas.builder,
         home: UpstreamOnboardingView(
           controller: controller,
+          onSelectProfile: controller.selectProfile,
+          onSelectServer: (server) async {
+            await controller.selectServer(server);
+            return controller.error == null;
+          },
           onLogout: () async {},
           onRequestLogout: () async {},
         ),
@@ -444,6 +608,11 @@ void main() {
               builder: LineupCanvas.builder,
               home: UpstreamOnboardingView(
                 controller: controller,
+                onSelectProfile: controller.selectProfile,
+                onSelectServer: (server) async {
+                  await controller.selectServer(server);
+                  return controller.error == null;
+                },
                 onLogout: () async {},
                 openBrowser: () async {},
               ),
@@ -484,6 +653,11 @@ void main() {
           builder: LineupCanvas.builder,
           home: UpstreamOnboardingView(
             controller: controller,
+            onSelectProfile: controller.selectProfile,
+            onSelectServer: (server) async {
+              await controller.selectServer(server);
+              return controller.error == null;
+            },
             onLogout: () async {},
           ),
         ),
@@ -533,6 +707,11 @@ void main() {
         ),
         home: UpstreamOnboardingView(
           controller: controller,
+          onSelectProfile: controller.selectProfile,
+          onSelectServer: (server) async {
+            await controller.selectServer(server);
+            return controller.error == null;
+          },
           onLogout: () async {},
           openBrowser: browser ?? () async {},
           accountOrigin: accountOrigin,
@@ -962,6 +1141,11 @@ void main() {
             width: 0.5,
             child: UpstreamOnboardingView(
               controller: controller,
+              onSelectProfile: controller.selectProfile,
+              onSelectServer: (server) async {
+                await controller.selectServer(server);
+                return controller.error == null;
+              },
               onLogout: () async {},
             ),
           ),
@@ -2325,4 +2509,42 @@ class _ProfileRecoveryPlex extends PlexClient {
     Future<void>? cancelled,
     void Function(PlexPlaylistProgress)? onProgress,
   }) async => const PlexPlaylistCatalog(playlists: [], failedIds: {});
+}
+
+class _AuthorizationController extends FixtureController {
+  _AuthorizationController({super.scenario});
+  final selections = <String>[];
+
+  @override
+  Future<bool> selectProfile(PlexHomeUser user, {String? pin}) async {
+    selections.add('profile:${pin ?? ''}');
+    fixtureActor.profileSelected(user);
+    return true;
+  }
+
+  @override
+  Future<void> selectServer(PlexServer server) async {
+    selections.add('server');
+    fixtureActor.serverSelected(server);
+    fixtureActor.present(LineupPresentation(stage: SetupStage.channelSetup));
+    notifyListeners();
+  }
+
+  @override
+  Future<bool> logout() {
+    selections.add('logout');
+    return super.logout();
+  }
+}
+
+class _AuthorizationGatePlayer extends FixturePlayer {
+  final stopResults = <Completer<void>>[];
+
+  @override
+  Future<void> stop() {
+    stops++;
+    final result = Completer<void>();
+    stopResults.add(result);
+    return result.future;
+  }
 }

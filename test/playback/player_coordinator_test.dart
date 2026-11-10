@@ -28,6 +28,254 @@ import '../support/test_doubles.dart';
 void main() {
   TestWidgetsFlutterBinding.ensureInitialized();
 
+  const transitionProfile = PlexHomeUser(
+    id: 'target',
+    name: 'Target',
+    protected: true,
+  );
+  const transitionServer = PlexServer(
+    id: 'target',
+    name: 'Target',
+    connections: [],
+  );
+  Future<bool> transition(PlayerCoordinator coordinator, String action) =>
+      switch (action) {
+        'profile' => coordinator.selectProfile(transitionProfile, pin: '1234'),
+        'server' => coordinator.selectServer(transitionServer),
+        _ => coordinator.logout(),
+      };
+
+  for (final action in ['profile', 'server', 'logout']) {
+    for (final failure in ['stop failure', 'timeout']) {
+      testWidgets(
+        '$action $failure blocks mutation and playback until cleanup retry',
+        (tester) async {
+          final lineup = _AuthorizationLineup();
+          final guide = GuideController(
+            lineup: lineup,
+            loadSchedule: (channel) async => _schedule(channel),
+          );
+          final player = _AuthorizationStopPlayer();
+          final coordinator = PlayerCoordinator(
+            player: player,
+            lineup: lineup,
+            guide: guide,
+            suspendInBackground: true,
+          );
+          addTearDown(lineup.dispose);
+          addTearDown(guide.dispose);
+          addTearDown(coordinator.dispose);
+          await coordinator.tune('channel-b');
+          final loads = player.loads.length;
+          final pending = transition(coordinator, action);
+          expect(coordinator.authorizationTransitionPending, isTrue);
+          expect(lineup.mutations, isEmpty);
+          expect(await transition(coordinator, action), isFalse);
+          expect(await coordinator.tune('channel-0'), isFalse);
+          await coordinator.play();
+          await coordinator.loadInitialMedia(
+            Uri.parse('https://example.invalid/retired'),
+          );
+          expect(player.plays, 0);
+          expect(player.loads.length, loads);
+          if (failure == 'timeout') {
+            await tester.pump(const Duration(seconds: 10));
+          } else {
+            player.stopResults.single.completeError(
+              const PlayerUnavailable('Synthetic stop failure.'),
+            );
+            await tester.pump();
+          }
+          expect(await pending, isFalse);
+          expect(lineup.mutations, isEmpty);
+          expect(coordinator.authorizationTransitionPending, isFalse);
+          expect(
+            coordinator.authorizationTransitionError,
+            contains('Playback could not be stopped'),
+          );
+          expect(coordinator.canRetry, isTrue);
+          expect(await coordinator.tune('channel-0'), isFalse);
+          final background = coordinator.setApplicationForeground(false);
+          await coordinator.setApplicationForeground(true);
+          expect(player.loads.length, loads);
+
+          final retry = coordinator.retry();
+          await tester.pump();
+          // Background cleanup can share or retry the failed native stop. Settle
+          // every earlier attempt late while the current retry remains pending.
+          final currentStop = player.stopResults.last;
+          for (final earlier in player.stopResults.take(
+            player.stopResults.length - 1,
+          )) {
+            if (!earlier.isCompleted) earlier.complete();
+          }
+          await tester.pump();
+          expect(coordinator.authorizationTransitionPending, isTrue);
+          expect(lineup.mutations, isEmpty);
+          currentStop.complete();
+          await tester.pump();
+          await retry;
+          await background;
+          expect(coordinator.authorizationTransitionError, isNull);
+          expect(lineup.mutations, isEmpty);
+          expect(player.loads.length, loads);
+
+          final explicitRetry = transition(coordinator, action);
+          player.stopResults.last.complete();
+          await tester.pump();
+          expect(await explicitRetry, isTrue);
+          expect(lineup.mutations, [action]);
+          expect(player.loads.length, loads);
+        },
+      );
+    }
+
+    testWidgets(
+      '$action stays exclusive through mutation and tolerates fullscreen failure',
+      (tester) async {
+        final lineup = _AuthorizationLineup()..mutationGate = Completer<void>();
+        final guide = GuideController(
+          lineup: lineup,
+          loadSchedule: (channel) async => _schedule(channel),
+        );
+        final player = _AuthorizationStopPlayer()..failFullscreen = true;
+        final coordinator = PlayerCoordinator(
+          player: player,
+          lineup: lineup,
+          guide: guide,
+        );
+        addTearDown(lineup.dispose);
+        addTearDown(guide.dispose);
+        addTearDown(coordinator.dispose);
+        await coordinator.tune('channel-b');
+        final pending = transition(coordinator, action);
+        await tester.pump();
+        expect(lineup.mutations, isEmpty);
+        expect(await coordinator.logout(), isFalse);
+        player.stopResults.single.complete();
+        await tester.pump();
+        expect(lineup.mutations, [action]);
+        expect(coordinator.status.state, PlayerState.stopped);
+        expect(coordinator.authorizationTransitionPending, isTrue);
+        expect(await coordinator.tune('channel-0'), isFalse);
+        expect(await coordinator.selectProfile(transitionProfile), isFalse);
+        expect(await coordinator.selectServer(transitionServer), isFalse);
+        await coordinator.play();
+        expect(player.plays, 0);
+        lineup.mutationGate!.complete();
+        await tester.pump();
+        expect(await pending, isTrue);
+        expect(coordinator.authorizationTransitionPending, isFalse);
+        expect(coordinator.hasPlaybackIntent, isFalse);
+      },
+    );
+  }
+
+  for (final lateWork in ['load', 'authorization recovery']) {
+    test(
+      'authorization transition retires late $lateWork completion',
+      () async {
+        final recovering = lateWork == 'authorization recovery';
+        final lineup = _AuthorizationLineup(
+          recoverAuthorization: recovering,
+          blockAuthorizationRecovery: recovering,
+        );
+        final guide = GuideController(
+          lineup: lineup,
+          loadSchedule: (channel) async => _schedule(channel),
+        );
+        final player = recovering
+            ? _SynchronousAuthorizationPlayer()
+            : _ControlledPlayer();
+        final coordinator = PlayerCoordinator(
+          player: player,
+          lineup: lineup,
+          guide: guide,
+        );
+        addTearDown(lineup.dispose);
+        addTearDown(guide.dispose);
+        addTearDown(coordinator.dispose);
+        if (recovering) {
+          addTearDown((player as _SynchronousAuthorizationPlayer).close);
+        } else {
+          addTearDown(player.dispose);
+        }
+        final tuning = coordinator.tune('channel-b');
+        if (recovering) {
+          await lineup.recoveryStarted.future;
+        } else {
+          await (player as _ControlledPlayer).firstLoadStarted.future;
+        }
+        expect(
+          await coordinator.selectProfile(transitionProfile, pin: '1234'),
+          isTrue,
+        );
+        if (recovering) {
+          lineup.finishRecovery.complete();
+        } else {
+          (player as _ControlledPlayer).releaseFirstLoad.complete();
+        }
+        expect(await tuning, isFalse);
+        expect(lineup.mutations, ['profile']);
+        expect(player.loads, hasLength(1));
+        expect(coordinator.hasPlaybackIntent, isFalse);
+        expect(coordinator.status.state, PlayerState.stopped);
+        expect(coordinator.error, isNull);
+      },
+    );
+  }
+
+  testWidgets(
+    'disposal while authorization stop is pending invokes no controller mutation',
+    (tester) async {
+      final lineup = _AuthorizationLineup();
+      final guide = GuideController(lineup: lineup);
+      final player = _AuthorizationStopPlayer();
+      final coordinator = PlayerCoordinator(
+        player: player,
+        lineup: lineup,
+        guide: guide,
+      );
+      addTearDown(lineup.dispose);
+      addTearDown(guide.dispose);
+      addTearDown(player.dispose);
+      final pending = coordinator.selectServer(transitionServer);
+      coordinator.dispose();
+      player.stopResults.single.complete();
+      await tester.pump();
+      expect(await pending, isFalse);
+      expect(lineup.mutations, isEmpty);
+      expect(await coordinator.logout(), isFalse);
+    },
+  );
+
+  test('authorization transition during presentation prevents native load dispatch', () async {
+    final lineup = _AuthorizationLineup();
+    final guide = GuideController(
+      lineup: lineup,
+      loadSchedule: (channel) async => _schedule(channel),
+    );
+    final player = _AuthorizationDuringPresentationPlayer();
+    final coordinator = PlayerCoordinator(
+      player: player,
+      lineup: lineup,
+      guide: guide,
+    );
+    addTearDown(lineup.dispose);
+    addTearDown(guide.dispose);
+    addTearDown(player.dispose);
+    addTearDown(coordinator.dispose);
+    Future<bool>? transition;
+    player.onPresentation = () {
+      transition ??= coordinator.selectProfile(transitionProfile);
+    };
+    expect(await coordinator.tune('channel-b'), isFalse);
+    expect(await transition, isTrue);
+    expect(player.loads, isEmpty);
+    expect(lineup.mutations, ['profile']);
+    expect(coordinator.status.state, PlayerState.stopped);
+  });
+
   group('subtitle selection reconciliation through the real transport', () {
     const channel = MethodChannel('lineup/native_player');
     final messenger =
@@ -3626,7 +3874,8 @@ void main() {
           return null;
         });
         addTearDown(() => messenger.setMockMethodCallHandler(channel, null));
-        final lineup = _LogoutLineup()..diagnostics.enabled = true;
+        final lineup = _LogoutLineup(failFirst: false)
+          ..diagnostics.enabled = true;
         final guide = GuideController(
           lineup: lineup,
           loadSchedule: (channel) async => _schedule(channel),
@@ -3693,11 +3942,24 @@ void main() {
         await tune;
         await pumpEventQueue(times: 2);
         expect(calls.where((call) => call.method == 'stop'), hasLength(1));
-        expect(await coordinator.logout(), isFalse);
+        final failedLogout = coordinator.logout();
+        await pumpEventQueue(times: 2);
+        final failedAuthorizationStop = calls
+            .lastWhere((call) => call.method == 'stop')
+            .arguments['stopId'];
+        expect(lineup.logoutCalls, 0);
+        await _nativeEvent({
+          'type': 'stopResult',
+          'stopId': failedAuthorizationStop,
+          'success': false,
+        });
+        expect(await failedLogout, isFalse);
+        expect(lineup.logoutCalls, 0);
+        expect(await coordinator.tune('channel-b'), isFalse);
         final logout = coordinator.logout();
         await pumpEventQueue(times: 2);
         final stops = calls.where((call) => call.method == 'stop').toList();
-        expect(stops, hasLength(2));
+        expect(stops, hasLength(3));
         final secondStop = stops.last.arguments['stopId'];
         expect(secondStop, isNot(firstStop));
         await _nativeEvent({
@@ -5013,33 +5275,31 @@ void main() {
     expect(coordinator.hasPlaybackIntent, isFalse);
   });
 
-  test(
-    'coordinated logout preserves playback on failure and drains on retry',
-    () async {
-      final lineup = _LogoutLineup();
-      final guide = GuideController(
-        lineup: lineup,
-        loadSchedule: (channel) async => _schedule(channel),
-      )..requestViewport(0, 2);
-      await Future<void>.delayed(Duration.zero);
-      final nativePlayer = _Player();
-      final coordinator = PlayerCoordinator(
-        player: nativePlayer,
-        lineup: lineup,
-        guide: guide,
-      );
-      addTearDown(lineup.dispose);
-      addTearDown(guide.dispose);
-      addTearDown(coordinator.dispose);
-      await coordinator.tune('channel-b');
+  test('coordinated logout leaves playback stopped after controller failure and retry', () async {
+    final lineup = _LogoutLineup();
+    final guide = GuideController(
+      lineup: lineup,
+      loadSchedule: (channel) async => _schedule(channel),
+    )..requestViewport(0, 2);
+    await Future<void>.delayed(Duration.zero);
+    final nativePlayer = _Player();
+    final coordinator = PlayerCoordinator(
+      player: nativePlayer,
+      lineup: lineup,
+      guide: guide,
+    );
+    addTearDown(lineup.dispose);
+    addTearDown(guide.dispose);
+    addTearDown(coordinator.dispose);
+    await coordinator.tune('channel-b');
 
-      expect(await coordinator.logout(), isFalse);
-      expect(nativePlayer.stops, 0);
-      expect(await coordinator.logout(), isTrue);
-      expect(nativePlayer.stops, 1);
-      expect(coordinator.hasPlaybackIntent, isFalse);
-    },
-  );
+    expect(await coordinator.logout(), isFalse);
+    expect(nativePlayer.stops, 1);
+    expect(coordinator.hasPlaybackIntent, isFalse);
+    expect(await coordinator.logout(), isTrue);
+    expect(nativePlayer.stops, 2);
+    expect(coordinator.hasPlaybackIntent, isFalse);
+  });
 
   test(
     'one overlay owner enforces track back-stack and direct number tune',
@@ -6788,7 +7048,7 @@ void main() {
   });
 
   test(
-    'successful logout preempts a pending load but failed logout preserves it',
+    'logout preempts a pending load before controller failure or success',
     () async {
       final lineup = _LogoutLineup();
       final guide = GuideController(
@@ -6809,18 +7069,17 @@ void main() {
 
       final tune = coordinator.tune('channel-b');
       await player.loadStarted.future;
-      expect(await coordinator.logout(), isFalse);
-      expect(player.stops, 0);
-      expect(player.loadSettled, isFalse);
-
-      final logout = coordinator.logout();
+      final failedLogout = coordinator.logout();
       await player.stopStarted.future;
       await Future<void>.delayed(Duration.zero);
+      expect(lineup.logoutCalls, 0);
       expect(player.loadSettled, isTrue);
       player.releaseStop.complete();
-      expect(await logout, isTrue);
+      expect(await failedLogout, isFalse);
+      expect(coordinator.hasPlaybackIntent, isFalse);
+      expect(await coordinator.logout(), isTrue);
       await tune;
-      expect(player.stops, 1);
+      expect(player.stops, 2);
     },
   );
 
@@ -9720,12 +9979,14 @@ class _TestLineup extends LineupController {
 }
 
 class _LogoutLineup extends _TestLineup {
+  _LogoutLineup({this.failFirst = true});
+  final bool failFirst;
   var logoutCalls = 0;
 
   @override
   Future<bool> logout() async {
     logoutCalls++;
-    if (logoutCalls == 1) return false;
+    if (failFirst && logoutCalls == 1) return false;
     changeContentScope();
     return true;
   }
@@ -10757,5 +11018,78 @@ class _SubtitlePlayer extends _EventPlayer {
     );
     if (rejection case final error?) return Future.error(error);
     return pending?.future ?? Future.value();
+  }
+}
+
+class _AuthorizationLineup extends _TestLineup {
+  _AuthorizationLineup({
+    super.recoverAuthorization,
+    super.blockAuthorizationRecovery,
+  });
+  final mutations = <String>[];
+  Completer<void>? mutationGate;
+
+  Future<void> _mutate(String action) async {
+    mutations.add(action);
+    await mutationGate?.future;
+    changeContentScope();
+  }
+
+  @override
+  Future<bool> selectProfile(PlexHomeUser user, {String? pin}) async {
+    await _mutate('profile');
+    return true;
+  }
+
+  @override
+  Future<void> selectServer(PlexServer selected) async {
+    await _mutate('server');
+    fixtureActor.serverSelected(selected);
+    notifyListeners();
+  }
+
+  @override
+  Future<bool> logout() async {
+    await _mutate('logout');
+    return true;
+  }
+}
+
+class _AuthorizationStopPlayer extends _Player {
+  final stopResults = <Completer<void>>[];
+  bool failFullscreen = false;
+
+  @override
+  Future<void> stop() {
+    stops++;
+    final result = Completer<void>();
+    stopResults.add(result);
+    return result.future;
+  }
+
+  @override
+  Future<void> setFullscreen(bool fullscreen) async {
+    if (failFullscreen) {
+      throw const PlayerUnavailable('Synthetic window failure.');
+    }
+    await super.setFullscreen(fullscreen);
+  }
+}
+
+class _AuthorizationDuringPresentationPlayer extends _Player {
+  VoidCallback? onPresentation;
+
+  @override
+  Future<void> setSubtitlePresentation({
+    required double scale,
+    required double imageRaise,
+    required bool lineupDrawsStyled,
+  }) async {
+    onPresentation?.call();
+    await super.setSubtitlePresentation(
+      scale: scale,
+      imageRaise: imageRaise,
+      lineupDrawsStyled: lineupDrawsStyled,
+    );
   }
 }

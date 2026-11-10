@@ -1,0 +1,13 @@
+// Plugin declarations live in settings.gradle.kts. Project buildEnvironment
+// reports are empty for this layout, so use Gradle's standard dependency report
+// against the settings buildscript classpath that actually resolved the plugins.
+import org.gradle.api.tasks.diagnostics.DependencyReportTask
+
+gradle.settingsEvaluated { settings ->
+    def classpath = settings.buildscript.configurations.getByName('classpath')
+    gradle.rootProject { root ->
+        root.tasks.register('lineupBuildEnvironment', DependencyReportTask) {
+            setConfigurations([classpath] as Set)
+        }
+    }
+}

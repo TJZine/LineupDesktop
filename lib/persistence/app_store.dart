@@ -478,6 +478,7 @@ abstract interface class CredentialStore {
   Future<String?> readProfileToken(String profileId);
   Future<void> writeAccountToken(String token);
   Future<void> writeProfileToken(String profileId, String token);
+  Future<void> deleteProfileToken(String profileId);
   Future<void> clear();
 }
 
@@ -519,6 +520,13 @@ class KeychainCredentialStore implements CredentialStore {
         aOptions: _androidOptions,
         mOptions: _macosOptions,
       );
+
+  @override
+  Future<void> deleteProfileToken(String profileId) => storage.delete(
+    key: 'plex.profile-token.$profileId',
+    aOptions: _androidOptions,
+    mOptions: _macosOptions,
+  );
 
   @override
   Future<void> clear() =>

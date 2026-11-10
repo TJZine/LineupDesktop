@@ -11,6 +11,8 @@ $scripts = @(
   'tool/windows/build-release.ps1',
   'tool/windows/ninja-diagnostics.ps1',
   'tool/windows/package.ps1',
+  'tool/windows/crt-inputs.ps1',
+  'tool/windows/verify-crt-inputs.ps1',
   'tool/windows/prepare-mpv.ps1',
   'tool/windows/run.ps1',
   'tool/windows/verify-build-inputs.ps1',
@@ -40,6 +42,9 @@ Assert-WindowsBuildInputContracts -LauncherPath $launcherPath -ReleasePath $buil
 
 . (Join-Path $PSScriptRoot 'verify-release-authorities.ps1')
 Assert-WindowsReleaseAuthorities
+
+. (Join-Path $PSScriptRoot 'verify-crt-inputs.ps1')
+Assert-WindowsCrtInputs
 
 $metadataPath = Join-Path $repository 'tool/windows/build-metadata.psd1'
 $metadata = Import-PowerShellDataFile -LiteralPath $metadataPath

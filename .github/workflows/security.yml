@@ -1,0 +1,77 @@
+name: Security
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+  schedule:
+    - cron: '21 13 * * 1'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: security-${{ github.head_ref || github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  advisories:
+    name: Scheduled dependency advisories
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
+        with:
+          persist-credentials: false
+      - name: Scan Pub and Gradle committed versions with affected/fixed controls
+        run: >-
+          tool/security/osv-scan.sh
+          --lockfile=pubspec.lock
+          --lockfile=android/gradle/verification-metadata.xml
+
+  codeql-cpp:
+    name: CodeQL C++
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    permissions:
+      contents: read
+      security-events: write
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
+        with:
+          persist-credentials: false
+      - uses: github/codeql-action/init@1fc58d04a4d4374f921bdac573c3811c240f9c26 # v4.39.2
+        with:
+          languages: c-cpp
+          build-mode: none
+      - uses: github/codeql-action/analyze@1fc58d04a4d4374f921bdac573c3811c240f9c26 # v4.39.2
+        with:
+          category: /language:c-cpp
+
+  codeql-kotlin:
+    name: CodeQL Java and Kotlin
+    runs-on: ubuntu-latest
+    timeout-minutes: 45
+    permissions:
+      contents: read
+      security-events: write
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
+        with:
+          persist-credentials: false
+      - uses: ./.github/actions/setup-flutter
+      - run: dart tool/check_toolchain.dart
+      - run: flutter pub get --enforce-lockfile
+      - uses: github/codeql-action/init@1fc58d04a4d4374f921bdac573c3811c240f9c26 # v4.39.2
+        with:
+          languages: java-kotlin
+          build-mode: manual
+      - name: Build Android source for Kotlin analysis
+        run: |
+          flutter build apk --debug --target-platform android-arm,android-arm64
+          cd android
+          ./gradlew :app:testDebugUnitTest --no-daemon
+      - uses: github/codeql-action/analyze@1fc58d04a4d4374f921bdac573c3811c240f9c26 # v4.39.2
+        with:
+          category: /language:java-kotlin

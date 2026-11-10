@@ -135,6 +135,8 @@ class _LineupShellState extends State<LineupShell> {
   Object get _shellPlayerFacts => (
     _player.hasPlaybackIntent,
     _player.tuning,
+    _player.authorizationTransitionPending,
+    _player.authorizationTransitionError,
     _player.error,
     _player.canRetry,
     _player.status.state,
@@ -644,20 +646,28 @@ class _LineupShellState extends State<LineupShell> {
   }
 
   void _openProfilePickerFromAccount() {
-    if (_selectionPending || widget.controller.busy) return;
+    if (_selectionPending ||
+        widget.controller.busy ||
+        _player.authorizationTransitionPending) {
+      return;
+    }
     _onboardingFromAccount = true;
     widget.controller.showProfiles();
   }
 
   void _openServerPickerFromAccount() {
-    if (_selectionPending || widget.controller.busy) return;
+    if (_selectionPending ||
+        widget.controller.busy ||
+        _player.authorizationTransitionPending) {
+      return;
+    }
     _onboardingFromAccount = true;
     widget.controller.showServers();
   }
 
   Future<bool> _leaveOnboardingForRoute() async {
     final controller = widget.controller;
-    if (controller.busy) return false;
+    if (controller.busy || _player.authorizationTransitionPending) return false;
     if (controller.stage == SetupStage.profiles &&
         controller.profileSelectionCanCancel) {
       controller.cancelProfileSelection();
@@ -790,6 +800,7 @@ class _LineupShellState extends State<LineupShell> {
   }
 
   Future<void> _requestLogout() async {
+    if (_player.authorizationTransitionPending) return;
     final confirmed =
         await showDialog<bool>(
           context: context,
@@ -817,6 +828,7 @@ class _LineupShellState extends State<LineupShell> {
   }
 
   Future<void> _logout() async {
+    if (_player.authorizationTransitionPending) return;
     if (_destination == ShellDestination.channels &&
         !(await (_channelsKey.currentState?.requestLeave() ??
             Future.value(true)))) {
@@ -825,16 +837,42 @@ class _LineupShellState extends State<LineupShell> {
     if (await _player.logout() || !mounted) return;
     await showDialog<void>(
       context: context,
-      builder: (context) => AlertDialog(
-        title: const Text('Could not sign out'),
-        content: Text(widget.controller.error ?? 'Sign out did not complete.'),
-        actions: [
-          FilledButton(
-            autofocus: true,
-            onPressed: () => Navigator.pop(context),
-            child: const Text('Close'),
+      builder: (context) => AnimatedBuilder(
+        animation: _player,
+        builder: (context, _) => AlertDialog(
+          title: const Text('Could not sign out'),
+          content: Semantics(
+            liveRegion: true,
+            child: Text(
+              _player.authorizationTransitionPending
+                  ? 'Stopping playback…'
+                  : _player.authorizationTransitionError ??
+                        widget.controller.error ??
+                        'Sign out did not complete.',
+            ),
           ),
-        ],
+          actions: [
+            if (_player.authorizationTransitionError != null ||
+                _player.authorizationTransitionPending)
+              TextButton(
+                onPressed: _player.authorizationTransitionPending
+                    ? null
+                    : () async {
+                        await _player.retry();
+                        if (context.mounted &&
+                            _player.authorizationTransitionError == null) {
+                          Navigator.pop(context);
+                        }
+                      },
+                child: const Text('Retry'),
+              ),
+            FilledButton(
+              autofocus: true,
+              onPressed: () => Navigator.pop(context),
+              child: const Text('Close'),
+            ),
+          ],
+        ),
       ),
     );
   }
@@ -1119,6 +1157,12 @@ class _LineupShellState extends State<LineupShell> {
               key: _onboardingKey,
               controller: controller,
               onLogout: _logout,
+              onSelectProfile: _player.selectProfile,
+              onSelectServer: _player.selectServer,
+              authorizationTransitionPending:
+                  _player.authorizationTransitionPending,
+              authorizationTransitionError: () =>
+                  _player.authorizationTransitionError,
               onRequestLogout: _requestLogout,
               accountOrigin: _onboardingFromAccount,
               onOpenSettings:
@@ -1216,6 +1260,7 @@ class _LineupShellState extends State<LineupShell> {
       onCategoryChanged: (category) => setState(() {
         _settingsCategory = category;
       }),
+      authorizationTransitionPending: _player.authorizationTransitionPending,
       onSwitchProfile: _openProfilePickerFromAccount,
       onSwitchServer: _openServerPickerFromAccount,
       onSignOut: _requestLogout,

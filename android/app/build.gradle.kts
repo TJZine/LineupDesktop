@@ -31,70 +31,12 @@ android {
         versionName = flutter.versionName
     }
 
-    val useDebugKey = System.getenv("LINEUP_ANDROID_SIGNING") == "debug-key"
-    val keyPath = System.getenv("LINEUP_ANDROID_KEYSTORE")
-    val lineupKeyAlias = System.getenv("LINEUP_ANDROID_KEY_ALIAS")
-    val lineupKeyPassword = System.getenv("LINEUP_ANDROID_KEY_PASSWORD")
-    val hasLineupKey = !keyPath.isNullOrBlank() &&
-        !lineupKeyAlias.isNullOrBlank() && !lineupKeyPassword.isNullOrBlank()
-
-    signingConfigs {
-        if (hasLineupKey && !useDebugKey) {
-            create("lineup") {
-                storeFile = file(keyPath!!)
-                storePassword = lineupKeyPassword
-                keyAlias = lineupKeyAlias
-                keyPassword = lineupKeyPassword
-            }
-        }
-    }
     buildTypes {
-        debug {
-            if (!useDebugKey && hasLineupKey) {
-                signingConfig = signingConfigs.getByName("lineup")
-            }
-        }
         getByName("profile") {
-            // Flutter creates profile by copying debug before this script sets
-            // debug's signingConfig, so configure it explicitly for upgrades.
-            signingConfig = if (hasLineupKey && !useDebugKey) {
-                signingConfigs.getByName("lineup")
-            } else {
-                null
-            }
+            signingConfig = signingConfigs.getByName("debug")
         }
         release {
-            // Never use the contributor/CI debug key for release.
-            signingConfig = if (hasLineupKey && !useDebugKey) {
-                signingConfigs.getByName("lineup")
-            } else {
-                null
-            }
-        }
-    }
-
-    // Fail before assembling an unsigned APK or accidentally using a debug key.
-    // Keep IDE sync and non-packaging unit tests usable without private signing.
-    gradle.taskGraph.whenReady {
-        val packagesRelease = allTasks.any {
-            it.project == project &&
-                it.name.contains("Release") &&
-                (it.name.startsWith("package") || it.name.startsWith("bundle"))
-        }
-        val packagesProfile = allTasks.any {
-            it.project == project && it.name.startsWith("package") &&
-                it.name.contains("Profile")
-        }
-        val packagesDebug = allTasks.any {
-            it.project == project && it.name.startsWith("package") &&
-                it.name.contains("Debug")
-        }
-        if (((packagesRelease || packagesProfile) && (!hasLineupKey || useDebugKey)) ||
-            (packagesDebug && !hasLineupKey && !useDebugKey)) {
-            throw GradleException(
-                "Lineup signing key required. Build through tool/android/with-signing.sh. " +
-                    "Contributors may set LINEUP_ANDROID_SIGNING=debug-key for debug only."
-            )
+            signingConfig = null
         }
     }
 }
@@ -111,6 +53,12 @@ flutter {
 
 // Session HLS is explicit; Direct Play keeps its progressive-only source.
 dependencies {
+    constraints {
+        implementation("com.google.guava:guava:33.7.2-android") {
+            version { strictly("33.7.2-android") }
+            because("Use the patched Android runtime for transitive Media3 dependencies")
+        }
+    }
     implementation("androidx.media3:media3-exoplayer:1.11.1")
     implementation("androidx.media3:media3-exoplayer-hls:1.11.1")
     implementation("androidx.media3:media3-datasource-okhttp:1.11.1")

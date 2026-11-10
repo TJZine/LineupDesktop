@@ -17,9 +17,11 @@ import 'package:lineup_desktop/channels/scheduler.dart';
 import 'package:lineup_desktop/diagnostics/diagnostics.dart';
 import 'package:lineup_desktop/guide/guide_controller.dart';
 import 'package:lineup_desktop/playback/native_player.dart';
+import 'package:lineup_desktop/playback/player_coordinator.dart';
 import 'package:lineup_desktop/persistence/app_store.dart';
 import 'package:lineup_desktop/plex/plex_client.dart';
 import 'package:lineup_desktop/plex/plex_models.dart';
+import 'package:lineup_desktop/plex/plex_scan_budget.dart';
 import 'package:lineup_desktop/settings/lineup_settings.dart';
 
 Matcher _throwsScheduleFailure(ScheduleFailureReason reason) => throwsA(
@@ -43,6 +45,874 @@ Future<void> _waitForTestState(
 }
 
 void main() {
+  group('profile credential compensation', () {
+    const child = PlexHomeUser(id: 'child', name: 'Child', protected: true);
+    const other = PlexHomeUser(id: 'other', name: 'Other', protected: false);
+
+    for (final hadPrevious in [false, true]) {
+      test(
+        'failed save restores exact key (previous=$hadPrevious) across restart',
+        () async {
+          final fixture = await _profileCredentialFixture(
+            hadPrevious: hadPrevious,
+          );
+          final before = Map<String, String>.from(
+            fixture.credentials.profileTokens,
+          );
+          fixture.store.blockNext(fail: true);
+          final selecting = fixture.controller.selectProfile(
+            child,
+            pin: '1234',
+          );
+          await fixture.store.blockedSaveStarted.future;
+          expect(fixture.credentials.profileTokens['child'], 'candidate');
+          expect(fixture.store.state.profileId, 'owner');
+          fixture.store.releaseBlockedSave();
+          expect(await selecting, isFalse);
+          expect(fixture.credentials.profileTokens, before);
+          expect(fixture.credentials.accountToken, 'account');
+          expect(fixture.controller.profile?.id, 'owner');
+          expect(fixture.store.state.profileId, 'owner');
+          expect(
+            fixture.credentials.events.last,
+            hadPrevious ? 'write:child:previous' : 'delete:child',
+          );
+          fixture.controller.dispose();
+          final restarted = LineupController(
+            store: fixture.store,
+            credentials: fixture.credentials,
+            plex: _FakePlex()
+              ..homeUsersResult = const [
+                PlexHomeUser(id: 'owner', name: 'Owner', protected: false),
+                child,
+                other,
+              ],
+          );
+          addTearDown(restarted.dispose);
+          await restarted.initialize();
+          expect(restarted.profile?.id, 'owner');
+        },
+      );
+
+      test(
+        'stale attempted write compensates (previous=$hadPrevious)',
+        () async {
+          final fixture = await _profileCredentialFixture(
+            hadPrevious: hadPrevious,
+          );
+          final written = Completer<void>();
+          final releaseWrite = Completer<void>();
+          fixture.credentials.onWrite = (id, token, call) async {
+            if (call != 1) return;
+            written.complete();
+            await releaseWrite.future;
+          };
+          final selecting = fixture.controller.selectProfile(
+            child,
+            pin: '1234',
+          );
+          await written.future;
+          await fixture.controller.refreshServers();
+          releaseWrite.complete();
+          expect(await selecting, isFalse);
+          expect(fixture.store.savedStates, isEmpty);
+          expect(
+            fixture.credentials.profileTokens['child'],
+            hadPrevious ? 'previous' : isNull,
+          );
+          expect(fixture.credentials.profileTokens['unrelated'], 'untouched');
+          expect(fixture.credentials.accountToken, 'account');
+        },
+      );
+
+      test(
+        'partial write failure compensates (previous=$hadPrevious)',
+        () async {
+          final fixture = await _profileCredentialFixture(
+            hadPrevious: hadPrevious,
+          );
+          fixture.credentials.onWrite = (_, _, call) async {
+            if (call == 1) throw StateError('opaque-secret-sentinel');
+          };
+          expect(
+            await fixture.controller.selectProfile(child, pin: '1234'),
+            isFalse,
+          );
+          expect(fixture.store.savedStates, isEmpty);
+          expect(
+            fixture.credentials.profileTokens['child'],
+            hadPrevious ? 'previous' : isNull,
+          );
+          expect(fixture.credentials.profileTokens['unrelated'], 'untouched');
+          expect(
+            fixture.controller.error,
+            isNot(contains('opaque-secret-sentinel')),
+          );
+        },
+      );
+
+      test(
+        'same-profile successor waits through compensation (previous=$hadPrevious)',
+        () async {
+          final fixture = await _profileCredentialFixture(
+            hadPrevious: hadPrevious,
+          );
+          var candidates = 0;
+          fixture.plex.switchHomeUserHandler = (_, _, _) async =>
+              'candidate-${++candidates}';
+          final compensating = Completer<void>();
+          final releaseCompensation = Completer<void>();
+          fixture.credentials.onWrite = (_, token, _) async {
+            if (token != 'previous') return;
+            compensating.complete();
+            await releaseCompensation.future;
+          };
+          fixture.credentials.onDelete = (_) async {
+            compensating.complete();
+            await releaseCompensation.future;
+          };
+          fixture.store.blockNext(fail: true);
+          final first = fixture.controller.selectProfile(child, pin: '1234');
+          await fixture.store.blockedSaveStarted.future;
+          final second = fixture.controller.selectProfile(child, pin: '1234');
+          await pumpEventQueue(times: 2);
+          fixture.store.releaseBlockedSave();
+          await compensating.future;
+          expect(
+            fixture.credentials.events.where((event) => event == 'read:child'),
+            hasLength(1),
+          );
+          expect(
+            fixture.credentials.events,
+            isNot(contains('write:child:candidate-2')),
+          );
+          releaseCompensation.complete();
+          expect(await first, isFalse);
+          expect(await second, isTrue);
+          expect(fixture.credentials.profileTokens['child'], 'candidate-2');
+          expect(fixture.store.state.profileId, 'child');
+          expect(fixture.controller.profile?.id, 'child');
+          expect(fixture.credentials.events, [
+            'read:child',
+            'write:child:candidate-1',
+            hadPrevious ? 'write:child:previous' : 'delete:child',
+            'read:child',
+            'write:child:candidate-2',
+          ]);
+        },
+      );
+
+      test(
+        'stale compensation failure remains visible through newer selection (previous=$hadPrevious)',
+        () async {
+          final fixture = await _profileCredentialFixture(
+            hadPrevious: hadPrevious,
+          );
+          fixture.controller.diagnostics.enabled = true;
+          fixture.credentials.onWrite = (_, token, _) async {
+            if (token == 'previous') throw StateError('opaque-secret-sentinel');
+          };
+          fixture.credentials.onDelete = (_) async =>
+              throw StateError('opaque-secret-sentinel');
+          fixture.store.blockNext(fail: true);
+          final first = fixture.controller.selectProfile(child, pin: '1234');
+          await fixture.store.blockedSaveStarted.future;
+          final second = fixture.controller.selectProfile(other);
+          fixture.store.releaseBlockedSave();
+          expect(await first, isFalse);
+          expect(await second, isTrue);
+          expect(fixture.store.state.profileId, 'other');
+          expect(fixture.controller.profile?.id, 'other');
+          expect(
+            fixture.controller.error,
+            contains('could not restore a profile credential'),
+          );
+          expect(
+            fixture.controller.error,
+            isNot(contains('opaque-secret-sentinel')),
+          );
+          expect(
+            fixture.controller.diagnostics.entries.any(
+              (entry) => entry.message == 'Credential cleanup failed',
+            ),
+            isTrue,
+          );
+          expect(
+            fixture.controller.diagnostics.entries
+                .map((entry) => entry.context)
+                .toString(),
+            isNot(contains('opaque-secret-sentinel')),
+          );
+          fixture.credentials.onWrite = null;
+          fixture.credentials.onDelete = null;
+          if (hadPrevious) {
+            expect(
+              await fixture.controller.selectProfile(child, pin: '1234'),
+              isTrue,
+            );
+            expect(fixture.credentials.profileTokens['child'], 'candidate');
+          } else {
+            expect(await fixture.controller.logout(), isTrue);
+            expect(fixture.credentials.profileTokens, isEmpty);
+            expect(fixture.credentials.accountToken, isNull);
+          }
+          expect(fixture.controller.error, isNull);
+        },
+      );
+    }
+
+    test('staleness during prior read prevents candidate write', () async {
+      final fixture = await _profileCredentialFixture(hadPrevious: true);
+      final reading = Completer<void>();
+      final releaseRead = Completer<void>();
+      fixture.credentials.onRead = (_) async {
+        reading.complete();
+        await releaseRead.future;
+      };
+      final selecting = fixture.controller.selectProfile(child, pin: '1234');
+      await reading.future;
+      await fixture.controller.refreshServers();
+      releaseRead.complete();
+      expect(await selecting, isFalse);
+      expect(fixture.credentials.events, ['read:child']);
+      expect(fixture.credentials.profileTokens['child'], 'previous');
+      expect(fixture.store.savedStates, isEmpty);
+    });
+
+    test('prior read failure invokes no write or compensation', () async {
+      final fixture = await _profileCredentialFixture(hadPrevious: true);
+      fixture.credentials.failRead = true;
+      expect(
+        await fixture.controller.selectProfile(child, pin: '1234'),
+        isFalse,
+      );
+      expect(fixture.credentials.events, ['read:child']);
+      expect(fixture.credentials.profileTokens['child'], 'previous');
+      expect(fixture.store.savedStates, isEmpty);
+    });
+
+    for (final aftermath in [
+      'discovery failure',
+      'dispose',
+      'logout cleanup failure',
+    ]) {
+      test('durable save retains candidate after $aftermath', () async {
+        final fixture = await _profileCredentialFixture(hadPrevious: true);
+        fixture.store.blockNext();
+        final selecting = fixture.controller.selectProfile(child, pin: '1234');
+        await fixture.store.blockedSaveStarted.future;
+        Future<bool>? logout;
+        if (aftermath == 'dispose') {
+          fixture.controller.dispose();
+        } else if (aftermath == 'logout cleanup failure') {
+          fixture.credentials.failClear = true;
+          logout = fixture.controller.logout();
+          await pumpEventQueue(times: 2);
+          expect(fixture.credentials.events, isNot(contains('clear')));
+        } else {
+          fixture.plex.discoverServersHandler = (_) async =>
+              throw const PlexException(
+                'network-unavailable',
+                'Synthetic discovery failure.',
+              );
+        }
+        fixture.store.releaseBlockedSave();
+        expect(await selecting, aftermath != 'dispose');
+        if (logout != null) expect(await logout, isFalse);
+        expect(fixture.store.state.profileId, 'child');
+        expect(fixture.credentials.profileTokens['child'], 'candidate');
+        expect(
+          fixture.credentials.events.where(
+            (event) =>
+                event == 'write:child:previous' || event == 'delete:child',
+          ),
+          isEmpty,
+        );
+        if (aftermath == 'dispose') {
+          final restarted = LineupController(
+            store: fixture.store,
+            credentials: fixture.credentials,
+            plex: _FakePlex()..homeUsersResult = const [child],
+          );
+          addTearDown(restarted.dispose);
+          await restarted.initialize();
+          expect(restarted.profile?.id, 'child');
+        } else {
+          expect(fixture.controller.profile?.id, 'child');
+          expect(fixture.controller.error, isNotNull);
+        }
+      });
+    }
+
+    test(
+      'logout waits for a stale candidate to compensate before clearing',
+      () async {
+        final fixture = await _profileCredentialFixture(hadPrevious: true);
+        final written = Completer<void>();
+        final releaseWrite = Completer<void>();
+        fixture.credentials.onWrite = (_, _, call) async {
+          if (call != 1) return;
+          written.complete();
+          await releaseWrite.future;
+        };
+        final selecting = fixture.controller.selectProfile(child, pin: '1234');
+        await written.future;
+        final logout = fixture.controller.logout();
+        await pumpEventQueue(times: 2);
+        expect(fixture.credentials.events, isNot(contains('clear')));
+        releaseWrite.complete();
+        expect(await selecting, isFalse);
+        expect(await logout, isTrue);
+        expect(fixture.credentials.events, [
+          'read:child',
+          'write:child:candidate',
+          'write:child:previous',
+          'clear',
+        ]);
+        expect(fixture.credentials.profileTokens, isEmpty);
+        expect(fixture.credentials.accountToken, isNull);
+        expect(fixture.store.state.profileId, 'owner');
+        expect(fixture.controller.stage, SetupStage.welcome);
+      },
+    );
+
+    test('logout before queued selection starts prevents credential write and queue cycle', () async {
+      final fixture = await _profileCredentialFixture(hadPrevious: false);
+      fixture.store.blockNext();
+      final settings = fixture.controller.updateSettings(
+        (current) => current.copyWith(nowWatchingBanner: false),
+      );
+      await fixture.store.blockedSaveStarted.future;
+      final selecting = fixture.controller.selectProfile(child, pin: '1234');
+      await pumpEventQueue(times: 2);
+      expect(fixture.credentials.events, isEmpty);
+      final logout = fixture.controller.logout();
+      await pumpEventQueue(times: 2);
+      expect(fixture.credentials.events, isEmpty);
+      fixture.store.releaseBlockedSave();
+      await settings;
+      expect(await selecting, isFalse);
+      expect(await logout, isTrue);
+      expect(fixture.credentials.events, ['clear']);
+      expect(fixture.credentials.profileTokens, isEmpty);
+    });
+
+    test('successful logout resolves failed stale compensation without a late notice', () async {
+      final fixture = await _profileCredentialFixture(hadPrevious: false);
+      fixture.credentials.onDelete = (_) async =>
+          throw StateError('opaque-secret-sentinel');
+      fixture.store.blockNext(fail: true);
+      final selecting = fixture.controller.selectProfile(child, pin: '1234');
+      await fixture.store.blockedSaveStarted.future;
+      final logout = fixture.controller.logout();
+      fixture.store.releaseBlockedSave();
+      expect(await selecting, isFalse);
+      expect(await logout, isTrue);
+      expect(fixture.controller.error, isNull);
+      expect(fixture.credentials.profileTokens, isEmpty);
+      expect(fixture.controller.stage, SetupStage.welcome);
+    });
+  });
+
+  test(
+    'scan recovery cannot borrow an unbudgeted in-flight artwork refresh',
+    () async {
+      final selected = _server('server');
+      final scanStarted = Completer<void>();
+      final scanRelease = Completer<void>();
+      final artworkRefreshStarted = Completer<void>();
+      final artworkRefresh = Completer<List<PlexServerAccess>>();
+      var scanRefreshes = 0;
+      final plex =
+          _FakePlex(scanLimits: const PlexScanLimits(retainedEntries: 2))
+            ..serversResult = [selected]
+            ..connectionResult = selected.connections.single
+            ..librariesResult = const [
+              PlexLibrary(
+                id: 'movies',
+                title: 'Movies',
+                type: PlexLibraryType.movie,
+              ),
+            ]
+            ..scanLibraryHandler = (_, _, _, _, _, _, _) async {
+              scanStarted.complete();
+              await scanRelease.future;
+              throw const PlexException('auth-invalid', 'Refresh');
+            }
+            ..artworkHandler = (_, token, _) async {
+              if (token != 'refreshed') {
+                throw const PlexException('auth-invalid', 'Refresh');
+              }
+              return Uint8List(0);
+            };
+      final controller = LineupController(
+        store: _MemoryStore(
+          const PersistedState(selectedServerByProfile: {'owner': 'server'}),
+        ),
+        credentials: _MemoryCredentials(accountToken: 'token'),
+        plex: plex,
+      );
+      addTearDown(controller.dispose);
+      await controller.initialize();
+      plex.discoverServersHandler = (_) async {
+        if (PlexScanBudget.current == null) {
+          artworkRefreshStarted.complete();
+          return artworkRefresh.future;
+        }
+        scanRefreshes++;
+        PlexScanBudget.current!.retain(3);
+        return [];
+      };
+      final scan = controller.scanLibraries({'movies'});
+      await scanStarted.future;
+      final artwork = controller.artworkForPath(
+        Uri.parse('/library/metadata/1/thumb'),
+      );
+      await artworkRefreshStarted.future;
+      scanRelease.complete();
+      expect(await scan, isFalse);
+      expect(scanRefreshes, 1);
+      expect(controller.error, contains('safe resource limits'));
+      artworkRefresh.complete([
+        PlexServerAccess(server: selected, token: 'refreshed'),
+      ]);
+      expect(await artwork, isEmpty);
+    },
+  );
+
+  test(
+    'playlist budget exhaustion is fatal after staged library success',
+    () async {
+      final selected = _server('server');
+      final transport = PlexClient(
+        clientIdentifier: 'synthetic',
+        httpClient: MockClient(
+          (request) async => http.Response(
+            jsonEncode({
+              'MediaContainer': {
+                'size': 1,
+                'totalSize': 1,
+                'Metadata': request.url.path == '/playlists/all'
+                    ? [
+                        {'ratingKey': 'p', 'title': 'Playlist'},
+                      ]
+                    : [
+                        {
+                          'ratingKey': 'm',
+                          'title': 'Movie',
+                          'type': 'movie',
+                          'duration': 60000,
+                          'Media': [
+                            {
+                              'Part': [
+                                {'key': '/movie'},
+                              ],
+                            },
+                          ],
+                        },
+                      ],
+              },
+            }),
+            200,
+          ),
+        ),
+      );
+      addTearDown(transport.close);
+      final plex =
+          _FakePlex(scanLimits: const PlexScanLimits(retainedEntries: 2))
+            ..serversResult = [selected]
+            ..connectionResult = selected.connections.single
+            ..librariesResult = const [
+              PlexLibrary(
+                id: 'movies',
+                title: 'Movies',
+                type: PlexLibraryType.movie,
+              ),
+            ]
+            ..scanLibraryHandler = (_, _, _, _, _, _, _) async {
+              return PlexLibraryScan(items: [_scanMovie('movies')]);
+            }
+            ..playlistsScanHandler = (server, token, current, cancelled) =>
+                transport.playlists(
+                  server,
+                  token,
+                  isCurrent: current,
+                  cancelled: cancelled,
+                );
+      final store = _MemoryStore(
+        const PersistedState(selectedServerByProfile: {'owner': 'server'}),
+      );
+      final controller = LineupController(
+        store: store,
+        credentials: _MemoryCredentials(accountToken: 'token'),
+        plex: plex,
+      );
+      addTearDown(controller.dispose);
+      await controller.initialize();
+      controller.diagnostics.enabled = true;
+      final saved = store.state;
+      expect(await controller.scanLibraries({'movies'}), isFalse);
+      expect(controller.error, contains('safe resource limits'));
+      expect(controller.libraryScanReadyIds, isEmpty);
+      expect(await controller.commitLibraryScan({'movies'}), isFalse);
+      expect(store.state, same(saved));
+      expect(
+        controller.diagnostics.entries.where(
+          (e) =>
+              e.message == 'Playlist discovery unavailable' ||
+              e.message == 'Some playlists could not be loaded',
+        ),
+        isEmpty,
+      );
+    },
+  );
+
+  for (final restoring in [false, true]) {
+    test(
+      'authorization recovery shares the admitted budget (saved restore: $restoring)',
+      () async {
+        final selected = _server('server');
+        final paths = <String>[];
+        final transport = PlexClient(
+          clientIdentifier: 'synthetic',
+          httpClient: MockClient((request) async {
+            if (PlexScanBudget.current != null) paths.add(request.url.path);
+            if (request.url.path == '/api/v2/resources') {
+              return http.Response(
+                jsonEncode([
+                  {
+                    'provides': 'server',
+                    'accessToken': 'refreshed',
+                    'clientIdentifier': selected.id,
+                    'name': 'Synthetic',
+                    'connections': [
+                      {'uri': selected.connections.single.uri.toString()},
+                    ],
+                  },
+                ]),
+                200,
+              );
+            }
+            if (request.url.path == '/identity') {
+              return http.Response('{"machineIdentifier":"server"}', 200);
+            }
+            if (request.url.queryParameters['X-Plex-Container-Start'] == '1') {
+              return http.Response('{}', 401);
+            }
+            return http.Response(
+              jsonEncode({
+                'MediaContainer': {
+                  'Metadata': [
+                    {
+                      'ratingKey': 'm',
+                      'title': 'Movie',
+                      'type': 'movie',
+                      'duration': 60000,
+                      'Media': [
+                        {
+                          'Part': [
+                            {'key': '/movie'},
+                          ],
+                        },
+                      ],
+                    },
+                  ],
+                  'size': 1,
+                  'offset': 0,
+                  'totalSize': 2,
+                },
+              }),
+              200,
+            );
+          }),
+        );
+        addTearDown(transport.close);
+        final plex = _FakePlex(scanLimits: const PlexScanLimits(requests: 4))
+          ..serversResult = [selected]
+          ..connectionResult = selected.connections.single
+          ..librariesResult = const [
+            PlexLibrary(
+              id: 'movies',
+              title: 'Movies',
+              type: PlexLibraryType.movie,
+            ),
+          ]
+          ..scanLibraryHandler =
+              (server, token, id, type, current, progress, cancelled) =>
+                  transport.scanLibrary(
+                    server,
+                    token,
+                    id,
+                    type,
+                    isCurrent: current,
+                    onProgress: progress,
+                    cancelled: cancelled,
+                  );
+        final store = _MemoryStore(
+          PersistedState(
+            selectedServerByProfile: const {'owner': 'server'},
+            selectedLibraryIdsByProfileServer: restoring
+                ? const {
+                    'owner': {
+                      'server': ['movies'],
+                    },
+                  }
+                : const {},
+            channelsByProfileServer: restoring
+                ? {
+                    'owner': {
+                      'server': [_channel('saved')],
+                    },
+                  }
+                : const {},
+          ),
+        );
+        final controller = LineupController(
+          store: store,
+          credentials: _MemoryCredentials(accountToken: 'token'),
+          plex: plex,
+        );
+        addTearDown(controller.dispose);
+        // Initial discovery is ordinary startup. Only in-scan refresh delegates
+        // to the real network parsers/prober under the scan's async scope.
+        plex.discoverServersHandler = (token) => PlexScanBudget.current == null
+            ? Future.value([
+                PlexServerAccess(server: selected, token: 'pms-token'),
+              ])
+            : transport.discoverServers(token);
+        plex.selectConnectionHandler = (server, token) =>
+            PlexScanBudget.current == null
+            ? Future.value(selected.connections.single)
+            : transport.selectConnection(server, token);
+        await controller.initialize();
+        final saved = store.state;
+        if (!restoring) {
+          expect(await controller.scanLibraries({'movies'}), isFalse);
+        }
+        expect(controller.error, contains('safe resource limits'));
+        expect(paths, [
+          '/library/sections/movies/all',
+          '/library/sections/movies/all',
+          '/api/v2/resources',
+          '/identity',
+        ]);
+        expect(controller.libraryScanReadyIds, isEmpty);
+        expect(controller.availableMedia, isEmpty);
+        expect(store.state, same(saved));
+        expect(
+          store.state.channelsByProfileServer['owner']?['server']?.map(
+            (c) => c.id,
+          ),
+          restoring ? ['saved'] : isEmpty,
+        );
+      },
+    );
+  }
+
+  test('fatal scan exhaustion drains siblings, skips queued work and preserves saved inventory', () async {
+    final selected = _server('server');
+    final fourStarted = Completer<void>();
+    final drain = Completer<void>();
+    var started = 0;
+    var cancelledSiblings = 0;
+    var fail = true;
+    final requested = <String>[];
+    final budgets = <PlexScanBudget>{};
+    final plex = _FakePlex(scanLimits: const PlexScanLimits(retainedEntries: 2))
+      ..serversResult = [selected]
+      ..connectionResult = selected.connections.single
+      ..librariesResult = [
+        for (final id in ['a', 'b', 'c', 'd', 'e'])
+          PlexLibrary(id: id, title: id, type: PlexLibraryType.movie),
+      ]
+      ..scanLibraryHandler = (_, _, id, _, _, _, cancelled) async {
+        requested.add(id);
+        budgets.add(PlexScanBudget.current!);
+        if (fail) {
+          if (++started == 4) fourStarted.complete();
+          await fourStarted.future;
+          if (id == 'a') PlexScanBudget.current!.retain(3);
+          await cancelled;
+          cancelledSiblings++;
+          await drain.future;
+          throw const PlexException('cancelled', 'cancelled');
+        }
+        return PlexLibraryScan(items: [_scanMovie(id)]);
+      };
+    final store = _CountingMemoryStore(
+      const PersistedState(selectedServerByProfile: {'owner': 'server'}),
+    );
+    final controller = LineupController(
+      store: store,
+      credentials: _MemoryCredentials(accountToken: 'token'),
+      plex: plex,
+    );
+    addTearDown(controller.dispose);
+    await controller.initialize();
+    controller.fixtureActor.publishInventory(
+      media: [_scanMovie('committed')],
+      selectedLibraryIds: {'committed'},
+    );
+    final saved = store.state;
+    final saves = store.saveCalls;
+    var finished = false;
+    final attempt = controller
+        .scanLibraries({'a', 'b', 'c', 'd', 'e'})
+        .whenComplete(() => finished = true);
+    await _waitForTestState(
+      () => cancelledSiblings == 3,
+      description: 'fatal sibling cancellation',
+    );
+    expect(finished, isFalse);
+    expect(requested, ['a', 'b', 'c', 'd']);
+    expect(budgets, hasLength(1));
+    drain.complete();
+    expect(await attempt, isFalse);
+    expect(controller.error, contains('safe resource limits'));
+    expect(controller.libraryScanReadyIds, isEmpty);
+    expect(await controller.commitLibraryScan({'a'}), isFalse);
+    expect(controller.availableMedia.single.id, 'committed-item');
+    expect(controller.selectedLibraryIds, {'committed'});
+    expect(store.state, same(saved));
+    expect(store.saveCalls, saves);
+    fail = false;
+    expect(await controller.scanLibraries({'e'}), isTrue);
+    expect(budgets, hasLength(2));
+    expect(await controller.commitLibraryScan({'e'}), isTrue);
+    expect(controller.availableMedia.single.id, 'e-item');
+  });
+
+  test(
+    'same-scope retry charges reused staged inventory before new results',
+    () async {
+      final selected = _server('server');
+      var retry = false;
+      final requests = <String>[];
+      final plex =
+          _FakePlex(scanLimits: const PlexScanLimits(retainedEntries: 3))
+            ..serversResult = [selected]
+            ..connectionResult = selected.connections.single
+            ..librariesResult = [
+              for (final id in ['a', 'b'])
+                PlexLibrary(id: id, title: id, type: PlexLibraryType.movie),
+            ]
+            ..scanLibraryHandler = (_, _, id, _, _, _, _) async {
+              requests.add(id);
+              if (id == 'b' && !retry) {
+                throw const PlexException('offline', 'Retry');
+              }
+              return PlexLibraryScan(
+                items: [_scanMovie('$id-1'), _scanMovie('$id-2')],
+              );
+            };
+      final store = _MemoryStore(
+        const PersistedState(selectedServerByProfile: {'owner': 'server'}),
+      );
+      final controller = LineupController(
+        store: store,
+        credentials: _MemoryCredentials(accountToken: 'token'),
+        plex: plex,
+      );
+      addTearDown(controller.dispose);
+      await controller.initialize();
+      expect(await controller.scanLibraries({'a', 'b'}), isTrue);
+      expect(controller.libraryScanReadyIds, {'a'});
+      retry = true;
+      final saved = store.state;
+      expect(
+        await controller.scanLibraries({'a', 'b'}, retryFailedOnly: true),
+        isFalse,
+      );
+      expect(requests, ['a', 'b', 'b']);
+      expect(controller.error, contains('safe resource limits'));
+      expect(controller.libraryScanReadyIds, {'a'});
+      expect(await controller.commitLibraryScan({'b'}), isFalse);
+      expect(store.state, same(saved));
+      // An ordinary earlier ready subset remains explicitly committable.
+      expect(await controller.commitLibraryScan({'a'}), isTrue);
+      expect(controller.availableMedia.map((i) => i.id), [
+        'a-1-item',
+        'a-2-item',
+      ]);
+    },
+  );
+
+  for (final action in ['profile', 'server', 'logout']) {
+    test(
+      'coordinator $action preserves old persisted scope and stopped playback on controller failure',
+      () async {
+        const owner = PlexHomeUser(
+          id: 'owner',
+          name: 'Owner',
+          protected: false,
+        );
+        const child = PlexHomeUser(
+          id: 'child',
+          name: 'Child',
+          protected: false,
+        );
+        final original = _server('server');
+        final target = _server('target');
+        final store = _ControlledSaveStore(
+          PersistedState(
+            profileId: owner.id,
+            selectedServerByProfile: {'owner': original.id},
+          ),
+        );
+        final credentials = _FailingClearCredentials(
+          accountToken: 'synthetic-token',
+        );
+        final plex = _FakePlex()
+          ..homeUsersResult = const [owner, child]
+          ..serversResult = [original, target];
+        final controller = LineupController(
+          store: store,
+          credentials: credentials,
+          plex: plex,
+        );
+        await controller.initialize();
+        final before = store.state.toJson();
+        final guide = GuideController(lineup: controller);
+        final player = FakeNativePlayer();
+        final coordinator = PlayerCoordinator(
+          player: player,
+          lineup: controller,
+          guide: guide,
+        );
+        addTearDown(controller.dispose);
+        addTearDown(guide.dispose);
+        addTearDown(player.dispose);
+        addTearDown(coordinator.dispose);
+        await coordinator.loadInitialMedia(
+          Uri.parse('https://example.invalid/synthetic.mp4'),
+        );
+        if (action != 'logout') store.blockNext(fail: true);
+        final transition = switch (action) {
+          'profile' => coordinator.selectProfile(child),
+          'server' => coordinator.selectServer(target),
+          _ => coordinator.logout(),
+        };
+        if (action != 'logout') {
+          await store.blockedSaveStarted.future;
+          expect(player.stops, 1);
+          expect(coordinator.status.state, PlayerState.stopped);
+          expect(coordinator.authorizationTransitionPending, isTrue);
+          expect(await coordinator.tune('obsolete'), isFalse);
+          store.releaseBlockedSave();
+        }
+        expect(await transition, isFalse);
+        expect(player.stops, 1);
+        expect(player.loads, hasLength(1));
+        expect(coordinator.hasPlaybackIntent, isFalse);
+        expect(controller.profile, owner);
+        expect(controller.server?.id, original.id);
+        expect(store.state.toJson(), before);
+        expect(controller.error, isNotNull);
+        expect(coordinator.authorizationTransitionError, isNull);
+      },
+    );
+  }
+
   test(
     'partial lineup publications retain unchanged owned collections',
     () async {
@@ -208,10 +1078,14 @@ void main() {
       final restoring = controller.selectServer(
         fixture.plex.serversResult.first,
       );
-      await newStarted.future;
-      expect(controller.restoringSavedLineup, isTrue);
+      await _waitForTestState(
+        () => controller.restoringSavedLineup,
+        description: 'new saved restore intent',
+      );
+      expect(newStarted.isCompleted, isFalse);
       oldRelease.complete();
       expect(await abandoned, isFalse);
+      await newStarted.future;
       expect(controller.restoringSavedLineup, isTrue);
       newRelease.complete();
       await restoring;
@@ -1206,14 +2080,17 @@ void main() {
         expect(controller.server!.id, 'other');
         expect(controller.libraryScanReadyIds, isEmpty);
         oldAttempt = false;
-        await controller.selectServer(fixture.plex.serversResult.first);
+        final restoring = controller.selectServer(
+          fixture.plex.serversResult.first,
+        );
+        release.complete();
+        await restoring;
         expect(controller.server!.id, 'server');
         expect(
           controller.libraryScanReadyIds,
           restoreFails ? isEmpty : {'movies', 'tv'},
         );
         final facts = controller.libraryScanFacts;
-        release.complete();
         expect(await abandoned, isFalse);
         expect(controller.libraryScanFacts, facts);
         expect(
@@ -1480,7 +2357,11 @@ void main() {
         final initialize = controller.initialize();
         await started.future;
         controller.showServers();
-        await controller.selectServer(fixture.plex.serversResult.last);
+        final selecting = controller.selectServer(
+          fixture.plex.serversResult.last,
+        );
+        finish.complete();
+        await selecting;
         expect(controller.server!.id, 'other');
         expect(
           controller.stage,
@@ -1491,7 +2372,6 @@ void main() {
           controller.channels.map((channel) => channel.id),
           savedOther ? ['other-saved'] : isEmpty,
         );
-        finish.complete();
         await initialize;
         expect(controller.server!.id, 'other');
         expect(
@@ -2300,9 +3180,12 @@ void main() {
       await controller.initialize();
       final oldScan = controller.scanLibraries({'movies'});
       await started.future;
-      expect(await controller.scanLibraries({'movies'}), isTrue);
+      final replacement = controller.scanLibraries({'movies'});
+      await Future<void>.delayed(Duration.zero);
+      expect(calls, 1, reason: 'replacement waits for old scan retirement');
       release.complete();
       expect(await oldScan, isFalse);
+      expect(await replacement, isTrue);
       expect(controller.availableMedia, isEmpty);
       expect(controller.failedCollectionTitles['movies'], isEmpty);
       expect(controller.libraryScanStatus, LibraryScanStatus.empty);
@@ -9832,7 +10715,7 @@ class _ConcurrentStore implements AppStore {
 }
 
 class _FakePlex extends PlexClient {
-  _FakePlex()
+  _FakePlex({super.scanLimits})
     : super(
         clientIdentifier: 'lineup-desktop-test-abcdefghijklmnopqrst',
         httpClient: testPlexHttpClient(),
@@ -10169,5 +11052,86 @@ class _ThrowOncePlaybackPlex extends _FakePlex {
       if (attempts == 1) throw StateError('unexpected projection failure');
     }
     return super.playbackDescriptor(server: server, item: item);
+  }
+}
+
+Future<
+  ({
+    LineupController controller,
+    _ControlledSaveStore store,
+    _ProfileTransactionCredentials credentials,
+    _FakePlex plex,
+  })
+>
+_profileCredentialFixture({required bool hadPrevious}) async {
+  final store = _ControlledSaveStore(const PersistedState(profileId: 'owner'));
+  final credentials = _ProfileTransactionCredentials(
+    profileTokens: {
+      'unrelated': 'untouched',
+      if (hadPrevious) 'child': 'previous',
+    },
+  );
+  final plex = _FakePlex()
+    ..homeUsersResult = const [
+      PlexHomeUser(id: 'owner', name: 'Owner', protected: false),
+      PlexHomeUser(id: 'child', name: 'Child', protected: true),
+      PlexHomeUser(id: 'other', name: 'Other', protected: false),
+    ]
+    ..switchHomeUserHandler = (_, _, _) async => 'candidate';
+  final controller = LineupController(
+    store: store,
+    credentials: credentials,
+    plex: plex,
+  );
+  addTearDown(controller.dispose);
+  await controller.initialize();
+  credentials.events.clear();
+  return (
+    controller: controller,
+    store: store,
+    credentials: credentials,
+    plex: plex,
+  );
+}
+
+class _ProfileTransactionCredentials extends _MemoryCredentials {
+  _ProfileTransactionCredentials({required super.profileTokens})
+    : super(accountToken: 'account');
+  final events = <String>[];
+  Future<void> Function(String id, String token, int call)? onWrite;
+  Future<void> Function(String id)? onDelete;
+  Future<void> Function(String id)? onRead;
+  var writeCalls = 0;
+  bool failRead = false;
+  bool failClear = false;
+
+  @override
+  Future<String?> readProfileToken(String profileId) async {
+    events.add('read:$profileId');
+    if (failRead) throw StateError('opaque-secret-sentinel');
+    final value = await super.readProfileToken(profileId);
+    await onRead?.call(profileId);
+    return value;
+  }
+
+  @override
+  Future<void> writeProfileToken(String profileId, String token) async {
+    events.add('write:$profileId:$token');
+    await super.writeProfileToken(profileId, token);
+    await onWrite?.call(profileId, token, ++writeCalls);
+  }
+
+  @override
+  Future<void> deleteProfileToken(String profileId) async {
+    events.add('delete:$profileId');
+    await onDelete?.call(profileId);
+    await super.deleteProfileToken(profileId);
+  }
+
+  @override
+  Future<void> clear() async {
+    events.add('clear');
+    if (failClear) throw StateError('opaque-secret-sentinel');
+    await super.clear();
   }
 }

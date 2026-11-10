@@ -56,6 +56,10 @@ class UpstreamOnboardingView extends StatefulWidget {
   const UpstreamOnboardingView({
     required this.controller,
     required this.onLogout,
+    required this.onSelectProfile,
+    required this.onSelectServer,
+    this.authorizationTransitionPending = false,
+    this.authorizationTransitionError,
     this.onRequestLogout,
     this.openBrowser = openPlexLink,
     this.accountOrigin = false,
@@ -66,6 +70,11 @@ class UpstreamOnboardingView extends StatefulWidget {
   });
 
   final LineupController controller;
+  final Future<bool> Function(PlexHomeUser user, {String? pin}) onSelectProfile;
+  final Future<bool> Function(PlexServer server) onSelectServer;
+  final bool authorizationTransitionPending;
+  // Submission can finish before the shell rebuilds with the latest error.
+  final String? Function()? authorizationTransitionError;
   final Future<void> Function() onLogout;
   final Future<void> Function()? onRequestLogout;
   final Future<void> Function() openBrowser;
@@ -80,6 +89,11 @@ class UpstreamOnboardingView extends StatefulWidget {
 
 class UpstreamOnboardingViewState extends State<UpstreamOnboardingView>
     with WidgetsBindingObserver {
+  bool get _actionsBusy =>
+      widget.controller.busy || widget.authorizationTransitionPending;
+  String? get _selectionError =>
+      widget.authorizationTransitionError?.call() ?? widget.controller.error;
+
   Timer? _clock;
   final _navigationFocus = FocusNode(debugLabel: 'Onboarding navigation');
   final _linkActionFocus = FocusNode(debugLabel: 'Retry secure cancellation');
@@ -256,6 +270,7 @@ class UpstreamOnboardingViewState extends State<UpstreamOnboardingView>
   /// temporarily unavailable child state are claimed so a press cannot race
   /// an asynchronous owner or fall through to task backgrounding.
   bool handleBack() {
+    if (widget.authorizationTransitionPending) return true;
     final controller = widget.controller;
     if (_pinUser != null) {
       return _profilePinKey.currentState?.handleBack() ?? true;
@@ -292,6 +307,7 @@ class UpstreamOnboardingViewState extends State<UpstreamOnboardingView>
   // shell calls handleBack() directly; desktop has no new implicit linking or
   // root-exit policy in this leaf.
   void _handleBack() {
+    if (widget.authorizationTransitionPending) return;
     if (_pinUser != null) {
       _profilePinKey.currentState?.handleBack();
       return;
@@ -330,11 +346,13 @@ class UpstreamOnboardingViewState extends State<UpstreamOnboardingView>
   }
 
   void _cancelProfileSelection() {
+    if (widget.authorizationTransitionPending) return;
     widget.controller.cancelProfileSelection();
     _focusNavigation();
   }
 
   void _cancelServerSelection() {
+    if (widget.authorizationTransitionPending) return;
     widget.controller.cancelServerSelection();
     _focusNavigation();
   }
@@ -481,7 +499,7 @@ class UpstreamOnboardingViewState extends State<UpstreamOnboardingView>
   }
 
   Widget _welcome() {
-    final enabled = !widget.controller.busy;
+    final enabled = !_actionsBusy;
     return _HeroContent(
       title: 'Your Plex library, scheduled like television',
       subtitle: 'Link Plex once, choose who is watching, then tune Lineup to your server.',
@@ -969,7 +987,7 @@ class UpstreamOnboardingViewState extends State<UpstreamOnboardingView>
                                       _profileReturnTarget(start + column)
                                       ? _profileReturnFocus
                                       : null,
-                                  onPressed: widget.controller.busy
+                                  onPressed: _actionsBusy
                                       ? null
                                       : () => _selectProfile(
                                           widget.controller.profiles[start +
@@ -991,14 +1009,16 @@ class UpstreamOnboardingViewState extends State<UpstreamOnboardingView>
         ),
         SizedBox(height: 28),
         TextButton(
-          onPressed: widget.controller.busy ? null : widget.onLogout,
+          onPressed: _actionsBusy ? null : widget.onLogout,
           child: const Text('Sign out'),
         ),
         if (widget.controller.profileSelectionCanCancel) ...[
           SizedBox(height: 12),
           TextButton(
             focusNode: _profileCancelFocus,
-            onPressed: _cancelProfileSelection,
+            onPressed: widget.authorizationTransitionPending
+                ? null
+                : _cancelProfileSelection,
             child: Text(
               widget.accountOrigin &&
                       widget.controller.profileSelectionOriginStage ==
@@ -1014,8 +1034,7 @@ class UpstreamOnboardingViewState extends State<UpstreamOnboardingView>
   );
 
   Widget _onboardingFeedback(Key key) {
-    final controller = widget.controller;
-    final message = controller.busy ? 'Working…' : controller.error;
+    final message = _actionsBusy ? 'Working…' : _selectionError;
     final roles = LineupTheme.of(context);
     if (message == null) return SizedBox.shrink(key: key);
     return Padding(
@@ -1027,7 +1046,7 @@ class UpstreamOnboardingViewState extends State<UpstreamOnboardingView>
           message,
           textAlign: TextAlign.center,
           style: TextStyle(
-            color: controller.busy
+            color: _actionsBusy
                 ? roles.secondaryText
                 : Theme.of(context).colorScheme.error,
             fontSize: 18,
@@ -1044,7 +1063,7 @@ class UpstreamOnboardingViewState extends State<UpstreamOnboardingView>
     maxWidth: 1040,
     child: Column(
       children: [
-        if (widget.controller.servers.isEmpty && !widget.controller.busy)
+        if (widget.controller.servers.isEmpty && !_actionsBusy)
           Builder(
             builder: (context) {
               final theme = Theme.of(context);
@@ -1071,7 +1090,7 @@ class UpstreamOnboardingViewState extends State<UpstreamOnboardingView>
                   ? widget.controller.connection
                   : null,
               onPressed:
-                  widget.controller.busy ||
+                  _actionsBusy ||
                       (_serverAttempt.pending &&
                           _serverAttempt.serverId == server.id)
                   ? null
@@ -1095,33 +1114,33 @@ class UpstreamOnboardingViewState extends State<UpstreamOnboardingView>
           children: [
             OutlinedButton.icon(
               autofocus: widget.controller.servers.isEmpty,
-              onPressed: widget.controller.busy ? null : _refreshServers,
+              onPressed: _actionsBusy ? null : _refreshServers,
               icon: const Icon(Icons.refresh),
               label: const Text('Refresh servers'),
             ),
             if (widget.controller.profiles.length > 1)
               OutlinedButton.icon(
-                onPressed: widget.controller.busy ? null : _showProfiles,
+                onPressed: _actionsBusy ? null : _showProfiles,
                 icon: const Icon(Icons.switch_account),
                 label: const Text('Switch profile'),
               ),
             if (widget.onRequestLogout != null)
               TextButton(
-                onPressed: widget.controller.busy
-                    ? null
-                    : widget.onRequestLogout,
+                onPressed: _actionsBusy ? null : widget.onRequestLogout,
                 child: const Text('Sign out'),
               ),
             if (widget.controller.serverSelectionCanCancel)
               TextButton(
-                onPressed: _cancelServerSelection,
+                onPressed: widget.authorizationTransitionPending
+                    ? null
+                    : _cancelServerSelection,
                 child: Text(
                   widget.accountOrigin ? '‹ Settings · Account' : 'Back',
                 ),
               ),
           ],
         ),
-        if ((_serverAttempt.message ?? widget.controller.error) != null &&
+        if ((_serverAttempt.message ?? _selectionError) != null &&
             _serverAttempt.serverId == null)
           Align(
             alignment: Alignment.center,
@@ -1130,7 +1149,7 @@ class UpstreamOnboardingViewState extends State<UpstreamOnboardingView>
               child: Semantics(
                 liveRegion: true,
                 child: Text(
-                  _serverAttempt.message ?? widget.controller.error!,
+                  _serverAttempt.message ?? _selectionError!,
                   style: TextStyle(color: Theme.of(context).colorScheme.error),
                 ),
               ),
@@ -1146,7 +1165,7 @@ class UpstreamOnboardingViewState extends State<UpstreamOnboardingView>
   }
 
   Future<void> _refreshServers() async {
-    if (!mounted || widget.controller.busy) return;
+    if (!mounted || _actionsBusy) return;
     _clearServerError();
     await widget.controller.refreshServers();
     if (!mounted || widget.controller.stage != SetupStage.servers) return;
@@ -1160,26 +1179,23 @@ class UpstreamOnboardingViewState extends State<UpstreamOnboardingView>
   }
 
   void _showProfiles() {
-    if (!mounted || widget.controller.busy) return;
+    if (!mounted || _actionsBusy) return;
     _clearServerError();
     widget.controller.showProfiles();
   }
 
   Future<void> _connectServer(PlexServer server) async {
-    if (widget.controller.busy) return;
+    if (_actionsBusy) return;
     final attempt = ++_serverAttemptRevision;
     setState(() {
       _serverAttempt = _PendingServerAttempt(server.id);
     });
-    await widget.controller.selectServer(server);
+    await widget.onSelectServer(server);
     if (!mounted || attempt != _serverAttemptRevision) return;
     setState(() {
       if (widget.controller.stage == SetupStage.servers &&
-          widget.controller.error != null) {
-        _serverAttempt = _FailedServerAttempt(
-          server.id,
-          widget.controller.error!,
-        );
+          _selectionError != null) {
+        _serverAttempt = _FailedServerAttempt(server.id, _selectionError!);
       } else {
         _serverAttempt = const _NoServerAttempt();
       }
@@ -1187,18 +1203,18 @@ class UpstreamOnboardingViewState extends State<UpstreamOnboardingView>
   }
 
   void _continueServer(PlexServer server) {
-    if (widget.controller.busy || widget.controller.server?.id != server.id) {
+    if (_actionsBusy || widget.controller.server?.id != server.id) {
       return;
     }
     widget.controller.continueCurrentServer();
   }
 
   Future<void> _selectProfile(PlexHomeUser user) async {
+    if (!mounted || _actionsBusy) return;
     if (!user.protected) {
-      await widget.controller.selectProfile(user);
+      await widget.onSelectProfile(user);
       return;
     }
-    if (!mounted || widget.controller.busy) return;
     setState(() {
       if (DeviceProfile.of(context).isTv) _invokedProfileId = user.id;
       _pinUser = user;
@@ -1217,8 +1233,8 @@ class UpstreamOnboardingViewState extends State<UpstreamOnboardingView>
       onAccepted: () {
         if (mounted) setState(() => _pinUser = null);
       },
-      onSubmit: (pin) => widget.controller.selectProfile(_pinUser!, pin: pin),
-      error: () => widget.controller.error,
+      onSubmit: (pin) => widget.onSelectProfile(_pinUser!, pin: pin),
+      error: () => _selectionError,
     ),
   );
 }

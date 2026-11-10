@@ -1,0 +1,138 @@
+name: Sign Android candidate
+
+on:
+  workflow_dispatch:
+    inputs:
+      source_sha:
+        description: Full reviewed main commit SHA
+        required: true
+        type: string
+      ci_run:
+        description: Successful CI run ID
+        required: true
+        type: string
+      ci_attempt:
+        description: CI run attempt number
+        required: true
+        type: string
+      artifact_id:
+        description: Numeric android-unsigned artifact ID
+        required: true
+        type: string
+
+permissions: {}
+
+defaults:
+  run:
+    shell: bash
+
+env:
+  SOURCE_SHA: ${{ inputs.source_sha }}
+  CI_RUN: ${{ inputs.ci_run }}
+  CI_ATTEMPT: ${{ inputs.ci_attempt }}
+  ARTIFACT_ID: ${{ inputs.artifact_id }}
+  WORKFLOW_SHA: ${{ github.workflow_sha }}
+  EXPECTED_CERTIFICATE: ${{ vars.ANDROID_SIGNING_CERT_SHA256 }}
+
+jobs:
+  prepare:
+    name: Prepare unsigned input manifest
+    if: github.event_name == 'workflow_dispatch' && github.repository == 'TJZine/LineupDesktop' && github.ref == 'refs/heads/main' && github.ref_protected
+    runs-on: ubuntu-24.04
+    timeout-minutes: 10
+    permissions:
+      actions: read
+      contents: read
+    outputs:
+      manifest_sha256: ${{ steps.manifest.outputs.manifest_sha256 }}
+    steps:
+      - name: Load reviewed helpers from the workflow revision
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
+        with:
+          ref: ${{ github.workflow_sha }}
+          persist-credentials: false
+          sparse-checkout-cone-mode: false
+          sparse-checkout: |
+            /tool/release/sign_android.py
+            /tool/release/verify.py
+      - name: Verify unsigned input and show approval manifest
+        id: manifest
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          test "$GITHUB_REF" = refs/heads/main
+          work="$RUNNER_TEMP/lineup-android-signing"
+          python3 -I -B tool/release/sign_android.py prepare \
+            --work-dir "$work" --build-tools "$ANDROID_HOME/build-tools/36.0.0" \
+            --repo "$GITHUB_REPOSITORY" --source-sha "$SOURCE_SHA" --workflow-sha "$WORKFLOW_SHA" \
+            --ci-run "$CI_RUN" --ci-attempt "$CI_ATTEMPT" --artifact "$ARTIFACT_ID" \
+            --signing-run "$GITHUB_RUN_ID" --signing-attempt "$GITHUB_RUN_ATTEMPT" \
+            --certificate "$EXPECTED_CERTIFICATE"
+          manifest_sha256=$(sha256sum "$work/input-manifest.txt" | cut -d ' ' -f 1)
+          printf 'manifest_sha256=%s\n' "$manifest_sha256" >> "$GITHUB_OUTPUT"
+          {
+            printf '## Review this input before approving Android signing\n\n'
+            printf 'Manifest SHA-256 `%s`\n\n' "$manifest_sha256"
+            printf '```text\n'
+            cat "$work/input-manifest.txt"
+            printf '```\n'
+          } >> "$GITHUB_STEP_SUMMARY"
+
+  sign:
+    name: Sign and verify Android candidate
+    needs: prepare
+    if: github.event_name == 'workflow_dispatch' && github.repository == 'TJZine/LineupDesktop' && github.ref == 'refs/heads/main' && github.ref_protected
+    environment:
+      name: android-production-signing
+      url: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}
+    runs-on: ubuntu-24.04
+    timeout-minutes: 10
+    permissions:
+      actions: read
+      contents: read
+    env:
+      MANIFEST_SHA256: ${{ needs.prepare.outputs.manifest_sha256 }}
+    steps:
+      - name: Load reviewed helpers from the workflow revision
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
+        with:
+          ref: ${{ github.workflow_sha }}
+          persist-credentials: false
+          sparse-checkout-cone-mode: false
+          sparse-checkout: |
+            /tool/release/sign_android.py
+            /tool/release/verify.py
+      - name: Independently fetch and verify approved input
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          test "$GITHUB_REF" = refs/heads/main
+          python3 -I -B tool/release/sign_android.py prepare \
+            --work-dir "$RUNNER_TEMP/lineup-android-signing" --build-tools "$ANDROID_HOME/build-tools/36.0.0" \
+            --repo "$GITHUB_REPOSITORY" --source-sha "$SOURCE_SHA" --workflow-sha "$WORKFLOW_SHA" \
+            --ci-run "$CI_RUN" --ci-attempt "$CI_ATTEMPT" --artifact "$ARTIFACT_ID" \
+            --signing-run "$GITHUB_RUN_ID" --signing-attempt "$GITHUB_RUN_ATTEMPT" \
+            --certificate "$EXPECTED_CERTIFICATE" --manifest-sha256 "$MANIFEST_SHA256"
+      - name: Sign approved APK
+        env:
+          ANDROID_KEYSTORE_BASE64: ${{ secrets.ANDROID_KEYSTORE_BASE64 }}
+          ANDROID_KEYSTORE_PASSWORD: ${{ secrets.ANDROID_KEYSTORE_PASSWORD }}
+          ANDROID_KEY_ALIAS: ${{ secrets.ANDROID_KEY_ALIAS }}
+          ANDROID_KEY_PASSWORD: ${{ secrets.ANDROID_KEY_PASSWORD }}
+        run: |
+          python3 -I -B tool/release/sign_android.py sign \
+            --work-dir "$RUNNER_TEMP/lineup-android-signing" --build-tools "$ANDROID_HOME/build-tools/36.0.0" \
+            --manifest-sha256 "$MANIFEST_SHA256"
+      - name: Verify final signature and prepare acceptance evidence
+        run: |
+          python3 -I -B tool/release/sign_android.py finalize \
+            --work-dir "$RUNNER_TEMP/lineup-android-signing" --build-tools "$ANDROID_HOME/build-tools/36.0.0" \
+            --manifest-sha256 "$MANIFEST_SHA256"
+      - name: Retain signed candidate for physical acceptance
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9
+        with:
+          name: android-signed-${{ inputs.source_sha }}-${{ github.run_id }}
+          path: ${{ runner.temp }}/lineup-android-signing/candidate/
+          if-no-files-found: error
+          retention-days: 3
+          compression-level: 0

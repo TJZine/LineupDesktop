@@ -9,6 +9,7 @@ import 'package:xml/xml.dart';
 import '../app_version.dart';
 import '../channels/channel.dart';
 import 'plex_models.dart';
+import 'plex_scan_budget.dart';
 import 'plex_transcode.dart';
 import 'plex_xml.dart';
 
@@ -66,7 +67,36 @@ class PlexClient {
     http.Client? httpClient,
     this.requestTimeout = const Duration(seconds: 15),
     this.onTranscodeStopFailure,
+    this.scanLimits = const PlexScanLimits(),
   }) : _http = httpClient ?? http.Client();
+
+  final PlexScanLimits scanLimits;
+
+  /// Owns one top-level attempt; nested scan calls reuse its async scope.
+  Future<T> runScan<T>(
+    Future<T> Function(PlexScanBudget budget) body, {
+    Future<void>? cancelled,
+  }) async {
+    final existing = PlexScanBudget.current;
+    if (existing != null) {
+      existing.check();
+      return body(existing);
+    }
+    final budget = PlexScanBudget(scanLimits, cancelled: cancelled);
+    try {
+      return await budget.run(() async {
+        final result = await body(budget);
+        budget.check();
+        return result;
+      });
+    } catch (_) {
+      // Preserve fatal exhaustion even when a recovery path maps IO errors.
+      budget.check();
+      rethrow;
+    } finally {
+      budget.close();
+    }
+  }
 
   final String clientIdentifier;
   final http.Client _http;
@@ -355,6 +385,7 @@ class PlexClient {
         timeout: const Duration(seconds: 4),
       );
     } catch (_) {
+      PlexScanBudget.current?.check();
       return null;
     }
     if (response.statusCode == 401) {
@@ -507,6 +538,21 @@ class PlexClient {
     void Function(PlexLibraryScanPhase phase)? onPhase,
     Future<void>? cancelled,
   }) async {
+    if (PlexScanBudget.current == null) {
+      return runScan(
+        (_) => scanLibrary(
+          server,
+          token,
+          libraryId,
+          libraryType,
+          isCurrent: isCurrent,
+          onProgress: onProgress,
+          onPhase: onPhase,
+          cancelled: cancelled,
+        ),
+        cancelled: cancelled,
+      );
+    }
     final phase = Stopwatch()..start();
     onPhase?.call(PlexLibraryScanPhase.items);
     final items = await libraryItems(
@@ -663,7 +709,11 @@ class PlexClient {
       try {
         records = await list();
       } on PlexException catch (error) {
-        if (error.isAuthorizationFailure || error.isCancellation) rethrow;
+        if (error is PlexScanLimitException ||
+            error.isAuthorizationFailure ||
+            error.isCancellation) {
+          rethrow;
+        }
         return PlexCollectionMembership(
           failure: error is _LibraryMetadataPageLimitException
               ? PlexCollectionFailure.pagingLimitExceeded
@@ -743,7 +793,9 @@ class PlexClient {
               (members[id] ??= {}).add(record.title);
             }
           } on PlexException catch (error, stack) {
-            if (error.isAuthorizationFailure || error.isCancellation) {
+            if (error is PlexScanLimitException ||
+                error.isAuthorizationFailure ||
+                error.isCancellation) {
               if (!abort.isCompleted || callerCancelled || !isCurrent()) {
                 fatal ??= error;
                 fatalStack ??= stack;
@@ -868,7 +920,20 @@ class PlexClient {
     Future<void>? cancelled,
     void Function(PlexPlaylistProgress progress)? onProgress,
   }) async {
+    if (PlexScanBudget.current == null) {
+      return runScan(
+        (_) => playlists(
+          server,
+          token,
+          isCurrent: isCurrent,
+          cancelled: cancelled,
+          onProgress: onProgress,
+        ),
+        cancelled: cancelled,
+      );
+    }
     void checkCurrent() {
+      PlexScanBudget.current?.check();
       if (!isCurrent()) {
         throw _scanCancelledException;
       }
@@ -935,7 +1000,8 @@ class PlexClient {
             if (fatal == null) rethrow;
             return null;
           }
-          if (exception.isAuthorizationFailure) {
+          if (exception is PlexScanLimitException ||
+              exception.isAuthorizationFailure) {
             fatal ??= exception;
             fatalStack ??= stack;
             signalAttemptAbort();
@@ -1118,6 +1184,7 @@ class PlexClient {
     }
 
     for (var page = 0; page < maximumPages; page++) {
+      PlexScanBudget.current?.check();
       checkCurrent();
       final json = await _serverJson(
         request(rawConsumed),
@@ -1139,6 +1206,17 @@ class PlexClient {
       knownTotal = validated.knownTotal;
       final metadata = validated.metadata;
       validateEntries(rawConsumed + metadata.length);
+      // Charge before parsing/retaining a page, including tags in its rows.
+      final budget = PlexScanBudget.current;
+      budget?.retain(metadata.length);
+      for (final raw in metadata) {
+        if (raw is Map) {
+          for (final key in ['Genre', 'Collection']) {
+            final tags = raw[key];
+            if (tags is List) budget?.retain(tags.length);
+          }
+        }
+      }
       rows.addAll(parsePage(metadata));
       rawConsumed += metadata.length;
       if (checkAfterPage) checkCurrent();
@@ -1448,12 +1526,12 @@ class PlexClient {
     'X-Plex-Session-Identifier': ?sessionId,
   };
 
-  void _cancel(Stream<List<int>> stream) {
+  Future<void> _cancel(Stream<List<int>> stream) {
     final subscription = stream.listen(
       null,
       onError: (Object _, StackTrace _) {},
     );
-    unawaited(subscription.cancel().onError((_, _) {}));
+    return subscription.cancel().onError((_, _) {});
   }
 
   Future<Map<String, Object?>> _serverJson(
@@ -1489,6 +1567,39 @@ class PlexClient {
     String oversizedCode = 'response-too-large',
     String oversizedMessage = 'Plex returned too much data.',
   }) async {
+    final budget = PlexScanBudget.current;
+    await budget?.acquireRequest();
+    try {
+      return await _sendUnpooled(
+        method,
+        uri,
+        headers: headers,
+        bodyFields: bodyFields,
+        cancelled: cancelled,
+        timeout: timeout,
+        maximumBytes: maximumBytes,
+        oversizedCode: oversizedCode,
+        oversizedMessage: oversizedMessage,
+      );
+    } catch (_) {
+      budget?.check();
+      rethrow;
+    } finally {
+      budget?.releaseRequest();
+    }
+  }
+
+  Future<http.Response> _sendUnpooled(
+    String method,
+    Uri uri, {
+    required Map<String, String> headers,
+    Map<String, String>? bodyFields,
+    Future<void>? cancelled,
+    Duration? timeout,
+    int maximumBytes = maximumControlResponseBytes,
+    String oversizedCode = 'response-too-large',
+    String oversizedMessage = 'Plex returned too much data.',
+  }) async {
     final abort = Completer<void>();
     var finished = false;
     void abortRequest() {
@@ -1496,12 +1607,21 @@ class PlexClient {
     }
 
     unawaited(_joinCancellation(cancelled, abort, isFinished: () => finished));
+    final budget = PlexScanBudget.current;
+    unawaited(
+      _joinCancellation(budget?.stopped, abort, isFinished: () => finished),
+    );
+    budget?.check();
     final request =
         http.AbortableRequest(method, uri, abortTrigger: abort.future)
           ..followRedirects = false
           ..headers.addAll(headers);
     if (bodyFields != null) request.bodyFields = bodyFields;
-    final limit = timeout ?? requestTimeout;
+    final requestLimit = timeout ?? requestTimeout;
+    final remainingBudget = budget?.remaining;
+    final limit = remainingBudget != null && remainingBudget < requestLimit
+        ? remainingBudget
+        : requestLimit;
     final elapsed = Stopwatch()..start();
     try {
       final pendingResponse = _http.send(request);
@@ -1523,7 +1643,12 @@ class PlexClient {
         rethrow;
       }
       if (streamed.statusCode < 200 || streamed.statusCode >= 300) {
-        _cancel(streamed.stream);
+        final draining = _cancel(streamed.stream);
+        if (budget != null) {
+          await draining;
+        } else {
+          unawaited(draining);
+        }
         return http.Response.bytes(
           const [],
           streamed.statusCode,
@@ -1535,12 +1660,22 @@ class PlexClient {
         );
       }
       if ((streamed.contentLength ?? 0) > maximumBytes) {
-        _cancel(streamed.stream);
+        final draining = _cancel(streamed.stream);
+        if (budget != null) {
+          await draining;
+        } else {
+          unawaited(draining);
+        }
         throw PlexException(oversizedCode, oversizedMessage);
       }
       final remaining = limit - elapsed.elapsed;
       if (remaining <= Duration.zero) {
-        _cancel(streamed.stream);
+        final draining = _cancel(streamed.stream);
+        if (budget != null) {
+          await draining;
+        } else {
+          unawaited(draining);
+        }
         throw TimeoutException('Plex response deadline elapsed.');
       }
       final body = await _readBounded(
@@ -1549,7 +1684,9 @@ class PlexClient {
         timeout: remaining,
         oversizedCode: oversizedCode,
         oversizedMessage: oversizedMessage,
+        cancelled: abort.future,
       );
+      budget?.check();
       return http.Response.bytes(
         body,
         streamed.statusCode,
@@ -1595,18 +1732,23 @@ class PlexClient {
     required Duration timeout,
     required String oversizedCode,
     required String oversizedMessage,
+    Future<void>? cancelled,
   }) {
     final completer = Completer<Uint8List>();
     final bytes = BytesBuilder(copy: false);
     StreamSubscription<List<int>>? subscription;
 
+    var finishing = false;
     void finishError(Object error, StackTrace stackTrace) {
-      if (completer.isCompleted) return;
+      if (completer.isCompleted || finishing) return;
+      finishing = true;
       final activeSubscription = subscription;
-      if (activeSubscription != null) {
-        unawaited(activeSubscription.cancel().onError((_, _) {}));
-      }
-      completer.completeError(error, stackTrace);
+      unawaited(() async {
+        if (activeSubscription != null) {
+          await activeSubscription.cancel().onError((_, _) {});
+        }
+        completer.completeError(error, stackTrace);
+      }());
     }
 
     final timer = Timer(
@@ -1618,6 +1760,14 @@ class PlexClient {
     );
     subscription = stream.listen(
       (chunk) {
+        if (finishing || completer.isCompleted) return;
+        try {
+          PlexScanBudget.current?.receive(chunk.length);
+        } catch (error, stack) {
+          timer.cancel();
+          finishError(error, stack);
+          return;
+        }
         if (bytes.length + chunk.length > maximumBytes) {
           timer.cancel();
           finishError(
@@ -1634,9 +1784,24 @@ class PlexClient {
       },
       onDone: () {
         timer.cancel();
-        if (!completer.isCompleted) completer.complete(bytes.takeBytes());
+        if (!completer.isCompleted && !finishing) {
+          completer.complete(bytes.takeBytes());
+        }
       },
       cancelOnError: false,
+    );
+    unawaited(
+      cancelled?.then((_) {
+        timer.cancel();
+        if (completer.isCompleted || finishing) return;
+        Object error = _scanCancelledException;
+        try {
+          PlexScanBudget.current?.check();
+        } catch (failure) {
+          error = failure;
+        }
+        finishError(error, StackTrace.current);
+      }),
     );
     return completer.future;
   }
@@ -1730,15 +1895,26 @@ PlexMediaItem _annotateLibraryItem(
   Map<String, Set<String>> titlesByMember,
   Map<String, List<String>> showGenres,
 ) {
-  final collections = <String>{
-    ...?titlesByMember[item.id],
-    ...?titlesByMember[item.parentRatingKey],
-    ...?titlesByMember[item.grandparentRatingKey],
-  };
-  final genres = <String>{
-    ...item.genres,
-    if (item.type == 'episode') ...?showGenres[item.grandparentRatingKey],
-  };
+  final budget = PlexScanBudget.current;
+  final collections = <String>{};
+  for (final id in [item.id, item.parentRatingKey, item.grandparentRatingKey]) {
+    for (final title in titlesByMember[id] ?? const <String>{}) {
+      budget?.retain(1);
+      collections.add(title);
+    }
+  }
+  final genres = <String>{};
+  void addGenres(Iterable<String> source) {
+    for (final genre in source) {
+      budget?.retain(1);
+      genres.add(genre);
+    }
+  }
+
+  addGenres(item.genres);
+  if (item.type == 'episode') {
+    addGenres(showGenres[item.grandparentRatingKey] ?? const []);
+  }
   return PlexMediaItem.withTags(
     item,
     collections: List.unmodifiable(collections),
