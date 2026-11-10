@@ -205,7 +205,7 @@ void main() {
       expect(coordinator.overlay, PlayerOverlay.error);
       expect(coordinator.error, error);
       expect(coordinator.canRetry, isTrue);
-      expect(player.stopResults, hasLength(1));
+      expect(player.stopResults, hasLength(2));
       coordinator.closeOverlay();
       expect(await coordinator.tune('channel-0'), isFalse);
       expect(coordinator.overlay, PlayerOverlay.error);

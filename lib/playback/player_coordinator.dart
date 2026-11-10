@@ -2467,9 +2467,7 @@ class PlayerCoordinator extends ChangeNotifier with WidgetsBindingObserver {
       ++_controlGeneration;
       ++_seekGeneration;
       final fullscreenCleanup = _queueFullscreenReset();
-      // The authorization transition (or its explicit Retry) owns this stop.
-      if (!_authorizationStopUnconfirmed &&
-          (_active != null || _tuning || _nativeCleanupRequired)) {
+      if (_active != null || _tuning || _nativeCleanupRequired) {
         _nextTuneGeneration();
         _tuning = false;
         _canRetry = false;
