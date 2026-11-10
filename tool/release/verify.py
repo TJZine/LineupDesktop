@@ -106,6 +106,9 @@ def check_run(run_info, artifact, commit, run_id, attempt, workflow):
             'wrong CI run or attempt')
     require(run_info.get('head_sha') == commit and run_info.get('path') == workflow,
             'wrong CI source or workflow')
+    require(run_info.get('event') in {'push', 'workflow_dispatch'} and
+            run_info.get('head_branch') == 'main',
+            'CI must run on a main branch push or workflow dispatch')
     require(run_info.get('status') == 'completed' and
             run_info.get('conclusion') == 'success', 'CI run did not succeed')
     require(not artifact.get('expired', True) and

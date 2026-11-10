@@ -134,5 +134,5 @@ jobs:
           name: android-signed-${{ inputs.source_sha }}-${{ github.run_id }}
           path: ${{ runner.temp }}/lineup-android-signing/candidate/
           if-no-files-found: error
-          retention-days: 3
+          retention-days: 1
           compression-level: 0

@@ -21,6 +21,7 @@ class ReleaseChecks(unittest.TestCase):
         commit = 'a' * 40
         run = dict(id=123, run_attempt=2, head_sha=commit, status='completed',
                    conclusion='success', path='.github/workflows/ci.yml',
+                   head_branch='main', event='push',
                    run_started_at='2026-11-09T10:00:00Z')
         artifact = dict(expired=False, digest='sha256:' + 'b' * 64,
                         workflow_run=dict(id=123, head_sha=commit),
@@ -28,8 +29,10 @@ class ReleaseChecks(unittest.TestCase):
         def check(r, a):
             return verify.check_run(r, a, commit, 123, 2, '.github/workflows/ci.yml')
         self.assertEqual(check(run, artifact), 'b' * 64)
+        self.assertEqual(check(dict(run, event='workflow_dispatch'), artifact), 'b' * 64)
         for field, value in [('id', 456), ('head_sha', 'c' * 40), ('run_attempt', 1),
-                             ('path', 'other.yml'), ('conclusion', 'failure'),
+                             ('path', 'other.yml'), ('event', 'pull_request'),
+                             ('head_branch', 'release'), ('conclusion', 'failure'),
                              ('status', 'in_progress')]:
             with self.subTest(run_field=field), self.assertRaises(ValueError):
                 check(dict(run, **{field: value}), artifact)
