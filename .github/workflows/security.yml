@@ -24,7 +24,7 @@ jobs:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
         with:
           persist-credentials: false
-      - name: Scan Pub and Gradle committed versions with affected/fixed controls
+      - name: Scan the Pub lockfile with affected and fixed controls
         run: >-
           tool/security/osv-scan.sh
           --lockfile=pubspec.lock
