@@ -219,6 +219,13 @@ metadata.
 
 ## Release packaging and runtime notices
 
+The Android `versionCode` is the build number after `+` in `pubspec.yaml`.
+It must strictly increase and exceed every build ever installed on maintainer
+devices. Once a candidate has been signed with the production key, retire its
+number permanently, even if the candidate is rejected. Before signing the
+first public candidate, confirm that the planned build number `20` is higher
+than every previously installed build.
+
 Prepare a fresh full checkout at the reviewed commit, with every source input
 committed and no untracked build inputs. Use non-shallow, non-sparse source
 with no prior `build/` output or Android project cache. Run in a credential-free build context.
@@ -305,6 +312,9 @@ adb -s emulator-5554 shell am start -n com.tjzine.lineup.dev/com.tjzine.lineup.M
 adb -s emulator-5554 shell input keyevent KEYCODE_DPAD_DOWN
 adb -s emulator-5554 shell input keyevent KEYCODE_DPAD_CENTER
 ```
+
+For a production-signed release upgrade, use
+`adb -s <serial> install -r <apk>` with the same authorized signing key.
 
 Debug/profile APKs use the `.dev` application ID and may use
 `install -r -d` on a disposable emulator. `flutter install` uninstalls by
