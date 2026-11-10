@@ -110,6 +110,7 @@ class UpstreamOnboardingViewState extends State<UpstreamOnboardingView>
   bool get _openingBrowser =>
       _browserPinId != null && _browserPinId == widget.controller.activePin?.id;
   _ServerAttempt _serverAttempt = const _NoServerAttempt();
+  Object? _serverRefresh;
   int _serverAttemptRevision = 0;
   PlexHomeUser? _pinUser;
   String? _invokedProfileId;
@@ -186,6 +187,7 @@ class UpstreamOnboardingViewState extends State<UpstreamOnboardingView>
     super.didUpdateWidget(oldWidget);
     if (oldWidget.controller == widget.controller) return;
     oldWidget.controller.removeListener(_controllerChanged);
+    _serverRefresh = null;
     _linkingStopped = _isLinkingStopped(widget.controller);
     _wasLinking = widget.controller.stage == SetupStage.linking;
     _busy = widget.controller.busy;
@@ -237,7 +239,8 @@ class UpstreamOnboardingViewState extends State<UpstreamOnboardingView>
           when _pinUser == null && controller.profileSelectionCanCancel =>
         _profileCancelFocus,
       SetupStage.servers
-          when controller.serverSelectionCanCancel &&
+          when _serverAttempt.pending &&
+              controller.serverSelectionCanCancel &&
               controller.canSwitchServer =>
         _serverCancelFocus,
       _ => null,
@@ -1136,7 +1139,11 @@ class UpstreamOnboardingViewState extends State<UpstreamOnboardingView>
           children: [
             OutlinedButton.icon(
               autofocus: !_actionsBusy && widget.controller.servers.isEmpty,
-              onPressed: _actionsBusy ? null : _refreshServers,
+              // Keep remote focus on Refresh while its request is pending.
+              // _refreshServers ignores repeated activation while busy.
+              onPressed: !_actionsBusy || (_isTv && _serverRefresh != null)
+                  ? _refreshServers
+                  : null,
               icon: const Icon(Icons.refresh),
               label: const Text('Refresh servers'),
             ),
@@ -1192,15 +1199,27 @@ class UpstreamOnboardingViewState extends State<UpstreamOnboardingView>
 
   Future<void> _refreshServers() async {
     if (!mounted || _actionsBusy) return;
-    _clearServerError();
-    await widget.controller.refreshServers();
-    if (!mounted || widget.controller.stage != SetupStage.servers) return;
-    if (widget.controller.error != null) {
-      setState(
-        () => _serverAttempt = _GeneralServerAttemptFailure(
-          widget.controller.error!,
-        ),
-      );
+    final controller = widget.controller;
+    final refresh = Object();
+    setState(() {
+      _serverAttempt = const _NoServerAttempt();
+      _serverRefresh = refresh;
+    });
+    try {
+      await controller.refreshServers();
+      if (!mounted ||
+          !identical(_serverRefresh, refresh) ||
+          controller.stage != SetupStage.servers ||
+          _serverAttempt.pending) {
+        return;
+      }
+      if (controller.error case final message?) {
+        setState(() => _serverAttempt = _GeneralServerAttemptFailure(message));
+      }
+    } finally {
+      if (mounted && identical(_serverRefresh, refresh)) {
+        setState(() => _serverRefresh = null);
+      }
     }
   }
 

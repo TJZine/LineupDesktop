@@ -1850,6 +1850,42 @@ void main() {
     );
   }, semanticsEnabled: true);
 
+  testWidgets('TV Refresh servers leaves Back unfocused while busy', (
+    tester,
+  ) async {
+    final plex = _SlowAuthorizationPlex();
+    final controller = LineupController(
+      store: MemoryAppStore()
+        ..state = const PersistedState(
+          profileId: 'owner',
+          selectedServerByProfile: {'owner': 'server'},
+        ),
+      credentials: MemoryCredentialStore(accountToken: 'synthetic-account'),
+      plex: plex,
+    );
+    addTearDown(controller.dispose);
+    await controller.initialize();
+    controller.showServers();
+    await show(tester, controller, isTv: true);
+    final back = find.widgetWithText(TextButton, 'Back');
+    final backFocus = tester.widget<TextButton>(back).focusNode!;
+    expect(backFocus.hasFocus, isFalse);
+    final gate = plex.refreshGate = Completer<void>();
+
+    await tester.tap(find.text('Refresh servers'));
+    await tester.pump();
+    await tester.pump();
+    expect(controller.busy, isTrue);
+    expect(backFocus.hasFocus, isFalse);
+    await tester.sendKeyEvent(LogicalKeyboardKey.select);
+    await tester.pump();
+    expect(controller.stage, SetupStage.servers);
+    expect(controller.busy, isTrue);
+    gate.complete();
+    await tester.pumpAndSettle();
+    expect(controller.busy, isFalse);
+  }, variant: const TargetPlatformVariant({TargetPlatform.android}));
+
   testWidgets('refresh and profile switch clear stale server errors', (
     tester,
   ) async {
@@ -2587,18 +2623,23 @@ class _PickerBoundaryPlex extends _ProfileRecoveryPlex {
 }
 
 class _SlowAuthorizationPlex extends _PickerBoundaryPlex {
+  Completer<void>? refreshGate;
+
   @override
-  Future<List<PlexServerAccess>> discoverServers(String token) async => [
-    ...await super.discoverServers(token),
-    PlexServerAccess(
-      server: const PlexServer(
-        id: 'alternate',
-        name: 'Alternate server',
-        connections: [],
+  Future<List<PlexServerAccess>> discoverServers(String token) async {
+    await refreshGate?.future;
+    return [
+      ...await super.discoverServers(token),
+      PlexServerAccess(
+        server: const PlexServer(
+          id: 'alternate',
+          name: 'Alternate server',
+          connections: [],
+        ),
+        token: 'synthetic-alternate-access',
       ),
-      token: 'synthetic-alternate-access',
-    ),
-  ];
+    ];
+  }
 
   @override
   Future<PlexConnection> selectConnection(
