@@ -359,18 +359,16 @@ class SetupLibraryStep extends StatelessWidget {
                   liveRegion: true,
                   child: Text(
                     scanError != null && (retry.isEmpty || error != null)
-                        ? scanError
+                        ? [
+                            scanError,
+                            ?data.profileCredentialRecoveryNotice,
+                          ].join('\n')
                         : ready.isEmpty
                         ? _summary()
                         : '${ready.length} of ${selectedLibraryIds.length} ${selectedLibraryIds.length == 1 ? 'library' : 'libraries'} ${ready.length == 1 ? 'is' : 'are'} ready. Continuing builds from ${data.libraries.where((library) => ready.contains(library.id)).map((library) => library.title).join(', ')}${excluded > 0 ? ' only' : ''}.',
                     style: bodyStyle,
                   ),
                 ),
-              ),
-            if (data.profileCredentialRecoveryNotice case final notice?)
-              Padding(
-                padding: const EdgeInsets.only(top: 16),
-                child: LineupNotice(message: notice),
               ),
             if (!DeviceProfile.of(context).isTv) ...[
               const SizedBox(height: 24),

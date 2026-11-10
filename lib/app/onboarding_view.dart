@@ -512,21 +512,7 @@ class UpstreamOnboardingViewState extends State<UpstreamOnboardingView>
             SetupStage.channelSetup ||
             SetupStage.ready => const SizedBox.shrink(),
           };
-    final notice = controller.profileCredentialRecoveryNotice;
-    return Theme(
-      key: key,
-      data: Theme.of(context),
-      child: Column(
-        mainAxisSize: MainAxisSize.min,
-        children: [
-          content,
-          if (notice != null) ...[
-            const SizedBox(height: 12),
-            LineupNotice(message: notice),
-          ],
-        ],
-      ),
-    );
+    return Theme(key: key, data: Theme.of(context), child: content);
   }
 
   Widget _welcome() {
@@ -1059,12 +1045,15 @@ class UpstreamOnboardingViewState extends State<UpstreamOnboardingView>
             ),
           ),
         ],
-        _onboardingFeedback(const ValueKey('profile-feedback-slot')),
+        _onboardingFeedback(
+          const ValueKey('profile-feedback-slot'),
+          recoveryNotice: widget.controller.profileCredentialRecoveryNotice,
+        ),
       ],
     ),
   );
 
-  Widget _onboardingFeedback(Key key) {
+  Widget _onboardingFeedback(Key key, {String? recoveryNotice}) {
     final message = _actionsBusy ? 'Working…' : _selectionError;
     final roles = LineupTheme.of(context);
     if (message == null) return SizedBox.shrink(key: key);
@@ -1074,7 +1063,7 @@ class UpstreamOnboardingViewState extends State<UpstreamOnboardingView>
       child: Semantics(
         liveRegion: true,
         child: Text(
-          message,
+          _withRecoveryNotice(message, _actionsBusy ? null : recoveryNotice),
           textAlign: TextAlign.center,
           style: TextStyle(
             color: _actionsBusy
@@ -1135,6 +1124,8 @@ class UpstreamOnboardingViewState extends State<UpstreamOnboardingView>
               error: _serverAttempt.serverId == server.id
                   ? _serverAttempt.message
                   : null,
+              profileCredentialRecoveryNotice:
+                  widget.controller.profileCredentialRecoveryNotice,
             ),
           ),
         SizedBox(height: 12),
@@ -1181,7 +1172,10 @@ class UpstreamOnboardingViewState extends State<UpstreamOnboardingView>
               child: Semantics(
                 liveRegion: true,
                 child: Text(
-                  _serverAttempt.message ?? _selectionError!,
+                  _withRecoveryNotice(
+                    _serverAttempt.message ?? _selectionError!,
+                    widget.controller.profileCredentialRecoveryNotice,
+                  ),
                   style: TextStyle(color: Theme.of(context).colorScheme.error),
                 ),
               ),
@@ -1267,9 +1261,14 @@ class UpstreamOnboardingViewState extends State<UpstreamOnboardingView>
       },
       onSubmit: (pin) => widget.onSelectProfile(_pinUser!, pin: pin),
       error: () => _selectionError,
+      profileCredentialRecoveryNotice:
+          widget.controller.profileCredentialRecoveryNotice,
     ),
   );
 }
+
+String _withRecoveryNotice(String message, String? notice) =>
+    notice == null ? message : '$message\n$notice';
 
 class _LinkStatusDot extends StatelessWidget {
   const _LinkStatusDot({required this.animated, required this.phase});
@@ -1622,6 +1621,7 @@ class _ServerCard extends StatelessWidget {
     this.pending = false,
     this.previouslyUsed = false,
     this.error,
+    this.profileCredentialRecoveryNotice,
   });
   final PlexServer server;
   final bool current;
@@ -1630,6 +1630,7 @@ class _ServerCard extends StatelessWidget {
   final bool pending;
   final bool previouslyUsed;
   final String? error;
+  final String? profileCredentialRecoveryNotice;
 
   @override
   Widget build(BuildContext context) {
@@ -1748,7 +1749,10 @@ class _ServerCard extends StatelessWidget {
                 Semantics(
                   liveRegion: true,
                   child: Text(
-                    error!,
+                    _withRecoveryNotice(
+                      error!,
+                      profileCredentialRecoveryNotice,
+                    ),
                     style: TextStyle(
                       color: Theme.of(context).colorScheme.error,
                       fontSize: 18,
@@ -1773,6 +1777,7 @@ class _ProfilePinStep extends StatefulWidget {
     required this.onAccepted,
     required this.onSubmit,
     required this.error,
+    required this.profileCredentialRecoveryNotice,
     super.key,
   });
   final PlexHomeUser user;
@@ -1782,6 +1787,7 @@ class _ProfilePinStep extends StatefulWidget {
   final VoidCallback onAccepted;
   final Future<bool> Function(String pin) onSubmit;
   final String? Function() error;
+  final String? profileCredentialRecoveryNotice;
 
   @override
   State<_ProfilePinStep> createState() => _ProfilePinStepState();
@@ -1897,6 +1903,9 @@ class _ProfilePinStepState extends State<_ProfilePinStep> {
   @override
   Widget build(BuildContext context) {
     final isTv = DeviceProfile.of(context).isTv;
+    final error = _error;
+    final notice = widget.profileCredentialRecoveryNotice;
+    final message = error == null ? null : _withRecoveryNotice(error, notice);
     const gap = 16.0;
     return PopScope(
       canPop: AndroidBackScope.claims(context),
@@ -1986,7 +1995,9 @@ class _ProfilePinStepState extends State<_ProfilePinStep> {
                   SizedBox(height: gap),
                   SizedBox(
                     key: const Key('profile-pin-status'),
-                    height: 44,
+                    height: !_submitting && error != null && notice != null
+                        ? null
+                        : 44,
                     child: _submitting
                         ? Semantics(
                             label: 'Checking PIN',
@@ -1995,17 +2006,17 @@ class _ProfilePinStepState extends State<_ProfilePinStep> {
                               child: CircularProgressIndicator(strokeWidth: 2),
                             ),
                           )
-                        : _error == null
+                        : message == null
                         ? const SizedBox.shrink()
                         : Semantics(
                             key: const Key('profile-pin-error'),
                             container: true,
                             liveRegion: true,
-                            label: _error,
+                            label: message,
                             child: ExcludeSemantics(
                               child: Center(
                                 child: Text(
-                                  _error!,
+                                  message,
                                   softWrap: true,
                                   textAlign: TextAlign.center,
                                   style: TextStyle(

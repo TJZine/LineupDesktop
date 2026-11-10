@@ -861,22 +861,34 @@ void main() {
     await tester.pump(const Duration(milliseconds: 200));
   }
 
-  testWidgets(
-    'onboarding shows a credential recovery notice alongside the current error',
-    (tester) async {
-      final controller = _AuthorizationController(
-        scenario: const LineupScenario(
-          stage: SetupStage.servers,
-          error: 'Synthetic server failure',
-        ),
-        profileCredentialRecoveryNotice: 'Synthetic credential recovery notice',
-      );
-      addTearDown(controller.dispose);
-      await show(tester, controller);
-      expect(find.text('Synthetic server failure'), findsOneWidget);
-      expect(find.text('Synthetic credential recovery notice'), findsOneWidget);
-    },
-  );
+  for (final stage in [
+    SetupStage.profiles,
+    SetupStage.servers,
+    SetupStage.welcome,
+  ]) {
+    testWidgets(
+      'credential recovery appears only within the $stage error surface',
+      (tester) async {
+        const error = 'Synthetic selection failure';
+        const notice = 'Synthetic credential recovery notice';
+        final controller = _AuthorizationController(
+          scenario: LineupScenario(stage: stage, error: error),
+          profileCredentialRecoveryNotice: notice,
+        );
+        addTearDown(controller.dispose);
+        await show(tester, controller);
+        expect(
+          find.text('$error\n$notice'),
+          stage == SetupStage.welcome ? findsNothing : findsOneWidget,
+        );
+        expect(
+          find.textContaining(notice),
+          stage == SetupStage.welcome ? findsNothing : findsOneWidget,
+        );
+        expect(find.text(notice), findsNothing);
+      },
+    );
+  }
 
   testWidgets(
     'NAV-I2 onboarding roots are side-effect-free and pickers cancel',
