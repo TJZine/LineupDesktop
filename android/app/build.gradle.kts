@@ -18,6 +18,7 @@ android {
         applicationId = "com.tjzine.lineup"
         minSdk = 28
         targetSdk = flutter.targetSdkVersion
+        resValue("string", "app_name", "Lineup")
         // Native-asset hooks can otherwise add x86_64 even when Flutter targets
         // only ARM. Distribution is a two-ABI universal TV APK.
         ndk {
@@ -32,7 +33,13 @@ android {
     }
 
     buildTypes {
+        getByName("debug") {
+            applicationIdSuffix = ".dev"
+            resValue("string", "app_name", "Lineup Dev")
+        }
         getByName("profile") {
+            applicationIdSuffix = ".dev"
+            resValue("string", "app_name", "Lineup Dev")
             signingConfig = signingConfigs.getByName("debug")
         }
         release {

@@ -1,8 +1,10 @@
 # Android TV runtime
 
 Lineup's Android host targets Android TV / Google TV and Android-based Fire TV
-(Fire OS), API 28 or later. The application ID is `com.tjzine.lineup`, with
-launcher label **Lineup**. Vega OS, phones and tablets are outside this beta.
+(Fire OS), API 28 or later. Release builds use application ID
+`com.tjzine.lineup` with launcher label **Lineup**. Debug and profile builds use
+`com.tjzine.lineup.dev` with launcher label **Lineup Dev**. Vega OS, phones and
+tablets are outside this beta.
 The private sideload APK contains `armeabi-v7a` and `arm64-v8a` only.
 
 Flutter/Dart owns application policy, focus and interaction. `MainActivity` hosts
@@ -299,23 +301,23 @@ actual assigned serial; never assume the default device.
 
 ```sh
 adb -s emulator-5554 install -r -d build/app/outputs/flutter-apk/app-debug.apk
-adb -s emulator-5554 shell am start -n com.tjzine.lineup/.MainActivity
+adb -s emulator-5554 shell am start -n com.tjzine.lineup.dev/com.tjzine.lineup.MainActivity
 adb -s emulator-5554 shell input keyevent KEYCODE_DPAD_DOWN
 adb -s emulator-5554 shell input keyevent KEYCODE_DPAD_CENTER
 ```
 
-After sign-in, update only with `adb -s <serial> install -r -d <apk>` using the
-same authorized signing key. `flutter install` uninstalls by default, and `flutter run` can
-uninstall after an install failure, losing sign-in and lineups. Use those tools
-only on disposable emulators.
+Debug/profile APKs use the `.dev` application ID and may use
+`install -r -d` on a disposable emulator. `flutter install` uninstalls by
+default, and `flutter run` can uninstall after an install failure, losing
+sign-in and lineups. Use those tools only on disposable emulators.
 
 For development media, Flutter 3.47.7 requires a **String ArrayList** extra
 (`--esal`); `--esa` produces a `String[]` and crashes the embedding. Stop the
 existing process first so the entrypoint runs again:
 
 ```sh
-adb -s emulator-5554 shell am force-stop com.tjzine.lineup
-adb -s emulator-5554 shell am start -n com.tjzine.lineup/.MainActivity --esal dart_entrypoint_args "'--media=https://localhost:8443/fixture.mp4?case=join&n=1'"
+adb -s emulator-5554 shell am force-stop com.tjzine.lineup.dev
+adb -s emulator-5554 shell am start -n com.tjzine.lineup.dev/com.tjzine.lineup.MainActivity --esal dart_entrypoint_args "'--media=https://localhost:8443/fixture.mp4?case=join&n=1'"
 ```
 
 The nested quotes preserve `&` and `?` across the host/device shells. Escape any
@@ -326,9 +328,9 @@ debug/profile synthetic media only; never pass credentials. Dart ignores
 Capture diagnostics locally, then sanitize before sharing:
 
 ```sh
-adb -s emulator-5554 logcat --pid="$(adb -s emulator-5554 shell pidof com.tjzine.lineup)" > /tmp/lineup-android-local.log
-adb -s emulator-5554 shell dumpsys meminfo com.tjzine.lineup
-adb -s emulator-5554 shell dumpsys gfxinfo com.tjzine.lineup
+adb -s emulator-5554 logcat --pid="$(adb -s emulator-5554 shell pidof com.tjzine.lineup.dev)" > /tmp/lineup-android-local.log
+adb -s emulator-5554 shell dumpsys meminfo com.tjzine.lineup.dev
+adb -s emulator-5554 shell dumpsys gfxinfo com.tjzine.lineup.dev
 adb -s emulator-5554 exec-out screencap -p > /tmp/lineup-android.png
 ```
 
@@ -371,14 +373,14 @@ Run it **only on a fresh disposable emulator**, never a signed-in device:
 ```sh
 flutter build apk --debug --target-platform android-arm,android-arm64 --target test/persistence/android_credential_smoke.dart
 adb -s emulator-5554 install -r -d build/app/outputs/flutter-apk/app-debug.apk
-adb -s emulator-5554 shell am start -n com.tjzine.lineup/.MainActivity --esal dart_entrypoint_args "'write'"
+adb -s emulator-5554 shell am start -n com.tjzine.lineup.dev/com.tjzine.lineup.MainActivity --esal dart_entrypoint_args "'write'"
 # Observe U1_STORAGE_WRITE_PASS, force-stop, and install the same signed APK again.
-adb -s emulator-5554 shell am force-stop com.tjzine.lineup
+adb -s emulator-5554 shell am force-stop com.tjzine.lineup.dev
 adb -s emulator-5554 install -r -d build/app/outputs/flutter-apk/app-debug.apk
-adb -s emulator-5554 shell am start -n com.tjzine.lineup/.MainActivity --esal dart_entrypoint_args "'verify-and-delete'"
+adb -s emulator-5554 shell am start -n com.tjzine.lineup.dev/com.tjzine.lineup.MainActivity --esal dart_entrypoint_args "'verify-and-delete'"
 # Observe U1_STORAGE_RESTART_EXACT_DELETE_PASS. Restart to check deletion persisted.
-adb -s emulator-5554 shell am force-stop com.tjzine.lineup
-adb -s emulator-5554 shell am start -n com.tjzine.lineup/.MainActivity --esal dart_entrypoint_args "'verify-and-clear'"
+adb -s emulator-5554 shell am force-stop com.tjzine.lineup.dev
+adb -s emulator-5554 shell am start -n com.tjzine.lineup.dev/com.tjzine.lineup.MainActivity --esal dart_entrypoint_args "'verify-and-clear'"
 # Observe U1_STORAGE_RESTART_UPGRADE_DELETE_PASS. Rebuild normal lib/main.dart.
 ```
 

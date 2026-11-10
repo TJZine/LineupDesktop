@@ -54,8 +54,8 @@ without an explicit assignment. Rebuild normal `lib/main.dart` after testing.
 ```sh
 flutter build apk --debug --target-platform android-arm,android-arm64 --target tool/android/fixtures/player_contract.dart
 adb -s ASSIGNED_SERIAL install -r -d build/app/outputs/flutter-apk/app-debug.apk
-adb -s ASSIGNED_SERIAL shell am force-stop com.tjzine.lineup
-adb -s ASSIGNED_SERIAL shell am start -n com.tjzine.lineup/.MainActivity --esal dart_entrypoint_args "'--case=contract'"
+adb -s ASSIGNED_SERIAL shell am force-stop com.tjzine.lineup.dev
+adb -s ASSIGNED_SERIAL shell am start -n com.tjzine.lineup.dev/com.tjzine.lineup.MainActivity --esal dart_entrypoint_args "'--case=contract'"
 ```
 
 Read current-process logcat for `U3_CONTRACT` records. A run passes only on its
