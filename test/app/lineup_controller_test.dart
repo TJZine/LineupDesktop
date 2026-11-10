@@ -326,12 +326,64 @@ void main() {
       final selecting = fixture.controller.selectProfile(child, pin: '1234');
       await reading.future;
       await fixture.controller.refreshServers();
-      releaseRead.complete();
       expect(await selecting, isFalse);
+      releaseRead.complete();
+      await pumpEventQueue(times: 2);
       expect(fixture.credentials.events, ['read:child']);
       expect(fixture.credentials.profileTokens['child'], 'previous');
       expect(fixture.store.savedStates, isEmpty);
     });
+
+    test(
+      'profile picker closes cancellation before the credential write',
+      () async {
+        final fixture = await _profileCredentialFixture(hadPrevious: true);
+        final controller = fixture.controller..showProfiles();
+        final writing = Completer<void>();
+        final releaseWrite = Completer<void>();
+        fixture.credentials.onWrite = (_, _, _) async {
+          writing.complete();
+          await releaseWrite.future;
+        };
+        expect(controller.profileSelectionCanCancel, isTrue);
+        final selection = controller.selectProfile(child, pin: '1234');
+        await writing.future;
+        expect(controller.profileSelectionCanCancel, isFalse);
+        controller.cancelProfileSelection();
+        releaseWrite.complete();
+        expect(await selection, isTrue);
+        expect(fixture.store.state.profileId, child.id);
+        expect(fixture.credentials.profileTokens[child.id], 'candidate');
+      },
+    );
+
+    test(
+      'profile picker keeps cancellation closed through compensation',
+      () async {
+        final fixture = await _profileCredentialFixture(hadPrevious: false);
+        final controller = fixture.controller..showProfiles();
+        final compensating = Completer<void>();
+        final release = Completer<void>();
+        fixture.credentials.onWrite = (_, _, _) async {
+          throw StateError('synthetic partial write failure');
+        };
+        fixture.credentials.onDelete = (_) async {
+          compensating.complete();
+          await release.future;
+        };
+        final selection = controller.selectProfile(child, pin: '1234');
+        await compensating.future;
+        expect(controller.profileSelectionCanCancel, isFalse);
+        controller.cancelProfileSelection();
+        expect(controller.stage, SetupStage.profiles);
+        release.complete();
+        expect(await selection, isFalse);
+        expect(controller.profileSelectionCanCancel, isTrue);
+        expect(controller.profile?.id, 'owner');
+        expect(fixture.store.savedStates, isEmpty);
+        expect(fixture.credentials.profileTokens[child.id], isNull);
+      },
+    );
 
     test('prior read failure invokes no write or compensation', () async {
       final fixture = await _profileCredentialFixture(hadPrevious: true);

@@ -9,6 +9,10 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:lineup_desktop/app/lineup_shell.dart';
 import 'package:lineup_desktop/app/lineup_restore_view.dart';
 import 'package:lineup_desktop/channels/channel.dart';
+import 'package:lineup_desktop/channels/content_resolver.dart';
+import 'package:lineup_desktop/channels/schedule_worker.dart';
+import 'package:lineup_desktop/channels/scheduler.dart';
+import 'package:lineup_desktop/guide/guide_view.dart';
 import 'package:lineup_desktop/persistence/app_store.dart';
 import 'package:lineup_desktop/plex/plex_client.dart';
 import 'package:lineup_desktop/ui/lineup_canvas.dart';
@@ -212,12 +216,19 @@ void main() {
               ],
             },
           },
+          currentChannelByProfileServer: const {
+            'owner': {'server': 'saved'},
+          },
         );
       final plex = _SlowAuthorizationPlex();
+      final credentials = MemoryCredentialStore(
+        accountToken: 'synthetic-account',
+      );
       final controller = LineupController(
         store: store,
-        credentials: MemoryCredentialStore(accountToken: 'synthetic-account'),
+        credentials: credentials,
         plex: plex,
+        scheduleWorkerFactory: _InlineScheduleWorker.new,
       );
       final player = _AuthorizationGatePlayer();
       addTearDown(controller.dispose);
@@ -225,6 +236,7 @@ void main() {
       await controller.initialize();
       expect(controller.stage, SetupStage.ready);
       final before = store.state;
+      final saveCalls = store.saveCalls;
       if (selectingServer) {
         controller.showServers();
       } else {
@@ -237,7 +249,7 @@ void main() {
             controller: controller,
             player: player,
             profile: tvProfile,
-            initialMediaPath: 'https://example.invalid/synthetic.mp4',
+            guideClock: () => DateTime.utc(2026, 1, 1, 0, 0, 5),
           ),
         ),
       );
@@ -281,11 +293,25 @@ void main() {
       expect(controller.busy, isFalse);
       expect(plex.gate.isCompleted, isFalse);
 
+      final guide = tester.widget<GuideView>(find.byType(GuideView));
+      final tune = guide.onTune('saved');
+      await tester.pump();
+      expect(plex.gate.isCompleted, isFalse);
+      expect(player.loads, hasLength(1));
+      expect(player.loads.last.path, '/synthetic/movie');
+      player.emit(
+        const PlayerStatus(state: PlayerState.playing, message: 'Playing'),
+      );
+      await tester.pumpAndSettle();
+      await tune;
+
       plex.gate.complete();
       await tester.pumpAndSettle();
       expect(controller.server?.id, 'server');
       expect(controller.profile?.id, 'owner');
       expect(store.state, same(before));
+      expect(store.saveCalls, saveCalls);
+      expect(await credentials.readProfileToken('guest'), isNull);
       expect(player.loads, hasLength(1));
     }, variant: const TargetPlatformVariant({TargetPlatform.android}));
   }
@@ -2582,6 +2608,16 @@ class _SlowAuthorizationPlex extends _PickerBoundaryPlex {
     }
     return super.switchHomeUser(token, id, pin);
   }
+}
+
+class _InlineScheduleWorker extends ScheduleWorker {
+  _InlineScheduleWorker(super.media, super.playlists);
+
+  @override
+  Future<ScheduleIndex> build(Channel channel) async => buildChannelSchedule(
+    channel,
+    resolveContent(channel.source, media, playlists),
+  );
 }
 
 class _ProfileRecoveryPlex extends PlexClient {

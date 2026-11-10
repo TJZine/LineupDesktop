@@ -545,9 +545,10 @@ profile/server cannot revive captured work. Once a save durably succeeds,
 disposal, later discovery failure and credential-cleanup failure never compensate
 the committed token. Server publication uses any same-profile authorization
 refreshed during the save, retaining the chosen connection and validated access
-if discovery omits the target. Selection cancellation is hidden during the save
-and restored on failure. Once a save has started, a changed request epoch does
-not suppress its successful commit. Logout retires authorization immediately,
+if discovery omits the target. Cancellation completes read-only selection
+preparation promptly. The picker hides cancellation before the first durable
+write and restores it on a current failure. Once a save has started, a changed
+request epoch does not suppress its successful commit. Logout retires authorization immediately,
 reserves the state queue, waits for prior state transactions to commit or
 compensate, then enqueues credential cleanup. It never holds the credential queue
 while waiting for a state operation behind itself. Successful cleanup clears

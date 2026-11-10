@@ -336,6 +336,7 @@ class LineupController extends ChangeNotifier {
     _ => null,
   };
   int _epoch = 0;
+  Completer<void>? _selectionPreparation;
   int _authorizationScope = 0;
   int _mutationScope = 0;
   int _mutationEligibility = 0;
@@ -780,7 +781,8 @@ class LineupController extends ChangeNotifier {
     _clearServerTarget();
     _pinTimer?.cancel();
     var accepted = false;
-    await _run(
+    var restoreCancellation = false;
+    await _runSelection(
       () async {
         final accountToken = _accountToken;
         if (accountToken == null) {
@@ -789,14 +791,23 @@ class LineupController extends ChangeNotifier {
         final token = profiles.length == 1 && selected.id == account?.id
             ? accountToken
             : await plex.switchHomeUser(accountToken, selected.id, pin);
-        if (operation != _epoch) return;
+        if (!_isCurrent(operation)) return;
         await _queueStateOperation(operation, () async {
+          restoreCancellation = profileSelectionCanCancel;
           accepted = await _commitProfileSelection(operation, selected, token);
         });
       },
       operation: operation,
       fallbackStage: SetupStage.profiles,
     );
+    // Restore the picker action after the credential transaction has settled.
+    if (!accepted &&
+        _isCurrent(operation) &&
+        restoreCancellation &&
+        !profileSelectionCanCancel) {
+      _profileSelectionCanCancel = true;
+      notifyListeners();
+    }
     if (accepted && _isCurrent(operation)) {
       await _run(
         () => _discover(operation),
@@ -818,9 +829,12 @@ class LineupController extends ChangeNotifier {
       if (!_isCurrent(operation)) return false;
       final previous = await credentials.readProfileToken(selected.id);
       if (!_isCurrent(operation)) return false;
-      final oldCanCancel = profileSelectionCanCancel;
-      final oldProfileOrigin = _profilePickerOrigin;
-      var cancellationHidden = false;
+      // Close cancellation before the first durable write. The transaction
+      // must finish or compensate once it can affect secure storage.
+      _selectionPreparation = null;
+      _profileSelectionCanCancel = false;
+      notifyListeners();
+      if (!_isCurrent(operation)) return false;
       var committed = false;
       try {
         // A throwing backend may already have changed the key.
@@ -831,11 +845,6 @@ class LineupController extends ChangeNotifier {
           profile: selected,
           token: token,
         );
-        _profileSelectionCanCancel = false;
-        _profilePickerOrigin = null;
-        cancellationHidden = true;
-        notifyListeners();
-        if (!_isCurrent(operation)) throw const LineupScopeSuperseded();
         await _persistState(selection.state);
         committed = true;
         _unrestoredProfileCredentials.remove(selected.id);
@@ -846,10 +855,6 @@ class LineupController extends ChangeNotifier {
         return true;
       } catch (_) {
         if (!committed) {
-          if (cancellationHidden) {
-            _profileSelectionCanCancel = oldCanCancel;
-            _profilePickerOrigin = oldProfileOrigin;
-          }
           try {
             if (previous == null) {
               await credentials.deleteProfileToken(selected.id);
@@ -878,6 +883,7 @@ class LineupController extends ChangeNotifier {
   void _publishProfileSelection(_ProfileSelection selection) {
     _persisted = selection.state;
     _retireScope();
+    _profilePickerOrigin = null;
     _profile = selection.profile;
     _profileToken = selection.token;
     _serverAccess = const {};
@@ -950,7 +956,7 @@ class LineupController extends ChangeNotifier {
     _invalidatePmsRefresh();
     _serverTargetId = selected.id;
     _serverTargetOperation = operation;
-    await _run(
+    await _runSelection(
       () async {
         final selectedConnection = await _withPmsAuthorization(
           operation,
@@ -975,6 +981,7 @@ class LineupController extends ChangeNotifier {
         );
         if (!_isCurrent(operation)) return;
         await _queueStateOperation(operation, () async {
+          if (!_isCurrent(operation)) return;
           final access = _serverAccess[selected.id]!;
           final profileKey = profile?.id ?? account?.id;
           final scope = profileKey == null
@@ -1002,8 +1009,10 @@ class LineupController extends ChangeNotifier {
             lineup: lineup,
           );
           final oldCanCancel = serverSelectionCanCancel;
+          _selectionPreparation = null;
           _serverSelectionCanCancel = false;
           notifyListeners();
+          if (!_isCurrent(operation)) return;
           try {
             await _persistState(selection.state);
           } catch (_) {
@@ -2870,11 +2879,39 @@ class LineupController extends ChangeNotifier {
     }
   }
 
+  Future<void> _runSelection(
+    Future<void> Function() body, {
+    required int operation,
+    required SetupStage fallbackStage,
+    SetupStage? scanLimitFallbackStage,
+  }) async {
+    final preparation = Completer<void>();
+    _selectionPreparation = preparation;
+    try {
+      await _run(
+        () => Future.any<void>([
+          preparation.future,
+          if (_isCurrent(operation)) body(),
+        ]),
+        operation: operation,
+        fallbackStage: fallbackStage,
+        scanLimitFallbackStage: scanLimitFallbackStage,
+      );
+    } finally {
+      if (identical(_selectionPreparation, preparation)) {
+        _selectionPreparation = null;
+      }
+    }
+  }
+
   int _invalidateOperation() {
+    final operation = ++_epoch;
+    _selectionPreparation?.complete();
+    _selectionPreparation = null;
     _scenarioOpen = false;
     _restoringSavedLineup = false;
     _scan.cancelIo();
-    return ++_epoch;
+    return operation;
   }
 
   bool _isCurrent(int operation) => !_disposed && operation == _epoch;
