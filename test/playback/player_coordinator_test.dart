@@ -134,20 +134,30 @@ void main() {
               .arguments;
           expect(arguments['positionMs'], 8011);
           final seekId = arguments['seekId'] as int;
-          Future<void> result(int load, int seek, {double position = 8.011}) =>
-              _nativeEvent({
-                'type': 'sessionSeekResult',
-                'loadId': load,
-                'seekId': seek,
-                'outcome': 'landed',
-                if (desktop) ...{
-                  'positionSeconds': position,
-                  'demuxerStartSeconds': 12.5,
-                },
-              });
+          Future<void> result(
+            int load,
+            num seek, {
+            double position = 8.011,
+            num start = 12.5,
+          }) => _nativeEvent({
+            'type': 'sessionSeekResult',
+            'loadId': load,
+            'seekId': seek,
+            'outcome': 'landed',
+            if (desktop) ...{
+              'positionSeconds': position,
+              'demuxerStartSeconds': start,
+            },
+          });
           await result(loadId + 1, seekId);
           await result(loadId, seekId + 1);
-          if (desktop) await result(loadId, seekId, position: double.nan);
+          if (desktop) {
+            await result(loadId, seekId, position: double.nan);
+            await result(loadId, seekId, start: -0x8000000000000000);
+            expect(landed, isFalse, reason: 'the signed clock must be bounded');
+          }
+          await result(loadId, seekId.toDouble());
+          expect(landed, isFalse, reason: 'seek identity must be an integer');
           await _nativeEvent({
             'type': 'property',
             'name': 'time-pos',

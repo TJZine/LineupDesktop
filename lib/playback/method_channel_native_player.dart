@@ -791,9 +791,11 @@ class MethodChannelNativePlayer
     switch (event['type']) {
       case 'sessionSeekResult':
         final pending = _pendingSessionSeek;
+        final seekId = event['seekId'];
         if (pending == null ||
+            seekId is! int ||
             event['loadId'] != pending.$1 ||
-            event['seekId'] != pending.$2 ||
+            seekId != pending.$2 ||
             pending.$3.isCompleted) {
           return;
         }
@@ -811,7 +813,8 @@ class MethodChannelNativePlayer
                 position > 10000000 ||
                 start is! num ||
                 !start.isFinite ||
-                start.abs() > 1000000) {
+                start < -1000000 ||
+                start > 1000000) {
               return;
             }
             pending.$3.complete((
