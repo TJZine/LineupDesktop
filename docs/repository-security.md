@@ -160,6 +160,7 @@ ledger.
 | libmpv and statically linked media dependencies | `tool/windows/build-metadata.psd1`, `third_party/libmpv/`, Windows runtime inventory with documented closure limits | [mpv security policy](https://github.com/mpv-player/mpv/security), [FFmpeg security](https://ffmpeg.org/security.html), and each inventoried upstream's advisories |
 | Android Media3, OkHttp, Kotlin/Gradle and transitives | Committed Gradle inputs, verification metadata and resolved graphs | [Android security bulletins](https://source.android.com/docs/security/bulletin), [Media3 releases](https://developer.android.com/jetpack/androidx/releases/media3), [OkHttp advisories](https://github.com/square/okhttp/security/advisories), and [GitHub Advisory Database](https://github.com/advisories) |
 | Microsoft runtime and SDK/toolchain | Selected toolchain CRT with signature/version/hash evidence | [Microsoft Security Update Guide](https://msrc.microsoft.com/update-guide) |
+| Documentation site generator (Zensical and its Python dependencies) | `tool/docs/requirements.txt` (hash-pinned) | [GitHub Advisory Database](https://github.com/advisories) for PyPI |
 
 Before release, review alerts, workflow failures, the actual runtime graph, and
 the native inventory advisory sources. Record source/version/date, relevant

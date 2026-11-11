@@ -1,0 +1,34 @@
+{% extends "base.html" %}
+
+{% block extrahead %}
+  {% if not page.url %}
+    {% set lu_title = config.site_name ~ " documentation" %}
+  {% elif page.meta and page.meta.title %}
+    {% set lu_title = page.meta.title %}
+  {% elif page.title and not page.is_homepage %}
+    {% set lu_title = page.title | striptags %}
+  {% else %}
+    {% set lu_title = config.site_name %}
+  {% endif %}
+  {% if page.meta and page.meta.description %}
+    {% set lu_description = page.meta.description %}
+  {% else %}
+    {% set lu_description = config.site_description %}
+  {% endif %}
+  <meta property="og:type" content="website">
+  <meta property="og:site_name" content="{{ config.site_name }}">
+  <meta property="og:title" content="{{ lu_title }}">
+  <meta property="og:description" content="{{ lu_description }}">
+  {% if page.canonical_url %}
+    <meta property="og:url" content="{{ page.canonical_url }}">
+  {% endif %}
+  <meta property="og:image" content="{{ config.site_url }}assets/brand/social-card.jpg">
+  <meta property="og:image:width" content="1200">
+  <meta property="og:image:height" content="630">
+  <meta property="og:image:alt" content="Lineup logo and wordmark with the line 'Your Plex library, on the air.'">
+  <meta name="twitter:card" content="summary_large_image">
+  <link rel="icon" type="image/png" sizes="32x32" href="{{ 'assets/brand/favicon-32.png' | url }}">
+  <link rel="apple-touch-icon" href="{{ 'assets/brand/apple-touch-icon.png' | url }}">
+  <link rel="preload" href="{{ 'assets/fonts/bodoni-moda-latin-opsz-normal.woff2' | url }}" as="font" type="font/woff2" crossorigin>
+  <link rel="preload" href="{{ 'assets/fonts/inter-latin-opsz-normal.woff2' | url }}" as="font" type="font/woff2" crossorigin>
+{% endblock %}
