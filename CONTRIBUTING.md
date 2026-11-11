@@ -138,4 +138,4 @@ authorization requirements.
 Use the repository issue templates and include the operating system, exact
 commit or package build information, reproduction steps, expected and actual
 behavior, and only redacted diagnostics. User-facing troubleshooting is in the
-[User Guide](docs/user-guide.md).
+[documentation site](https://tjzine.github.io/LineupDesktop/guides/troubleshooting/).

@@ -373,7 +373,7 @@ ErsatzTV, or dizqueTV server/streaming architecture is a Lineup requirement.
 **Stale documentation to correct when the related work lands:**
 
 - Product Parity rows 216, 338, 365, and 368.
-- [User Guide](user-guide.md) §Channels says Custom Studio programming uses
+- [User Guide](https://github.com/TJZine/LineupDesktop/blob/2a23bbc0b75658301062c17ec71b3bebdc06bf19/docs/user-guide.md) §Channels says Custom Studio programming uses
   Library or Hand-picked, with playlists only preserved. Studio offers a
   **Plex playlist** choice for new custom channels.
 

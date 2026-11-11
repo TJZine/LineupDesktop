@@ -41,7 +41,7 @@ compatibility target.
 
 | # | Decision |
 | --- | --- |
-| D1 | **OSD focus suspension is keyboard-only.** The timed OSD stays open only while *keyboard-driven* focus is inside its controls. This matches the existing [user guide](user-guide.md) wording. After a mouse action (Sleep preset, app menu dismissal, clicking an OSD control), the OSD times out normally, and pointer activity re-arms the timer. |
+| D1 | **OSD focus suspension is keyboard-only.** The timed OSD stays open only while *keyboard-driven* focus is inside its controls. This matches the existing [user guide](https://github.com/TJZine/LineupDesktop/blob/2a23bbc0b75658301062c17ec71b3bebdc06bf19/docs/user-guide.md) wording. After a mouse action (Sleep preset, app menu dismissal, clicking an OSD control), the OSD times out normally, and pointer activity re-arms the timer. |
 | D2 | **TV libraries: hydrate show genres only.** Episodes inherit their show's genres so TV Genre channels work. Do not add a TV Studio or network strategy. TV Studios stays empty, matching upstream. Actors are unchanged. |
 | D3 | **Playlists row shows a discovery failure with Retry.** If playlist discovery fails, or some playlists fail during setup, the Playlists strategy row shows an unavailable/partial state and a Retry action, instead of "None in your libraries". The new copy must be shown to the user for approval before merge. |
 | D4 | **Append skips existing sources, and Update flags dead sources.** "Add as new channels" skips any proposal whose generated identity (`builderKey`) already exists. The Update review lists generated channels whose source is confirmed gone as **Source not found**, and the user chooses to keep or remove them. The default is keep. Nothing is deleted automatically. |

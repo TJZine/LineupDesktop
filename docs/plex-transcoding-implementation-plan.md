@@ -491,7 +491,7 @@ fixtures, or a relaxed master validator to complete an early foundation unit.
   - server-limit error;
   - remote/relay;
   - Direct Play containment unchanged.
-- Update `docs/user-guide.md` and the architecture note.
+- Update the affected pages under `docs/guides/` and `docs/reference/`, and the architecture note.
 
 ## Regression matrix (summary)
 

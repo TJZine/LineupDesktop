@@ -16,6 +16,8 @@
   <img src="https://img.shields.io/badge/status-pre--release-orange.svg" alt="Pre-release status">
 </p>
 
+<p align="center"><a href="https://tjzine.github.io/LineupDesktop/"><strong>Documentation</strong></a> · <a href="https://github.com/TJZine/LineupDesktop/releases">Releases</a></p>
+
 > [!IMPORTANT]
 > Lineup Desktop is under active development. Use the official
 > [GitHub Releases](https://github.com/TJZine/LineupDesktop/releases) page for
@@ -67,7 +69,7 @@ The app guides you through these steps.
 
 The main application then provides **Guide**, **Channels**, **Settings**,
 **Diagnostics**, and **Player** destinations. The
-[User Guide](docs/user-guide.md) documents the complete flow, controls,
+[documentation site](https://tjzine.github.io/LineupDesktop/) documents the complete flow, controls,
 settings, privacy behavior, and troubleshooting steps.
 
 ## Getting a build
@@ -131,7 +133,7 @@ unpinned components; follow the exact Windows procedure in
 | Document | Purpose |
 | --- | --- |
 | [Documentation index](docs/README.md) | Audience-oriented map of the project documentation |
-| [User Guide](docs/user-guide.md) | Setup, navigation, controls, settings, privacy, and troubleshooting |
+| [Documentation site](https://tjzine.github.io/LineupDesktop/) | Installation, setup, the Guide and Player, channels, settings, privacy, and troubleshooting |
 | [Contributing](CONTRIBUTING.md) | Contribution workflow, architecture constraints, and review expectations |
 | [Development](docs/DEVELOPMENT.md) | Toolchain, commands, native build setup, and engineering practices |
 | [Architecture](docs/architecture.md) | Component ownership, implemented state, and dependency decisions |

@@ -718,7 +718,7 @@ still the user's.
   - record the macOS display report values.
 - `docs/open-obligations.md`: move the macOS backlog rows to their results.
 - New `docs/macos-runtime.md` (from S2 and R1).
-- `docs/user-guide.md`: macOS HDR behavior, the free and Pro tiers, and
+- User documentation (`docs/getting-started/macos.md` and affected `docs/guides/` pages): macOS HDR behavior, the free and Pro tiers, and
   restoring purchases.
 
 ## Sources

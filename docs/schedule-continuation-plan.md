@@ -10,7 +10,7 @@ native runtime behavior or a runnable patched-engine package.
 **Original problem:** When a channel's program reached the end of its final media part,
 Lineup cleared playback and showed **Playback stopped**. A channel should keep
 airing: the next scheduled program should start. The
-[user guide](user-guide.md#known-limitations) now describes the implemented
+[known limitations page](reference/limitations.md) now describes the implemented
 continuation behavior and its remaining physical acceptance limit.
 
 ## Approved behavior
