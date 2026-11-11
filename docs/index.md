@@ -35,7 +35,7 @@ Setup is a one-time walk-through. After that, every channel keeps its own schedu
 <div class="lu-howto-ch" aria-hidden="true"><b>01</b><span>Setup</span></div>
 
 <ol>
-<li><span class="lu-kicker">Link Plex</span><strong>Sign in with a code</strong><p>Enter the code at plex.tv/link, pick your Plex Home profile, and choose a server.</p></li>
+<li><span class="lu-kicker">Link Plex</span><strong>Sign in with a code</strong><p>Enter the code at plex.tv/link, then choose your Plex server.</p></li>
 <li><span class="lu-kicker">Build</span><strong>Generate a lineup</strong><p>Choose libraries, then let Lineup propose channels from your collections, genres, decades, studios, actors and directors.</p></li>
 <li class="live"><span class="lu-kicker">On now</span><strong>Tune in</strong><p>Open the Guide, find what's on, and press Enter. Flip channels with Page Up and Page Down or by number.</p></li>
 </ol>
