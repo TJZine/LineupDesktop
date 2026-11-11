@@ -46,8 +46,12 @@ void Parser() {
   auto uri = owner.Activate(absolute); Check(!!uri, "cryptographic opaque id available");
   auto output = ReadAll(owner, *uri);
   Check(output.find("#EXT-X-START") == std::string::npos && output.find(parent + "0.m4s") == std::string::npos &&
-        output.find(parent + "1.m4s") == std::string::npos && output.find(parent + "2.m4s") != std::string::npos,
-        "containing segment from cumulative EXTINF, no prefix walk");
+        output.find(parent + "1.m4s") != std::string::npos && output.find(parent + "2.m4s") != std::string::npos,
+        "retain exactly one predecessor to the containing segment");
+  Check(absolute->target_duration_seconds() == 10, "validated target duration");
+  auto zero = SessionPlaylist::Parse(Original(false, "0"), variant, 0);
+  Check(zero && ReadAll(owner, *owner.Activate(zero)).find(parent + "0.m4s") != std::string::npos,
+        "segment zero retains the full manifest");
   Check(output.find("#EXTINF:4.000001,last\r\n") != std::string::npos &&
         output.find("#EXT-X-MAP:URI=\"" + parent + "init.mp4\"\r\n") != std::string::npos &&
         output.find("#EXT-X-MEDIA-SEQUENCE:0\r\n") != std::string::npos &&
@@ -68,6 +72,10 @@ void Parser() {
          {"init.mp4\"", "init.mp4\",BYTERANGE=\"1@0\""},
          {"#EXT-X-MEDIA-SEQUENCE:0", "#EXT-X-MEDIA-SEQUENCE:1"},
          {"#EXT-X-TARGETDURATION:10", "#EXT-X-TARGETDURATION"},
+         {"#EXT-X-TARGETDURATION:10\r\n", ""},
+         {"#EXT-X-TARGETDURATION:10", "#EXT-X-TARGETDURATION:10.1"},
+         {"#EXT-X-TARGETDURATION:10", "#EXT-X-TARGETDURATION:0"},
+         {"#EXT-X-TARGETDURATION:10", "#EXT-X-TARGETDURATION:121"},
          {"#EXT-X-VERSION:7", "#EXT-X-VERSION"},
          {"#EXT-X-MEDIA-SEQUENCE:0", "#EXT-X-MEDIA-SEQUENCE"},
          {"#EXT-X-VERSION:7", "#EXT-X-VERSION:7\r\n#EXT-X-VERSION:7"},

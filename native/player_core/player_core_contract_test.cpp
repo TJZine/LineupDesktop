@@ -137,6 +137,7 @@ struct FakeMpv {
   std::optional<LoadOutcome> controlled_load;
   std::optional<int64_t> playlist_id;
   bool reject_stop = false;
+  bool reject_seek = false;
   bool fail_create = false;
   bool fail_stream_registration = false;
   int64_t selected_track = -1;
@@ -277,6 +278,7 @@ int FakeCommand(mpv_handle*, const char** args) {
   if (std::strcmp(args[0], "seek") == 0) {
     fake->seek_flags.push_back(args[2]);
     fake->seek_targets.push_back(args[1]);
+    if (fake->reject_seek) return MPV_ERROR_COMMAND;
   }
   if (std::strcmp(args[0], "stop") == 0 && fake->reject_stop) {
     return MPV_ERROR_COMMAND;
@@ -1618,7 +1620,8 @@ void SessionLoads(PlayerCore& core) {
   PlayerCoreTestAccess::RunQueuedCommands(core);
   Check(session.successes == 1 && fake->load_options ==
         std::map<std::string, std::string>{{"access-references", "yes"}, {"curl-max-redirects", "0"},
-          {"demuxer", "lavf"}, {"demuxer-lavf-o", "format_whitelist=%7%hls,mov,protocol_whitelist=%13%https,tls,tcp"}},
+          {"demuxer", "lavf"}, {"demuxer-lavf-o", "format_whitelist=%7%hls,mov,protocol_whitelist=%13%https,tls,tcp"},
+          {"hr-seek-demuxer-offset", "10"}},
         "session load uses token-free reference and redirect map");
   const std::string opaque = fake->authenticated_uri;
   Check(opaque.find("lineup-session://") == 0 && opaque.find("media.invalid") == std::string::npos, "loadfile sees only opaque capability");
@@ -1804,18 +1807,26 @@ void FreshSessionClock(PlayerCore& core) {
           "replacement clears D and pre-ready notifications cannot relabel prior clock");
     events.received.clear(); ready(id);
     PlayerCoreTestAccess::Drain(core,events.Sink());
+    Check(std::none_of(events.received.begin(), events.received.end(), [](const auto& e) {
+      return Has(e, "name", Value("demuxer-start-time"));
+    }), "FILE_LOADED does not qualify the initial alignment clock");
+    mpv_event restart{}; restart.event_id = MPV_EVENT_PLAYBACK_RESTART;
+    PlayerCoreTestAccess::Event(core, restart);
+    PlayerCoreTestAccess::Drain(core,events.Sink());
     const auto numeric = std::find_if(events.received.begin(),events.received.end(),[](const auto& e){return Has(e,"name",Value("demuxer-start-time"));});
     Check(numeric != events.received.end() && Has(*numeric,"value",Value(12.5)) && Has(*numeric,"loadId",Value(id)),
-          "FILE_LOADED samples fresh D even when identical across sessions and no observer notification");
+          "initial restart samples fresh D even when identical across sessions");
     events.received.clear(); changed(-999);
     PlayerCoreTestAccess::Drain(core,events.Sink());
-    Check(events.received.size() == 1 && Has(events.received[0],"value",Value(12.5)),
-          "stale queued property payload ignored in favor of current property read");
+    Check(events.received.size() == 2 && Has(events.received[0], "value", Value(12.5)) &&
+          Has(events.received[1], "name", Value("time-pos")),
+          "fresh clock and position replace the stale queued payload");
     events.received.clear();
   }
   for (double value : {-2.25,std::numeric_limits<double>::infinity(),std::numeric_limits<double>::quiet_NaN()}) {
     fake->demuxer_start = value; changed(99); PlayerCoreTestAccess::Drain(core,events.Sink());
-    Check(events.received.size() == 1 && Has(events.received[0],"value",std::isfinite(value) ? Value(value) : Value()),
+    Check(events.received.size() == (std::isfinite(value) ? 2u : 1u) &&
+          Has(events.received[0], "value", std::isfinite(value) ? Value(value) : Value()),
           "D is signed finite numeric or unknown"); events.received.clear();
   }
   fake->demuxer_start_available = false; changed(99); PlayerCoreTestAccess::Drain(core,events.Sink());
@@ -1826,6 +1837,114 @@ void FreshSessionClock(PlayerCore& core) {
   events.received.clear(); fake->demuxer_start_available = true; fake->demuxer_start = 77; changed(77);
   PlayerCoreTestAccess::Drain(core,events.Sink());
   Check(events.received.empty(), "post-stop property notifications cannot resurrect D");
+  fake->demuxer_start_available = false;
+  CloseWorkerless(core);
+}
+
+void SessionSeekCorrelation(PlayerCore& core) {
+  OpenWorkerless(core);
+  Events events;
+  PlayerCoreTestAccess::Drain(core, events.Sink());
+  const auto drain = [&] {
+    events.received.clear();
+    PlayerCoreTestAccess::Drain(core, events.Sink());
+  };
+  const auto mpv_event = [&](mpv_event_id type) {
+    struct mpv_event event{};
+    event.event_id = type;
+    PlayerCoreTestAccess::Event(core, event);
+  };
+  const auto load = [&](int64_t id) {
+    const std::string uri = "https://clock.invalid/video/:/transcode/universal/session/opaque/base/index.m3u8";
+    const std::string text =
+        "#EXTM3U\n#EXT-X-TARGETDURATION:10\n#EXT-X-MEDIA-SEQUENCE:0\n"
+        "#EXT-X-MAP:URI=\"init.mp4\"\n#EXTINF:10,\n0.m4s\n#EXT-X-ENDLIST\n";
+    fake->playlist_id = id;
+    Reply reply;
+    Call(core, "load", reply, {{"uri", uri}, {"loadId", id}, {"kind", "plexSession"},
+        {"sessionPlaylist", ValueMap{{"text", text}, {"offsetMicroseconds", 0}}}});
+    Check(reply.successes == 1, "valid session fixture");
+    PlayerCoreTestAccess::RunQueuedCommands(core);
+    Start(core, id);
+    mpv_event(MPV_EVENT_FILE_LOADED);
+  };
+  const auto align = [&](int64_t load_id, int64_t seek_id) {
+    Reply reply;
+    Call(core, "alignSession", reply,
+         {{"loadId", load_id}, {"seekId", seek_id}, {"positionMs", 4500}});
+    Check(reply.successes == 1, "valid alignment is admitted");
+    PlayerCoreTestAccess::RunQueuedCommands(core);
+  };
+  const auto has_result = [&] {
+    return std::any_of(events.received.begin(), events.received.end(),
+                       [](const auto& e) { return Has(e, "type", Value("sessionSeekResult")); });
+  };
+
+  Reply malformed;
+  Call(core, "alignSession", malformed, {{"loadId", 1}, {"seekId", 1}, {"positionMs", 4.5}});
+  Check(malformed.error == "invalid_argument", "alignment target must be integral milliseconds");
+
+  fake->demuxer_start_available = true;
+  fake->demuxer_start = 12;
+  fake->seek_position = 1.25;
+  load(751);
+  const auto previous_seeks = fake->seek_flags.size();
+  align(751, 1);
+  mpv_event(MPV_EVENT_PLAYBACK_RESTART);
+  drain();
+  Check(!has_result() && fake->seek_flags.size() == previous_seeks,
+        "initial restart cannot land a pre-ready alignment");
+
+  align(750, 2);
+  Check(fake->seek_flags.size() == previous_seeks, "stale load cannot execute a seek");
+  align(751, 3);
+  align(751, 4);
+  Check(fake->seek_flags.size() == previous_seeks + 1 &&
+        fake->seek_flags.back() == "absolute+exact" && fake->seek_targets.back() == "4.5",
+        "one exact seek executes for the session");
+  mpv_event(MPV_EVENT_PLAYBACK_RESTART);
+  drain();
+  Check(!has_result(), "a restart without the post-command seek cannot land");
+  mpv_event(MPV_EVENT_SEEK);
+  mpv_event(MPV_EVENT_PLAYBACK_RESTART);
+  drain();
+  const auto landed = std::find_if(events.received.begin(), events.received.end(),
+                                  [](const auto& e) { return Has(e, "type", Value("sessionSeekResult")); });
+  Check(landed != events.received.end() && Has(*landed, "loadId", 751) &&
+        Has(*landed, "seekId", 3) && Has(*landed, "outcome", "landed") &&
+        Has(*landed, "positionSeconds", 1.25) && Has(*landed, "demuxerStartSeconds", 12.0),
+        "correlated restart reports the actual imprecise clock for Dart to judge");
+
+  load(752);
+  mpv_event(MPV_EVENT_PLAYBACK_RESTART);
+  align(752, 5);
+  mpv_event(MPV_EVENT_SEEK);
+  load(753);
+  mpv_event(MPV_EVENT_PLAYBACK_RESTART);
+  drain();
+  Check(!has_result(), "replacement retires the old seek before its restart");
+  align(753, 6);
+  mpv_event(MPV_EVENT_SEEK);
+  Reply ordinary;
+  Call(core, "seek", ordinary, {{"seconds", 6.0}});
+  PlayerCoreTestAccess::RunQueuedCommands(core);
+  mpv_event(MPV_EVENT_SEEK);
+  mpv_event(MPV_EVENT_PLAYBACK_RESTART);
+  drain();
+  Check(!has_result(), "overlapping seek invalidates the observation");
+
+  load(754);
+  mpv_event(MPV_EVENT_PLAYBACK_RESTART);
+  fake->reject_seek = true;
+  align(754, 7);
+  fake->reject_seek = false;
+  drain();
+  Check(has_result() && std::any_of(events.received.begin(), events.received.end(),
+            [](const auto& e) { return Has(e, "outcome", "failed") && Has(e, "seekId", 7); }) &&
+        std::none_of(events.received.begin(), events.received.end(),
+            [](const auto& e) { return Has(e, "state", "error"); }) &&
+        fake->commands.back() == "seek",
+        "refused alignment reports failure without stopping the load");
   fake->demuxer_start_available = false;
   CloseWorkerless(core);
 }
@@ -2598,6 +2717,7 @@ int main() {
     SessionLoads(core);
     SessionMetadataPrivacy(core);
     FreshSessionClock(core);
+    SessionSeekCorrelation(core);
   }
   InitializeFailures();
   Lifecycle();

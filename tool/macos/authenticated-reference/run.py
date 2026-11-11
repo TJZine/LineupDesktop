@@ -594,6 +594,7 @@ def main():
     cmake = tool("cmake")
     identity = validate_runtime(args.runtime, args.flutter_root)
     source_paths = [*pathlib.Path(__file__).parent.glob("*.*"),
+                    REPO / "tool/native/session-alignment/fixture.h",
                     *[REPO / "macos/Runner/NativePlayer" / name for name in
                       ("LineupNativePlayer.h", "LineupNativePlayer.mm", "FoundationValueConversion.h",
                        "FoundationValueConversion.mm", "VideoGeometry.h", "VideoGeometry.mm")],

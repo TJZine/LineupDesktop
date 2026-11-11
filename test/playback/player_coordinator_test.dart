@@ -72,73 +72,104 @@ void main() {
       expect(clock.landingMs, isNull);
     });
 
-    test('transport accepts only the matching rendered-frame result', () async {
-      const channel = MethodChannel('lineup/native_player');
-      final messenger =
-          TestDefaultBinaryMessengerBinding.instance.defaultBinaryMessenger;
-      final calls = <MethodCall>[];
-      messenger.setMockMethodCallHandler(channel, (call) async {
-        calls.add(call);
-        return null;
-      });
-      addTearDown(() => messenger.setMockMethodCallHandler(channel, null));
-      final player = MethodChannelNativePlayer();
-      addTearDown(player.dispose);
-      await player.initialize();
-      final ready = player.load(
-        Uri.parse('https://fixture.invalid/variant.m3u8'),
-        kind: LoadKind.plexSession,
-        startPaused: true,
+    for (final desktop in [false, true]) {
+      test(
+        'transport accepts only the matching alignment result (desktop=$desktop)',
+        () async {
+          const channel = MethodChannel('lineup/native_player');
+          final messenger =
+              TestDefaultBinaryMessengerBinding.instance.defaultBinaryMessenger;
+          final calls = <MethodCall>[];
+          messenger.setMockMethodCallHandler(channel, (call) async {
+            calls.add(call);
+            return null;
+          });
+          addTearDown(() => messenger.setMockMethodCallHandler(channel, null));
+          final player = MethodChannelNativePlayer();
+          addTearDown(player.dispose);
+          await player.initialize();
+          final ready = player.load(
+            Uri.parse('https://fixture.invalid/variant.m3u8'),
+            kind: LoadKind.plexSession,
+            startPaused: true,
+            sessionPlaylist: desktop
+                ? const NativeSessionPlaylist(
+                    text: '#EXTM3U',
+                    offsetMicroseconds: 0,
+                  )
+                : null,
+          );
+          await pumpEventQueue(times: 3);
+          final loadId =
+              calls.lastWhere((c) => c.method == 'load').arguments['loadId']
+                  as int;
+          await _nativeEvent({
+            'type': 'state',
+            'state': 'playing',
+            'paused': true,
+            'loadId': loadId,
+          });
+          await ready;
+          final snapshots = <PlayerEvent>[];
+          final subscription = player.events.listen(snapshots.add);
+          addTearDown(subscription.cancel);
+          await _nativeEvent({
+            'type': 'property',
+            'name': 'session-clock',
+            'value': {'state': 'ready', 'adjustmentUs': -2000000},
+            'loadId': loadId,
+          });
+          expect(snapshots.last.sessionAdjustment, adjustment);
+          var landed = false;
+          SessionSeekLanding? landedClock;
+          final alignment = player
+              .alignSession(const Duration(milliseconds: 8011))
+              .then((clock) {
+                landedClock = clock;
+                landed = true;
+              });
+          await pumpEventQueue(times: 3);
+          final arguments = calls
+              .lastWhere((c) => c.method == 'alignSession')
+              .arguments;
+          expect(arguments['positionMs'], 8011);
+          final seekId = arguments['seekId'] as int;
+          Future<void> result(int load, int seek, {double position = 8.011}) =>
+              _nativeEvent({
+                'type': 'sessionSeekResult',
+                'loadId': load,
+                'seekId': seek,
+                'outcome': 'landed',
+                if (desktop) ...{
+                  'positionSeconds': position,
+                  'demuxerStartSeconds': 12.5,
+                },
+              });
+          await result(loadId + 1, seekId);
+          await result(loadId, seekId + 1);
+          if (desktop) await result(loadId, seekId, position: double.nan);
+          await _nativeEvent({
+            'type': 'property',
+            'name': 'time-pos',
+            'value': 8.011,
+            'loadId': loadId,
+          });
+          expect(landed, isFalse);
+          await result(loadId, seekId);
+          await alignment;
+          expect(landed, isTrue);
+          expect(
+            landedClock,
+            desktop
+                ? (
+                    position: const Duration(milliseconds: 8011),
+                    demuxerStart: const Duration(milliseconds: 12500),
+                  )
+                : null,
+          );
+        },
       );
-      await pumpEventQueue(times: 3);
-      final loadId =
-          calls.lastWhere((c) => c.method == 'load').arguments['loadId'] as int;
-      await _nativeEvent({
-        'type': 'state',
-        'state': 'playing',
-        'paused': true,
-        'loadId': loadId,
-      });
-      await ready;
-      final snapshots = <PlayerEvent>[];
-      final subscription = player.events.listen(snapshots.add);
-      addTearDown(subscription.cancel);
-      await _nativeEvent({
-        'type': 'property',
-        'name': 'session-clock',
-        'value': {'state': 'ready', 'adjustmentUs': -2000000},
-        'loadId': loadId,
-      });
-      expect(snapshots.last.sessionAdjustment, adjustment);
-      var landed = false;
-      final alignment = player
-          .alignSession(const Duration(milliseconds: 8011))
-          .then((_) => landed = true);
-      await pumpEventQueue(times: 3);
-      final arguments = calls
-          .lastWhere((c) => c.method == 'alignSession')
-          .arguments;
-      expect(arguments['positionMs'], 8011);
-      final seekId = arguments['seekId'] as int;
-      Future<void> result(int load, int seek) => _nativeEvent({
-        'type': 'sessionSeekResult',
-        'loadId': load,
-        'seekId': seek,
-        'outcome': 'landed',
-      });
-      await result(loadId + 1, seekId);
-      await result(loadId, seekId + 1);
-      await _nativeEvent({
-        'type': 'property',
-        'name': 'time-pos',
-        'value': 8.011,
-        'loadId': loadId,
-      });
-      expect(landed, isFalse);
-      await result(loadId, seekId);
-      await alignment;
-      expect(landed, isTrue);
-    });
+    }
 
     for (final cell in [
       (local: true, eligible: true, decide: false),
@@ -176,7 +207,11 @@ void main() {
         final f = _SessionFixture(android: false);
         await f.setUp();
         f.expectSession();
-        expect(await f.tune(tester), isTrue);
+        f.player.autoDesktopClock = false;
+        final tune = f.coordinator.tune('one');
+        await f.waitForNativeLoads(tester, 1);
+        await tester.pump(const Duration(seconds: 2));
+        expect(await tune, isTrue);
         expect(f.starts.single['offset'], '1800');
         expect(f.player.kinds, [LoadKind.plexSession]);
         expect(f.player.loadPlexTokens, [null]);
@@ -226,92 +261,110 @@ void main() {
       );
     }
 
-    testWidgets('alignment waits for landed seek and honors a user pause', (
-      tester,
-    ) async {
-      final f = _SessionFixture(android: true, local: true);
-      await f.setUp();
-      f.expectSession();
-      await tester.pumpWidget(
-        MaterialApp(
-          home: ListenableBuilder(
-            listenable: f.coordinator,
-            builder: (context, child) =>
-                PlayerSurface(controller: f.coordinator),
+    for (final android in [true, false]) {
+      testWidgets('alignment cover and user pause (Android=$android)', (
+        tester,
+      ) async {
+        final f = _SessionFixture(android: android, local: android);
+        await f.setUp();
+        f.expectSession();
+        await tester.pumpWidget(
+          MaterialApp(
+            home: ListenableBuilder(
+              listenable: f.coordinator,
+              builder: (context, child) =>
+                  PlayerSurface(controller: f.coordinator),
+            ),
           ),
-        ),
-      );
-      final nativeFinder = find.byType(NativeVideoSurface);
-      final nativeElement = tester.element(nativeFinder);
-      f.player.beforeLoadResult = () {
-        expectSync(find.bySemanticsLabel('Preparing playback'), findsOneWidget);
-        expectSync(find.byType(SubtitleLayer), findsNothing);
-      };
-      final tune = f.coordinator.tune('one');
-      await tester.pump();
-      expect(tester.element(nativeFinder), same(nativeElement));
-      final stack = tester.widget<Stack>(
-        find
-            .descendant(
-              of: find.byType(PlayerSurface),
-              matching: find.byType(Stack),
-            )
-            .first,
-      );
-      expect(stack.children.first, isA<NativeVideoSurface>());
-      expect(
-        stack.children[1],
-        isA<ColoredBox>().having(
-          (box) => box.color,
-          'opaque alignment cover',
-          LineupTheme.of(nativeElement).deepBackground,
-        ),
-      );
-      expect(find.byType(SubtitleLayer), findsNothing);
-      expect(find.bySemanticsLabel('Preparing playback'), findsOneWidget);
-      expect(f.player.loadStartPaused, [true]);
-      expect(f.coordinator.sessionAlignmentHeld, isTrue);
-      expect(f.coordinator.status.state, PlayerState.loading);
-      expect(f.coordinator.playbackToggleWillPause, isTrue);
+        );
+        final nativeFinder = find.byType(NativeVideoSurface);
+        final nativeElement = tester.element(nativeFinder);
+        f.player.beforeLoadResult = () {
+          expectSync(
+            find.bySemanticsLabel('Preparing playback'),
+            findsOneWidget,
+          );
+          expectSync(find.byType(SubtitleLayer), findsNothing);
+        };
+        final tune = f.coordinator.tune('one');
+        await tester.pump();
+        expect(tester.element(nativeFinder), same(nativeElement));
+        final stack = tester.widget<Stack>(
+          find
+              .descendant(
+                of: find.byType(PlayerSurface),
+                matching: find.byType(Stack),
+              )
+              .first,
+        );
+        expect(stack.children.first, isA<NativeVideoSurface>());
+        expect(
+          stack.children[1],
+          isA<ColoredBox>().having(
+            (box) => box.color,
+            'opaque alignment cover',
+            LineupTheme.of(nativeElement).deepBackground,
+          ),
+        );
+        expect(find.byType(SubtitleLayer), findsNothing);
+        expect(find.bySemanticsLabel('Preparing playback'), findsOneWidget);
+        expect(f.player.loadStartPaused, [true]);
+        expect(f.coordinator.sessionAlignmentHeld, isTrue);
+        expect(f.coordinator.status.state, PlayerState.loading);
+        expect(f.coordinator.playbackToggleWillPause, isTrue);
 
-      f.player.observe(live, state: PlayerState.paused, adjustment: adjustment);
-      await tester.pump();
-      expect(f.player.alignments, [live + const Duration(seconds: 8)]);
-      await f.coordinator.pause();
-      expect(f.coordinator.playbackToggleWillPause, isFalse);
-      f.player.observe(
-        live + const Duration(seconds: 8),
-        state: PlayerState.paused,
-        adjustment: adjustment,
-      );
-      await tester.pump();
-      expect(f.coordinator.sessionAlignmentHeld, isTrue);
-      expect(f.player.plays, 0);
-      f.player.observe(
-        live + const Duration(seconds: 8),
-        state: PlayerState.paused,
-      );
-      expect(f.coordinator.position, live);
-      f.player.landing!.complete();
-      await tester.pump();
-      expect(await tune, isTrue);
-      expect(f.coordinator.sessionAlignmentHeld, isFalse);
-      expect(tester.element(nativeFinder), same(nativeElement));
-      expect(find.byType(SubtitleLayer), findsOneWidget);
-      expect(f.player.plays, 0);
-      expect(f.player.pauseCalls, 0);
-      expect(f.coordinator.position, live);
+        final target = android
+            ? live + const Duration(seconds: 8)
+            : const Duration(seconds: 21);
+        f.player.observe(
+          android ? live : Duration.zero,
+          state: PlayerState.paused,
+          adjustment: android ? adjustment : null,
+          demuxerStartTime: android ? null : 1789,
+        );
+        await tester.pump();
+        expect(f.player.alignments, [target]);
+        await f.coordinator.pause();
+        expect(f.coordinator.playbackToggleWillPause, isFalse);
+        f.player.observe(
+          target,
+          state: PlayerState.paused,
+          adjustment: android ? adjustment : null,
+          demuxerStartTime: android ? null : 1789,
+        );
+        await tester.pump();
+        expect(f.coordinator.sessionAlignmentHeld, isTrue);
+        expect(f.player.plays, 0);
+        f.player.observe(target, state: PlayerState.paused);
+        expect(f.coordinator.position, live);
+        f.player.landing!.complete(
+          android
+              ? null
+              : (position: target, demuxerStart: const Duration(seconds: 1789)),
+        );
+        await tester.pump();
+        expect(await tune, isTrue);
+        expect(f.coordinator.sessionAlignmentHeld, isFalse);
+        expect(tester.element(nativeFinder), same(nativeElement));
+        expect(find.byType(SubtitleLayer), findsOneWidget);
+        expect(f.player.plays, 0);
+        expect(f.player.pauseCalls, 0);
+        expect(f.coordinator.position, live);
 
-      f.player.observe(
-        live + const Duration(seconds: 9),
-        adjustment: const Duration(seconds: -1),
-      );
-      expect(f.coordinator.position, live);
-      expect(f.player.alignments, hasLength(1));
-      expect(f.player.seeks, isEmpty);
-      await tester.pumpWidget(const SizedBox.shrink());
-      await f.close(tester);
-    });
+        f.player.observe(
+          android
+              ? live + const Duration(seconds: 9)
+              : target + const Duration(seconds: 1),
+          adjustment: android ? const Duration(seconds: -1) : null,
+          demuxerStartTime: android ? null : 1788,
+        );
+        expect(f.coordinator.position, live);
+        expect(f.player.alignments, hasLength(1));
+        expect(f.player.seeks, isEmpty);
+        await tester.pumpWidget(const SizedBox.shrink());
+        await f.close(tester);
+      });
+    }
 
     for (final release in [
       'near',
@@ -365,6 +418,100 @@ void main() {
             _ => 'timedOut',
           }),
         );
+        await f.close(tester);
+      });
+    }
+
+    for (final release in [
+      'near',
+      'clock timeout',
+      'landing timeout',
+      'failed',
+      'imprecise',
+    ]) {
+      testWidgets('desktop alignment releases on $release', (tester) async {
+        final f = _SessionFixture(android: false);
+        await f.setUp();
+        f.expectSession();
+        f.player.autoDesktopClock = false;
+        final tune = f.coordinator.tune('one');
+        await f.waitForNativeLoads(tester, 1);
+        final generation = f.player.generation;
+        // Old-load and invalid clocks must not settle the hold.
+        f.player.observe(
+          Duration.zero,
+          demuxerStartTime: 1789,
+          fromGeneration: generation - 1,
+        );
+        f.player.observe(Duration.zero, demuxerStartTime: double.nan);
+        await tester.pump();
+        expect(f.player.alignments, isEmpty);
+        expect(f.coordinator.sessionAlignmentHeld, isTrue);
+        if (release == 'clock timeout') {
+          await tester.pump(const Duration(milliseconds: 1999));
+          expect(f.coordinator.sessionAlignmentHeld, isTrue);
+          expect(f.player.plays, 0);
+          await tester.pump(const Duration(milliseconds: 1));
+          expect(f.coordinator.position, live);
+        } else if (release == 'near') {
+          f.player.observe(
+            const Duration(milliseconds: 20500),
+            demuxerStartTime: 1789,
+          );
+        } else {
+          f.player.observe(Duration.zero, demuxerStartTime: 1789);
+          await tester.pump();
+          expect(f.player.alignments, [const Duration(seconds: 21)]);
+          // Another valid clock can rebase mapping, but never the seek target.
+          f.player.observe(const Duration(seconds: 25), demuxerStartTime: 1786);
+          await tester.pump();
+          expect(f.coordinator.sessionAlignmentHeld, isTrue);
+          expect(f.player.plays, 0);
+          if (release == 'failed') {
+            f.player.landing!.completeError(const PlayerUnavailable('fixture'));
+          } else if (release == 'imprecise') {
+            f.player.landing!.complete((
+              position: const Duration(seconds: 25),
+              demuxerStart: const Duration(seconds: 1786),
+            ));
+          } else {
+            await tester.pump(const Duration(milliseconds: 4999));
+            expect(f.coordinator.sessionAlignmentHeld, isTrue);
+            await tester.pump(const Duration(milliseconds: 1));
+          }
+        }
+        await tester.pump();
+        expect(f.coordinator.sessionAlignmentHeld, isFalse);
+        expect(await tune, isTrue);
+        if (release == 'landing timeout') {
+          f.player.landing!.complete((
+            position: const Duration(seconds: 21),
+            demuxerStart: const Duration(seconds: 1789),
+          ));
+          await tester.pump();
+        }
+        expect(f.coordinator.error, isNull);
+        expect(f.player.plays, 1);
+        expect(f.player.loads, hasLength(1));
+        expect(f.player.seeks, isEmpty);
+        expect(
+          f.player.alignments,
+          hasLength(release == 'near' || release == 'clock timeout' ? 0 : 1),
+        );
+        final alignment = f.lineup.diagnostics.entries
+            .singleWhere(
+              (entry) => entry.context.containsKey('alignmentOutcome'),
+            )
+            .context;
+        expect(alignment['alignmentOutcome'], switch (release) {
+          'near' => 'noneNeeded',
+          'failed' || 'imprecise' => release,
+          _ => 'timedOut',
+        });
+        if (release == 'imprecise') {
+          expect(alignment['landingErrorMs'], 1000);
+          expect(f.coordinator.position, live + const Duration(seconds: 1));
+        }
         await f.close(tester);
       });
     }
@@ -593,9 +740,16 @@ void main() {
         await f.setUp();
         f.expectSession();
         f.player.beforeLoadResult = () {
-          f.player.observe(const Duration(seconds: 10), demuxerStartTime: 1788);
+          f.player.observe(
+            const Duration(seconds: 10),
+            demuxerStartTime: 1788,
+            state: PlayerState.loading,
+          );
         };
-        expect(await f.tune(tester), isTrue);
+        final tune = f.coordinator.tune('one');
+        await f.waitForNativeLoads(tester, 1);
+        await tester.pump(const Duration(seconds: 2));
+        expect(await tune, isTrue);
         expect(
           f.coordinator.position,
           const Duration(minutes: 29, seconds: 48),
@@ -811,7 +965,7 @@ void main() {
             f.coordinator.tune(channel),
         ];
         f.holdStart!.complete();
-        await tester.pump();
+        await f.waitForNativeLoads(tester, 1);
         expect(await first, isFalse);
         expect(await Future.wait(later), [false, false, false, true]);
         expect(f.startIds, hasLength(2));
@@ -842,7 +996,7 @@ void main() {
           }
 
           failLoad();
-          await tester.pump();
+          await f.waitForNativeLoads(tester, 2);
           expect(f.startIds, hasLength(2));
           expect(f.starts.last['offset'], '1812');
           expect(f.player.loadPlexTokens, [null, null]);
@@ -874,7 +1028,7 @@ void main() {
         failureCode: 'audio_decode_error',
       );
       decodeFailure();
-      await tester.pump();
+      await f.waitForNativeLoads(tester, 2);
       expect(f.decisions.single['directPlay'], '0');
       expect(f.starts.single['offset'], '1800');
       expect(f.player.kinds, [LoadKind.direct, LoadKind.plexSession]);
@@ -1009,6 +1163,7 @@ void main() {
 
         final firstSeek = f.coordinator.seekTo(const Duration(seconds: 60));
         await tester.pump(const Duration(milliseconds: 400));
+        await f.waitForNativeLoads(tester, 2);
         await firstSeek;
         expect(f.starts.last['offset'], '60');
 
@@ -1023,6 +1178,7 @@ void main() {
 
         final relative = f.coordinator.seekBy(Duration(seconds: scenario.step));
         await tester.pump(const Duration(milliseconds: 400));
+        await f.waitForNativeLoads(tester, 3);
         await relative;
         expect(f.starts.last['offset'], scenario.target);
         await f.close(tester);
@@ -1106,11 +1262,12 @@ void main() {
 
       final second = f.coordinator.seekBy(const Duration(seconds: 10));
       hold.complete();
-      await tester.pump();
+      await f.waitForNativeLoads(tester, 2);
       await first;
       await tester.pump(const Duration(milliseconds: 200));
       final third = f.coordinator.seekBy(const Duration(seconds: 10));
       await tester.pump(const Duration(milliseconds: 400));
+      await f.waitForNativeLoads(tester, 3);
       await Future.wait([second, third]);
       expect(f.starts.map((start) => start['offset']), ['1800', '60', '80']);
       await f.close(tester);
@@ -12931,6 +13088,7 @@ class _SessionFixture {
   Future<bool> tune(WidgetTester tester, [String channel = 'one']) async {
     final result = coordinator.tune(channel);
     await tester.pump();
+    await tester.pump();
     return result;
   }
 
@@ -13144,7 +13302,8 @@ class _SessionNative extends FakeNativePlayer
   final kinds = <LoadKind>[];
   final playlists = <NativeSessionPlaylist?>[];
   final alignments = <Duration>[];
-  Completer<void>? landing;
+  Completer<SessionSeekLanding?>? landing;
+  bool autoDesktopClock = true;
   Completer<void>? holdStop;
   bool failStop = false;
   void Function()? beforeLoadResult;
@@ -13196,6 +13355,15 @@ class _SessionNative extends FakeNativePlayer
       sessionPlaylist: sessionPlaylist,
     );
     beforeLoadResult?.call();
+    if (autoDesktopClock &&
+        sessionPlaylist != null &&
+        beforeLoadResult == null) {
+      observe(
+        const Duration(seconds: 10),
+        state: PlayerState.paused,
+        demuxerStartTime: sessionPlaylist.offsetMicroseconds / 1000000,
+      );
+    }
   }
 
   void observe(
@@ -13228,9 +13396,9 @@ class _SessionNative extends FakeNativePlayer
   }
 
   @override
-  Future<void> alignSession(Duration position) {
+  Future<SessionSeekLanding?> alignSession(Duration position) {
     alignments.add(position);
-    return (landing = Completer<void>()).future;
+    return (landing = Completer<SessionSeekLanding?>()).future;
   }
 
   @override

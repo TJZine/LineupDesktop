@@ -100,7 +100,8 @@ class MethodChannelNativePlayer
   int _nextStopId = 0;
   int _nextTrackRequestId = 0;
   int _nextSessionSeekId = 0;
-  (int, int, Completer<void>)? _pendingSessionSeek;
+  (int, int, Completer<SessionSeekLanding?>)? _pendingSessionSeek;
+  bool _sessionHasDesktopClock = false;
   Duration? _sessionAdjustment;
   LoadKind? _activeKind;
   (int, Completer<void>)? _pendingStop;
@@ -314,6 +315,7 @@ class MethodChannelNativePlayer
     _activeLoadId = loadId;
     _activeGeneration = generation;
     _activeKind = kind;
+    _sessionHasDesktopClock = sessionPlaylist != null;
     _resetMediaState(startPaused: startPaused);
     _subtitleCuesActive = true;
     _setStatus(PlayerState.loading, 'Loading media');
@@ -398,7 +400,7 @@ class MethodChannelNativePlayer
       });
 
   @override
-  Future<void> alignSession(Duration position) async {
+  Future<SessionSeekLanding?> alignSession(Duration position) async {
     final loadId = _activeLoadId;
     if (loadId == null ||
         _activeKind != LoadKind.plexSession ||
@@ -406,14 +408,14 @@ class MethodChannelNativePlayer
       throw const PlayerUnavailable('No session alignment is available.');
     }
     final seekId = ++_nextSessionSeekId;
-    final landed = Completer<void>();
+    final landed = Completer<SessionSeekLanding?>();
     final request = (loadId, seekId, landed);
     _pendingSessionSeek = request;
     // Attach the failure handler before command dispatch. A replacement may
     // retire the seek while the method reply is still in flight.
-    final result = landed.future.then<Object?>(
-      (_) => null,
-      onError: (Object error) => error,
+    final result = landed.future.then<(SessionSeekLanding?, Object?)>(
+      (clock) => (clock, null),
+      onError: (Object error) => (null, error),
     );
     try {
       await _invoke('alignSession', {
@@ -421,9 +423,10 @@ class MethodChannelNativePlayer
         'seekId': seekId,
         'positionMs': position.inMilliseconds,
       });
-      final failure = await result;
+      final (clock, failure) = await result;
       // ignore: only_throw_errors
       if (failure != null) throw failure;
+      return clock;
     } finally {
       if (identical(_pendingSessionSeek, request)) _pendingSessionSeek = null;
     }
@@ -796,7 +799,27 @@ class MethodChannelNativePlayer
         }
         switch (event['outcome']) {
           case 'landed':
-            pending.$3.complete();
+            if (!_sessionHasDesktopClock) {
+              pending.$3.complete();
+              return;
+            }
+            final position = event['positionSeconds'];
+            final start = event['demuxerStartSeconds'];
+            if (position is! num ||
+                !position.isFinite ||
+                position < 0 ||
+                position > 10000000 ||
+                start is! num ||
+                !start.isFinite ||
+                start.abs() > 1000000) {
+              return;
+            }
+            pending.$3.complete((
+              position: _durationFromSeconds(position),
+              demuxerStart: Duration(
+                microseconds: (start * Duration.microsecondsPerSecond).round(),
+              ),
+            ));
           case 'failed':
             pending.$3.completeError(
               const PlayerUnavailable('The session alignment seek failed.'),

@@ -13,9 +13,12 @@ if(NOT Python3_Interpreter_FOUND)
     "Production builds do not require Python.")
 endif()
 
+set(reference_arguments --harness "${LINEUP_REFERENCE_HARNESS}" --dll "${LINEUP_REFERENCE_DLL}")
+if(DEFINED LINEUP_ALIGNMENT_OUTPUT)
+  list(APPEND reference_arguments --output "${LINEUP_ALIGNMENT_OUTPUT}")
+endif()
 execute_process(
-  COMMAND "${Python3_EXECUTABLE}" "${LINEUP_REFERENCE_CHECKER}"
-    --harness "${LINEUP_REFERENCE_HARNESS}" --dll "${LINEUP_REFERENCE_DLL}"
+  COMMAND "${Python3_EXECUTABLE}" -B "${LINEUP_REFERENCE_CHECKER}" ${reference_arguments}
   RESULT_VARIABLE result)
 if(NOT "${result}" STREQUAL "0")
   message(FATAL_ERROR "Authenticated-reference checker failed: ${result}")

@@ -62,6 +62,7 @@ class PlayerCoordinator extends ChangeNotifier with WidgetsBindingObserver {
       player: player,
       clock: _clock,
       changed: notifyListeners,
+      canResume: () => !sessionAlignmentHeld,
     );
     _displaySubscription = player.displayReports.listen(
       _displayMatching.receive,
@@ -298,9 +299,7 @@ class PlayerCoordinator extends ChangeNotifier with WidgetsBindingObserver {
 
   bool get sessionAlignmentHeld {
     final load = _activeLoad;
-    return load != null &&
-        load.sessionClock?.desktop == false &&
-        !load.alignmentReleased;
+    return load != null && load.sessionClock != null && !load.alignmentReleased;
   }
 
   PlayerStatus get status => sessionAlignmentHeld
@@ -1620,15 +1619,12 @@ class PlayerCoordinator extends ChangeNotifier with WidgetsBindingObserver {
         requested: requested ?? Duration.zero,
         offset: part.offset,
       );
-      if (!desktop) {
-        notifyListeners();
-        // Submit the opaque Flutter cover before Media3 can render its
-        // initial paused frame into the already mounted native surface.
-        await Future.any([
-          WidgetsBinding.instance.endOfFrame,
-          load.cancellation.cancelled,
-        ]);
-      }
+      notifyListeners();
+      // Submit the cover before the backend can render the initial frame.
+      await Future.any([
+        WidgetsBinding.instance.endOfFrame,
+        load.cancellation.cancelled,
+      ]);
     }
     if (!_ownsLoad(load)) {
       if (part is SessionPartLoad) unawaited(part.handle.stop());
@@ -1637,13 +1633,13 @@ class PlayerCoordinator extends ChangeNotifier with WidgetsBindingObserver {
     await _dispatchNativeLoad(load, part);
     if (!_ownsLoad(load)) return;
     final clock = load.sessionClock;
-    if (clock == null || desktop) return;
+    if (clock == null) return;
     if (load.policyFailure != null) return;
     await clock.align(player, load.cancellation.cancelled);
     if (!_ownsLoad(load) || load.policyFailure != null) return;
     _recordSessionAlignment(clock);
     load.alignmentReleased = true;
-    if (!_userPaused) {
+    if (!_userPaused && !_displayMatching.takeOverPause()) {
       if (_status.state == PlayerState.paused) {
         _status = const PlayerStatus(
           state: PlayerState.ready,
@@ -1712,7 +1708,6 @@ class PlayerCoordinator extends ChangeNotifier with WidgetsBindingObserver {
       }
       return;
     }
-    if (clock.desktop && lead == null) return;
     clock.loggedAlignment = true;
     clock.loggedLead = lead != null;
     lineup.diagnostics.add(DiagnosticEvent.plexSessionAlignment, {
@@ -1720,6 +1715,7 @@ class PlayerCoordinator extends ChangeNotifier with WidgetsBindingObserver {
       'alignmentOutcome': outcome.name,
       'leadMs': lead?.inMilliseconds,
       'landingMs': clock.landingMs,
+      'landingErrorMs': clock.landingError?.inMilliseconds,
     });
   }
 

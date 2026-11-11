@@ -182,9 +182,14 @@ class PlayerCore {
   struct PlayCommand {};
   struct PauseCommand {};
   enum class SeekMode { exact, keyframes };
+  struct SessionSeek {
+    int64_t load_id;
+    int64_t seek_id;
+  };
   struct SeekCommand {
     double seconds;
     SeekMode mode;
+    std::optional<SessionSeek> session = std::nullopt;
   };
   enum class SeekObservationPhase {
     load_start, file_loaded, initial_restart, seek_start, seek_restart,
@@ -195,6 +200,7 @@ class PlayerCore {
     SeekMode mode;
     SeekObservationPhase phase;
     std::chrono::steady_clock::time_point deadline;
+    std::optional<int64_t> session_seek_id = std::nullopt;
   };
   struct StopCommand {
     int64_t stop_id;
@@ -235,7 +241,12 @@ class PlayerCore {
   void StopEventThread();
   void EventLoop(uint64_t generation);
   void HandleMpvEvent(const mpv_event& event, uint64_t generation);
-  void ObserveSeekLanding(mpv_event_id event);
+  void ObserveSeekLanding(mpv_event_id event, uint64_t generation);
+  void PublishReadySessionClock(uint64_t generation);
+  std::optional<double> ReadSeekPosition() const;
+  std::optional<double> ReadDemuxerStart() const;
+  void QueueSessionSeekResult(uint64_t generation, SessionSeek seek,
+                              std::optional<std::pair<double, double>> clock);
   void ResetSeekObservation();
   void PublishSessionClock(uint64_t generation, bool sample);
   void ClearSessionClock(uint64_t generation);
@@ -272,7 +283,9 @@ class PlayerCore {
   size_t queued_playlist_bytes_ = 0;
   SessionPlaylistRegistry session_playlists_;
   std::optional<int64_t> session_clock_load_;
+  bool session_file_loaded_ = false;
   bool session_clock_ready_ = false;
+  bool session_alignment_attempted_ = false;
   std::mutex event_mutex_;
   std::deque<QueuedEvent> events_;
   NativePlaybackState playback_;

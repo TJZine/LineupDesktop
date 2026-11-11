@@ -43,7 +43,7 @@ The native result is `null` unless a result map is shown.
 | `pause` | None | `null` or `command_queue_full`. |
 | `seek` | `seconds: num`, finite and >= 0; `mode: "exact"` or `"keyframes"`, optional, default `"exact"` | `null`, `invalid_argument`, or `command_queue_full`. |
 | `stop` | `stopId: int > 0` | `null`, `invalid_argument`, or `command_queue_full`. Completion is asynchronous through `stopResult`. |
-| `alignSession` (Android) | `loadId: int > 0`, `seekId: int > 0`, `positionMs: int` from 0 through `9223372036854775` | `null` on queue admission, `invalid_argument` for malformed input, `not_initialized`, or `command_queue_full`. The worker ignores stale, unready, non-session, and duplicate alignment commands without emitting a result. |
+| `alignSession` | `loadId: int > 0`, `seekId: int > 0`, `positionMs: int` from 0 through `9223372036854775` | `null` on queue admission, `invalid_argument` for malformed input, `not_initialized`, or `command_queue_full`. The worker ignores stale, unready, non-session, and duplicate alignment commands without emitting a result. |
 | `setVideoRect` | `left`, `top`, `width`, `height`, and `scale` are finite numbers; `width >= 0`, `height >= 0`, `scale > 0`; optional Android `showSubtitles` boolean (omitted means `true`) | `null` or `invalid_argument`. The Windows implementation also returns `invalid_argument` if the host window is missing or `SetWindowPos` fails. |
 | `setFullscreen` | `fullscreen: bool` | `null`, `invalid_argument`, or `window_error`. |
 | `selectTrack` | `type: "video"`, `"audio"`, or `"subtitle"`; `id: int > 0` or null; `loadId: int > 0`; `requestId: int > 0` | `null`, `invalid_argument`, or `command_queue_full`. Completion is asynchronous through `trackResult`. |
@@ -82,9 +82,10 @@ The desktop core accepts only the bounded reference/lexical/tag scope: one finit
 media playlist, sequence zero, one MAP, no encryption/master/rendition/range or
 unknown URI-bearing tags. Relative flat references resolve against the verified
 HTTPS session namespace; originally absolute references retain their resource
-identity. The trimmed view begins at the EXTINF-containing segment, renders
-absolute MAP/media targets, keeps EXTINF and media bytes unchanged, removes
-EXT-X-START and retains ENDLIST. No native or desktop alignment seek is added.
+identity. The trimmed view retains the segment immediately before the
+EXTINF-containing segment when available, renders absolute MAP/media targets,
+keeps EXTINF and media bytes unchanged, removes EXT-X-START and retains ENDLIST.
+The whole manifest must declare an integral EXT-X-TARGETDURATION of 1–120 s.
 
 One registered `lineup-session` stream callback serves a random 128-bit per-load
 opaque URI ending in `.m3u8`. It never exposes the manifest as a filename.
@@ -101,13 +102,15 @@ Overflow fails the accepted active load even when its START_FILE has not yet
 been observed. Classified raw-log errors remain observational until a terminal
 failure occurs.
 
-The session node-map has these per-file options, with no token, start or hr-seek:
+The session node-map has these per-file options. libmpv restores them on file
+retirement, including before a subsequent Direct Play load.
 
 ```text
 access-references=yes
 curl-max-redirects=0
 demuxer=lavf
 demuxer-lavf-o=format_whitelist=%7%hls,mov,protocol_whitelist=%13%https,tls,tcp
+hr-seek-demuxer-offset=<validated EXT-X-TARGETDURATION in seconds>
 ```
 
 The dictionary uses mpv's byte-count quoting for embedded commas. The lavf
@@ -236,12 +239,18 @@ media`, `Playing`, `Playback ended`, and `Playback stopped`. Dart preserves
 native error messages where appropriate and uses its existing safe status
 messages for command, timeout, and local lifecycle failures.
 
-### `sessionSeekResult` (Android)
+### `sessionSeekResult`
 
 `{type: "sessionSeekResult", loadId: int, seekId: int, outcome: "landed" | "failed"}`
-settles the matching alignment seek of the current session load. A qualified
-frame released after the seek marker produces `landed`. A failure during native
-seek dispatch produces `failed`. Dart bounds its wait for a matching event.
+settles the matching alignment seek of the current session load. Android
+publishes `landed` after a qualified frame. Desktop waits until the current
+session's initial restart has been consumed before executing an alignment seek.
+Its `landed` event requires the command's post-command SEEK, a subsequent
+qualified PLAYBACK_RESTART and finite same-load `positionSeconds` (non-negative)
+and `demuxerStartSeconds` (signed). It includes both values for Dart to assess
+accuracy. A refused seek publishes `failed` without retiring playback.
+Replacement, stop, overlapping seeks and terminal native errors invalidate the
+pending observation.
 
 ### `property`
 
@@ -411,6 +420,17 @@ protocol: mpv supplies no seek request ID, and `time-pos` is sampled when the
 worker consumes the restart. It may include playback progress since landing.
 Dart keeps commanded resume intent separate from observed UI position and never
 treats a commanded target as landing evidence.
+
+
+For a desktop session, Dart waits up to two seconds for the first qualified P
+and D. When `x - (P + D - 10 s)` exceeds 0.5 s, it requests one exact seek to
+`max(0, x + 10 s - D)` in whole milliseconds and waits up to five seconds for
+landing. A miss exceeding 0.5 s is recorded as `imprecise` with the signed
+landing error in milliseconds. A timeout, refused seek or imprecise landing
+releases the alignment hold and uses observed playback. Session user seeks
+continue to restart the session.
+
+November 11, 2026 approval: desktop reuses the paused session load, mounted native surface, opaque `roles.deepBackground` cover, hidden subtitles and Preparing playback spinner until alignment releases, honoring the viewer's pause intent.
 
 ### Stops
 

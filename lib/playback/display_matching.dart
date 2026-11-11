@@ -29,10 +29,12 @@ class DisplayMatching {
     required this.player,
     required this.clock,
     required this.changed,
+    this.canResume,
   }) : report = player.displayReport;
   final NativePlayer player;
   final DateTime Function() clock;
   final void Function() changed;
+  final bool Function()? canResume;
   DisplayMatchingReport report;
   bool session = false;
   DisplayMatchingState desired = DisplayMatchingState.unknown;
@@ -258,12 +260,23 @@ class DisplayMatching {
     _suppressTransition = false;
   }
 
+  // Transfer an already-paused load from another presentation hold.
+  bool takeOverPause() {
+    final hold = _hold;
+    if (hold == null) return false;
+    hold.paused = true;
+    return true;
+  }
+
   void _finish({required bool resume}) {
     final hold = _hold;
     if (hold == null) return;
     _hold = null;
     _timer?.cancel();
-    if (resume && !_userPaused && (hold.prepaused || hold.paused)) {
+    if (resume &&
+        !_userPaused &&
+        (canResume?.call() ?? true) &&
+        (hold.prepaused || hold.paused)) {
       _suppressTransition = true;
       unawaited(player.play().catchError((Object _) {}));
     }

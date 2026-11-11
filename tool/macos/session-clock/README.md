@@ -1,5 +1,9 @@
 # Production macOS session-clock fixture
 
+This five-cell experiment documents the pre-alignment desktop trim. Use the
+[current desktop alignment matrix](../../native/session-alignment/README.md)
+to validate the production path with predecessor retention and an alignment seek.
+
 This standalone validation target compiles the real macOS adapter, Flutter codec
 conversion, `PlayerCore`, `LibmpvOperations` and session stream callback. It does
 not open a separate ctypes player. Its factory differs only by selecting null

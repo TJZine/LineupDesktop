@@ -298,7 +298,11 @@ std::shared_ptr<SessionPlaylist> SessionPlaylist::Parse(std::string_view origina
     boundary += durations[i];
   }
   if (!containing) return {};
-  for (size_t i = 0; i < *containing; ++i) { lines[pairs[i].first].remove = true; lines[pairs[i].second].remove = true; }
+  const size_t first_retained = *containing == 0 ? 0 : *containing - 1;
+  for (size_t i = 0; i < first_retained; ++i) {
+    lines[pairs[i].first].remove = true;
+    lines[pairs[i].second].remove = true;
+  }
   std::string output;
   const auto directory = variant.substr(0, variant.rfind('/') + 1);
   for (const auto& line : lines) {
@@ -317,7 +321,7 @@ std::shared_ptr<SessionPlaylist> SessionPlaylist::Parse(std::string_view origina
     } else output += line.text;
     output += line.ending;
   }
-  return std::shared_ptr<SessionPlaylist>(new SessionPlaylist(std::move(output)));
+  return std::shared_ptr<SessionPlaylist>(new SessionPlaylist(std::move(output), *target));
 }
 SessionPlaylist::~SessionPlaylist() { Retire(); }
 

@@ -134,6 +134,14 @@ add_test(NAME authenticated_reference
     "-DLINEUP_REFERENCE_DLL=${LINEUP_MPV_DLL}"
     -P "${CMAKE_SOURCE_DIR}/../tool/windows/run-authenticated-reference-test.cmake")
 set_tests_properties(authenticated_reference PROPERTIES TIMEOUT 180)
+add_test(NAME desktop_session_alignment
+  COMMAND "${CMAKE_COMMAND}"
+    "-DLINEUP_REFERENCE_CHECKER=${CMAKE_SOURCE_DIR}/../tool/native/session-alignment/run.py"
+    "-DLINEUP_REFERENCE_HARNESS=$<TARGET_FILE:authenticated_reference_test>"
+    "-DLINEUP_REFERENCE_DLL=${LINEUP_MPV_DLL}"
+    "-DLINEUP_ALIGNMENT_OUTPUT=${CMAKE_BINARY_DIR}/desktop-session-alignment.json"
+    -P "${CMAKE_SOURCE_DIR}/../tool/windows/run-authenticated-reference-test.cmake")
+set_tests_properties(desktop_session_alignment PROPERTIES TIMEOUT 180)
 
 add_executable(native_player_contract_test EXCLUDE_FROM_ALL
   "native_player_contract_test.cpp"

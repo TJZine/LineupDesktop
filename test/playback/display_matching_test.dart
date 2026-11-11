@@ -67,6 +67,28 @@ void main() {
     f.close();
   });
 
+  testWidgets('display matching shares the session alignment pause', (
+    tester,
+  ) async {
+    var aligning = true;
+    final f = _Fixture(canResume: () => !aligning);
+    f.start();
+    f.decode();
+    f.report(outcome: DisplayMatchingOutcome.matched);
+    expect(f.policy.holdActive, isFalse);
+    expect(f.player.plays, 0);
+
+    f.start();
+    f.decode();
+    f.report(outcome: DisplayMatchingOutcome.matched, wrote: true);
+    expect(f.policy.takeOverPause(), isTrue);
+    aligning = false;
+    await f.elapse(tester, const Duration(milliseconds: 1500));
+    expect(f.player.plays, 1);
+    expect(f.policy.holdActive, isFalse);
+    f.close();
+  });
+
   testWidgets('identical reports do not notify or disturb hold settlement', (
     tester,
   ) async {
@@ -448,10 +470,11 @@ void main() {
 }
 
 class _Fixture {
-  _Fixture() {
+  _Fixture({bool Function()? canResume}) {
     policy = DisplayMatching(
       player: player,
       clock: () => now,
+      canResume: canResume,
       changed: () {
         changes++;
       },
