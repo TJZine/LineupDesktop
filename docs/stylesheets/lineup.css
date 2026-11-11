@@ -248,8 +248,7 @@ body {
 .md-nav__title { color: var(--archive); font: 600 11.5px/1 var(--lu-label); letter-spacing: .14em; text-transform: uppercase; }
 .md-nav__link { color: var(--support); border-radius: 6px; padding: 6px 10px; }
 .md-nav__link:hover { color: var(--paper); background: var(--booth); }
-.md-nav__link--active,
-.md-nav__item .md-nav__link--active {
+.md-nav__item .md-nav__link--active:not(:where(.md-nav--secondary *)) {
   color: var(--paper) !important;
   background: var(--selected) !important;
   box-shadow: inset 2px 0 0 var(--amber) !important;
@@ -277,8 +276,14 @@ body {
 .md-sidebar--secondary .md-nav__link { color: var(--support); padding: 0; }
 .md-sidebar--secondary .md-nav__link:hover,
 .md-sidebar--secondary .md-nav__link:focus { color: var(--paper); }
-.md-typeset .admonition,
-.md-typeset details {
+.md-nav--secondary .md-nav__link .md-typeset { color: inherit; }
+.md-nav--secondary .md-nav__link.md-nav__link--active[href] {
+  color: var(--amber-ink);
+  background: transparent;
+  box-shadow: none;
+}
+.md-typeset :is(.admonition, details),
+.md-typeset :is(.admonition, details):is(.tip, .warning, .note) {
   border: 1px solid var(--rule);
   border-left: 3px solid var(--amber);
   border-radius: var(--lu-radius);
@@ -286,21 +291,20 @@ body {
   box-shadow: none;
   color: var(--support);
 }
-.md-typeset .admonition-title,
-.md-typeset details > summary {
+.md-typeset :is(.admonition, details) > :is(.admonition-title, summary) {
+  padding-inline-start: 0;
   background: transparent;
   color: var(--amber-ink);
   font: 600 12px/1 var(--lu-label);
   letter-spacing: .12em;
   text-transform: uppercase;
 }
-.md-typeset .admonition.note,
-.md-typeset details.note { border-left-color: var(--rule-strong); }
-.md-typeset .admonition.note .admonition-title,
-.md-typeset details.note > summary { color: var(--support); }
-.md-typeset .admonition.warning { border-left-color: var(--amber); }
-.md-typeset .admonition.warning .admonition-title { color: var(--amber-ink); }
-.md-typeset .admonition.warning p { color: var(--paper); }
+.md-typeset .admonition-title::before,
+.md-typeset summary::before { display: none; }
+.md-typeset :is(.admonition, details).note { border-left-color: var(--rule-strong); }
+.md-typeset :is(.admonition, details).note > :is(.admonition-title, summary) { color: var(--support); }
+.md-typeset :is(.admonition, details) > summary::after { color: var(--archive); }
+.md-typeset .admonition.warning { color: var(--paper); }
 .md-typeset .admonition :is(p, li),
 .md-typeset details :is(p, li) { color: inherit; }
 .md-typeset .highlight,
@@ -329,14 +333,26 @@ body {
   background: var(--booth);
 }
 .md-typeset .tabbed-labels { border-bottom: 1px solid var(--rule); }
+.js .md-typeset .tabbed-set:not(:has(> input:focus-visible)) > .tabbed-labels::before { display: none; }
 .md-typeset .tabbed-labels > label {
   padding: 13px 16px;
   border-bottom: 2px solid transparent;
   color: var(--support);
   font: 600 14px/1 var(--lu-label);
 }
-.md-typeset .tabbed-labels > label:hover { color: var(--paper); }
-.md-typeset .tabbed-set > input:checked + .tabbed-labels > label { color: var(--paper); border-bottom-color: var(--amber); }
+.md-typeset .tabbed-labels > label:hover { color: var(--support); }
+.md-typeset .tabbed-set > input:nth-child(1):checked ~ .tabbed-labels > :nth-child(1),
+.md-typeset .tabbed-set > input:nth-child(2):checked ~ .tabbed-labels > :nth-child(2),
+.md-typeset .tabbed-set > input:nth-child(3):checked ~ .tabbed-labels > :nth-child(3),
+.md-typeset .tabbed-set > input:nth-child(4):checked ~ .tabbed-labels > :nth-child(4) {
+  color: var(--paper);
+  border-bottom-color: var(--amber);
+}
+.md-typeset .tabbed-block { padding-bottom: 0; }
+.md-typeset .tabbed-block .md-typeset__scrollwrap,
+.md-typeset .tabbed-block .md-typeset__table { margin: 0; padding: 0; }
+.md-typeset .tabbed-block .md-typeset__table { display: block; }
+.md-typeset .tabbed-block table:not([class]) { margin: 0; border: 0; border-radius: 0; }
 .md-typeset table:not([class]) {
   display: table;
   width: 100%;
