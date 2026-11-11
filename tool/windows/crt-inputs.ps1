@@ -17,10 +17,10 @@ function Get-LineupCrtSelection {
   $default = Join-Path $vs 'VC/Auxiliary/Build/Microsoft.VCRedistVersion.default.txt'
   $redistVersion = (Get-Content -Raw -LiteralPath $default).Trim()
   # VS2022 17.14 (14.44) is the supported VC143 servicing baseline.
-  # A newer toolset generation requires an explicit compatibility policy update.
-  if ($redistVersion -notmatch '^14\.44\.[0-9]+$' -or
-    ([version] $redistVersion) -lt $toolset) {
-    throw 'The selected VC143 redistributable is unsupported or older than the build toolset.'
+  # The directory identifies the servicing generation. The DLL versions
+  # determine whether the redistributable is current enough for the toolset.
+  if ($redistVersion -notmatch '^14\.44\.[0-9]+$') {
+    throw "The selected VC143 redistributable directory version is unsupported (directory version: '$redistVersion', toolset version: $toolset, file version: not inspected)."
   }
   [pscustomobject]@{
     Directory = Join-Path $vs "VC/Redist/MSVC/$redistVersion/x64/Microsoft.VC143.CRT"
@@ -33,7 +33,8 @@ function Assert-LineupCrtIdentity {
   param(
     [Parameter(Mandatory)] $Signature,
     [Parameter(Mandatory)] [version] $Version,
-    [Parameter(Mandatory)] [version] $Toolset
+    [Parameter(Mandatory)] [version] $Toolset,
+    [Parameter(Mandatory)] [string] $DirectoryVersion
   )
   # Windows trust validation must succeed, including digest/chain validation.
   # A Microsoft-looking filename or version resource is not signature proof.
@@ -43,7 +44,7 @@ function Assert-LineupCrtIdentity {
   }
   if ($Version.Major -ne 14 -or $Version.Minor -ne 44 -or
     $Version -lt $Toolset) {
-    throw 'CRT file version is unsupported or older than the build toolset.'
+    throw "CRT file version is unsupported or older than the build toolset (directory version: '$DirectoryVersion', toolset version: $Toolset, file version: $Version)."
   }
 }
 
@@ -74,7 +75,8 @@ function Copy-LineupVerifiedCrt {
     $version = [version]::new($file.VersionInfo.FileMajorPart, $file.VersionInfo.FileMinorPart,
       $file.VersionInfo.FileBuildPart, $file.VersionInfo.FilePrivatePart)
     $signature = Microsoft.PowerShell.Security\Get-AuthenticodeSignature -LiteralPath $source -ErrorAction Stop
-    Assert-LineupCrtIdentity -Signature $signature -Version $version -Toolset $Selection.Toolset
+    Assert-LineupCrtIdentity -Signature $signature -Version $version `
+      -Toolset $Selection.Toolset -DirectoryVersion $Selection.Version
     $target = Join-Path $Destination $name
     Copy-Item -LiteralPath $source -Destination $target
     # Bind the checked input to the actual copied bytes, failing on substitution.
@@ -82,7 +84,8 @@ function Copy-LineupVerifiedCrt {
       throw 'CRT changed while copying into the package.'
     }
     $copiedSignature = Microsoft.PowerShell.Security\Get-AuthenticodeSignature -LiteralPath $target -ErrorAction Stop
-    Assert-LineupCrtIdentity -Signature $copiedSignature -Version $version -Toolset $Selection.Toolset
+    Assert-LineupCrtIdentity -Signature $copiedSignature -Version $version `
+      -Toolset $Selection.Toolset -DirectoryVersion $Selection.Version
     "$name=$version sha256=$hash signer=Microsoft Corporation"
   }
 }

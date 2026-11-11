@@ -16,18 +16,21 @@ function Assert-WindowsCrtInputs {
     $certificate | Add-Member ScriptMethod GetNameInfo { param($Type, $Issuer) $this.Publisher }
     [pscustomobject]@{ Status = $Status; SignerCertificate = $certificate }
   }
+  $directoryVersion = '14.44.35112'
   $toolset = [version] '14.44.35207'
   $runtime = [version] '14.44.35211.0'
-  Assert-LineupCrtIdentity (Signature) $runtime $toolset
   foreach ($status in @('NotSigned', 'HashMismatch', 'NotTrusted', 'UnknownError')) {
-    Assert-CrtRejected { Assert-LineupCrtIdentity (Signature $status) $runtime $toolset } 'valid Microsoft'
+    Assert-CrtRejected { Assert-LineupCrtIdentity (Signature $status) $runtime $toolset $directoryVersion } 'valid Microsoft'
   }
-  Assert-CrtRejected { Assert-LineupCrtIdentity (Signature 'Valid' 'Other Publisher') $runtime $toolset } 'valid Microsoft'
+  Assert-CrtRejected { Assert-LineupCrtIdentity (Signature 'Valid' 'Other Publisher') $runtime $toolset $directoryVersion } 'valid Microsoft'
   $unsigned = [pscustomobject]@{ Status = 'Valid'; SignerCertificate = $null }
-  Assert-CrtRejected { Assert-LineupCrtIdentity $unsigned $runtime $toolset } 'valid Microsoft'
-  Assert-CrtRejected { Assert-LineupCrtIdentity (Signature) ([version] '14.38.33135') $toolset } 'unsupported or older'
-  Assert-CrtRejected { Assert-LineupCrtIdentity (Signature) ([version] '14.44.35200') $toolset } 'unsupported or older'
-  Assert-CrtRejected { Assert-LineupCrtIdentity (Signature) $runtime ([version] '14.50.1') } 'unsupported or older'
+  Assert-CrtRejected { Assert-LineupCrtIdentity $unsigned $runtime $toolset $directoryVersion } 'valid Microsoft'
+  Assert-CrtRejected { Assert-LineupCrtIdentity (Signature) ([version] '14.38.33135') $toolset $directoryVersion } 'unsupported or older'
+  $oldRuntime = [version] '14.44.35200.0'
+  Assert-CrtRejected {
+    Assert-LineupCrtIdentity (Signature) $oldRuntime $toolset $directoryVersion
+  } "directory version: '$directoryVersion', toolset version: $toolset, file version: $oldRuntime"
+  Assert-CrtRejected { Assert-LineupCrtIdentity (Signature) $runtime ([version] '14.50.1') $directoryVersion } 'unsupported or older'
 
   $image = [byte[]]::new(128)
   $image[0] = 0x4d; $image[1] = 0x5a; $image[0x3c] = 64
@@ -50,15 +53,17 @@ function Assert-WindowsCrtInputs {
     $vsPath = $vs.Replace('\', '/')
     "set(CMAKE_CXX_COMPILER `"$vsPath/VC/Tools/MSVC/14.44.35207/bin/Hostx64/x64/cl.exe`")" |
       Set-Content -LiteralPath $compiler
-    '14.44.35211' | Set-Content -LiteralPath $default
+    $directoryVersion | Set-Content -LiteralPath $default
     $selection = Get-LineupCrtSelection $cmake
-    if ($selection.Version -cne '14.44.35211' -or $selection.Toolset -ne $toolset -or
-      $selection.Directory -cne (Join-Path $vs 'VC/Redist/MSVC/14.44.35211/x64/Microsoft.VC143.CRT')) {
+    if ($selection.Version -cne $directoryVersion -or $selection.Toolset -ne $toolset -or
+      $selection.Directory -cne (Join-Path $vs "VC/Redist/MSVC/$directoryVersion/x64/Microsoft.VC143.CRT")) {
       throw 'CRT selection did not use the actual compiler installation.'
     }
-    foreach ($version in @('14.38.33135', '14.44.35200', '14.50.1', '../other', 'not-a-version')) {
+    Assert-LineupCrtIdentity (Signature) $runtime $selection.Toolset $selection.Version
+    foreach ($version in @('14.38.33135', '14.50.1', '../other', 'not-a-version')) {
       $version | Set-Content -LiteralPath $default
-      Assert-CrtRejected { Get-LineupCrtSelection $cmake } 'unsupported or older'
+      Assert-CrtRejected { Get-LineupCrtSelection $cmake } `
+        "directory version: '$version', toolset version: $toolset, file version: not inspected"
     }
     'set(CMAKE_CXX_COMPILER "untrusted/cl.exe")' | Set-Content -LiteralPath $compiler
     Assert-CrtRejected { Get-LineupCrtSelection $cmake } 'supported MSVC'
