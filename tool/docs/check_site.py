@@ -28,6 +28,8 @@ ALLOWED_SEARCH_PREFIXES = (
     "contributing/",
 )
 FORBIDDEN_MARKERS = (b"docs/handoffs", b"docs/reviews")
+# Match the retired screenshot marker without leaving a source reference to it.
+LEGACY_SCREENSHOT_MARKER = b"placeholder-" b"16x9"
 
 
 def main() -> int:
@@ -64,7 +66,7 @@ def main() -> int:
 
     markers = list(FORBIDDEN_MARKERS)
     if final:
-        markers.append(b"placeholder-16x9")
+        markers.append(LEGACY_SCREENSHOT_MARKER)
     for path in sorted(p for p in site.rglob("*") if p.is_file()):
         try:
             data = path.read_bytes()

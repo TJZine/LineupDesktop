@@ -8,8 +8,8 @@ The Guide shows what's on every channel now and for the next few hours. The chan
 { .lead }
 
 <figure>
-<a href="../images/placeholder-16x9.webp"><img src="../images/placeholder-16x9.webp" alt="Placeholder for the full Guide with a currently airing program focused, its details above the schedule, and the tuned channel playing in picture-in-picture." width="1600" height="900"></a>
-<figcaption>The line across the schedule marks the current time. The highlighted row is the channel you're tuned to.</figcaption>
+<a href="../images/guide-live.webp"><img src="../images/guide-live.webp" alt="Lineup Guide with Fallout tuned on channel 2 and American Sniper on channel 4 focused." width="1600" height="1000"></a>
+<figcaption>The line across the schedule marks the current time. The highlighted program is the one you're inspecting, and <strong>Watching</strong> marks the channel you're tuned to.</figcaption>
 </figure>
 
 ## Move around

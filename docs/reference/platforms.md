@@ -29,7 +29,7 @@ See [Windows Native Acceptance](https://github.com/TJZine/LineupDesktop/blob/mai
 
 ### Android TV and Fire TV
 
-Direct Play and couch-use checks remain open. You can reach Channel Studio's manual editor and Air Check, but they have not passed remote-only testing for this beta. Upgrade testing requires a production-signed APK. See [Android runtime](https://github.com/TJZine/LineupDesktop/blob/main/docs/android-runtime.md).
+Direct Play and couch-use checks remain open. You can reach Channel Studio's manual editor and the schedule preview, but they have not passed remote-only testing for this beta. Upgrade testing requires a production-signed APK. See [Android runtime](https://github.com/TJZine/LineupDesktop/blob/main/docs/android-runtime.md).
 
 ### macOS
 

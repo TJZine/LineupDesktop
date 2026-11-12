@@ -12,7 +12,7 @@ Each channel keeps its own schedule, so tuning in joins the program already on.
 **Playback order** determines the sequence of programs. Choose **Shuffle**, **In order**, or **Mini-marathons**. Mini-marathons play blocks of two to five episodes from one show and require episodes that Lineup can group by show. They can include specials when enabled, including in additional versions.
 
 ??? note "Details"
-    A new custom channel saves the schedule starting point and shuffle choices you preview in Air Check. Updating a matching generated channel keeps its schedule starting point and shuffle choices.
+    A new custom channel saves the schedule starting point and shuffle choices shown in the schedule preview. Updating a matching generated channel keeps its schedule starting point and shuffle choices.
 
     Shuffle accounts for each occurrence and its duration before shuffling. A Plex server response that only reorders the same programs won't reshuffle the schedule. A saved shuffle can transition once when the scheduling rules change, while preserving the cycle before the transition. **In order** and **Mini-marathons** keep their ordering rules.
 

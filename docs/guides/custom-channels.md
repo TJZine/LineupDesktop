@@ -21,9 +21,9 @@ In **Hand-picked**, use **Browse library** to search, filter, and select matchin
 
 A saved item missing from the current playable library shows **Unavailable — retained until removed**. Lineup keeps it in the list and leaves it out of the schedule until it can play it again.
 
-## Preview with Air Check
+## Preview the schedule
 
-**Air Check** previews what's on now and next, how timing and the repeat cycle work, and why programs are included. It uses the same scheduling rules as Guide and Player. It flags unavailable or invalid programming so you can fix it. See [How schedules work](schedules.md) for ordering and schedule stability.
+**Schedule preview** shows what's on now and next, how timing and the repeat cycle work, and why programs are included. Lineup's messages call this check Air Check. It uses the same scheduling rules as Guide and Player. It flags unavailable or invalid programming so you can fix it. See [How schedules work](schedules.md) for ordering and schedule stability.
 
 ## Save, tune, or delete
 

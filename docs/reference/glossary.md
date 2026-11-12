@@ -20,7 +20,7 @@ Look up terms you see in Lineup and in these guides.
 | Generated channel | A channel created by **Generate lineup**. Generating again can update or replace it. |
 | Custom channel | A channel you build in Channel Studio. Generating a lineup never changes it. |
 | Channel Studio | The page for building or editing a custom channel and inspecting a generated one. |
-| Air Check | The Channel Studio preview of what a channel plays now and next, and why. |
+| Schedule preview (Air Check) | The Channel Studio preview of what a channel plays now and next, and why. |
 | Hand-picked | Custom channel programming made of titles you choose and order yourself. |
 | Playback order | How a channel orders its programs: **Shuffle**, **In order** or **Mini-marathons** (blocks of 2 to 5 episodes of one show). |
 | PiP | Picture-in-picture: the video area in the Guide that keeps playing the tuned channel. |

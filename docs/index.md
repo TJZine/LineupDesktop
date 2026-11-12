@@ -72,7 +72,7 @@ A guide you can browse while the current channel keeps playing, channels that st
 
 The channel you're watching keeps playing in the corner while you look through the next two, three or four hours. In the Player, press ++arrow-up++ for a Mini Guide over the picture.
 
-<figure class="lu-shot"><img src="images/placeholder-16x9.webp" alt="Placeholder for a Mini Guide over the Player screenshot." width="1600" height="900"></figure>
+<figure class="lu-shot"><img src="images/home-mini-guide.webp" alt="Mini Guide listing nearby channels over Ponyo playing in the Player." width="1600" height="1000"></figure>
 
 </article>
 
@@ -96,7 +96,7 @@ Generate a whole lineup at once, or hand-pick a custom channel in Channel Studio
 
 Files play directly from your Plex server. On Windows, fullscreen can switch your display to HDR to match the video.
 
-<figure class="lu-shot"><img src="images/placeholder-16x9.webp" alt="Placeholder for an on-screen playback controls screenshot." width="1600" height="900"></figure>
+<figure class="lu-shot"><img src="images/home-osd.webp" alt="Player showing Ponyo with the on-screen controls along the bottom." width="1600" height="1000"></figure>
 
 </article>
 
@@ -210,9 +210,9 @@ Install
 
 <div class="lu-gallery" markdown>
 
-<figure><img src="images/placeholder-16x9.webp" alt="Placeholder for the expanded Now Playing view." width="1600" height="900"><figcaption><strong>Now Playing.</strong> Synopsis, cast and what's on next, without leaving the picture.</figcaption></figure>
-<figure><img src="images/placeholder-16x9.webp" alt="Placeholder for Channel Studio Air Check." width="1600" height="900"><figcaption><strong>Channel Studio.</strong> Air Check shows what a channel will play before you save it.</figcaption></figure>
-<figure><img src="images/placeholder-16x9.webp" alt="Placeholder for the Guide on a TV." width="1600" height="900"><figcaption><strong>On the TV.</strong> The same Guide, laid out for the couch and a D-pad.</figcaption></figure>
+<figure><img src="images/home-now-playing.webp" alt="Now Playing for Ponyo with poster, synopsis, cast and what's on next." width="1600" height="1000"><figcaption><strong>Now Playing.</strong> Synopsis, cast and what's on next, without leaving the picture.</figcaption></figure>
+<figure><img src="images/home-air-check.webp" alt="Channel Studio draft with the schedule preview showing what plays now and next." width="1600" height="1000"><figcaption><strong>Channel Studio.</strong> The schedule preview shows what a channel will play before you save it.</figcaption></figure>
+<figure><img src="images/home-tv-guide.webp" alt="Lineup Guide on Android TV with This Is Us focused." width="1600" height="1000"><figcaption><strong>On the TV.</strong> The same Guide, laid out for the couch and a D-pad.</figcaption></figure>
 
 </div>
 

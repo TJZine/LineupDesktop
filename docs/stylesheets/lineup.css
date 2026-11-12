@@ -367,6 +367,8 @@ body {
   display: block;
   width: 100%;
   height: auto;
+  aspect-ratio: 16 / 10;
+  object-fit: contain;
   border: 1px solid var(--rule-strong);
   border-radius: 12px;
   box-shadow: none;
@@ -479,7 +481,7 @@ body:has(.lu-home) .md-content__inner > .md-typeset { max-width: none; }
 .lu-platforms-mini span { min-width: 0; }
 .lu-platforms-mini span::before { color: var(--archive); content: "◦ "; }
 .lu-frame { margin: 0; overflow: hidden; border: 1px solid var(--rule-strong); border-radius: 12px; background: var(--inset); box-shadow: 0 0 0 6px var(--reel); }
-.lu-frame img { display: block; width: 100%; height: auto; aspect-ratio: 16 / 9; object-fit: contain; }
+.lu-frame img { display: block; width: 100%; height: auto; aspect-ratio: 16 / 10; object-fit: contain; }
 
 /* Home content. */
 .lu-home { max-width: none; padding: 0; }
@@ -524,7 +526,7 @@ body:has(.lu-home) .md-content__inner > .md-typeset { max-width: none; }
 .lu-card p { margin: 0; color: var(--support); font-size: 15px; }
 .lu-card .lu-kicker { font-size: 11.5px; }
 .lu-shot { margin: auto 0 0; }
-.lu-shot img { display: block; width: 100%; height: auto; aspect-ratio: 16 / 9; border: 1px solid var(--rule-strong); border-radius: 6px; object-fit: contain; }
+.lu-shot img { display: block; width: 100%; height: auto; aspect-ratio: 16 / 10; border: 1px solid var(--rule-strong); border-radius: 6px; object-fit: contain; }
 .lu-chips { display: flex; flex-wrap: wrap; gap: 6px; margin-top: auto; padding-top: 6px; }
 .lu-chips span { padding: 6px 10px; border: 1px solid var(--rule-strong); border-radius: 999px; color: var(--support); font: 500 12.5px/1 var(--lu-label); }
 .lu-platforms { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 16px; }
@@ -539,7 +541,7 @@ body:has(.lu-home) .md-content__inner > .md-typeset { max-width: none; }
 .lu-platforms a { margin-top: auto; color: var(--amber-ink); font: 600 14px/1 var(--lu-label); }
 .lu-gallery { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 16px; }
 .lu-gallery figure { display: flex; flex-direction: column; gap: 10px; min-width: 0; margin: 0; }
-.lu-gallery img { display: block; width: 100%; height: auto; aspect-ratio: 16 / 9; border: 1px solid var(--rule-strong); border-radius: var(--lu-radius); object-fit: contain; }
+.lu-gallery img { display: block; width: 100%; height: auto; aspect-ratio: 16 / 10; border: 1px solid var(--rule-strong); border-radius: var(--lu-radius); object-fit: contain; }
 .lu-gallery figcaption { color: var(--support); font-size: 14px; }
 .lu-gallery figcaption strong { color: var(--paper); font-weight: 600; }
 .lu-faq { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 0 48px; }
