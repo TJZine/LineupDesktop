@@ -123,17 +123,18 @@ lists and the HLS child-context I/O blocker; it does not inherit NET-origin
 sandboxing. Unexpected private playlist redirects fail closed. Direct-load
 global reference defaults remain unchanged.
 
-The core emits fresh finite or null `demuxer-start-time` seconds through the
-ordinary load-correlated property path, clearing it for a new load and rereading
-it at correlated FILE_LOADED rather than relabeling an old notification payload.
-Dart retains nullable signed finite `PlayerTelemetry.demuxerStartTime`; zero is
-valid, unavailable/invalid values clear it, and existing load/lifetime resets
-apply. The coordinator maps the part position as `P + D - 10 s`, clamped at
-zero. It estimates with the issued offset plus `P` until the first valid sample
-and retains the last valid `D` for that load. Desktop has no alignment seek.
-Manifest text and
-child references are never forwarded through logs, properties, errors or
-Diagnostics; internal libmpv errors are classified into fixed failures.
+The core clears `demuxer-start-time` for each desktop session load. After the
+current file's initial playback restart, it first publishes a fresh read of
+`demuxer-start-time` (`D`) through the load-correlated property path, followed
+by a fresh `time-pos` (`P`) when both are available. An unavailable or invalid
+`D` is sent as null. Zero is valid. The coordinator maps the part position as
+`P + D - 10 s`, clamped at zero. It estimates with the issued offset plus `P`
+until the first valid sample and retains the last valid `D` for that load. See
+[Seeks](#seeks) for the desktop alignment decision.
+
+Manifest text and child references are never forwarded through logs,
+properties, errors or Diagnostics; internal libmpv errors are classified into
+fixed failures.
 Bounded typed subtitle cues are authored media content, so their URL-like text
 and literals remain renderable. Only the native cue publisher marks that value
 as content; generic properties/platform events retain private-text redaction.
@@ -400,9 +401,11 @@ non-negative native `time-pos`. Fields are load ID, mode, target, observed
 seconds, and signed `observed-target` offset; no URI, token, title, or raw mpv
 output is included. Initial joins report `mode=keyframes`.
 
-Samples expire ten seconds after native command execution. Replacement, stop,
-matching end/error, command failure, overflow, and stale load identity invalidate
-them. An older file's end cannot retire the new load's pending initial sample.
+Desktop alignment observations expire five seconds after native command
+execution. Ordinary seek and initial join samples expire after ten seconds.
+Replacement, stop, matching end/error, command failure, overflow, and stale
+load identity invalidate them. An older file's end cannot retire the new load's
+pending initial sample.
 Overlapping seek commands (including an exact user override) or duplicate seek
 notifications make samples ambiguous and suppress logging until the next load.
 A load/seek without its matching restart produces no landing diagnostic.
