@@ -282,8 +282,8 @@ body {
   background: transparent;
   box-shadow: none;
 }
-.md-typeset :is(.admonition, details),
-.md-typeset :is(.admonition, details):is(.tip, .warning, .note) {
+.md-typeset :is(.admonition, details[class]),
+.md-typeset :is(.admonition, details[class]):is(.tip, .warning, .note) {
   border: 1px solid var(--rule);
   border-left: 3px solid var(--amber);
   border-radius: var(--lu-radius);
@@ -291,7 +291,7 @@ body {
   box-shadow: none;
   color: var(--support);
 }
-.md-typeset :is(.admonition, details) > :is(.admonition-title, summary) {
+.md-typeset :is(.admonition, details[class]) > :is(.admonition-title, summary) {
   padding-inline-start: 0;
   background: transparent;
   color: var(--amber-ink);
@@ -301,12 +301,12 @@ body {
 }
 .md-typeset .admonition-title::before,
 .md-typeset summary::before { display: none; }
-.md-typeset :is(.admonition, details).note { border-left-color: var(--rule-strong); }
-.md-typeset :is(.admonition, details).note > :is(.admonition-title, summary) { color: var(--support); }
-.md-typeset :is(.admonition, details) > summary::after { color: var(--archive); }
+.md-typeset :is(.admonition, details[class]).note { border-left-color: var(--rule-strong); }
+.md-typeset :is(.admonition, details[class]).note > :is(.admonition-title, summary) { color: var(--support); }
+.md-typeset :is(.admonition, details[class]) > summary::after { color: var(--archive); }
 .md-typeset .admonition.warning { color: var(--paper); }
 .md-typeset .admonition :is(p, li),
-.md-typeset details :is(p, li) { color: inherit; }
+.md-typeset details[class] :is(p, li) { color: inherit; }
 .md-typeset .highlight,
 .md-typeset pre { border-radius: var(--lu-radius); }
 .md-typeset :not(pre) > code {
@@ -548,8 +548,9 @@ body:has(.lu-home) .md-content__inner > .md-typeset { max-width: none; }
 .lu-faq details { border: 0; border-top: 1px solid var(--rule); border-radius: 0; background: transparent; padding: 18px 0; }
 .lu-faq summary { display: flex; justify-content: space-between; gap: 16px; cursor: pointer; color: var(--paper); font: 600 17px/1.35 var(--lu-body); list-style: none; }
 .lu-faq summary::-webkit-details-marker { display: none; }
-.lu-faq summary::after { color: var(--archive); content: "+"; font: 400 22px/1 var(--lu-display); }
-.lu-faq details[open] summary::after { content: "−"; }
+.md-typeset .lu-faq details > summary { padding: 0; min-height: 0; }
+.md-typeset .lu-faq details > summary::after { position: static; inset: auto; width: auto; height: auto; transform: none; -webkit-mask-image: none; mask-image: none; background: none; color: var(--support); content: "+" / ""; font: 300 24px/1 var(--lu-body); }
+.md-typeset .lu-faq details[open] > summary::after { content: "−" / ""; transform: none; }
 .lu-faq details p { margin: 10px 0 0; color: var(--support); font-size: 15px; }
 
 /* Page footer. */

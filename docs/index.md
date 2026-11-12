@@ -6,6 +6,7 @@ hide:
   - navigation
   - toc
   - path
+  - footer
 ---
 
 <div class="lu-home" markdown>
