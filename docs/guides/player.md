@@ -7,7 +7,10 @@ description: Watch the tuned channel with Lineup's playback controls.
 Watch the tuned channel and open its controls without leaving the picture.
 { .lead }
 
-On Windows, Lineup uses one window per user session. Opening another copy brings the existing window forward and ignores the new launch arguments, including a local media file passed to it.
+On Windows, Lineup runs in a single window. Opening it again brings that window to the front.
+
+??? note "Details"
+    Opening another copy ignores its launch arguments, including a local media file passed to it.
 
 ## On-screen controls
 
@@ -21,7 +24,7 @@ Open [Audio, subtitles and sleep](tracks-and-sleep.md) for track and timer contr
 
 ### DVR controls
 
-**DVR playback controls** is off by default. The transport buttons are hidden, and Player shortcuts for play, pause, seek, stop, rewind, and fast forward are disabled. Channel surfing, number entry, Guide and Mini Guide tuning, tracks, sleep, menu, and fullscreen remain available.
+**DVR playback controls** is off by default. The playback buttons are hidden, and Player shortcuts for play, pause, seek, stop, rewind, and fast forward are disabled. Channel surfing, number entry, Guide and Mini Guide tuning, tracks, sleep, menu, and fullscreen remain available.
 
 Turn **DVR playback controls** on under **Settings** → **Playback** for previous and next channel buttons, play and pause, and seeking. See [Keyboard and remote](../reference/controls.md) for supported keys. For playback through multiple media parts, see [How schedules work](schedules.md#program-endings).
 

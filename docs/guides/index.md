@@ -1,8 +1,8 @@
 ---
-title: Overview
+title: Guides overview
 description: Find guides for watching, channels, and your setup.
 ---
-# Overview
+# Guides overview
 
 Find the screen or task you need while watching or setting up Lineup.
 { .lead }
@@ -19,4 +19,4 @@ Find the screen or task you need while watching or setting up Lineup.
 
 Choose **Open Lineup menu** on Guide, Settings, or Diagnostics, or **Lineup menu** on Player. The menu leads to **Guide**, **Player**, **Channels**, **Settings**, and **Account**. Player is available while a channel is loading, playing or paused, and when playback shows an error. **Now Playing** appears after tuning when the current program's details are available and playback has no error. **Account** opens Settings with its account category selected.
 
-Channels has its own management rail. Settings has a category rail, and the same Player surface stays behind it while playback is active.
+Channels and Settings each have a side menu. While something is playing, the picture stays behind Settings.

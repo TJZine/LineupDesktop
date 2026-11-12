@@ -40,7 +40,7 @@ Moving through the Guide never changes channel. Playback only switches when you 
 
 From the root Guide, the Guide button opens the Lineup menu, and Back sends Lineup to the background.
 
-The program you focus is the one you're inspecting. Your selection is the program you activate. The tuned channel is the one playing, and an airing program is one on the schedule right now. Activating an airing program tunes its channel and opens the Player. The Guide always shows the playing channel in a picture-in-picture area above the schedule. Both screens use the same playback session.
+Moving around only highlights programs. Selecting a program that's on now tunes its channel and opens the Player. The channel you're watching keeps playing in the corner of the Guide. When nothing is playing, the corner shows artwork for the program you've highlighted.
 
 ## Go back to now
 

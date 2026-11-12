@@ -9,7 +9,7 @@ Let Lineup suggest channels from your Plex libraries, then review what it will c
 
 ## Choose libraries
 
-Open **Channels** → **Generate lineup**, or continue from first-run setup. On **Choose libraries**, select the libraries to scan. The scan shows page and item counts, and reports ready, empty, unsupported, cancelled, or failed libraries. You can cancel a scan, retry failed libraries, or continue with the libraries that are ready.
+Open **Channels** → **Generate lineup**, or continue from first-run setup. On **Choose libraries**, select the libraries to scan. The scan shows its progress and marks each library as ready, empty, unsupported, cancelled, or failed. You can cancel a scan, retry failed libraries, or continue with the libraries that are ready.
 
 If there are no usable movie or show libraries, choose **Switch server** or [sign out](profiles-and-servers.md#sign-out).
 
@@ -37,9 +37,9 @@ In **Review**, look through the full proposed lineup and its current and final c
 | **Replace generated channels** | Replaces generated programming and keeps your custom channels. |
 | **Add as new channels** | Appends the proposed channels as new channels. |
 
-Confirm removals and apply the changes explicitly. In replace mode, the confirmation stays visible while you inspect the roster.
+Confirm removals and apply the changes explicitly. In replace mode, the confirmation stays visible while you look through the channel list.
 
-On TV, Right from a channel row or disclosure heading jumps to the enabled primary action, or to **Back to configure** when the primary action is disabled. The hint reads **Press right on any channel to jump here**. Up returns to the remembered row. Moving between these areas leaves your search and confirmation in place and does not apply changes.
+On TV, press Right on a channel to jump to the main button, or to **Back to configure** if the main button isn't available yet. The hint reads **Press right on any channel to jump here**. Press Up to go back to the channel you were on. Moving around doesn't apply anything or clear your search.
 
 After an unchanged plan or a successful save, **View lineup** opens the lineup on desktop. On TV, **Open guide** goes to the Guide. After a successful save, **Add a custom channel** opens Channel Studio.
 

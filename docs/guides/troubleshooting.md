@@ -33,4 +33,7 @@ Find the next step when Lineup can't connect, play, install, or save a change.
 
 If a setting or lineup change fails, the previous state should remain. Check that your Plex server and local storage are available, then try again.
 
-If Lineup reports corrupt saved data, it puts the unreadable state in a separate file and starts with an empty setup. This applies to invalid text encoding, malformed JSON, or invalid data structure. Review the setup before dismissing the banner. Other storage read failures stop startup and preserve your data.
+If Lineup reports corrupt saved data, it moves the unreadable data to a separate file and starts with an empty setup. Review the setup before dismissing the banner.
+
+??? note "Details"
+    This applies to saved data with invalid text encoding, malformed JSON, or an invalid structure. Other storage read failures stop startup and preserve your data.

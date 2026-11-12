@@ -19,8 +19,8 @@ Signing out stops playback and removes Plex sign-in credentials. Your lineup and
 
 On Windows, replacing or deleting the portable application folder leaves local app data in place. Sign out before removing the app folder if you want to remove your sign-in.
 
-On Android TV and Fire TV, install an update over the existing production app. Uninstalling first removes your saved lineups and sign-in credentials.
+On Android TV and Fire TV, install an update over the Lineup app you already have. Uninstalling first removes your saved lineups and sign-in credentials.
 
 ## Diagnostics
 
-Lineup records bounded, structured facts. It redacts known credentials, authorization headers, URLs that contain a Plex token, and private paths. It omits arbitrary exception text and arbitrary messages from the playback engine. [Review a support report](../guides/support-reports.md) before sharing it because it can still describe private activity.
+Lineup records only a small, fixed set of facts. It redacts known credentials, authorization headers, URLs that contain a Plex token, and private paths. It omits arbitrary exception text and arbitrary messages from the playback engine. [Review a support report](../guides/support-reports.md) before sharing it because it can still describe private activity.

@@ -11,3 +11,4 @@ Link Plex, choose a server, and build a set of channels you can tune.
 2. If your Plex Home has more than one profile, choose yours. With a single profile, Lineup uses it and goes straight to the server list. See [Plex Home profiles](../guides/profiles-and-servers.md#plex-home-profiles) for PIN entry.
 3. Choose a reachable Plex Media Server. See [Plex Media Server](../guides/profiles-and-servers.md#plex-media-server) for connection labels and discovery.
 4. Choose your libraries, set up your channels, and review the proposed lineup before applying it. Follow [Generate a lineup](../guides/generate-lineup.md) for scans, sources, playback order, and review.
+5. Open the **Guide**, pick a program that's on now, and press ++enter++ (Select on a TV remote) to start watching. See [The Guide](../guides/guide.md).

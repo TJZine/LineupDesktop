@@ -33,4 +33,4 @@ Direct Play and couch-use checks remain open. You can reach Channel Studio's man
 
 ### macOS
 
-The preserved beta candidate still builds with a macOS 12 deployment target. Runtime coverage is recorded on macOS 27. Sonoma hardware validation, distribution and remaining runtime checks are open, including signed distribution.
+The supported minimum is macOS 14 Sonoma. The current test build has so far been run on a newer macOS release; testing on Sonoma hardware, signed distribution and the remaining playback checks are still open.

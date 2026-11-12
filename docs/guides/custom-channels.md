@@ -15,9 +15,9 @@ Choose **Duplicate as custom** to start a separate draft from a generated channe
 
 ## Choose programs
 
-Choose **Library** for a channel based on library filters or **Hand-picked** to put titles in an order you choose. Saved playlist and mixed sources remain available to inspect and stay in place until you replace them.
+Choose **Library** for a channel based on library filters or **Hand-picked** to put titles in an order you choose. Channels you made earlier from a Plex playlist or mixed sources keep working, and stay as they are until you change them.
 
-In **Hand-picked**, use **Browse library** to search, filter, and select matching programs. You can select visible results together. Use **Channel programs** to reorder the list with the up and down arrow buttons. Counts remain visible, and your search and filters stay in place when you switch tabs. Reordering and selection work without a network request for each edit.
+In **Hand-picked**, use **Browse library** to search, filter, and select matching programs. You can select visible results together. Use **Channel programs** to reorder the list with the up and down arrow buttons. Counts remain visible, and your search and filters stay in place when you switch tabs.
 
 A saved item missing from the current playable library shows **Unavailable — retained until removed**. Lineup keeps it in the list and leaves it out of the schedule until it can play it again.
 

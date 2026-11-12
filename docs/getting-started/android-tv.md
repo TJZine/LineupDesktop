@@ -17,7 +17,7 @@ Use a device running Android 9 or later on ARM. Fire TV devices running Vega OS 
 
 ## Update
 
-Open the new APK over the installed production app. Keep the old app installed during the update. See [Privacy and stored data](../reference/privacy.md#update-or-remove-lineup) for what uninstalling removes.
+Open the new APK over the Lineup app you already have. Don't uninstall the old app first. See [Privacy and stored data](../reference/privacy.md#update-or-remove-lineup) for what uninstalling removes.
 
 ??? note "For testers"
     To update an installed production build from a computer, run `adb install -r <apk>`.

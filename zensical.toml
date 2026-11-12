@@ -34,7 +34,7 @@ nav = [
     { "Your first lineup" = "getting-started/first-lineup.md" },
   ] },
   { "Guides" = [
-    { "Overview" = "guides/index.md" },
+    { "Guides overview" = "guides/index.md" },
     { "Watching" = [
       { "The Guide" = "guides/guide.md" },
       { "The Player" = "guides/player.md" },
@@ -54,13 +54,12 @@ nav = [
     ] },
   ] },
   { "Reference" = [
-    { "Overview" = "reference/index.md" },
+    { "Reference overview" = "reference/index.md" },
     { "Keyboard and remote" = "reference/controls.md" },
     { "Platform support" = "reference/platforms.md" },
     { "Known limitations" = "reference/limitations.md" },
     { "Privacy and stored data" = "reference/privacy.md" },
     { "Glossary" = "reference/glossary.md" },
-    { "Releases" = "https://github.com/TJZine/LineupDesktop/releases" },
   ] },
   { "Contributing" = "contributing/index.md" },
 ]

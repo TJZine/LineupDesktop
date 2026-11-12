@@ -1,12 +1,24 @@
 {% extends "base.html" %}
 
-{% block extrahead %}
-  {% if not page.url %}
-    {% set lu_title = config.site_name ~ " documentation" %}
+{% block htmltitle %}
+  {% if page.is_homepage or not page.url %}
+    <title>Lineup · Virtual TV channels for Plex</title>
   {% elif page.meta and page.meta.title %}
-    {% set lu_title = page.meta.title %}
-  {% elif page.title and not page.is_homepage %}
-    {% set lu_title = page.title | striptags %}
+    <title>{{ page.meta.title }} · {{ config.site_name }}</title>
+  {% elif page.title %}
+    <title>{{ page.title | striptags }} · {{ config.site_name }}</title>
+  {% else %}
+    <title>{{ config.site_name }}</title>
+  {% endif %}
+{% endblock %}
+
+{% block extrahead %}
+  {% if page.is_homepage or not page.url %}
+    {% set lu_title = "Lineup · Virtual TV channels for Plex" %}
+  {% elif page.meta and page.meta.title %}
+    {% set lu_title = page.meta.title ~ " · " ~ config.site_name %}
+  {% elif page.title %}
+    {% set lu_title = (page.title | striptags) ~ " · " ~ config.site_name %}
   {% else %}
     {% set lu_title = config.site_name %}
   {% endif %}
@@ -31,4 +43,5 @@
   <link rel="apple-touch-icon" href="{{ 'assets/brand/apple-touch-icon.png' | url }}">
   <link rel="preload" href="{{ 'assets/fonts/bodoni-moda-latin-opsz-normal.woff2' | url }}" as="font" type="font/woff2" crossorigin>
   <link rel="preload" href="{{ 'assets/fonts/inter-latin-opsz-normal.woff2' | url }}" as="font" type="font/woff2" crossorigin>
+  <link rel="preload" href="{{ 'assets/fonts/instrument-sans-latin-wght-normal.woff2' | url }}" as="font" type="font/woff2" crossorigin>
 {% endblock %}

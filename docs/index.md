@@ -13,13 +13,13 @@ hide:
 
 <section class="lu-section" markdown>
 
-## How it works
+<p class="lu-eyebrow">How it works</p>
 
 <div class="lu-section-head" markdown>
 
 <div>
 
-<h3>Three steps to your first channel</h3>
+<h2>Three steps to your first channel</h2>
 
 </div>
 
@@ -49,13 +49,13 @@ Setup is a one-time walk-through. After that, every channel keeps its own schedu
 
 <section class="lu-section" markdown>
 
-## What you get
+<p class="lu-eyebrow">What you get</p>
 
 <div class="lu-section-head" markdown>
 
 <div>
 
-<h3>Made to feel like television</h3>
+<h2>Made to feel like television</h2>
 
 </div>
 
@@ -79,17 +79,17 @@ The channel you're watching keeps playing in the corner while you look through t
 
 <article class="lu-card lu-card-builder" markdown>
 
-<span class="lu-kicker">Channel Builder</span>
+<span class="lu-kicker">Channels</span>
 
 ### Channels from what you already have
 
 Generate a whole lineup at once, or hand-pick a custom channel in Channel Studio.
 
-<div class="lu-chips" aria-label="Channel sources"><span>Collections</span><span>Playlists</span><span>Genres</span><span>Decades</span><span>Studios</span><span>Actors</span><span>Directors</span><span>Recently added</span></div>
+<ul class="lu-chips" role="list" aria-label="Channel sources"><li>Collections</li><li>Playlists</li><li>Genres</li><li>Decades</li><li>Studios</li><li>Actors</li><li>Directors</li><li>Recently added</li></ul>
 
 </article>
 
-<article class="lu-card" markdown>
+<article class="lu-card lu-card-playback" markdown>
 
 <span class="lu-kicker">Playback</span>
 
@@ -107,7 +107,7 @@ Files play directly from your Plex server. On Windows, fullscreen can switch you
 
 ### Keyboard or remote
 
-On a keyboard: number keys change channel, ++a++ and ++c++ open audio and subtitle tracks, and ++s++ sets a sleep timer. On a TV remote: the D-pad, Channel Up and Down, and the Player controls.
+On a keyboard: number keys change channel, ++a++ and ++c++ open audio and subtitle tracks, and ++s++ sets a sleep timer. On a TV remote: the D‑pad, Channel Up and Down, and the Player controls.
 
 </article>
 
@@ -117,7 +117,7 @@ On a keyboard: number keys change channel, ++a++ and ++c++ open audio and subtit
 
 ### Your way to watch
 
-Four themes, reduced motion, larger focus indicators, subtitle styling, and optional DVR-style pause and seek.
+Four themes, reduced motion, larger focus indicators, subtitle styling, and optional DVR‑style pause and seek.
 
 </article>
 
@@ -127,13 +127,13 @@ Four themes, reduced motion, larger focus indicators, subtitle styling, and opti
 
 <section class="lu-section" markdown>
 
-## Platforms
+<p class="lu-eyebrow">Platforms</p>
 
 <div class="lu-section-head" markdown>
 
 <div>
 
-<h3>Where Lineup runs</h3>
+<h2>Where Lineup runs</h2>
 
 </div>
 
@@ -169,7 +169,7 @@ Needs
 : Android 9 or later on ARM. Fire TV with Fire OS only; Vega OS devices can't install APKs
 
 Install
-: APK, installed from another device
+: APK, sideloaded
 
 [Install on a TV →](getting-started/android-tv.md)
 
@@ -197,13 +197,13 @@ Install
 
 <section class="lu-section" markdown>
 
-## A closer look
+<p class="lu-eyebrow">A closer look</p>
 
 <div class="lu-section-head" markdown>
 
 <div>
 
-<h3>Around the app</h3>
+<h2>Around the app</h2>
 
 </div>
 
@@ -211,9 +211,9 @@ Install
 
 <div class="lu-gallery" markdown>
 
-<figure><img src="images/home-now-playing.webp" alt="Now Playing for Ponyo with poster, synopsis, cast and what's on next." width="1600" height="1000"><figcaption><strong>Now Playing.</strong> Synopsis, cast and what's on next, without leaving the picture.</figcaption></figure>
-<figure><img src="images/home-air-check.webp" alt="Channel Studio draft with the schedule preview showing what plays now and next." width="1600" height="1000"><figcaption><strong>Channel Studio.</strong> The schedule preview shows what a channel will play before you save it.</figcaption></figure>
-<figure><img src="images/home-tv-guide.webp" alt="Lineup Guide on Android TV with This Is Us focused." width="1600" height="1000"><figcaption><strong>On the TV.</strong> The same Guide, laid out for the couch and a D-pad.</figcaption></figure>
+<figure><a href="images/home-now-playing.webp"><img src="images/home-now-playing.webp" alt="Now Playing for Ponyo with poster, synopsis, cast and what's on next." width="1600" height="1000"></a><figcaption><strong>Now Playing.</strong> Synopsis, cast and what's on next, without leaving the picture.</figcaption></figure>
+<figure><a href="images/home-air-check.webp"><img src="images/home-air-check.webp" alt="Channel Studio draft with the schedule preview showing what plays now and next." width="1600" height="1000"></a><figcaption><strong>Channel Studio.</strong> The schedule preview shows what a channel will play before you save it.</figcaption></figure>
+<figure><a href="images/home-tv-guide.webp"><img src="images/home-tv-guide.webp" alt="Lineup Guide on Android TV with This Is Us focused." width="1600" height="1000"></a><figcaption><strong>On the TV.</strong> The same Guide, laid out for the couch and a D‑pad.</figcaption></figure>
 
 </div>
 
@@ -221,13 +221,13 @@ Install
 
 <section class="lu-section" markdown>
 
-## Questions
+<p class="lu-eyebrow">Questions</p>
 
 <div class="lu-section-head" markdown>
 
 <div>
 
-<h3>Before you install</h3>
+<h2>Before you install</h2>
 
 </div>
 
@@ -273,7 +273,7 @@ In your system's secure credential storage. Support reports are redacted before 
 
 <details><summary>Is there a public release yet?</summary>
 
-Check GitHub Releases. If no build is listed there, no public build is available yet.
+Not yet. Public builds will appear on GitHub Releases. The release listed there today is a playback component for developers, not the Lineup app.
 
 </details>
 

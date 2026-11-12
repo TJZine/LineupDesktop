@@ -18,13 +18,13 @@ Each channel keeps its own schedule, so tuning in joins the program already on.
 
 ## Program endings
 
-If a Plex item has several sequential parts, Lineup plays them as one tune. With DVR controls on, the Player can show total progress and seek across parts when it knows all the durations it needs. Otherwise it shows the current part's timing.
+If a Plex item has several sequential parts, Lineup plays them back to back as one program. With DVR controls on, the Player can show total progress and seek across parts when it knows all the durations it needs. Otherwise it shows the current part's timing.
 
 At the natural end of a channel's last media part, Lineup starts the next scheduled program from the beginning, even if the previous file ends before its slot ends. It allows small loading delays to preserve the next program's opening. After a longer delay, Lineup rejoins the live schedule. Manually tuning or choosing **Retry** also joins live.
 
-Failed continuations wait for you to retry.
+If the next program fails to start, Lineup waits for you to choose **Retry**.
 
-The Player title, progress, and **Up next** follow the loaded program. The full Guide and Mini Guide stay on the clock schedule. Tuning, stopping, a sleep timer ending, signing out, or changing the lineup or its content supersedes a pending continuation.
+The Player title, progress, and **Up next** follow the loaded program. The full Guide and Mini Guide stay on the clock schedule. Changing channel, stopping, a sleep timer ending, signing out, or changing the lineup cancels a next program that hasn't started yet.
 
 ??? note "Details"
     If the next program's scheduled start was more than 30 seconds ago, such as after a pause, Lineup joins the program airing now at its live position. If a stream ends more than 30 seconds before its known duration, Lineup shows a playback error with **Retry** instead of advancing.
