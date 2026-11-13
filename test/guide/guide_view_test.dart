@@ -1301,9 +1301,8 @@ void main() {
     await tester.pumpWidget(
       MaterialApp(
         builder: (context, child) => MediaQuery(
-          data: MediaQuery.of(
-            context,
-          ).copyWith(textScaler: const TextScaler.linear(1.15)),
+          data: MediaQuery.of(context)
+              .copyWith(textScaler: const TextScaler.linear(1.15)),
           child: _guideCanvasBuilder(context, child),
         ),
         home: GuideView(
