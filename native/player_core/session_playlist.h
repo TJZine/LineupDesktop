@@ -24,13 +24,16 @@ class SessionPlaylist {
                                                int64_t offset_microseconds);
   ~SessionPlaylist();
   size_t byte_size() const;
+  int64_t target_duration_seconds() const { return target_duration_seconds_; }
   void Retire();
 
  private:
   friend class SessionPlaylistRegistry;
-  explicit SessionPlaylist(std::string bytes) : bytes_(std::move(bytes)) {}
+  SessionPlaylist(std::string bytes, int64_t target_duration_seconds)
+      : bytes_(std::move(bytes)), target_duration_seconds_(target_duration_seconds) {}
   mutable std::mutex mutex_;
   std::string bytes_;
+  const int64_t target_duration_seconds_;
   bool retired_ = false;
 };
 

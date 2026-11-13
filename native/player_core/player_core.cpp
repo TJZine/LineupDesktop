@@ -724,7 +724,9 @@ void PlayerCore::FinishDispose() {
   }
   playback_.Reset();
   session_clock_load_.reset();
+  session_file_loaded_ = false;
   session_clock_ready_ = false;
+  session_alignment_attempted_ = false;
   subtitle_presentation_ = {};
   subtitle_codec_ = SubtitleCodec::none;
   subtitle_text_.clear();
@@ -787,6 +789,21 @@ std::optional<CallResult> PlayerCore::HandleCommand(std::string_view method,
     const SeekMode seek_mode = mode && *mode == "keyframes"
                                    ? SeekMode::keyframes : SeekMode::exact;
     if (!QueueCommand(SeekCommand{*seconds, seek_mode})) {
+      return QueueFullError();
+    }
+    return CallResult::Success();
+  }
+  if (method == "alignSession") {
+    constexpr int64_t kMaximumPositionMs = 9223372036854775;
+    const auto load = arguments ? AsInt(Find(*arguments, "loadId")) : std::nullopt;
+    const auto seek = arguments ? AsInt(Find(*arguments, "seekId")) : std::nullopt;
+    const auto position = arguments ? AsInt(Find(*arguments, "positionMs")) : std::nullopt;
+    if (!load || *load <= 0 || !seek || *seek <= 0 ||
+        !position || *position < 0 || *position > kMaximumPositionMs) {
+      return CallResult::Failure("invalid_argument", "A valid session alignment request is required.");
+    }
+    if (!QueueCommand(SeekCommand{static_cast<double>(*position) / 1000.0,
+                                  SeekMode::exact, SessionSeek{*load, *seek}})) {
       return QueueFullError();
     }
     return CallResult::Success();
@@ -986,7 +1003,9 @@ void PlayerCore::RunCommand(QueuedCommand& command, uint64_t generation) {
       subtitle_retired_load_.reset();
       session_playlists_.Retire();
       session_clock_load_.reset();
+      session_file_loaded_ = false;
       session_clock_ready_ = false;
+      session_alignment_attempted_ = false;
       std::string load_uri = payload.uri;
       if (payload.session_playlist) {
         auto opaque = session_playlists_.Activate(payload.session_playlist);
@@ -1029,7 +1048,10 @@ void PlayerCore::RunCommand(QueuedCommand& command, uint64_t generation) {
             option_values[option_count].format = MPV_FORMAT_STRING;
             option_values[option_count++].u.string = value;
           };
-          if (payload.plex_session) {
+          std::string demuxer_offset;
+          if (payload.session_playlist) {
+            demuxer_offset = std::to_string(payload.session_playlist->target_duration_seconds());
+            option("hr-seek-demuxer-offset", demuxer_offset.data());
             option("access-references", const_cast<char*>("yes"));
             // Exclude mpv's ordinary-playlist fallback, which would reopen
             // children outside this file's security options after lavf fails.
@@ -1077,8 +1099,6 @@ void PlayerCore::RunCommand(QueuedCommand& command, uint64_t generation) {
                                   "Playback correlation exceeded native limits"));
           } else {
             if (payload.plex_session) {
-              session_clock_load_ = payload.load_id;
-              session_clock_ready_ = false;
               PublishSessionClock(generation, false);
             }
             ClearSubtitleCues(generation, payload.load_id);
@@ -1104,6 +1124,18 @@ void PlayerCore::RunCommand(QueuedCommand& command, uint64_t generation) {
       status =
           mpv_operations_.set_property(mpv_, "pause", MPV_FORMAT_FLAG, &paused);
     } else if constexpr (std::is_same_v<Payload, SeekCommand>) {
+      const auto load = playback_.active_load();
+      if (payload.session) {
+        const auto& seek = *payload.session;
+        if (seek.load_id != load || seek.load_id != playback_.event_load() ||
+            seek.load_id != session_clock_load_ || !session_clock_ready_ ||
+            session_alignment_attempted_ || playback_.pending_stop()) return;
+        session_alignment_attempted_ = true;
+        if (seek_observation_ || seek_observation_ambiguous_) {
+          QueueSessionSeekResult(generation, seek, std::nullopt);
+          return;
+        }
+      }
       std::ostringstream seconds_stream;
       seconds_stream << std::setprecision(std::numeric_limits<double>::max_digits10)
                      << payload.seconds;
@@ -1112,19 +1144,24 @@ void PlayerCore::RunCommand(QueuedCommand& command, uint64_t generation) {
                               ? "absolute+keyframes" : "absolute+exact";
       const char* value[] = {"seek", seconds.c_str(), flags, nullptr};
       status = mpv_operations_.command(mpv_, value);
-      // Passive observation only. Overlapping commands have no libmpv request
-      // IDs, so suppress their landing samples for this load instead of
-      // attributing an older restart to the newest target.
+      // libmpv events have no seek request ID. An overlapping ordinary seek
+      // invalidates any pending observation for this load.
       if (seek_observation_) {
         seek_observation_.reset();
         seek_observation_ambiguous_ = true;
       }
-      const auto load = playback_.active_load();
       if (status >= 0 && !seek_observation_ambiguous_ && load &&
           playback_.event_load() == load) {
         seek_observation_ = SeekObservation{
             *load, payload.seconds, payload.mode, SeekObservationPhase::seek_start,
-            std::chrono::steady_clock::now() + std::chrono::seconds(10)};
+            std::chrono::steady_clock::now() + std::chrono::seconds(payload.session ? 5 : 10),
+            payload.session ? std::optional<int64_t>(payload.session->seek_id) : std::nullopt};
+      }
+      if (payload.session && status < 0) {
+        // Alignment is best effort. A refused seek leaves the current file
+        // playing from its observed position when Dart releases the hold.
+        QueueSessionSeekResult(generation, *payload.session, std::nullopt);
+        status = 0;
       }
     } else if constexpr (std::is_same_v<Payload, StopCommand>) {
       ResetSeekObservation();
@@ -1337,20 +1374,54 @@ void PlayerCore::EventLoop(uint64_t generation) {
   worker_finished_ = true;
 }
 
+std::optional<double> PlayerCore::ReadSeekPosition() const {
+  double position = 0;
+  int seeking = 1;
+  if (mpv_operations_.get_property(mpv_, "seeking", MPV_FORMAT_FLAG, &seeking) >= 0 &&
+      !seeking &&
+      mpv_operations_.get_property(mpv_, "time-pos", MPV_FORMAT_DOUBLE, &position) >= 0 &&
+      std::isfinite(position) && position >= 0) return position;
+  return std::nullopt;
+}
+
+std::optional<double> PlayerCore::ReadDemuxerStart() const {
+  double seconds = 0;
+  if (mpv_operations_.get_property(mpv_, "demuxer-start-time", MPV_FORMAT_DOUBLE, &seconds) >= 0 &&
+      std::isfinite(seconds) && std::abs(seconds) <= 1000000) return seconds;
+  return std::nullopt;
+}
+
 void PlayerCore::PublishSessionClock(uint64_t generation, bool sample) {
   if (!session_clock_load_) return;
-  Value clock;
-  double seconds = 0;
-  if (sample && mpv_operations_.get_property(mpv_, "demuxer-start-time", MPV_FORMAT_DOUBLE, &seconds) >= 0 &&
-      std::isfinite(seconds)) clock = seconds;
+  const auto start = sample ? ReadDemuxerStart() : std::nullopt;
   QueueEvent(generation, {{"type", "property"}, {"name", "demuxer-start-time"},
-                          {"value", std::move(clock)}, {"loadId", *session_clock_load_}});
+                          {"value", start ? Value(*start) : Value()}, {"loadId", *session_clock_load_}});
+  // A fresh D can arrive after the initial restart, while a paused time-pos
+  // has no reason to notify again. Supply its current P as well.
+  if (start) {
+    if (const auto position = ReadSeekPosition()) {
+      QueueEvent(generation, {{"type", "property"}, {"name", "time-pos"},
+                              {"value", *position}, {"loadId", *session_clock_load_}});
+    }
+  }
+}
+
+void PlayerCore::PublishReadySessionClock(uint64_t generation) {
+  // FILE_LOADED can precede the initial restart. Wait until that restart is
+  // consumed before publishing an alignment clock or accepting its seek.
+  if (!session_file_loaded_ || session_clock_ready_ || !session_clock_load_ ||
+      session_clock_load_ != playback_.active_load() ||
+      session_clock_load_ != playback_.event_load() || playback_.pending_stop()) return;
+  session_clock_ready_ = true;
+  PublishSessionClock(generation, true);
 }
 
 void PlayerCore::ClearSessionClock(uint64_t generation) {
   PublishSessionClock(generation, false);
   session_clock_load_.reset();
+  session_file_loaded_ = false;
   session_clock_ready_ = false;
+  session_alignment_attempted_ = false;
 }
 
 void PlayerCore::RetireFailedSession(std::optional<int64_t> load_id,
@@ -1367,7 +1438,7 @@ void PlayerCore::ResetSeekObservation() {
   seek_observation_ambiguous_ = false;
 }
 
-void PlayerCore::ObserveSeekLanding(mpv_event_id event) {
+void PlayerCore::ObserveSeekLanding(mpv_event_id event, uint64_t generation) {
   if (!seek_observation_) return;
   auto& sample = *seek_observation_;
   if (std::chrono::steady_clock::now() > sample.deadline ||
@@ -1401,19 +1472,25 @@ void PlayerCore::ObserveSeekLanding(mpv_event_id event) {
     return;
   }
   if (sample.phase == SeekObservationPhase::seek_start) return;
-  double position = 0;
-  int seeking = 1;
-  if (mpv_operations_.get_property(mpv_, "seeking", MPV_FORMAT_FLAG, &seeking) >= 0 &&
-      !seeking &&
-      mpv_operations_.get_property(mpv_, "time-pos", MPV_FORMAT_DOUBLE, &position) >= 0 &&
-      std::isfinite(position) && position >= 0) {
+  if (const auto position = ReadSeekPosition()) {
     std::ostringstream line;
     line << std::fixed << std::setprecision(6)
          << "[lineup-player] seek landing loadId=" << sample.load_id
          << " mode=" << (sample.mode == SeekMode::keyframes ? "keyframes" : "exact")
-         << " target=" << sample.target << " observed=" << position
-         << " offset=" << position - sample.target << '\n';
+         << " target=" << sample.target << " observed=" << *position
+         << " offset=" << *position - sample.target << '\n';
     std::cerr << line.str();
+    if (sample.session_seek_id && session_clock_ready_ &&
+        session_clock_load_ == sample.load_id && !playback_.pending_stop()) {
+      if (const auto start = ReadDemuxerStart()) {
+        QueueEvent(generation, {{"type", "property"}, {"name", "demuxer-start-time"},
+                                {"value", *start}, {"loadId", sample.load_id}});
+        QueueEvent(generation, {{"type", "property"}, {"name", "time-pos"},
+                                {"value", *position}, {"loadId", sample.load_id}});
+        QueueSessionSeekResult(generation, {sample.load_id, *sample.session_seek_id},
+                               std::make_pair(*position, *start));
+      }
+    }
   }
   seek_observation_.reset();
 }
@@ -1468,11 +1545,10 @@ void PlayerCore::HandleMpvEvent(const mpv_event& event, uint64_t generation) {
                                        &observed_pause) < 0) {
         observed_pause = -1;
       }
-      ObserveSeekLanding(event.event_id);
+      ObserveSeekLanding(event.event_id, generation);
       if (session_clock_load_ && session_clock_load_ == playback_.event_load() &&
           session_clock_load_ == playback_.active_load()) {
-        session_clock_ready_ = true;
-        PublishSessionClock(generation, true);
+        session_file_loaded_ = true;
       }
       auto ready = StateEvent("playing", "Playing", playback_.event_load());
       // A load hold can pause and resume before mpv emits another observed
@@ -1565,7 +1641,8 @@ void PlayerCore::HandleMpvEvent(const mpv_event& event, uint64_t generation) {
     }
     case MPV_EVENT_SEEK:
     case MPV_EVENT_PLAYBACK_RESTART:
-      ObserveSeekLanding(event.event_id);
+      if (event.event_id == MPV_EVENT_PLAYBACK_RESTART) PublishReadySessionClock(generation);
+      ObserveSeekLanding(event.event_id, generation);
       break;
     case MPV_EVENT_LOG_MESSAGE:
       if (const auto* message =
@@ -1608,7 +1685,7 @@ void PlayerCore::HandleMpvEvent(const mpv_event& event, uint64_t generation) {
       }
       if (event.reply_userdata == kDemuxerStartTime) {
         // Notifications can be coalesced or queued across replacement. Read
-        // the current property only after this session has reached readiness.
+        // the current property only after this session's initial restart.
         PublishSessionClock(generation, session_clock_ready_ &&
             session_clock_load_ == playback_.event_load() &&
             session_clock_load_ == playback_.active_load());
@@ -1678,6 +1755,18 @@ void PlayerCore::HandleMpvEvent(const mpv_event& event, uint64_t generation) {
     default:
       break;
   }
+}
+
+void PlayerCore::QueueSessionSeekResult(
+    uint64_t generation, SessionSeek seek,
+    std::optional<std::pair<double, double>> clock) {
+  ValueMap event{{"type", "sessionSeekResult"}, {"loadId", seek.load_id},
+                 {"seekId", seek.seek_id}, {"outcome", clock ? "landed" : "failed"}};
+  if (clock) {
+    event["positionSeconds"] = clock->first;
+    event["demuxerStartSeconds"] = clock->second;
+  }
+  QueueEvent(generation, std::move(event));
 }
 
 void PlayerCore::QueueStopResult(uint64_t generation, int64_t stop_id,

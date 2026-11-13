@@ -953,6 +953,7 @@ class _DiagnosticsViewState extends State<DiagnosticsView> {
     'sessionSubtitles' => 'Session subtitles',
     'positionBasis' => 'Position basis',
     'alignmentOutcome' => 'Alignment outcome',
+    'landingErrorMs' => 'Landing error (ms)',
     'leadMs' => 'Initial lead (ms)',
     'landingMs' => 'Landing time (ms)',
     _ => key,

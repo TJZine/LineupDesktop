@@ -2,7 +2,7 @@ import 'dart:async';
 
 import 'native_player.dart';
 
-enum SessionAlignmentOutcome { noneNeeded, landed, timedOut, failed }
+enum SessionAlignmentOutcome { noneNeeded, landed, timedOut, failed, imprecise }
 
 /// One clock per admitted session load. All results are part-relative source
 /// positions. The coordinator adds the preceding parts' aggregate offset.
@@ -11,7 +11,7 @@ final class PlexSessionClock {
     required this.desktop,
     required this.requested,
     required this.offset,
-  }) : outcome = desktop ? SessionAlignmentOutcome.noneNeeded : null;
+  });
 
   static const _origin = Duration(seconds: 10);
   static const _tolerance = Duration(milliseconds: 500);
@@ -26,6 +26,7 @@ final class PlexSessionClock {
   Duration? lead;
   SessionAlignmentOutcome? outcome;
   int? landingMs;
+  Duration? landingError;
   bool loggedAlignment = false;
   bool loggedLead = false;
   bool loggedEstimate = false;
@@ -47,37 +48,33 @@ final class PlexSessionClock {
         _demuxerStart = Duration(
           microseconds: (sample * Duration.microsecondsPerSecond).round(),
         );
+        if (_canDecide(event, active)) {
+          final error =
+              (requested - _desktopPosition(event.position, _demuxerStart!))
+                  .abs();
+          _decide(
+            error > _tolerance ? requested + _origin - _demuxerStart! : null,
+          );
+        }
       }
     } else {
       _adjustment = event.sessionAdjustment ?? _adjustment;
       _firstAdjustment ??= _adjustment;
       final first = _firstAdjustment;
-      if (!_ready.isCompleted &&
-          first != null &&
+      if (first != null &&
           event.sessionAdjustment != null &&
-          event.positionUpdated &&
-          const {
-            PlayerState.playing,
-            PlayerState.paused,
-            PlayerState.ready,
-          }.contains(event.status.state)) {
+          _canDecide(event, active)) {
         final error = (event.position - first - _origin - requested).abs();
-        final target = requested + first + _origin;
-        _ready.complete(
-          error <= _tolerance
-              ? null
-              : Duration(
-                  milliseconds: target.isNegative ? 0 : target.inMilliseconds,
-                ),
-        );
+        _decide(error > _tolerance ? requested + first + _origin : null);
       }
     }
 
     final adjustment = _adjustment;
+    final start = _demuxerStart;
     final unbounded = desktop
-        ? event.position +
-              (_demuxerStart ?? offset) -
-              (_demuxerStart == null ? Duration.zero : _origin)
+        ? start == null
+              ? event.position + offset
+              : _desktopPosition(event.position, start)
         : adjustment != null
         ? event.position - adjustment - _origin
         : event.position;
@@ -89,8 +86,26 @@ final class PlexSessionClock {
     return position;
   }
 
+  bool _canDecide(PlayerEvent event, bool active) =>
+      !_ready.isCompleted &&
+      active &&
+      event.positionUpdated &&
+      const {
+        PlayerState.playing,
+        PlayerState.paused,
+        PlayerState.ready,
+      }.contains(event.status.state);
+
+  static Duration _desktopPosition(Duration position, Duration start) =>
+      position + start - _origin;
+
+  void _decide(Duration? target) => _ready.complete(
+    target == null
+        ? null
+        : Duration(milliseconds: target.isNegative ? 0 : target.inMilliseconds),
+  );
+
   Future<void> align(NativePlayer player, Future<void> cancelled) async {
-    if (desktop) return;
     try {
       final (current, target) = await Future.any([
         _ready.future.then((target) => (true, target)),
@@ -101,15 +116,26 @@ final class PlexSessionClock {
         outcome = SessionAlignmentOutcome.noneNeeded;
       } else if (player is SessionAlignmentPlayer) {
         final watch = Stopwatch()..start();
-        final landed = await Future.any([
+        final (current, landing) = await Future.any([
           (player as SessionAlignmentPlayer)
               .alignSession(target)
-              .then((_) => true),
-          cancelled.then((_) => false),
+              .then((landing) => (true, landing)),
+          cancelled.then((_) => (false, null)),
         ]).timeout(const Duration(seconds: 5));
-        if (!landed) return;
+        if (!current) return;
+        if (desktop && landing == null) {
+          outcome = SessionAlignmentOutcome.failed;
+          return;
+        }
         landingMs = watch.elapsedMilliseconds;
-        outcome = SessionAlignmentOutcome.landed;
+        if (landing != null) {
+          landingError =
+              _desktopPosition(landing.position, landing.demuxerStart) -
+              requested;
+        }
+        outcome = (landingError?.abs() ?? Duration.zero) > _tolerance
+            ? SessionAlignmentOutcome.imprecise
+            : SessionAlignmentOutcome.landed;
       } else {
         outcome = SessionAlignmentOutcome.failed;
       }

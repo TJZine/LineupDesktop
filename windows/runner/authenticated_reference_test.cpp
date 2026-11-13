@@ -1,5 +1,8 @@
 #include "native_player.h"
 
+#include "../../tool/native/session-alignment/fixture.h"
+#include "encodable_value_conversion.h"
+
 #include <flutter/standard_method_codec.h>
 
 #include <atomic>
@@ -282,6 +285,10 @@ class TestMessenger final : public flutter::BinaryMessenger {
       if (mode == "session-nested-hls") session_structural_failure = true;
       return;
     }
+    if (alignment) {
+      if (const auto decoded = lineup::ToValueMap(call->arguments())) alignment->Event(*decoded);
+      return;
+    }
     if (mode == "session-nested-hls" && ++event_count > 4096) session_structural_failure = true;
     const auto load_id = map->find(Value("loadId"));
     if (load_id != map->end() && !(load_id->second == Value(active_load_id))) return;
@@ -342,6 +349,7 @@ class TestMessenger final : public flutter::BinaryMessenger {
     return replied && success;
   }
 
+  lineup::fixture::AlignmentFixture* alignment = nullptr;
   int64_t active_load_id = 1;
   PlaybackObservation* playback_observation = nullptr;
   flutter::BinaryMessageHandler handler;
@@ -458,6 +466,40 @@ bool TerminalStateContractHolds() {
 }
 
 int main(int argc, char** argv) {
+  if ((argc == 8 || argc == 9) && std::strcmp(argv[1], "--alignment") == 0) {
+    test_ca = argv[2];
+    FILE* redirected = nullptr;
+    if (freopen_s(&redirected, "NUL", "w", stderr) != 0) return 2;
+    SetEnvironmentVariableW(L"LINEUP_FLUTTER_DCOMP_ACTIVE",
+                            L"deb287481e3ce9468f3434937ced4240a70539ca");
+    HWND window = CreateWindowExW(0, L"STATIC", L"", WS_OVERLAPPEDWINDOW,
+                                  0, 0, 64, 64, nullptr, nullptr,
+                                  GetModuleHandle(nullptr), nullptr);
+    if (!window) return 2;
+    int result = 2;
+    {
+      lineup::fixture::AlignmentFixture fixture;
+      TestMessenger messenger;
+      messenger.alignment = &fixture;
+      WindowsNativePlayer player(window, window, &messenger, TestOperations());
+      const auto call = [&messenger](const char* method, lineup::player::ValueMap args) {
+        return messenger.Call(method, lineup::ToEncodableMap(args));
+      };
+      const auto pump = [&player] {
+        MSG message;
+        while (PeekMessageW(&message, nullptr, 0, 0, PM_REMOVE)) {
+          if (!player.HandleWindowMessage(message.message)) {
+            TranslateMessage(&message);
+            DispatchMessageW(&message);
+          }
+        }
+        MsgWaitForMultipleObjects(0, nullptr, FALSE, 5, QS_ALLINPUT);
+      };
+      if (call("initialize", {})) result = fixture.Run(argc, argv, observed_client.load(), call, pump);
+    }
+    DestroyWindow(window);
+    return result;
+  }
   if (argc < 3 || argc > 5) return 2;
   if (!TerminalStateContractHolds()) {
     std::cout << "messenger_contract=failed\n";

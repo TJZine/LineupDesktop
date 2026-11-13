@@ -19,6 +19,8 @@
 #import "LineupNativePlayer.h"
 #include "player_core/mpv_operations.h"
 #include "session_policy_test.h"
+#include "../../native/session-alignment/fixture.h"
+#include "FoundationValueConversion.h"
 
 namespace {
 const char* test_ca = nullptr;
@@ -211,6 +213,7 @@ bool RuntimeBound() {
 @property(nonatomic) BOOL playing;
 @property(nonatomic) BOOL stopConfirmed;
 @property(nonatomic) PlaybackObservation* playbackObservation;
+@property(nonatomic) lineup::fixture::AlignmentFixture* alignment;
 - (BOOL)call:(NSString*)method arguments:(id)arguments;
 - (void)sendEvent:(NSDictionary*)event;
 @end
@@ -221,6 +224,10 @@ bool RuntimeBound() {
   if (![call.method isEqualToString:@"event"] ||
       ![call.arguments isKindOfClass:NSDictionary.class]) return;
   NSDictionary* event = call.arguments;
+  if (self.alignment) {
+    if (const auto decoded = lineup::ToValueMap(event)) self.alignment->Event(*decoded);
+    return;
+  }
   if ([event[@"type"] isEqual:@"stopResult"] && [event[@"stopId"] longLongValue] == 1 && [event[@"success"] boolValue])
     self.stopConfirmed = YES;
   NSString* state = event[@"state"];
@@ -349,9 +356,34 @@ void PrintAvailableFormats() {
 }  // namespace
 
 int main(int argc, char** argv) {
-  if (argc < 3 || argc > 5) return 2;
   @autoreleasepool {
     try {
+      if ((argc == 8 || argc == 9) && std::strcmp(argv[1], "--alignment") == 0) {
+        if (!RuntimeBound()) return 2;
+        lineup::fixture::AlignmentFixture fixture;
+        test_ca = argv[2];
+        ReferenceMessenger* messenger = [ReferenceMessenger new];
+        messenger.alignment = &fixture;
+        ReferenceWindow* window = [ReferenceWindow new];
+        NSView* host = [[NSView alloc] initWithFrame:NSMakeRect(0, 0, 64, 64)];
+        ReferenceTestPlayer* player = [[ReferenceTestPlayer alloc]
+            initWithMessenger:messenger videoHost:host window:(NSWindow*)window];
+        const auto call = [messenger](const char* method, lineup::player::ValueMap args) {
+          return [messenger call:@(method) arguments:lineup::ToFoundationMap(args)];
+        };
+        const auto pump = [] {
+          [NSRunLoop.currentRunLoop runMode:NSDefaultRunLoopMode
+                                beforeDate:[NSDate dateWithTimeIntervalSinceNow:0.005]];
+        };
+        if (!call("initialize", {})) return 2;
+        const int result = fixture.Run(argc, argv, observed_client, call, pump);
+        __block BOOL disposed = NO;
+        [player beginShutdownWithCompletion:^{ disposed = YES; }];
+        const auto until = std::chrono::steady_clock::now() + std::chrono::seconds(5);
+        while (!disposed && std::chrono::steady_clock::now() < until) pump();
+        return disposed && RuntimeBound() ? result : 2;
+      }
+      if (argc < 3 || argc > 5) return 2;
       test_ca = argv[1];
       bool nonzero_start = false;
       std::string session_playlist_path;

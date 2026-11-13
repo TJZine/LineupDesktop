@@ -438,10 +438,13 @@ class PlayerStatus {
   final int? httpStatus;
 }
 
-/// Optional Android session mechanism. Completion reports a rendered frame
-/// following the exact alignment seek for the current load.
+/// The desktop clock sampled at the correlated playback restart.
+typedef SessionSeekLanding = ({Duration position, Duration demuxerStart});
+
+/// Completes after the current load's exact alignment seek lands. Android
+/// confirms a rendered frame without a separate clock snapshot.
 abstract interface class SessionAlignmentPlayer {
-  Future<void> alignSession(Duration position);
+  Future<SessionSeekLanding?> alignSession(Duration position);
 }
 
 class PlayerEvent {
