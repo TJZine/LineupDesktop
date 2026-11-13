@@ -9,9 +9,9 @@ This file is excluded from the site build.
 
 | File | Platform | Build | Screen and state |
 | --- | --- | --- | --- |
-| `home-guide.webp` | macOS 27, Apple Silicon, fullscreen window | Release build of `f7daf2c790d66a1020ebec4767efe2f93d91fa05` (Flutter 3.47.6) | Full Guide, channels 1–5; channel 2 tuned and playing in the picture-in-picture; its airing program focused |
-| `guide-live.webp` | macOS 27 | Same build | Same Guide page with channel 2 tuned ("Watching") and focus on an airing program on channel 4 |
-| `home-mini-guide.webp` | macOS 27 | Same build | Player with the Mini Guide open, focus on the channel above the tuned one |
+| `home-guide.webp` | macOS 27, Apple Silicon, MacBook Pro 16 full screen (1728×1084) | Release build of `feat/guide-l40` at `48ca282f` (Flutter 3.47.7), retaken 2026-11-13 | L40 Guide, channels 1–6; channel 3 tuned and playing in the picture-in-picture; its airing program focused |
+| `guide-live.webp` | macOS 27, MacBook Pro 16 full screen | Same L40 build | Same Guide page with channel 3 tuned ("Watching") and focus on an airing program on channel 2 |
+| `home-mini-guide.webp` | macOS 27 | Release build of `f7daf2c790d66a1020ebec4767efe2f93d91fa05` (Flutter 3.47.6) | Player with the Mini Guide open, focus on the channel above the tuned one |
 | `home-osd.webp` | macOS 27 | Same build | Player with the compact on-screen controls; subtitles off |
 | `home-now-playing.webp` | macOS 27 | Same build | Player with Now Playing expanded |
 | `home-air-check.webp` | macOS 27 | Same build | Channel Studio, unsaved custom draft "Animation Matinee" (discarded after capture) with the schedule preview |
