@@ -67,10 +67,10 @@ class _HandheldPortraitPlayer extends StatelessWidget {
                           right: math.max(4, insets.right),
                           bottom: 6,
                           child: _PortraitVideoAction(
-                            label: controller.fullscreen
+                            label: controller.fullscreenControlActive
                                 ? 'Exit full screen'
                                 : 'Full screen',
-                            icon: controller.fullscreen
+                            icon: controller.fullscreenControlActive
                                 ? Icons.fullscreen_exit
                                 : Icons.fullscreen,
                             onPressed: () =>

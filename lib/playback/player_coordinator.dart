@@ -45,6 +45,7 @@ class PlayerCoordinator extends ChangeNotifier with WidgetsBindingObserver {
     this.overlayTimeout,
     this.suspendInBackground = false,
     this.resumeOnInactive = false,
+    this.controlsHandheldPresentation = false,
     DateTime Function()? clock,
   }) : _clock = clock ?? DateTime.now {
     subtitleAppearance = SubtitleAppearanceSource(lineup: lineup);
@@ -197,6 +198,7 @@ class PlayerCoordinator extends ChangeNotifier with WidgetsBindingObserver {
   void setPlayerDestinationVisible(bool value) {
     if (_playerDestinationVisible == value) return;
     _playerDestinationVisible = value;
+    if (!value) _fullscreenOrientationRequested = false;
     notifyListeners();
   }
 
@@ -209,6 +211,7 @@ class PlayerCoordinator extends ChangeNotifier with WidgetsBindingObserver {
   /// Handheld windows can become visible in split-screen without input focus.
   /// TV keeps its existing resumed-only recovery; desktop remains opted out.
   final bool resumeOnInactive;
+  final bool controlsHandheldPresentation;
   bool _backgroundSuspended = false;
   // Null means no captured intent; false keeps an explicit/untuned stop from
   // being recaptured as play while native stop acknowledgement is pending.
@@ -248,6 +251,7 @@ class PlayerCoordinator extends ChangeNotifier with WidgetsBindingObserver {
   int? _miniGuideWindowStart;
   String? _error;
   bool _fullscreen = false;
+  bool _fullscreenOrientationRequested = false;
   bool _cursorVisible = true;
   bool _cursorIdle = false;
   bool _tuning = false;
@@ -385,6 +389,12 @@ class PlayerCoordinator extends ChangeNotifier with WidgetsBindingObserver {
 
   String? get error => _error;
   bool get fullscreen => _fullscreen;
+  bool get fullscreenOrientationRequested => _fullscreenOrientationRequested;
+  bool get fullscreenControlActive =>
+      _usesHandheldPresentation ? fullscreenOrientationRequested : fullscreen;
+  bool get _usesHandheldPresentation =>
+      controlsHandheldPresentation &&
+      player.capabilities.fullscreen == PlayerFullscreenMode.systemBars;
   bool get canToggleFullscreen =>
       player.capabilities.fullscreen != PlayerFullscreenMode.fixed;
   bool get cursorVisible => _cursorVisible;
@@ -2541,6 +2551,14 @@ class PlayerCoordinator extends ChangeNotifier with WidgetsBindingObserver {
   Future<void> _queueFullscreen({bool exitOnly = false}) {
     final mode = player.capabilities.fullscreen;
     if (mode == PlayerFullscreenMode.fixed) return Future.value();
+    if (_usesHandheldPresentation) {
+      final next = !exitOnly && !_fullscreenOrientationRequested;
+      if (_fullscreenOrientationRequested != next) {
+        _fullscreenOrientationRequested = next;
+        notifyListeners();
+      }
+      return Future.value();
+    }
     final controlGeneration = ++_controlGeneration;
     final tuneGeneration = _tuneGeneration;
     final epoch = _fullscreenEpoch;
@@ -3087,6 +3105,8 @@ class PlayerCoordinator extends ChangeNotifier with WidgetsBindingObserver {
 
   Future<void> _queueFullscreenReset() {
     ++_fullscreenEpoch;
+    _fullscreenOrientationRequested = false;
+    if (_usesHandheldPresentation) return Future.value();
     _fullscreen = false;
     final operation = _fullscreenOperations.then(
       (_) => player.setFullscreen(false),

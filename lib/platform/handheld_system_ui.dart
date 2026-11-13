@@ -3,6 +3,7 @@ import 'dart:async';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 
+import '../playback/native_player.dart';
 import 'platform_events.dart';
 
 /// Application policy uses DISPLAY dimensions for phone detection, the actual
@@ -40,10 +41,8 @@ class HandheldSystemUiPolicy {
     ];
   }
 
-  SystemUiMode get mode =>
-      playerVisible && (!osdVisible || windowSize.width > windowSize.height)
-      ? SystemUiMode.immersiveSticky
-      : SystemUiMode.edgeToEdge;
+  bool get hideBars =>
+      playerVisible && (!osdVisible || windowSize.width > windowSize.height);
 }
 
 /// Hosted only on Android handheld. It owns and retires one observation and
@@ -54,12 +53,14 @@ class HandheldSystemUi extends StatefulWidget {
     required this.osdVisible,
     required this.child,
     this.fullscreen = false,
+    this.player,
     super.key,
   });
 
   final bool playerVisible;
   final bool osdVisible;
   final bool fullscreen;
+  final NativePlayer? player;
   final Widget child;
 
   @override
@@ -74,8 +75,8 @@ class _HandheldSystemUiState extends State<HandheldSystemUi>
   bool get _ownsWindow => identical(_owner, this);
   late final VoidCallback _unsubscribe;
   bool? _multiWindow;
-  (List<DeviceOrientation>, SystemUiMode)? _pending;
-  (List<DeviceOrientation>, SystemUiMode)? _applied;
+  (List<DeviceOrientation>, bool?)? _pending;
+  (List<DeviceOrientation>, bool?)? _applied;
   bool _applying = false;
 
   @override
@@ -110,8 +111,13 @@ class _HandheldSystemUiState extends State<HandheldSystemUi>
   }
 
   void _schedule(HandheldSystemUiPolicy policy) {
-    final next = (policy.orientations, policy.mode);
-    bool same((List<DeviceOrientation>, SystemUiMode)? other) =>
+    final next = (
+      policy.orientations,
+      widget.player?.capabilities.fullscreen == PlayerFullscreenMode.systemBars
+          ? policy.hideBars
+          : null,
+    );
+    bool same((List<DeviceOrientation>, bool?)? other) =>
         other != null &&
         other.$2 == next.$2 &&
         other.$1.length == next.$1.length &&
@@ -135,13 +141,26 @@ class _HandheldSystemUiState extends State<HandheldSystemUi>
         await SystemChrome.setPreferredOrientations(next.$1);
         if (!mounted || !_ownsWindow) return;
         if (_pending != null) continue;
-        await SystemChrome.setEnabledSystemUIMode(next.$2);
+        final hidden = next.$2;
+        if (hidden != null && hidden != _applied?.$2) {
+          await _setSystemBars(widget.player!, hidden);
+        }
         if (!mounted || !_ownsWindow) return;
         SystemChrome.setSystemUIOverlayStyle(_bars);
         _applied = next;
       }
     } finally {
       _applying = false;
+    }
+  }
+
+  Future<void> _setSystemBars(NativePlayer player, bool hidden) async {
+    try {
+      await player.setFullscreen(hidden);
+    } on PlayerUnavailable catch (error) {
+      if (mounted && _ownsWindow) {
+        FlutterError.reportError(FlutterErrorDetails(exception: error));
+      }
     }
   }
 
@@ -183,7 +202,10 @@ class _HandheldSystemUiState extends State<HandheldSystemUi>
     if (_ownsWindow) {
       _owner = null;
       unawaited(SystemChrome.setPreferredOrientations(const []));
-      unawaited(SystemChrome.setEnabledSystemUIMode(SystemUiMode.edgeToEdge));
+      final player = widget.player;
+      if (player?.capabilities.fullscreen == PlayerFullscreenMode.systemBars) {
+        unawaited(_setSystemBars(player!, false));
+      }
       SystemChrome.setSystemUIOverlayStyle(_bars);
     }
     super.dispose();

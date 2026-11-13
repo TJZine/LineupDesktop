@@ -15,13 +15,18 @@ import androidx.media3.common.VideoSize
 import androidx.media3.common.util.UnstableApi
 import androidx.media3.ui.CaptionStyleCompat
 import androidx.media3.ui.SubtitleView
+import com.tjzine.lineup.DeviceForm
 import io.flutter.plugin.common.BinaryMessenger
 import io.flutter.plugin.common.MethodChannel
 import kotlin.math.roundToInt
 
 /** Activity composition root installs [view] below Flutter, keeping video default-z-order. */
 @UnstableApi
-class NativePlayerAdapter(private val activity: Activity, messenger: BinaryMessenger) {
+class NativePlayerAdapter(
+    private val activity: Activity,
+    messenger: BinaryMessenger,
+    deviceForm: DeviceForm = DeviceForm.detect(activity),
+) {
     val view = FrameLayout(activity)
     private val video = SurfaceView(activity)
     // White text with a black outline and no box, like libmpv's default; Media3's
@@ -56,11 +61,20 @@ class NativePlayerAdapter(private val activity: Activity, messenger: BinaryMesse
         }
     }
 
+    private val systemBars =
+        if (deviceForm == DeviceForm.HANDHELD) HandheldSystemBars(activity.window) else null
+
     private var rectangle = VideoRect(0.0, 0.0, 0.0, 0.0, 1.0)
     private var videoSize = VideoSize.UNKNOWN
     private val controller =
         NativePlayerController(
             object : PlayerHost {
+                override fun observedFullscreen(): Boolean? = systemBars?.observedFullscreen()
+
+                override fun setFullscreen(fullscreen: Boolean) {
+                    systemBars?.setFullscreen(fullscreen)
+                }
+
                 override fun firstFrame(generation: Long, loadId: Long, positionMs: Long) {
                     if (
                         activity.applicationInfo.flags and
@@ -174,6 +188,7 @@ class NativePlayerAdapter(private val activity: Activity, messenger: BinaryMesse
                         ::keepScreenOn,
                         subtitlePresentation = { presentation },
                         observeSessionLanding = session,
+                        deviceForm = deviceForm,
                     ).also { engine = it }
                 }
 
@@ -181,6 +196,7 @@ class NativePlayerAdapter(private val activity: Activity, messenger: BinaryMesse
                     channel.invokeMethod("event", value)
                 }
             },
+            deviceForm,
             MediaCapabilitiesProbe(activity)::read,
         )
 
@@ -282,12 +298,17 @@ class NativePlayerAdapter(private val activity: Activity, messenger: BinaryMesse
     private fun pixels(value: Double) =
         value.coerceIn(Int.MIN_VALUE.toDouble(), Int.MAX_VALUE.toDouble()).roundToInt()
 
+    fun observeSystemBars() {
+        systemBars?.observe(controller::publishFullscreen)
+    }
+
     fun releaseForBackground() {
         controller.releaseForBackground()
     }
 
     fun close() {
         channel.setMethodCallHandler(null)
+        systemBars?.close()
         controller.close()
         (view.parent as? ViewGroup)?.removeView(view)
     }

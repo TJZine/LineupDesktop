@@ -4,6 +4,9 @@ import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:lineup_desktop/platform/handheld_system_ui.dart';
+import 'package:lineup_desktop/playback/native_player.dart';
+
+import '../support/test_doubles.dart';
 
 void main() {
   test(
@@ -62,19 +65,13 @@ void main() {
       ]);
       expect(policy(multiWindow: true).orientations, isEmpty);
       expect(policy(multiWindow: null).orientations, isEmpty);
-      expect(policy(player: true, osd: true).mode, SystemUiMode.edgeToEdge);
+      expect(policy(player: true, osd: true).hideBars, isFalse);
+      expect(policy(player: true, osd: false).hideBars, isTrue);
       expect(
-        policy(player: true, osd: false).mode,
-        SystemUiMode.immersiveSticky,
+        policy(player: true, window: const Size(915, 412)).hideBars,
+        isTrue,
       );
-      expect(
-        policy(player: true, window: const Size(915, 412)).mode,
-        SystemUiMode.immersiveSticky,
-      );
-      expect(
-        policy(window: const Size(915, 412)).mode,
-        SystemUiMode.edgeToEdge,
-      );
+      expect(policy(window: const Size(915, 412)).hideBars, isFalse);
     },
   );
 
@@ -85,6 +82,13 @@ void main() {
       final messenger =
           TestDefaultBinaryMessengerBinding.instance.defaultBinaryMessenger;
       final calls = <MethodCall>[];
+      final native = FakeNativePlayer(
+        capabilities: const PlayerCapabilities(
+          displayMatching: false,
+          fullscreen: PlayerFullscreenMode.systemBars,
+        ),
+      );
+      addTearDown(native.dispose);
       messenger.setMockMethodCallHandler(platform, (_) async => true);
       messenger.setMockMethodCallHandler(SystemChannels.platform, (call) async {
         calls.add(call);
@@ -108,6 +112,7 @@ void main() {
             home: HandheldSystemUi(
               playerVisible: player,
               osdVisible: osd,
+              player: native,
               child: const SizedBox(),
             ),
           ),
@@ -155,15 +160,10 @@ void main() {
         ],
       );
       await pump(player: true, osd: false);
-      expect(
-        calls
-            .where(
-              (call) => call.method == 'SystemChrome.setEnabledSystemUIMode',
-            )
-            .last
-            .arguments,
-        'SystemUiMode.immersiveSticky',
-      );
+      expect(native.fullscreenValues, [false, true]);
+      native.emitFullscreen(false);
+      await pump(player: true, osd: false);
+      expect(native.fullscreenValues, [false, true]);
       await fact(true);
       expect(
         calls
@@ -175,14 +175,12 @@ void main() {
         isEmpty,
       );
       await pump();
+      expect(native.fullscreenValues, [false, true, false]);
       expect(
-        calls
-            .where(
-              (call) => call.method == 'SystemChrome.setEnabledSystemUIMode',
-            )
-            .last
-            .arguments,
-        'SystemUiMode.edgeToEdge',
+        calls.any(
+          (call) => call.method == 'SystemChrome.setEnabledSystemUIMode',
+        ),
+        isFalse,
       );
       await tester.pumpWidget(const SizedBox.shrink());
       await tester.pump();
@@ -204,6 +202,10 @@ void main() {
       final messenger =
           TestDefaultBinaryMessengerBinding.instance.defaultBinaryMessenger;
       final calls = <MethodCall>[];
+      final native = FakeNativePlayer(
+        capabilities: const PlayerCapabilities.unavailable(),
+      );
+      addTearDown(native.dispose);
       messenger.setMockMethodCallHandler(platform, (_) async => true);
       messenger.setMockMethodCallHandler(SystemChannels.platform, (call) async {
         calls.add(call);
@@ -225,6 +227,7 @@ void main() {
         home: HandheldSystemUi(
           key: ValueKey(key),
           playerVisible: false,
+          player: native,
           osdVisible: true,
           child: const SizedBox(),
         ),
@@ -254,6 +257,7 @@ void main() {
         orientations.any((call) => (call.arguments as List).isEmpty),
         isFalse,
       );
+      expect(native.fullscreenValues, isEmpty);
       await tester.pumpWidget(const SizedBox.shrink());
       await tester.pump();
     },
@@ -267,7 +271,13 @@ void main() {
           TestDefaultBinaryMessengerBinding.instance.defaultBinaryMessenger;
       final calls = <MethodCall>[];
       final releaseBOrientation = Completer<void>();
-      final postReleaseMode = Completer<void>();
+      final native = FakeNativePlayer(
+        capabilities: const PlayerCapabilities(
+          displayMatching: false,
+          fullscreen: PlayerFullscreenMode.systemBars,
+        ),
+      );
+      addTearDown(native.dispose);
       var holdBOrientation = false;
       messenger.setMockMethodCallHandler(platform, (_) async => true);
       messenger.setMockMethodCallHandler(SystemChannels.platform, (call) async {
@@ -278,12 +288,6 @@ void main() {
               'DeviceOrientation.landscapeLeft',
             )) {
           await releaseBOrientation.future;
-        }
-        if (call.method == 'SystemChrome.setEnabledSystemUIMode' &&
-            releaseBOrientation.isCompleted &&
-            holdBOrientation &&
-            !postReleaseMode.isCompleted) {
-          postReleaseMode.complete();
         }
         return null;
       });
@@ -303,6 +307,7 @@ void main() {
         home: HandheldSystemUi(
           playerVisible: player,
           osdVisible: osd,
+          player: native,
           child: const SizedBox(),
         ),
       );
@@ -329,15 +334,7 @@ void main() {
             .arguments,
         ['DeviceOrientation.portraitUp'],
       );
-      expect(
-        calls
-            .where(
-              (call) => call.method == 'SystemChrome.setEnabledSystemUIMode',
-            )
-            .last
-            .arguments,
-        'SystemUiMode.edgeToEdge',
-      );
+      expect(native.fullscreenValues, [false]);
 
       holdBOrientation = true;
       await tester.pumpWidget(host(player: true, osd: false));
@@ -359,7 +356,8 @@ void main() {
       await tester.pumpWidget(host());
       await tester.pump();
       releaseBOrientation.complete();
-      await postReleaseMode.future;
+      await tester.pump();
+      await tester.pump();
       expect(
         calls
             .where(
@@ -369,15 +367,7 @@ void main() {
             .arguments,
         ['DeviceOrientation.portraitUp'],
       );
-      expect(
-        calls
-            .where(
-              (call) => call.method == 'SystemChrome.setEnabledSystemUIMode',
-            )
-            .last
-            .arguments,
-        'SystemUiMode.edgeToEdge',
-      );
+      expect(native.fullscreenValues, [false]);
       await tester.pumpWidget(const SizedBox.shrink());
       await tester.pump();
     },

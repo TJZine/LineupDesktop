@@ -122,6 +122,9 @@ class _LineupShellState extends State<LineupShell> {
       clock: widget.guideClock,
       suspendInBackground: widget.profile.isTv || widget.profile.isHandheld,
       resumeOnInactive: widget.profile.isHandheld,
+      controlsHandheldPresentation:
+          widget.profile.host == TargetPlatform.android &&
+          widget.profile.isHandheld,
     );
     _player.setPlayerDestinationVisible(
       _destination == ShellDestination.player,
@@ -1279,7 +1282,8 @@ class _LineupShellState extends State<LineupShell> {
                         LineupCanvas.usesPortraitCompositionOf(context)) ||
                     _player.overlay != PlayerOverlay.none ||
                     _appMenu != null,
-                fullscreen: _player.canToggleFullscreen && _player.fullscreen,
+                fullscreen: _player.fullscreenOrientationRequested,
+                player: widget.player,
                 child: child!,
               );
             },

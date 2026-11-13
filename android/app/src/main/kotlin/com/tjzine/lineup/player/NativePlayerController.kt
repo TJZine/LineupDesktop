@@ -1,8 +1,11 @@
 package com.tjzine.lineup.player
 
+import com.tjzine.lineup.DeviceForm
+
 /** Protocol/lifetime owner. Calls and completion callbacks use the application looper. */
 internal class NativePlayerController(
     private val host: PlayerHost,
+    private val deviceForm: DeviceForm = DeviceForm.TV,
     private val mediaCapabilities: () -> Map<String, Any> = { MediaCapabilitiesProbe.empty },
 ) {
     interface Reply {
@@ -23,6 +26,7 @@ internal class NativePlayerController(
     private var cleanupEngine: PlayerEngine? = null
     private val cleanupWaiters = mutableListOf<(Boolean) -> Unit>()
     private var cleanupRunning = false
+    private var lastFullscreen: Boolean? = null
     private var volume = 100.0
     private val commands = ArrayDeque<PlayerCommand>()
     private var queuedBytes = 0
@@ -61,7 +65,9 @@ internal class NativePlayerController(
                         displayRevision = -1
                         events.clear()
                         initialized = true
-                        queue(mapOf("type" to "fullscreen", "fullscreen" to true))
+                        lastFullscreen = null
+                        if (deviceForm == DeviceForm.TV) publishFullscreen(true)
+                        else host.observedFullscreen()?.let(::publishFullscreen)
                         queue(
                             mapOf(
                                 "type" to "state",
@@ -77,7 +83,7 @@ internal class NativePlayerController(
                             "capabilities" to
                                 mapOf(
                                     "displayMatching" to false,
-                                    "fullscreen" to "fixed",
+                                    "fullscreen" to if (deviceForm == DeviceForm.TV) "fixed" else "systemBars",
                                 ),
                         )
                     reply.success(replyValue)
@@ -100,9 +106,14 @@ internal class NativePlayerController(
                             reply.success()
                         }
                         "setFullscreen" -> {
-                            PlayerProtocol.boolean(PlayerProtocol.map(arguments)["fullscreen"])
-                            queue(mapOf("type" to "fullscreen", "fullscreen" to true))
-                            drainEvents()
+                            val fullscreen =
+                                PlayerProtocol.boolean(PlayerProtocol.map(arguments)["fullscreen"])
+                            if (deviceForm == DeviceForm.TV) {
+                                queue(mapOf("type" to "fullscreen", "fullscreen" to true))
+                                drainEvents()
+                            } else {
+                                host.setFullscreen(fullscreen)
+                            }
                             reply.success()
                         }
                         "setDisplayMatching" -> {
@@ -148,8 +159,18 @@ internal class NativePlayerController(
         } catch (e: ProtocolError) {
             reply.error(e.code)
         } catch (_: Exception) {
-            reply.error(if (method == "initialize") "initialize_failed" else "native_command_error")
+            reply.error(when (method) {
+                "initialize" -> "initialize_failed"
+                "setFullscreen" -> "window_error"
+                else -> "native_command_error"
+            })
         }
+    }
+
+    fun publishFullscreen(observed: Boolean) {
+        if (!initialized || lastFullscreen == observed) return
+        lastFullscreen = observed
+        queue(mapOf("type" to "fullscreen", "fullscreen" to observed))
     }
 
     private fun postCommands() {

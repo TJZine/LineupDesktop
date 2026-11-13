@@ -21,6 +21,7 @@ import androidx.media3.exoplayer.source.MediaSource
 import androidx.media3.exoplayer.source.ProgressiveMediaSource
 import androidx.media3.extractor.ExtractorsFactory
 import androidx.media3.ui.SubtitleView
+import com.tjzine.lineup.DeviceForm
 import okhttp3.HttpUrl.Companion.toHttpUrlOrNull
 
 /** Media/OS mechanism only. Each instance has one immutable load and is never reused. */
@@ -35,6 +36,7 @@ internal class Media3Engine(
     createPlayer: ((Context) -> ExoPlayer)? = null,
     private val subtitlePresentation: () -> SubtitlePresentation = { SubtitlePresentation() },
     observeSessionLanding: Boolean = false,
+    deviceForm: DeviceForm = DeviceForm.detect(context),
 ) : PlayerEngine {
     private val debug =
         context.applicationInfo.flags and android.content.pm.ApplicationInfo.FLAG_DEBUGGABLE != 0
@@ -58,6 +60,7 @@ internal class Media3Engine(
                 .build(),
             /* handleAudioFocus = */ true,
         )
+        if (deviceForm == DeviceForm.HANDHELD) it.setHandleAudioBecomingNoisy(true)
         it.setVideoSurfaceView(video)
     }
     private val playbackHandler = Handler(player.playbackLooper)

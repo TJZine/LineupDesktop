@@ -19,7 +19,6 @@ class PlatformChannel(
     private val keyboardVisibility: KeyboardVisibilityObserver,
     private val licenseResources: LicenseResources = LicenseResources(activity.assets),
     private val licenseExecutor: ExecutorService = Executors.newSingleThreadExecutor(),
-    private val deviceForm: DeviceForm = DeviceForm.detect(activity),
     private val publish: (String, Any?) -> Unit = { _, _ -> },
 ) : MethodChannel.MethodCallHandler, AutoCloseable {
     private val mainHandler = Handler(Looper.getMainLooper())
@@ -36,13 +35,6 @@ class PlatformChannel(
                 watchingWindowFacts = call.method == "watchWindowFacts" && !closed.get()
                 publishWindowFacts()
                 result.success(true)
-            }
-            "deviceProfile" -> {
-                if (call.arguments != null) {
-                    result.error("invalid_arguments", "deviceProfile accepts no arguments.", null)
-                    return
-                }
-                result.success(mapOf("formFactor" to deviceForm.wireValue))
             }
             "listLicenseDocuments" -> {
                 if (call.arguments != null) {

@@ -222,7 +222,7 @@ class PlayerViewState extends State<PlayerView> with WidgetsBindingObserver {
       next?.scheduled.item,
       controller.presentedState,
       controller.playbackToggleWillPause,
-      controller.fullscreen,
+      controller.fullscreenControlActive,
       controller.sleepDuration,
       controller.sleepDeadline,
       sleepRemaining == null ? null : (sleepRemaining.inSeconds / 60).ceil(),
@@ -490,7 +490,8 @@ class PlayerViewState extends State<PlayerView> with WidgetsBindingObserver {
         controller.showOsd();
         return true;
       default:
-        if (controller.canToggleFullscreen && controller.fullscreen) {
+        if (controller.canToggleFullscreen &&
+            controller.fullscreenControlActive) {
           unawaited(controller.exitFullscreen());
           return true;
         }
@@ -1513,7 +1514,9 @@ class _Osd extends StatelessWidget {
       if (controller.canToggleFullscreen)
         IconButton(
           style: actionStyle,
-          tooltip: controller.fullscreen ? 'Exit full screen' : 'Full screen',
+          tooltip: controller.fullscreenControlActive
+              ? 'Exit full screen'
+              : 'Full screen',
           onPressed: unsupported
               ? null
               : () {
@@ -1523,8 +1526,10 @@ class _Osd extends StatelessWidget {
           padding: null,
           iconSize: 20,
           icon: Icon(
-            controller.fullscreen ? Icons.fullscreen_exit : Icons.fullscreen,
-            semanticLabel: controller.fullscreen
+            controller.fullscreenControlActive
+                ? Icons.fullscreen_exit
+                : Icons.fullscreen,
+            semanticLabel: controller.fullscreenControlActive
                 ? 'Exit full screen'
                 : 'Full screen',
           ),

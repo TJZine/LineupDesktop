@@ -573,12 +573,23 @@ with Media3 **1.11.1**; it does not use or duplicate the desktop libmpv core.
 The Dart composition root selects the existing method-channel transport on
 Android. Plex, schedule joins, recovery, persistence and navigation remain Dart
 policy. `clientApiVersion: 1` is an Android adapter constant, not an mpv version.
-Android also sends `capabilities: {displayMatching: false, fullscreen: "fixed"}`
-in its initialize reply. Dart's historical local ready message is unchanged
+Android sends `capabilities` with `displayMatching: false` and
+`fullscreen: "fixed"` on TV or `fullscreen: "systemBars"` on handheld.
+Dart's historical local ready message is unchanged
 for desktop compatibility. Desktop adapters may omit `capabilities`; Dart then
 uses the host defaults: Windows supports display matching and window fullscreen,
 while macOS supports window fullscreen only. Before initialization and after
 dispose, capabilities are unavailable (`false`, `fixed`).
+
+On TV the fullscreen observation is always true. On handheld,
+`setFullscreen` requests bar visibility. Completion acknowledges the request.
+The independent `fullscreen` observation is true when both status and
+navigation bars are hidden in the public window insets (API 30+) or decor
+visibility flags (API 28–29). Transient overlays may be drawn by Android
+without changing the application's visibility signal. A swipe that changes
+the public state is reported, and a transient overlay can leave the reported
+fullscreen state true. Dart owns MD-13 bar and orientation intent separately
+from these observations.
 
 `NativePlayerController` validates codec values, admits at most 64 commands and
 128 KiB of URI/header data, and owns load/stop/request correlation. Commands and

@@ -42,7 +42,10 @@ class MainActivity : FlutterActivity() {
         super.onCreate(savedInstanceState)
         // Video keeps default SurfaceView z-order; subtitles are window content,
         // and Flutter's transparent SurfaceView is on top of both.
-        nativePlayer?.let { findViewById<FrameLayout>(android.R.id.content).addView(it.view, 0) }
+        nativePlayer?.let {
+            findViewById<FrameLayout>(android.R.id.content).addView(it.view, 0)
+            it.observeSystemBars()
+        }
     }
 
     override fun onStop() {
@@ -72,7 +75,7 @@ class MainActivity : FlutterActivity() {
 
     override fun configureFlutterEngine(flutterEngine: FlutterEngine) {
         super.configureFlutterEngine(flutterEngine)
-        nativePlayer = NativePlayerAdapter(this, flutterEngine.dartExecutor.binaryMessenger)
+        nativePlayer = NativePlayerAdapter(this, flutterEngine.dartExecutor.binaryMessenger, deviceForm)
         deviceCaptions = DeviceCaptions(this, flutterEngine.dartExecutor.binaryMessenger)
         val channel = MethodChannel(flutterEngine.dartExecutor.binaryMessenger, "lineup/platform")
         val visibility = KeyboardVisibilityObserver(this) { visible ->
@@ -80,7 +83,7 @@ class MainActivity : FlutterActivity() {
         }
         keyboardVisibility = visibility
         val dispatcher = PlatformChannel(
-            this, visibility, deviceForm = deviceForm,
+            this, visibility,
             publish = { method, value -> channel.invokeMethod(method, value) },
         )
         platformDispatcher = dispatcher

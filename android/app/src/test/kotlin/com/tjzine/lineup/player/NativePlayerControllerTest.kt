@@ -1,5 +1,6 @@
 package com.tjzine.lineup.player
 
+import com.tjzine.lineup.DeviceForm
 import org.junit.Assert.*
 import org.junit.Test
 
@@ -73,6 +74,15 @@ class NativePlayerControllerTest {
         var presentation: SubtitlePresentation? = null
         val presentationsAtCreation = mutableListOf<SubtitlePresentation?>()
         var rejectPresentation = false
+        var fullscreenSnapshot: Boolean? = null
+        val fullscreenRequests = mutableListOf<Boolean>()
+
+        override fun observedFullscreen() = fullscreenSnapshot
+
+        override fun setFullscreen(fullscreen: Boolean) {
+            fullscreenRequests.add(fullscreen)
+        }
+
         override fun subtitlePresentation(value: SubtitlePresentation?) {
             if (rejectPresentation) throw IllegalStateException("fixture")
             presentation = value
@@ -203,6 +213,42 @@ class NativePlayerControllerTest {
             landing.frame(7_000_000, 20f)
             assertEquals(listOf(41L), landed)
         }
+    }
+
+    @Test
+    fun handheldFullscreenRequestsAndObservedBarsAreIndependent() {
+        host.fullscreenSnapshot = false
+        val handheld = NativePlayerController(host, DeviceForm.HANDHELD)
+        val initialize = Result().also { handheld.call("initialize", null, it) }
+        assertEquals(
+            mapOf("clientApiVersion" to 1, "capabilities" to
+                mapOf("displayMatching" to false, "fullscreen" to "systemBars")),
+            initialize.value,
+        )
+        fun observations() =
+            host.events.filter { it["type"] == "fullscreen" }.map { it["fullscreen"] }
+        assertEquals(listOf(false), observations())
+
+        val request = Result().also {
+            handheld.call("setFullscreen", mapOf("fullscreen" to true), it)
+        }
+        assertTrue(request.done)
+        assertNull(request.error)
+        assertEquals(listOf(true), host.fullscreenRequests)
+        host.drain()
+        assertEquals(listOf(false), observations())
+
+        handheld.publishFullscreen(true)
+        host.drain()
+        // A transient overlay can leave the application insets hidden.
+        handheld.publishFullscreen(true)
+        host.drain()
+        assertEquals(listOf(false, true), observations())
+        // If a user reveal changes the public visibility, publish that fact.
+        handheld.publishFullscreen(false)
+        host.drain()
+        assertEquals(listOf(false, true, false), observations())
+        assertEquals(listOf(true), host.fullscreenRequests)
     }
 
     @Test

@@ -229,6 +229,10 @@ internal interface PlayerEngine {
 }
 
 internal interface PlayerHost {
+    fun observedFullscreen(): Boolean? = null
+
+    fun setFullscreen(fullscreen: Boolean) {}
+
     fun firstFrame(generation: Long, loadId: Long, positionMs: Long) {}
 
     fun frameTimestamp(generation: Long, loadId: Long, presentationTimeUs: Long) {}
