@@ -54,6 +54,8 @@ The maintainer adopted the October 26 reconciliation (local evidence, not tracke
 
 ## 1 + 2. Guide composition (rail numbers and picture size)
 
+**2026-11-13:** The TV Guide adopts the centred information block, 34 em synopsis measure, visible-pixel title art and full-width fallback title line. The TV band, picture and row geometry remain unchanged.
+
 ### Diagnosis
 
 - **Picture.**

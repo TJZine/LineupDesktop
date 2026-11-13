@@ -211,6 +211,13 @@ on physical resolution. Preserve the approved proportional presentation across
 720p, 1080p, 1440p and 2160p. Smaller windows and enlarged text still require
 accessible accommodation; the five-row target must not force clipped content.
 
+**2026-11-13 amendment (L40):** the maintainer approved a larger desktop picture and a content-aware row
+floor. The desktop picture targets 40 % of the canvas width and never drops below today's picture; rows
+never drop below `max(92.8 cu, two-line row content + 16.8 cu)` or today's row, whichever is smaller, and
+the picture gives way first. A sixth row appears only when six rows of at least `max(96 cu, that floor)`
+fit. This replaces "no automatic extra rows" for that rule only; Comfort/Compact and a row-count
+preference stay out. Evidence: the Guide information study (local handoff record).
+
 C is retained only as a documented future alternative. Reconsider it if actual
 usage demonstrates a need for more channels per view; it is not deferred required
 implementation scope. This supersedes earlier row-count alternatives retained in the history. The mock's exact pixel values remain illustrative and require
