@@ -259,18 +259,19 @@ void main() {
     (tester) async {
       tester.view.devicePixelRatio = 1;
       addTearDown(tester.view.reset);
-      for (final (size, textScale) in [
-        (const Size(1280, 720), 1.0),
-        (const Size(1920, 1080), 1.0),
-        (const Size(1920, 1200), 1.0),
-        (const Size(2560, 1440), 1.0),
-        (const Size(3440, 1440), 1.0),
-        (const Size(1920, 1080), 1.5),
+      for (final (size, textScale, rowCount) in [
+        (const Size(1280, 720), 1.0, 5),
+        (const Size(1920, 1080), 1.0, 5),
+        (const Size(1920, 1200), 1.0, 6),
+        (const Size(2560, 1440), 1.0, 5),
+        (const Size(3440, 1440), 1.0, 5),
+        (const Size(1920, 1080), 1.5, 5),
       ]) {
         tester.view.physicalSize = size;
         final lineup = _Lineup(40);
         final guide = GuideController(
           lineup: lineup,
+          clock: () => DateTime.utc(2026, 1, 15, 3, 17),
           loadSchedule: (c) async => _schedule(c),
         );
         await tester.pumpWidget(
@@ -304,7 +305,7 @@ void main() {
         expect(bounds.left, closeTo(0, .001));
         expect(bounds.right, closeTo(size.width, .001));
         expect(bounds.bottom, closeTo(size.height, .001));
-        expect(tester.getSize(finder).height / row, closeTo(5, .000001));
+        expect(tester.getSize(finder).height / row, closeTo(rowCount, .000001));
         final controls = _drawnRect(
           tester,
           find.byKey(const Key('guide-control-content')),
@@ -354,7 +355,7 @@ void main() {
         final beforePage = guide.focusedChannelIndex;
         await tester.sendKeyEvent(LogicalKeyboardKey.pageDown);
         await tester.pumpAndSettle();
-        expect(guide.focusedChannelIndex, beforePage + 5);
+        expect(guide.focusedChannelIndex, beforePage + rowCount);
         expectSnapped();
         await tester.sendKeyEvent(LogicalKeyboardKey.pageUp);
         await tester.pumpAndSettle();
@@ -457,18 +458,18 @@ void main() {
   );
 
   testWidgets(
-    'Guide PiP preserves pre-full-bleed dimensions and native alignment across the matrix',
+    'Guide PiP fills the L40 band and preserves native alignment across the matrix',
     (tester) async {
       addTearDown(tester.view.reset);
       for (final (size, textScale, expectedPicture, expectedInformationHeight)
           in const [
-            (Size(1280.0, 720.0), 1.0, Size(296.967111, 167.044), 167.036),
-            (Size(1920.0, 1080.0), 1.0, Size(576.0, 324.0), 323.995),
-            (Size(1920.0, 1200.0), 1.0, Size(576.0, 324.0), 443.995),
-            (Size(2560.0, 1440.0), 1.0, Size(768.0, 432.0), 431.993333),
-            (Size(3440.0, 1440.0), 1.0, Size(768.0, 432.0), 431.993333),
-            (Size(3840.0, 2160.0), 1.0, Size(1152.0, 648.0), 647.99),
-            (Size(1920.0, 1080.0), 1.5, Size(576.0, 324.0), 323.995),
+            (Size(1280.0, 720.0), 1.0, Size(358.4, 201.6), 201.6),
+            (Size(1920.0, 1080.0), 1.0, Size(768.0, 432.0), 432.0),
+            (Size(1920.0, 1200.0), 1.0, Size(768.0, 432.0), 432.0),
+            (Size(2560.0, 1440.0), 1.0, Size(1024.0, 576.0), 576.0),
+            (Size(3440.0, 1440.0), 1.0, Size(1024.0, 576.0), 576.0),
+            (Size(3840.0, 2160.0), 1.0, Size(1536.0, 864.0), 864.0),
+            (Size(1920.0, 1080.0), 1.5, Size(707.111111, 397.75), 397.75),
           ]) {
         for (final dpr in [1.0, 1.5]) {
           tester.view
@@ -1378,21 +1379,6 @@ void main() {
     },
   );
 
-  test('16:10 height extends information without enlarging five rows', () {
-    final reference = GuideLayoutPolicy.forSize(
-      const Size(1920, 1080),
-      hasPicture: true,
-    );
-    final tall = GuideLayoutPolicy.forSize(
-      const Size(1920, 1200),
-      hasPicture: true,
-    );
-    expect(tall.minimumRows, 5);
-    expect(tall.rowHeight, reference.rowHeight);
-    expect(tall.pictureWidth, reference.pictureWidth);
-    expect(tall.showcaseHeight - reference.showcaseHeight, closeTo(120, .001));
-  });
-
   test('clear logo usability follows decoded size and actual constraints', () {
     const ordinary = Size(1200, 400);
     const extremeWide = Size(1200, 20);
@@ -1422,7 +1408,7 @@ void main() {
     );
   });
 
-  test('layout policy stays bounded and keeps one five-row composition', () {
+  test('layout policy stays bounded at small and non-finite sizes', () {
     for (final size in const [
       Size.zero,
       Size(320, 240),
@@ -1448,10 +1434,10 @@ void main() {
       hasPicture: true,
       textScale: 2,
     );
-    expect(comfortable.rowHeight, closeTo(114.4, 0.1));
+    expect(comfortable.rowHeight, closeTo(92.8, 0.1));
     expect(enlarged.rowHeight, greaterThanOrEqualTo(116));
-    expect(comfortable.minimumRows, 5);
-    expect(enlarged.minimumRows, 5);
+    expect(comfortable.rowCount, 5);
+    expect(enlarged.rowCount, 5);
   });
 
   testWidgets('non-positive timeline slots render safely', (tester) async {
@@ -2086,6 +2072,7 @@ void main() {
     addTearDown(lineup.dispose);
     final guide = GuideController(
       lineup: lineup,
+      clock: () => DateTime.utc(2026, 1, 15, 3, 17),
       loadSchedule: (channel) async => _schedule(channel),
     );
     addTearDown(guide.dispose);
@@ -2183,9 +2170,10 @@ void main() {
       expect(tester.takeException(), isNull, reason: '$size');
     }
 
-    expect(tallGeometry[1200]!.$1, tallGeometry[1080]!.$1);
+    expect(tallGeometry[1080]!.$1, closeTo(92.8, .001));
+    expect(tallGeometry[1200]!.$1, closeTo(97.333, .001));
     expect(tallGeometry[1200]!.$2, tallGeometry[1080]!.$2);
-    expect(tallGeometry[1200]!.$3 - tallGeometry[1080]!.$3, closeTo(120, .001));
+    expect(tallGeometry[1200]!.$3, tallGeometry[1080]!.$3);
     final pictureSemantics = find.bySemanticsLabel(
       'Now playing picture in picture. Open full player.',
     );
@@ -3783,7 +3771,7 @@ void main() {
         tester,
         find.byKey(const Key('guide-picture-in-picture')),
       ).width,
-      closeTo(576, 0.01),
+      closeTo(768, 0.01),
     );
     final list = tester.widget<ListView>(
       find.byKey(const Key('guide-schedule-list')),

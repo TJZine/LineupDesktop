@@ -24,6 +24,8 @@ const _guideEdgeContentInset = 12.0;
 const _guidePictureAspectRatio = 16 / 9;
 const _guideReferencePictureHeight = 324.0;
 const _guideSynopsisWidthFloor = 400.0;
+const _guideDesktopRowFloor = 92.8;
+const _guideExtraRowMinimum = 96.0;
 
 /// A width and height in physical pixels.
 typedef _PixelSize = ({int width, int height});
@@ -37,7 +39,7 @@ class GuideLayoutPolicy {
     required this.showcaseHeight,
     required this.pictureWidth,
     required this.rowHeight,
-    required this.minimumRows,
+    required this.rowCount,
     required this.compactLogo,
     required this.minimumIdentityWidth,
   });
@@ -97,7 +99,7 @@ class GuideLayoutPolicy {
       ),
     );
     const showcaseHeightAdjustment = 0.01;
-    final showcaseHeight = tvControlsHeight == null
+    var showcaseHeight = tvControlsHeight == null
         ? math.max(0.0, pictureAllocation - showcaseHeightAdjustment)
         : math.min(
             math.max(
@@ -106,14 +108,45 @@ class GuideLayoutPolicy {
             ),
             math.max(0.0, available - minimumRowHeight * minimumRows),
           );
+    final widthBudget = math.max(0.0, width - 360 - 12 - 40);
+    var rowCount = minimumRows;
+    var pictureHeight = showcaseHeight;
+    if (tvControlsHeight == null && hasPicture) {
+      final reference = math.max(
+        compactPictureHeight,
+        _guideReferencePictureHeight,
+      );
+      final todayPicture = math.min(showcaseHeight, reference);
+      final todayRow = math.max(
+        minimumRowHeight,
+        (available - showcaseHeight) / minimumRows,
+      );
+      // Use the approved study estimate: the bundled row styles measure 44 cu
+      // at 100%, outside the handoff tolerance for the 52.7 cu estimate.
+      final rowFloor = math.max(_guideDesktopRowFloor, 52.7 * textScale + 16.8);
+      final target = width * 0.40 / _guidePictureAspectRatio;
+      final rowLimitedBand =
+          available - minimumRows * math.min(rowFloor, todayRow);
+      final widthLimitedBand =
+          math.min(widthBudget, width * 0.5) / _guidePictureAspectRatio;
+      showcaseHeight = math.min(
+        widthLimitedBand,
+        math.max(todayPicture, math.min(target, rowLimitedBand)),
+      );
+      pictureHeight = showcaseHeight;
+      rowCount = math.max(
+        minimumRows,
+        ((available - showcaseHeight) /
+                math.max(_guideExtraRowMinimum, rowFloor))
+            .floor(),
+      );
+    } else if (tvControlsHeight == null) {
+      pictureHeight = math.min(_guideReferencePictureHeight, pictureAllocation);
+    }
     final rowHeight = math.max(
       minimumRowHeight,
-      (available - showcaseHeight) / minimumRows,
+      (available - showcaseHeight) / rowCount,
     );
-    final pictureHeight = tvControlsHeight == null
-        ? math.min(_guideReferencePictureHeight, pictureAllocation)
-        : showcaseHeight;
-    final widthBudget = math.max(0.0, width - 360 - 12 - 40);
     final pictureWidth = tvControlsHeight == null
         ? (hasPicture
               ? math.min(pictureHeight * 16 / 9, widthBudget)
@@ -152,7 +185,7 @@ class GuideLayoutPolicy {
       showcaseHeight: showcaseHeight,
       pictureWidth: pictureWidth,
       rowHeight: rowHeight,
-      minimumRows: minimumRows,
+      rowCount: rowCount,
       compactLogo: showcaseHeight < 180 * textScale,
       minimumIdentityWidth: tvControlsHeight == null ? 0 : tvIdentityWidth,
     );
@@ -190,7 +223,7 @@ class GuideLayoutPolicy {
         : math.max(56, height);
   }
 
-  /// Whole-row offsets, including the trailing edge of a five-row viewport.
+  /// Whole-row offsets, including the trailing edge of the viewport.
   static double snapRowOffset(
     double offset,
     double rowHeight,
@@ -208,7 +241,7 @@ class GuideLayoutPolicy {
   final double showcaseHeight;
   final double pictureWidth;
   final double rowHeight;
-  final int minimumRows;
+  final int rowCount;
   final bool compactLogo;
   final double minimumIdentityWidth;
 }
@@ -967,6 +1000,12 @@ class _GuideViewState extends State<GuideView>
 
   Widget _schedule(GuideLayoutPolicy policy, List<Channel> channels) {
     final scroll = _scrollFor(policy.rowHeight);
+    final sourceRowFloor = DeviceProfile.of(context).isTv
+        ? 78.0
+        : _guideDesktopRowFloor;
+    final showProvenance =
+        policy.rowHeight + 0.000001 >=
+        sourceRowFloor * MediaQuery.textScalerOf(context).scale(1);
     return Column(
       key: _scheduleKey,
       children: [
@@ -1098,11 +1137,7 @@ class _GuideViewState extends State<GuideView>
                                   clock: _presentationClock,
                                   railWidth: policy.channelRailWidth,
                                   hideSchedule: _allVisibleFailed,
-                                  showProvenance:
-                                      policy.rowHeight >=
-                                      78 *
-                                          MediaQuery.textScalerOf(context)
-                                              .scale(1),
+                                  showProvenance: showProvenance,
                                   onTune: widget.onTune,
                                   activityPulse: _activityPulse,
                                   onGridKey: _gridKey,
