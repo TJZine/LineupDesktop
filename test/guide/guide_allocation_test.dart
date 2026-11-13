@@ -490,6 +490,17 @@ void main() {
             }
           }
           expect(pip.width / pip.height, closeTo(16 / 9, .000001));
+          if (!configuration.tv) {
+            expect(
+              pip.width / canvasScale,
+              closeTo(switch (scale) {
+                1.15 => 757.87,
+                1.3 => 747.73,
+                _ => 768,
+              }, .01),
+            );
+            expect(pip.height, closeTo(info.height, .01));
+          }
           final completeRows =
               ((listRect.height + .1) / (rowHeight * canvasScale)).floor();
           if (completeRows < 5) {
@@ -519,7 +530,7 @@ void main() {
             }
           }
           final rowPaint = <Object?>[];
-          for (var i = 0; i < 5; i++) {
+          for (var i = 0; i < completeRows; i++) {
             final top = listRect.top + i * rowHeight * canvasScale;
             final rect = Rect.fromLTWH(
               listRect.left,
@@ -564,7 +575,7 @@ void main() {
                   },
             ];
           }
-          for (var i = 0; i < 5; i++) {
+          for (var i = 0; i < completeRows; i++) {
             final timeline = find.byKey(ValueKey('guide-timeline-channel-$i'));
             final paragraphs = find.descendant(
               of: timeline,

@@ -110,6 +110,28 @@ void main() {
       expect(tester.takeException(), isNull);
     },
   );
+  testWidgets('wide cropped logo uses the reserved visible height', (
+    tester,
+  ) async {
+    final bytes = await _solidLogoBytes(tester, size: const Size(540, 60));
+    Widget logo({required bool reserve}) => _logoApp(
+      bytes,
+      maximumSize: const Size(360, 128),
+      maximumVisibleHeight: 64,
+      minimumVisibleSize: const Size(96, 25.6),
+      reserveVisibleSlot: reserve,
+    );
+    await tester.pumpWidget(logo(reserve: false));
+    await _waitForImageDecode(tester);
+    expect(find.text('Readable title'), findsOneWidget);
+    await tester.pumpWidget(logo(reserve: true));
+    final image = find.byKey(const Key('accepted-logo'));
+    expect(image, findsOneWidget);
+    expect(tester.getSize(image).height, closeTo(360 / 9, .01));
+    expect(tester.getSize(find.byType(ClearLogoImage)).height, 64);
+    expect(find.text('Readable title'), findsNothing);
+  });
+
   testWidgets('desktop rejects empty alpha and keeps padded contain geometry', (
     tester,
   ) async {
@@ -443,6 +465,7 @@ Widget _logoApp(
   Size? minimumVisibleSize = const Size(96, 28),
   Size maximumSize = const Size(420, 84),
   double dpr = 1,
+  bool reserveVisibleSlot = false,
 }) => MaterialApp(
   home: MediaQuery(
     data: MediaQueryData(devicePixelRatio: dpr),
@@ -455,6 +478,7 @@ Widget _logoApp(
           maximumSize: maximumSize,
           minimumVisibleSize: minimumVisibleSize,
           maximumVisibleHeight: maximumVisibleHeight,
+          reserveVisibleSlot: reserveVisibleSlot,
           imageKey: const Key('accepted-logo'),
           fallback: const Text('Readable title'),
         ),

@@ -1009,6 +1009,7 @@ void main() {
       addTearDown(lineup.dispose);
       final guide = GuideController(
         lineup: lineup,
+        clock: () => DateTime.utc(2026, 1, 15, 3, 17),
         loadSchedule: (c) async => _schedule(c),
       );
       addTearDown(guide.dispose);
@@ -1033,7 +1034,7 @@ void main() {
         expect(tester.getSize(progress).width, greaterThan(920));
         expect(
           tester.getSize(identity).width,
-          closeTo((tester.getSize(progress).width - 32) * .4, .1),
+          closeTo((tester.getSize(progress).width - 32) * .5, .1),
         );
         expect(
           tester.getTopLeft(synopsis).dx,
@@ -1050,6 +1051,10 @@ void main() {
         );
         expect(tester.getTopLeft(meta).dx, tester.getTopLeft(progress).dx);
         final summary = tester.widget<Text>(synopsis);
+        expect(
+          tester.getSize(synopsis).width,
+          lessThanOrEqualTo(34 * summary.style!.fontSize!),
+        );
         expect(summary.maxLines, greaterThan(3));
         expect(summary.overflow, TextOverflow.ellipsis);
         final metadata = tester.widget<Text>(meta);
@@ -3587,6 +3592,147 @@ void main() {
     );
   }
 
+  for (final tv in [false, true]) {
+    testWidgets(
+      'Guide information starts stay fixed through focus and logo loading (tv=$tv)',
+      (tester) async {
+        await tester.runAsync(loadPinnedTestFonts);
+        tester.view
+          ..devicePixelRatio = 1
+          ..physicalSize = tv ? const Size(1920, 1080) : const Size(1512, 949);
+        addTearDown(tester.view.reset);
+        final now = DateTime(2026, 1, 14, 22, 17);
+        final anchor = DateTime(2026, 1, 14, 22);
+        const longTitle = 'The Long Journey Home';
+        final logo = await _artI1LogoPng(
+          tester,
+          padded: false,
+          size: const Size(540, 60),
+        );
+        final pendingLogo = Completer<Uint8List?>();
+        final lineup = _Lineup(
+          3,
+          artworkLoader: (path) async => switch (path.path) {
+            '/unusable' => _narrowLogoPng,
+            '/wide' => pendingLogo.future,
+            _ => null,
+          },
+          scenario: const LineupScenario(
+            settings: LineupSettings(
+              preferClearLogos: true,
+              reduceMotion: true,
+            ),
+          ),
+        );
+        addTearDown(lineup.dispose);
+        lineup.fixtureActor.replaceChannels([
+          for (final (i, item) in [
+            ChannelItem(
+              id: 'rich',
+              title: 'The Beginning',
+              showTitle: longTitle,
+              duration: const Duration(hours: 2),
+              year: 2026,
+              genres: const ['Drama'],
+              resolution: '4k',
+              summary: 'A signal arrives.',
+              clearLogo: Uri.parse('/unusable'),
+            ),
+            const ChannelItem(
+              id: 'sparse',
+              title: 'A Quiet Evening',
+              duration: Duration(hours: 2),
+              summary: 'A quiet evening in the city.',
+            ),
+            ChannelItem(
+              id: 'wide',
+              title: 'The Long Way Home Again',
+              duration: const Duration(hours: 2),
+              summary: 'The long way home.',
+              clearLogo: Uri.parse('/wide'),
+            ),
+          ].indexed)
+            Channel(
+              id: 'c$i',
+              number: i + 1,
+              name: 'Cinema',
+              source: ManualSource([item]),
+              playbackMode: PlaybackMode.sequential,
+              anchor: anchor,
+              shuffleSeed: i,
+            ),
+        ]);
+        final guide = GuideController(
+          lineup: lineup,
+          clock: () => now,
+          loadSchedule: (channel) async => _schedule(channel),
+        );
+        addTearDown(guide.dispose);
+        const boundary = Key('l40-information-boundary');
+        await tester.pumpWidget(
+          RepaintBoundary(
+            key: boundary,
+            child: MaterialApp(
+              theme: LineupTheme.forName(
+                LineupThemeName.emberSteel,
+                formFactor: profileFor(tv).formFactor,
+              ),
+              builder: _guideCanvasBuilderFor(tv),
+              home: GuideView(
+                controller: guide,
+                pictureInPicture: const ColoredBox(color: Colors.black),
+                onClose: (_, _) {},
+                onTune: (_) async {},
+              ),
+            ),
+          ),
+        );
+        await tester.pumpAndSettle();
+        await tester.runAsync(clearLogoDecodesSettled);
+        await tester.pump();
+        final title = find.byKey(const Key('guide-clear-logo-fallback'));
+        final eyebrow = find.byKey(const Key('guide-info-channel'));
+        final synopsis = find.byKey(const Key('guide-program-synopsis'));
+        final identity = find.byKey(const Key('guide-program-identity'));
+        List<Offset> starts() => [
+          tester.getTopLeft(eyebrow),
+          tester.getTopLeft(title),
+          tester.getTopLeft(synopsis),
+        ];
+        expect(find.byType(ClearLogoImage), findsOneWidget);
+        final paragraph = tester.renderObject<RenderParagraph>(title);
+        expect(paragraph.text.toPlainText(), longTitle);
+        expect(paragraph.didExceedMaxLines, isFalse);
+        final painter = TextPainter(
+          text: paragraph.text,
+          textDirection: paragraph.textDirection,
+          textScaler: paragraph.textScaler,
+          maxLines: 1,
+        )..layout(maxWidth: tester.getSize(identity).width);
+        expect(paragraph.size.height, painter.height);
+        painter.dispose();
+
+        final rich = starts();
+        guide.moveVertical(1);
+        await tester.pumpAndSettle();
+        expect(tester.widget<Text>(title).data, 'A Quiet Evening');
+        expect(starts(), rich);
+
+        guide.moveVertical(1);
+        await tester.pumpAndSettle();
+        expect(starts(), rich);
+        pendingLogo.complete(logo);
+        final capture = await _waitForArtI1GuideRaster(tester, boundary);
+        expect(title, findsNothing);
+        expect(tester.getTopLeft(eyebrow), rich[0]);
+        expect(tester.getTopLeft(synopsis), rich[2]);
+        expect(capture.visibleBounds.top, closeTo(rich[1].dy, 2));
+        expect(tester.takeException(), isNull);
+        await tester.pumpWidget(const SizedBox.shrink());
+      },
+    );
+  }
+
   testWidgets('TV Guide keeps the title for a decoded transparent clear logo', (
     tester,
   ) async {
@@ -5432,18 +5578,20 @@ Future<Uint8List> _transparentLogoPng(WidgetTester tester) async {
 Future<Uint8List> _artI1LogoPng(
   WidgetTester tester, {
   required bool padded,
+  Size size = const Size(600, 120),
 }) async {
   final bytes = await tester.runAsync(() async {
     final recorder = ui.PictureRecorder();
     final canvas = Canvas(recorder);
     canvas.drawRect(
-      padded
-          ? const Rect.fromLTWH(140, 20, 320, 80)
-          : const Rect.fromLTWH(0, 0, 600, 120),
+      padded ? const Rect.fromLTWH(140, 20, 320, 80) : Offset.zero & size,
       Paint()..color = _artI1LogoColor,
     );
     final picture = recorder.endRecording();
-    final image = await picture.toImage(600, 120);
+    final image = await picture.toImage(
+      size.width.toInt(),
+      size.height.toInt(),
+    );
     final data = await image.toByteData(format: ui.ImageByteFormat.png);
     image.dispose();
     picture.dispose();

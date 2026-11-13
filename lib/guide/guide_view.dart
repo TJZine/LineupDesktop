@@ -3600,27 +3600,31 @@ double debugMeasureGuideTextWidth(String text) => _textWidth(
 double _textHeight(
   TextStyle? style,
   TextScaler scaler,
-  TextDirection direction,
-) => _guideTextMetrics.measure(
-  (
-    kind: _GuideTextMetricKind.height,
-    text: 'Ag',
-    style: style,
-    scaler: scaler,
-    direction: direction,
-  ),
-  () {
-    final painter = TextPainter(
-      text: TextSpan(text: 'Ag', style: style),
-      textDirection: direction,
-      textScaler: scaler,
-      maxLines: 1,
-    )..layout();
-    final height = painter.height.ceilToDouble();
-    painter.dispose();
-    return height;
-  },
-);
+  TextDirection direction, {
+  bool roundUp = true,
+}) {
+  final height = _guideTextMetrics.measure(
+    (
+      kind: _GuideTextMetricKind.height,
+      text: 'Ag',
+      style: style,
+      scaler: scaler,
+      direction: direction,
+    ),
+    () {
+      final painter = TextPainter(
+        text: TextSpan(text: 'Ag', style: style),
+        textDirection: direction,
+        textScaler: scaler,
+        maxLines: 1,
+      )..layout();
+      final height = painter.height;
+      painter.dispose();
+      return height;
+    },
+  );
+  return roundUp ? height.ceilToDouble() : height;
+}
 
 double _textWidth(
   String text,
@@ -4004,6 +4008,11 @@ class _ProgramDetails extends StatelessWidget {
     final roles = LineupTheme.of(context);
     final scaler = MediaQuery.textScalerOf(context);
     final enlarged = scaler.scale(1) > 1;
+    final isTv = DeviceProfile.of(context).isTv;
+    final direction = Directionality.of(context);
+    final inherited = DefaultTextStyle.of(context).style;
+    double line(TextStyle style) =>
+        _textHeight(inherited.merge(style), scaler, direction, roundUp: false);
     final metadataSeparator = enlarged ? '\u00a0· ' : ' · ';
     final hasSynopsis = item.summary?.trim().isNotEmpty == true;
     final duration = program.scheduled.end.difference(program.scheduled.start);
@@ -4042,13 +4051,7 @@ class _ProgramDetails extends StatelessWidget {
       maxLines: 1,
       overflow: TextOverflow.ellipsis,
     );
-    final title = Text(
-      item.showTitle ?? item.title,
-      key: const Key('guide-clear-logo-fallback'),
-      maxLines: 1,
-      overflow: TextOverflow.ellipsis,
-      style: _GuideStyles.title.copyWith(color: roles.primaryText),
-    );
+    final title = item.showTitle ?? item.title;
     final episode = [
       ?_episodeCode(item),
       if (item.showTitle != null) item.title,
@@ -4062,17 +4065,86 @@ class _ProgramDetails extends StatelessWidget {
         );
         final mergeFacts = dense && !enlarged;
         final gap = dense ? 4.0 : 10.0;
-        final desktopLogoHeight = compactLogo || dense ? 42.0 : 64.0;
-        final logoHeight = DeviceProfile.of(context).isTv
-            ? math.max(
-                desktopLogoHeight,
-                _lineHeight(context, _GuideStyles.title),
-              )
-            : desktopLogoHeight;
+        final unscaledLogoSlot = dense ? 42.0 : 64.0;
+        final contentScale = isTv || dense
+            ? 1.0
+            : (box.maxHeight / 296).clamp(1.0, 1.4);
+        final logoSlot = unscaledLogoSlot * contentScale;
+        final baseTitleStyle = _GuideStyles.title.copyWith(
+          color: roles.primaryText,
+        );
+        final scaledTitleStyle = baseTitleStyle.copyWith(
+          fontSize: 54 * contentScale,
+        );
+        final episodeStyle = _GuideStyles.episode.copyWith(
+          color: roles.secondaryText,
+          fontSize: 22 * contentScale,
+        );
+        final synopsisStyle = bodyStyle.copyWith(
+          fontSize: 18 * (1 + (contentScale - 1) / 2),
+        );
         final identityFlex = _GuideInformationLayout.identityFlex(
           height: box.maxHeight,
           compactLogo: compactLogo,
           enlarged: enlarged,
+        );
+        final rowWidth = math.max(0.0, box.maxWidth - 32);
+        final synopsisMeasure = 34 * scaler.scale(synopsisStyle.fontSize!);
+        final identityWidth = hasSynopsis
+            ? math
+                  .max(
+                    minimumIdentityWidth,
+                    math.max(
+                      rowWidth *
+                          math.max(
+                            identityFlex / 10,
+                            contentScale > 1 ? .5 : 0,
+                          ),
+                      rowWidth - synopsisMeasure,
+                    ),
+                  )
+                  .clamp(0.0, rowWidth)
+            : box.maxWidth;
+        final titleStyle =
+            contentScale > 1 &&
+                _textWidth(
+                      title,
+                      inherited.merge(scaledTitleStyle),
+                      scaler,
+                      direction,
+                    ) >
+                    identityWidth
+            ? baseTitleStyle
+            : scaledTitleStyle;
+        final fallbackTitle = Text(
+          title,
+          key: const Key('guide-clear-logo-fallback'),
+          maxLines: 1,
+          overflow: TextOverflow.ellipsis,
+          style: titleStyle,
+        );
+        final eyebrowToTitle = line(channelStyle) + gap;
+        final metadataHeight = line(metadataStyle);
+        final badgeHeight = line(_GuideStyles.badge(context)) + 8;
+        final reservedIdentity =
+            eyebrowToTitle +
+            math.max(line(scaledTitleStyle), logoSlot) +
+            gap +
+            line(episodeStyle) +
+            gap +
+            metadataHeight +
+            (mergeFacts ? 0 : gap + metadataHeight) +
+            gap +
+            badgeHeight;
+        final progressReserve = gap + 4;
+        final messageReserve = playbackMessage == null ? 0 : metadataHeight;
+        final centerOffset = math.max(
+          0.0,
+          (box.maxHeight -
+                  progressReserve -
+                  messageReserve -
+                  reservedIdentity) /
+              2,
         );
         final identity = Column(
           key: const Key('guide-program-identity'),
@@ -4082,26 +4154,18 @@ class _ProgramDetails extends StatelessWidget {
             eyebrow,
             SizedBox(height: gap),
             if (clearLogo != null)
-              SizedBox(
-                height: logoHeight,
-                child: ConstrainedBox(
-                  constraints: BoxConstraints(
-                    maxWidth: compactLogo || dense ? 280 : 420,
-                  ),
-                  child: ClearLogoImage(
-                    clearLogo!,
-                    imageKey: const Key('guide-clear-logo'),
-                    fallback: title,
-                    semanticLabel: '${item.showTitle ?? item.title} logo',
-                    maximumSize: Size(
-                      compactLogo || dense ? 280 : 420,
-                      logoHeight,
-                    ),
-                  ),
-                ),
+              ClearLogoImage(
+                clearLogo!,
+                imageKey: const Key('guide-clear-logo'),
+                fallback: fallbackTitle,
+                semanticLabel: '$title logo',
+                maximumSize: Size(logoSlot * 12, logoSlot * 2),
+                maximumVisibleHeight: logoSlot,
+                minimumVisibleSize: Size(96, unscaledLogoSlot * .4),
+                reserveVisibleSlot: true,
               )
             else
-              title,
+              fallbackTitle,
             if (episode.isNotEmpty) ...[
               SizedBox(height: gap),
               Text(
@@ -4109,9 +4173,7 @@ class _ProgramDetails extends StatelessWidget {
                 key: const Key('guide-info-episode'),
                 maxLines: 1,
                 overflow: TextOverflow.ellipsis,
-                style: _GuideStyles.episode.copyWith(
-                  color: roles.secondaryText,
-                ),
+                style: episodeStyle,
               ),
             ],
             SizedBox(height: gap),
@@ -4120,10 +4182,8 @@ class _ProgramDetails extends StatelessWidget {
                   ? '$timeLine · $factsLine'
                   : timeLine,
               key: const Key('guide-program-meta'),
-              maxLines: DeviceProfile.of(context).isTv ? 1 : null,
-              overflow: DeviceProfile.of(context).isTv
-                  ? TextOverflow.ellipsis
-                  : null,
+              maxLines: isTv ? 1 : null,
+              overflow: isTv ? TextOverflow.ellipsis : null,
               style: metadataStyle,
             ),
             if (!mergeFacts && factsLine.isNotEmpty) ...[
@@ -4131,16 +4191,14 @@ class _ProgramDetails extends StatelessWidget {
               Text(
                 factsLine,
                 key: const Key('guide-info-genres'),
-                maxLines: DeviceProfile.of(context).isTv ? 1 : null,
-                overflow: DeviceProfile.of(context).isTv
-                    ? TextOverflow.ellipsis
-                    : null,
+                maxLines: isTv ? 1 : null,
+                overflow: isTv ? TextOverflow.ellipsis : null,
                 style: metadataStyle,
               ),
             ],
             if (badges.isNotEmpty) ...[
               SizedBox(height: gap),
-              if (DeviceProfile.of(context).isTv)
+              if (isTv)
                 Row(
                   key: const Key('guide-program-badges'),
                   mainAxisSize: MainAxisSize.min,
@@ -4179,56 +4237,52 @@ class _ProgramDetails extends StatelessWidget {
           crossAxisAlignment: CrossAxisAlignment.stretch,
           children: [
             Expanded(
-              child: Row(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  if (DeviceProfile.of(context).isTv && hasSynopsis)
+              child: Padding(
+                padding: EdgeInsets.only(top: centerOffset),
+                child: Row(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
                     SizedBox(
-                      width: math.max(
-                        minimumIdentityWidth,
-                        (box.maxWidth - 32) * identityFlex / 10,
-                      ),
-                      child: identity,
-                    )
-                  else
-                    Expanded(
-                      flex: hasSynopsis ? identityFlex : 1,
-                      child: DeviceProfile.of(context).isTv
+                      width: identityWidth,
+                      child: isTv
                           ? identity
                           : SingleChildScrollView(child: identity),
                     ),
-                  if (hasSynopsis) ...[
-                    const SizedBox(width: 32),
-                    Expanded(
-                      flex: 10 - identityFlex,
-                      child: Padding(
-                        padding: EdgeInsets.only(
-                          top: _lineHeight(context, channelStyle) + gap,
-                        ),
-                        child: LayoutBuilder(
-                          builder: (context, synopsisBox) {
-                            final lineHeight = _lineHeight(context, bodyStyle);
-                            final lines = math.max(
-                              1,
-                              (synopsisBox.maxHeight / lineHeight).floor(),
-                            );
-                            return Text(
+                    if (hasSynopsis && rowWidth > identityWidth) ...[
+                      const SizedBox(width: 32),
+                      Expanded(
+                        child: Padding(
+                          padding: EdgeInsets.only(top: eyebrowToTitle),
+                          child: LayoutBuilder(
+                            builder: (context, synopsisBox) => Text(
                               item.summary!,
                               key: const Key('guide-program-synopsis'),
-                              maxLines: lines,
+                              maxLines: math.max(
+                                1,
+                                (synopsisBox.maxHeight / line(synopsisStyle))
+                                    .floor(),
+                              ),
                               overflow: TextOverflow.ellipsis,
-                              style: bodyStyle,
-                            );
-                          },
+                              style: synopsisStyle,
+                            ),
+                          ),
                         ),
                       ),
-                    ),
+                    ],
                   ],
-                ],
+                ),
               ),
             ),
-            if (current) ...[
-              SizedBox(height: gap),
+            if (playbackMessage != null)
+              Text(
+                playbackMessage!,
+                key: const Key('guide-playback-message'),
+                maxLines: 1,
+                overflow: TextOverflow.ellipsis,
+                style: metadataStyle,
+              ),
+            SizedBox(height: gap),
+            if (current)
               Semantics(
                 label: '${_duration(elapsed)} elapsed, $remaining remaining',
                 child: LinearProgressIndicator(
@@ -4238,35 +4292,13 @@ class _ProgramDetails extends StatelessWidget {
                       : elapsed.inMilliseconds / duration.inMilliseconds,
                   minHeight: 4,
                 ),
-              ),
-            ],
-            if (playbackMessage != null)
-              Text(
-                playbackMessage!,
-                key: const Key('guide-playback-message'),
-                maxLines: 1,
-                overflow: TextOverflow.ellipsis,
-                style: metadataStyle,
-              ),
+              )
+            else
+              const SizedBox(height: 4),
           ],
         );
       },
     );
-  }
-
-  double _lineHeight(BuildContext context, TextStyle style) {
-    final painter = TextPainter(
-      text: TextSpan(
-        text: 'Ag',
-        style: DefaultTextStyle.of(context).style.merge(style),
-      ),
-      textDirection: Directionality.of(context),
-      textScaler: MediaQuery.textScalerOf(context),
-      maxLines: 1,
-    )..layout();
-    final height = painter.height;
-    painter.dispose();
-    return height;
   }
 }
 
