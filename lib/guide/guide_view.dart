@@ -112,11 +112,11 @@ class GuideLayoutPolicy {
     var rowCount = minimumRows;
     var pictureHeight = showcaseHeight;
     if (tvControlsHeight == null && hasPicture) {
-      final reference = math.max(
-        compactPictureHeight,
+      // Today's visible picture: the band capped at the 324 cu reference.
+      final todayPicture = math.min(
+        showcaseHeight,
         _guideReferencePictureHeight,
       );
-      final todayPicture = math.min(showcaseHeight, reference);
       final todayRow = math.max(
         minimumRowHeight,
         (available - showcaseHeight) / minimumRows,
@@ -129,9 +129,15 @@ class GuideLayoutPolicy {
           available - minimumRows * math.min(rowFloor, todayRow);
       final widthLimitedBand =
           math.min(widthBudget, width * 0.5) / _guidePictureAspectRatio;
-      showcaseHeight = math.min(
-        widthLimitedBand,
-        math.max(todayPicture, math.min(target, rowLimitedBand)),
+      // Never smaller than today's visible picture; the 50 % width cap only
+      // limits growth (narrow windows keep today's picture).
+      final todayVisible = math.min(
+        todayPicture,
+        widthBudget / _guidePictureAspectRatio,
+      );
+      showcaseHeight = math.max(
+        todayVisible,
+        math.min(widthLimitedBand, math.min(target, rowLimitedBand)),
       );
       pictureHeight = showcaseHeight;
       rowCount = math.max(
@@ -1003,9 +1009,12 @@ class _GuideViewState extends State<GuideView>
     final sourceRowFloor = DeviceProfile.of(context).isTv
         ? 78.0
         : _guideDesktopRowFloor;
+    final textScale = MediaQuery.textScalerOf(context).scale(1);
     final showProvenance =
-        policy.rowHeight + 0.000001 >=
-        sourceRowFloor * MediaQuery.textScalerOf(context).scale(1);
+        policy.rowHeight + 0.000001 >= sourceRowFloor * textScale;
+    // The larger channel number and label keep their pre-L40 threshold; only
+    // the source line moved to the L40 row floor.
+    final largeRail = policy.rowHeight + 0.000001 >= 78 * textScale;
     return Column(
       key: _scheduleKey,
       children: [
@@ -1138,6 +1147,7 @@ class _GuideViewState extends State<GuideView>
                                   railWidth: policy.channelRailWidth,
                                   hideSchedule: _allVisibleFailed,
                                   showProvenance: showProvenance,
+                                  largeRail: largeRail,
                                   onTune: widget.onTune,
                                   activityPulse: _activityPulse,
                                   onGridKey: _gridKey,
@@ -2698,6 +2708,7 @@ class _GuideRow extends StatelessWidget {
     required this.railWidth,
     required this.numberColumnWidth,
     required this.showProvenance,
+    required this.largeRail,
     required this.hideSchedule,
     required this.onTune,
     required this.activityPulse,
@@ -2710,6 +2721,7 @@ class _GuideRow extends StatelessWidget {
   final double railWidth;
   final double numberColumnWidth;
   final bool showProvenance;
+  final bool largeRail;
   final bool hideSchedule;
   final Future<void> Function(String channelId) onTune;
   final Animation<double> activityPulse;
@@ -2818,7 +2830,7 @@ class _GuideRow extends StatelessWidget {
                             color: focusChannelRail
                                 ? roles.focusedText
                                 : roles.secondaryText,
-                            fontSize: (showProvenance ? 28 : 22),
+                            fontSize: (largeRail ? 28 : 22),
                             fontWeight: FontWeight.w500,
                             fontFeatures: const [
                               ui.FontFeature.tabularFigures(),
@@ -2855,7 +2867,7 @@ class _GuideRow extends StatelessWidget {
                             final supportStyle = DefaultTextStyle.of(context)
                                 .style
                                 .copyWith(
-                                  fontSize: showProvenance ? 16 : 14,
+                                  fontSize: largeRail ? 16 : 14,
                                   color:
                                       focusChannelRail &&
                                           DeviceProfile.of(context).isTv

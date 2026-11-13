@@ -77,6 +77,11 @@ void main() {
       const Size(1600, 900),
       const Size(1920, 1280),
       const Size(3024, 1964),
+      // Narrower than 4:3: the picture must not shrink below today's.
+      const Size(800, 900),
+      const Size(900, 1000),
+      const Size(1000, 1200),
+      const Size(1024, 1366),
     };
     for (final window in windows) {
       final canvas = window / LineupCanvas.scaleFor(window);
@@ -107,7 +112,9 @@ void main() {
           );
           expect(
             policy.pictureWidth,
-            lessThanOrEqualTo(canvas.width * .40 + epsilon),
+            lessThanOrEqualTo(
+              math.max(canvas.width * .40, legacyPicture) + epsilon,
+            ),
             reason: reason,
           );
           expect(

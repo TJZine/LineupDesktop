@@ -1281,6 +1281,50 @@ void main() {
     expect(find.text('Watching'), findsOneWidget);
   });
 
+  testWidgets('L40 keeps the large channel number at 115% text', (
+    tester,
+  ) async {
+    tester.view.physicalSize = const Size(1920, 1080);
+    tester.view.devicePixelRatio = 1;
+    addTearDown(tester.view.resetPhysicalSize);
+    addTearDown(tester.view.resetDevicePixelRatio);
+    final lineup = _Lineup(2);
+    addTearDown(lineup.dispose);
+    await lineup.updateSettings(
+      (s) => s.copyWith(guideShowChannelSources: true),
+    );
+    final guide = GuideController(
+      lineup: lineup,
+      loadSchedule: (c) async => _schedule(c),
+    );
+    addTearDown(guide.dispose);
+    await tester.pumpWidget(
+      MaterialApp(
+        builder: (context, child) => MediaQuery(
+          data: MediaQuery.of(
+            context,
+          ).copyWith(textScaler: const TextScaler.linear(1.15)),
+          child: _guideCanvasBuilder(context, child),
+        ),
+        home: GuideView(
+          controller: guide,
+          onClose: (_, _) {},
+          onTune: (_) async {},
+          pictureInPicture: const SizedBox.expand(),
+        ),
+      ),
+    );
+    await tester.pumpAndSettle();
+    // Rows sit at the L40 floor (92.8 cu): the source line hides at 115 %
+    // text, but the channel number keeps its larger pre-L40 size.
+    expect(find.text('Manual lineup'), findsNothing);
+    final numbers = tester
+        .widgetList<Text>(find.text('1'))
+        .where((text) => text.style?.fontSize != null);
+    expect(numbers, isNotEmpty);
+    expect(numbers.first.style!.fontSize, 28);
+  });
+
   testWidgets(
     'shared idle backdrop rejects stale focus artwork and honors Reduce Motion',
     (tester) async {
