@@ -10,6 +10,7 @@ import 'dart:io';
 import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
+import 'package:flutter/scheduler.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:http/http.dart' as http;
 import 'package:http/testing.dart';
@@ -430,6 +431,170 @@ void main() {
         );
         await f.close(tester);
       });
+    }
+
+    testWidgets('hidden desktop session loads and releases without a frame', (
+      tester,
+    ) async {
+      final f = _SessionFixture(android: false);
+      await f.setUp();
+      f.expectSession();
+      final binding = tester.binding;
+      binding.handleAppLifecycleStateChanged(AppLifecycleState.hidden);
+      addTearDown(() {
+        binding.handleAppLifecycleStateChanged(AppLifecycleState.resumed);
+      });
+      expect(SchedulerBinding.instance.framesEnabled, isFalse);
+      final tune = f.coordinator.tune('one');
+      // Drain async work without delivering a frame or advancing the clock.
+      await tester.idle();
+      expect(f.player.kinds, [LoadKind.plexSession]);
+      expect(f.player.loadStartPaused, [true]);
+      expect(await tune, isTrue);
+      expect(f.coordinator.sessionAlignmentHeld, isFalse);
+      expect(f.player.plays, 1);
+      binding.handleAppLifecycleStateChanged(AppLifecycleState.resumed);
+      await f.close(tester);
+    });
+
+    testWidgets('desktop cover wait is bounded with frames enabled', (
+      tester,
+    ) async {
+      final f = _SessionFixture(android: false);
+      await f.setUp();
+      f.expectSession();
+      expect(SchedulerBinding.instance.framesEnabled, isTrue);
+      final tune = f.coordinator.tune('one');
+      await tester.idle();
+      expect(f.coordinator.sessionAlignmentHeld, isTrue);
+      expect(f.player.loads, isEmpty);
+      await tester.binding.delayed(const Duration(milliseconds: 249));
+      expect(f.player.loads, isEmpty);
+      await tester.binding.delayed(const Duration(milliseconds: 1));
+      expect(f.player.kinds, [LoadKind.plexSession]);
+      expect(await tune, isTrue);
+      await f.close(tester);
+    });
+
+    for (final cell in [
+      (initialErrorMs: 600, landingErrorMs: -125, outcome: 'landed'),
+      (initialErrorMs: -600, landingErrorMs: -600, outcome: 'imprecise'),
+      (initialErrorMs: -600, landingErrorMs: 600, outcome: 'imprecise'),
+    ]) {
+      testWidgets(
+        'desktop alignment from ${cell.initialErrorMs} ms to ${cell.landingErrorMs} ms',
+        (tester) async {
+          final f = _SessionFixture(android: false);
+          await f.setUp();
+          f.expectSession();
+          f.player.autoDesktopClock = false;
+          final tune = f.coordinator.tune('one');
+          await f.waitForNativeLoads(tester, 1);
+          const target = Duration(seconds: 21);
+          f.player.observe(
+            target + Duration(milliseconds: cell.initialErrorMs),
+            state: PlayerState.paused,
+            demuxerStartTime: 1789,
+          );
+          await tester.pump();
+          expect(f.player.alignments, [target]);
+          expect(f.player.plays, 0);
+
+          final position = target + Duration(milliseconds: cell.landingErrorMs);
+          f.player.observe(position, state: PlayerState.paused);
+          f.player.landing!.complete((
+            position: position,
+            demuxerStart: const Duration(seconds: 1789),
+          ));
+          await tester.pump();
+          expect(await tune, isTrue);
+          expect(f.coordinator.sessionAlignmentHeld, isFalse);
+          expect(
+            f.coordinator.position,
+            live + Duration(milliseconds: cell.landingErrorMs),
+          );
+          expect(f.player.plays, 1);
+          expect(f.player.loads, hasLength(1));
+          expect(f.player.alignments, [target]);
+          final alignment = f.lineup.diagnostics.entries
+              .singleWhere(
+                (entry) => entry.context.containsKey('alignmentOutcome'),
+              )
+              .context;
+          expect(alignment['alignmentOutcome'], cell.outcome);
+          expect(alignment['landingErrorMs'], cell.landingErrorMs);
+          await f.close(tester);
+        },
+      );
+    }
+
+    for (final displayFirst in [true, false]) {
+      testWidgets(
+        'Windows HDR and session alignment holds (displayFirst=$displayFirst)',
+        (tester) async {
+          final f = _SessionFixture(android: false);
+          await f.setUp(desktopPlatform: TargetPlatform.windows);
+          f.expectSession();
+          f.player.autoDesktopClock = false;
+          f.player.emitFullscreen(true);
+          final tune = f.coordinator.tune('one');
+          await f.waitForNativeLoads(tester, 1);
+          expect(f.coordinator.displayHoldActive, isTrue);
+          expect(f.coordinator.sessionAlignmentHeld, isTrue);
+          f.player.observe(
+            const Duration(seconds: 20),
+            state: PlayerState.paused,
+            demuxerStartTime: 1789,
+            gamma: 'pq',
+          );
+          await tester.pump();
+          const target = Duration(seconds: 21);
+          expect(f.player.alignments, [target]);
+          final hdr = f.player.displayMatchingRequests.last;
+          expect(hdr.session, isTrue);
+          expect(hdr.desired, DisplayMatchingState.hdr);
+
+          void matchDisplay() => f.player.emitDisplayReport(
+            DisplayMatchingReport(
+              revision: hdr.revision,
+              session: DisplayMatchingSessionState.active,
+              observed: DisplayMatchingState.hdr,
+              outcome: DisplayMatchingOutcome.matched,
+              wrote: false,
+              owned: false,
+              reason: null,
+              route: DisplayMatchingRoute.advancedColor,
+              activeColorMode: null,
+            ),
+          );
+          void land() => f.player.landing!.complete((
+            position: target,
+            demuxerStart: const Duration(seconds: 1789),
+          ));
+
+          if (displayFirst) {
+            matchDisplay();
+          } else {
+            land();
+          }
+          await tester.pump();
+          expect(f.coordinator.displayHoldActive, !displayFirst);
+          expect(f.coordinator.sessionAlignmentHeld, displayFirst);
+          expect(f.player.plays, 0);
+          if (displayFirst) {
+            land();
+          } else {
+            matchDisplay();
+          }
+          await tester.pump();
+          expect(await tune, isTrue);
+          expect(f.coordinator.displayHoldActive, isFalse);
+          expect(f.coordinator.sessionAlignmentHeld, isFalse);
+          expect(f.player.plays, 1);
+          expect(f.player.loadStartPaused, [true]);
+          await f.close(tester);
+        },
+      );
     }
 
     for (final release in [
@@ -12984,10 +13149,18 @@ class _SessionFixture {
   final anchor = DateTime(2026, 11, 7, 12);
   late DateTime now = anchor.add(const Duration(minutes: 30));
 
-  Future<void> setUp() async {
+  Future<void> setUp({
+    TargetPlatform desktopPlatform = TargetPlatform.macOS,
+  }) async {
     debugDefaultTargetPlatformOverride = android
         ? TargetPlatform.android
-        : TargetPlatform.macOS;
+        : desktopPlatform;
+    if (desktopPlatform == TargetPlatform.windows) {
+      player.capabilities = const PlayerCapabilities(
+        displayMatching: true,
+        fullscreen: PlayerFullscreenMode.window,
+      );
+    }
     lineup = LineupController(
       store: MemoryAppStore(
         initial: const PersistedState(
@@ -13380,6 +13553,7 @@ class _SessionNative extends FakeNativePlayer
     Duration position, {
     PlayerState state = PlayerState.playing,
     double? demuxerStartTime,
+    String? gamma,
     Duration? adjustment,
     String? failureCode,
     int? httpStatus,
@@ -13396,7 +13570,10 @@ class _SessionNative extends FakeNativePlayer
         ),
         position: position,
         duration: _SessionFixture.partDuration,
-        telemetry: PlayerTelemetry(demuxerStartTime: demuxerStartTime),
+        telemetry: PlayerTelemetry(
+          demuxerStartTime: demuxerStartTime,
+          gamma: gamma,
+        ),
         tracks: const [],
         positionUpdated: true,
         sessionAdjustment: adjustment,

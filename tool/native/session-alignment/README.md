@@ -10,9 +10,18 @@ physical pass.
 
 The seven original target/GOP cells include a segment-zero no-seek control.
 The other cells use a two-second GOP, perform a running seek and exercise
-session → Direct Play → session on the same client. A miss over 0.5 s stops the
-matrix. The JSON includes fixture HTTP and bytes, the clocks and option
-readbacks, and input and runtime hashes. The synthetic server only binds
+session → Direct Play → session on the same client. These cases must stay
+within 0.5 s. A separate 12-second GOP with four-second fragments exercises an
+expected imprecise landing. The keyframe before the 11-second request is in
+segment 0, outside the retained view starting at segment 1. The two fragments
+leading up to the next keyframe carry real inter frames. This case must receive
+a correlated landing over 0.5 s from the target while meeting the same command,
+pause and stop checks. The driver checks through stop for late failures,
+duplicate results and pause changes.
+
+The JSON includes the long-GOP original playlist, ffprobe packet geometry,
+fixture HTTP and bytes, the clocks and option readbacks, and input, source and
+runtime hashes. The synthetic server only binds
 loopback, uses temporary keys and serves generated media. It makes zero Plex
 requests.
 
@@ -42,4 +51,4 @@ python3 -B tool/native/session-alignment/run.py \
 By default the checker generates the original timing grids with FFmpeg and
 independently checks sample packets with ffprobe. To rerun with the previously
 frozen synthetic template bytes, pass their media directory with
-`--frozen-media`. The two-second GOP is generated in either case.
+`--frozen-media`. Both additional GOPs are generated in either case.

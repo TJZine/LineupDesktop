@@ -250,6 +250,9 @@ Its `landed` event requires the command's post-command SEEK, a subsequent
 qualified PLAYBACK_RESTART and finite same-load `positionSeconds` (non-negative)
 and `demuxerStartSeconds` (signed). It includes both values for Dart to assess
 accuracy. A refused seek publishes `failed` without retiring playback.
+If an ordinary seek observation is pending or seek correlation is already
+ambiguous, the desktop worker consumes the load's alignment attempt and
+publishes `failed` without issuing the alignment seek.
 Replacement, stop, overlapping seeks and terminal native errors invalidate the
 pending observation.
 
@@ -426,12 +429,12 @@ treats a commanded target as landing evidence.
 
 
 For a desktop session, Dart waits up to two seconds for the first qualified P
-and D. When `x - (P + D - 10 s)` exceeds 0.5 s, it requests one exact seek to
+and D. When `abs(x - (P + D - 10 s))` exceeds 0.5 s, it requests one exact seek to
 `max(0, x + 10 s - D)` in whole milliseconds and waits up to five seconds for
-landing. A miss exceeding 0.5 s is recorded as `imprecise` with the signed
-landing error in milliseconds. A timeout, refused seek or imprecise landing
-releases the alignment hold and uses observed playback. Session user seeks
-continue to restart the session.
+landing. Dart records an absolute landing error exceeding 0.5 s as `imprecise`
+and reports the signed error in milliseconds. A timeout, refused seek or
+imprecise landing releases the alignment hold and uses observed playback.
+Session user seeks continue to restart the session.
 
 November 11, 2026 approval: desktop reuses the paused session load, mounted native surface, opaque `roles.deepBackground` cover, hidden subtitles and Preparing playback spinner until alignment releases, honoring the viewer's pause intent.
 

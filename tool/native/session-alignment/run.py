@@ -34,6 +34,7 @@ CASES = [
     ("copy-0", "copy", 0, True),
     ("alternate-gop", "alternate", 21, True),
     ("running", "copy", 21, False),
+    ("long-gop", "long-gop", 11, True),
 ]
 
 
@@ -80,6 +81,19 @@ def shift_fragment(fragment, shift, video_scale):
     return bytes(result)
 
 
+def split_mp4(data):
+    init = b""
+    fragments = []
+    for kind, start, end in boxes(data):
+        if kind in (b"ftyp", b"moov"):
+            init += data[start - 8:end]
+        elif kind == b"moof":
+            fragment_start = start - 8
+        elif kind == b"mdat":
+            fragments.append(data[fragment_start:end])
+    return init, fragments
+
+
 class Corpus:
     def __init__(self, mode, ffmpeg, ffprobe, frozen):
         self.duration = 10 if mode == "copy" else 5
@@ -106,21 +120,12 @@ class Corpus:
             "-c:a", "aac", "-b:a", "32k", "-video_track_timescale", str(self.video_scale),
             "-movflags", "frag_keyframe+empty_moov+default_base_moof", "-f", "mp4", "pipe:1",
         ]
-        if frozen and mode != "alternate":
+        if frozen and mode in ("copy", "encode"):
             self.init = (frozen / f"{mode}-init.mp4").read_bytes()
             self.template = (frozen / f"{mode}-template.m4s").read_bytes()
             self.intro = (frozen / "copy-intro.m4s").read_bytes() if mode == "copy" else None
         else:
-            data = tool_output([ffmpeg, *self.command])
-            fragments = []
-            self.init = b""
-            for kind, start, end in boxes(data):
-                if kind in (b"ftyp", b"moov"):
-                    self.init += data[start - 8:end]
-                elif kind == b"moof":
-                    fragment_start = start - 8
-                elif kind == b"mdat":
-                    fragments.append(data[fragment_start:end])
+            self.init, fragments = split_mp4(tool_output([ffmpeg, *self.command]))
             self.intro = fragments[0] if mode == "copy" else None
             self.template = fragments[1]
         self.probe = ffprobe
@@ -142,13 +147,16 @@ class Corpus:
             self.template, source + self.gop * step + 10 - self.first, self.video_scale
         ) for step in range(count))
 
-    def manifest(self, offset):
+    def fragments(self):
+        return {index: self.fragment(index) for index in range(1300 // self.duration)}
+
+    def manifest(self, offset, segment_count):
         tags = [
             "#EXTM3U", "#EXT-X-VERSION:7", "#EXT-X-PLAYLIST-TYPE:VOD",
             f"#EXT-X-TARGETDURATION:{self.duration}", "#EXT-X-MEDIA-SEQUENCE:0",
             f"#EXT-X-START:TIME-OFFSET={offset}", '#EXT-X-MAP:URI="init.mp4"',
         ]
-        for index in range(1300 // self.duration):
+        for index in range(segment_count):
             tags.extend([f"#EXTINF:{self.duration},synthetic", f"{index}.m4s"])
         return ("\n".join([*tags, "#EXT-X-ENDLIST"]) + "\n").encode()
 
@@ -159,9 +167,78 @@ class Corpus:
             "-show_entries", "packet=pts_time,dts_time,flags", "-of", "json", "pipe:0",
         ], data=self.init + fragment)
         packets = json.loads(data)["packets"]
-        if not packets or "K" not in packets[0]["flags"]:
-            raise ValueError("Synthetic fragment did not start at a keyframe")
-        return {"first": packets[0], "frames": len(packets)}
+        if not packets:
+            raise ValueError("Empty synthetic video fragment")
+        return {
+            "first": packets[0], "last": packets[-1], "frames": len(packets),
+            "keyframes": [p for p in packets if "K" in p["flags"]],
+        }
+
+    def identity(self):
+        return {
+            "initSha256": sha(self.init), "templateSha256": sha(self.template),
+            "introSha256": sha(self.intro) if self.intro else None,
+            "generatorArgs": self.command,
+        }
+
+
+class LongGopCorpus(Corpus):
+    # Four-second fMP4 fragments can start mid-GOP. The retained fragment
+    # starts at 4 s, after the keyframe preceding the 11 s request.
+    def __init__(self, ffmpeg, ffprobe):
+        self.duration = 4
+        self.probe = ffprobe
+        self.command = [
+            "-v", "error", "-f", "lavfi", "-i", "testsrc2=size=96x54:rate=24",
+            "-f", "lavfi", "-i", "anullsrc=r=48000:cl=stereo", "-t", "40",
+            "-c:v", "libx264", "-preset", "ultrafast", "-pix_fmt", "yuv420p",
+            "-g", "288", "-keyint_min", "1", "-sc_threshold", "0", "-bf", "0",
+            "-force_key_frames", "1.5,13.5,25.5,37.5",
+            "-c:a", "aac", "-b:a", "32k", "-video_track_timescale", "12288",
+            "-movflags", "empty_moov+default_base_moof", "-frag_duration", "4000000",
+            "-f", "mp4", "pipe:1",
+        ]
+        self.init, segments = split_mp4(tool_output([ffmpeg, *self.command]))
+        self.segments = {
+            index: shift_fragment(segment, Fraction(10), 12288)
+            for index, segment in enumerate(segments)
+        }
+        if len(self.segments) != 10:
+            raise ValueError("Unexpected long-GOP fragment count")
+
+    def fragments(self):
+        return self.segments
+
+    def identity(self):
+        return {
+            "initSha256": sha(self.init), "generatorArgs": self.command,
+            "segmentSha256": [sha(segment) for segment in self.segments.values()],
+        }
+
+    def geometry(self, fragments, offset, containing, retained):
+        proofs = [self.packet_proof(fragment) for fragment in fragments.values()]
+        keyframes = [
+            (index, Fraction(packet["pts_time"]) - 10)
+            for index, proof in enumerate(proofs)
+            for packet in proof["keyframes"]
+        ]
+        before = max((pair for pair in keyframes if pair[1] <= offset), key=lambda pair: pair[1])
+        after = min((pair for pair in keyframes if pair[1] > offset), key=lambda pair: pair[1])
+        if not (before[0] < retained <= containing < after[0] and
+                after[1] - before[1] > self.duration and
+                all(pts % self.duration != 0 for _, pts in keyframes[1:])):
+            raise ValueError("Long-GOP geometry did not exercise the removed keyframe")
+        return {
+            "targetDuration": self.duration,
+            "segments": [
+                {"index": index, "playlistStart": index * self.duration,
+                 "playlistDuration": self.duration, **proof}
+                for index, proof in enumerate(proofs)
+            ],
+            "keyframeBeforeTarget": {"segment": before[0], "sourceSeconds": float(before[1])},
+            "keyframeAfterTarget": {"segment": after[0], "sourceSeconds": float(after[1])},
+            "gopAcrossTargetSeconds": float(after[1] - before[1]),
+        }
 
 
 class BoundedHandler(REFERENCE.Handler):
@@ -177,12 +254,15 @@ class BoundedHandler(REFERENCE.Handler):
 def run_case(args, root, context, name, corpus, offset, paused, isolation=False):
     containing = int(offset // corpus.duration)
     retained = max(0, containing - 1)
-    payload = corpus.manifest(offset)
-    manifest = root / "variant.m3u8"
-    manifest.write_bytes(payload)
     # Provide the complete source if the demuxer reads ahead. Keep the omitted
     # prefix available too so accidental reads are observable and fail.
-    fragments = {index: corpus.fragment(index) for index in range(1300 // corpus.duration)}
+    fragments = corpus.fragments()
+    payload = corpus.manifest(offset, len(fragments))
+    manifest = root / "variant.m3u8"
+    manifest.write_bytes(payload)
+    geometry = (corpus.geometry(fragments, offset, containing, retained)
+                if isinstance(corpus, LongGopCorpus) else None)
+    expected_outcomes = ("imprecise",) if geometry is not None else ("landed", "noneNeeded")
     server = REFERENCE.Server(("127.0.0.1", 0), BoundedHandler)
     server.context = context
     server.authenticated = False
@@ -232,7 +312,10 @@ def run_case(args, root, context, name, corpus, offset, paused, isolation=False)
     counts = [row for row in native if "outcome" in row]
     passed = (
         result.returncode == 0 and len(counts) == (2 if isolation else 1)
-        and all(row["pass"] for row in counts)
+        and all(row["valid"] and row["outcome"] in expected_outcomes
+                and (abs(row["errorSeconds"]) > 0.5) == (geometry is not None)
+                for row in counts)
+        and native[-1].get("validThroughStop") is True
         and native[0].get("mpvVersion") and native[0].get("ffmpegVersion")
         and native[-1].get("restored") is True
         and (not isolation or any(row.get("directRestored") is True for row in native))
@@ -240,16 +323,22 @@ def run_case(args, root, context, name, corpus, offset, paused, isolation=False)
         and requested_indices and requested_indices[0] == retained
         and min(requested_indices) == retained
         and all(path in server.files and not header and not query for path, header, query in requests)
+        and len(responses) == len(requests)
+        and all(row["method"] == "GET" and row["status"] in (200, 206) and row["finished"]
+                for row in responses)
         and 0 < bytes_written <= 32 * 1024 * 1024
     )
     return {
         "case": name, "containing": containing, "retained": retained, "offset": offset,
         "mode": "paused" if paused else "running", "pass": bool(passed),
+        "expectedOutcomes": expected_outcomes,
         "harnessExit": result.returncode, "native": native,
         "fixtureRequests": len(requests), "fixtureBytes": bytes_written,
         "acceptedConnections": connection_count, "requests": responses,
         "serverErrors": server.errors, "serverFailed": server_failed or server.failed,
         "manifestSha256": sha(payload), "initSha256": sha(corpus.init),
+        **({"longGopGeometry": geometry, "originalManifest": payload.decode("ascii")}
+           if geometry is not None else {}),
         "fragmentSha256": {str(index): sha(fragments[index]) for index in set(requested_indices)},
         "containingPackets": corpus.packet_proof(fragments[containing]),
         "retainedPackets": corpus.packet_proof(fragments[retained]),
@@ -310,6 +399,16 @@ def main():
         "ffprobe": tool_output([args.ffprobe, "-version"]).decode().splitlines()[0],
         "ffmpegSha256": sha(Path(args.ffmpeg).read_bytes()),
         "ffprobeSha256": sha(Path(args.ffprobe).read_bytes()),
+        "sourceFilesSha256": {
+            path: sha((REPO / path).read_bytes())
+            for path in (
+                "tool/native/session-alignment/run.py", "tool/native/session-alignment/fixture.h",
+                "native/player_core/player_core.cpp", "native/player_core/session_playlist.cpp",
+                "tool/macos/authenticated-reference/authenticated_reference.mm",
+                "windows/runner/authenticated_reference_test.cpp",
+                "lib/playback/plex_session_clock.dart",
+            )
+        },
         "frozenOriginalMedia": args.frozen_media is not None, "plexRequests": 0, "cells": [],
     }
     args.output.parent.mkdir(parents=True, exist_ok=True)
@@ -319,12 +418,8 @@ def main():
         context = REFERENCE.certificate(root, args.openssl)
         corpora = {mode: Corpus(mode, args.ffmpeg, args.ffprobe, args.frozen_media)
                    for mode in ("copy", "encode", "alternate")}
-        results["corpus"] = {
-            mode: {"initSha256": sha(corpus.init), "templateSha256": sha(corpus.template),
-                   "introSha256": sha(corpus.intro) if corpus.intro else None,
-                   "generatorArgs": corpus.command}
-            for mode, corpus in corpora.items()
-        }
+        corpora["long-gop"] = LongGopCorpus(args.ffmpeg, args.ffprobe)
+        results["corpus"] = {mode: corpus.identity() for mode, corpus in corpora.items()}
         try:
             for name, mode, offset, paused in CASES:
                 row = run_case(args, root, context, name, corpora[mode], offset, paused)

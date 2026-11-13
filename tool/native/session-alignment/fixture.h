@@ -33,33 +33,53 @@ class AlignmentFixture {
     const auto type = FindString(&event, "type");
     if (!type) return;
     if (*type == "stopResult") {
-      stopped_ = AsInt(Find(event, "stopId")) == load_ &&
-                 FindBool(&event, "success") && *FindBool(&event, "success");
+      const auto success = FindBool(&event, "success");
+      if (!stop_sent_ || AsInt(Find(event, "stopId")) != load_ ||
+          stopped_ || !success || !*success) {
+        failed_ = true;
+      } else {
+        stopped_ = true;
+      }
       return;
     }
-    if (AsInt(Find(event, "loadId")) != load_) return;
+    const auto id = AsInt(Find(event, "loadId"));
     if (*type == "state") {
       const auto state = FindString(&event, "state");
-      ready_ |= state && *state == "playing";
-      failed_ |= state && *state == "error";
-    } else if (*type == "property") {
-      const auto name = FindString(&event, "name");
-      const auto value = AsNumber(Find(event, "value"));
-      if (!ready_ || !name || !value || !std::isfinite(*value)) return;
-      if (*name == "demuxer-start-time") start_ = value;
-      if (*name == "time-pos" && *value >= 0) {
-        if (start_ && !initial_) initial_ = Sample{*value, *start_};
+      if (state && *state == "error") failed_ = true;
+      if (id != load_ || !state) return;
+      if (*state == "playing") {
+        ready_ = true;
+        CheckPause(FindBool(&event, "paused"));
+      } else if (*state == "stopped" && stop_sent_ && !file_stopped_) {
+        file_stopped_ = true;
+      } else if (*state == "stopped" || *state == "ended") {
+        failed_ = true;
       }
-    } else if (*type == "sessionSeekResult" && AsInt(Find(event, "seekId")) == load_) {
+    } else if (*type == "sessionSeekResult") {
       const auto outcome = FindString(&event, "outcome");
       const auto position = AsNumber(Find(event, "positionSeconds"));
       const auto start = AsNumber(Find(event, "demuxerStartSeconds"));
-      if (landed_ || !seek_sent_ || !outcome || *outcome != "landed" ||
-          !position || !start || !std::isfinite(*position) || !std::isfinite(*start)) {
+      if (id != load_ || AsInt(Find(event, "seekId")) != load_ ||
+          landed_ || !seek_sent_ || file_stopped_ || stopped_ ||
+          !outcome || *outcome != "landed" ||
+          !position || !start || !std::isfinite(*position) || *position < 0 ||
+          *position > 10000000 || !std::isfinite(*start) || std::abs(*start) > 1000000) {
         failed_ = true;
       } else {
         landed_ = Sample{*position, *start};
         landing_ms_ = ElapsedMs(seek_at_);
+      }
+    } else if (*type == "property" && id == load_ && ready_) {
+      const auto name = FindString(&event, "name");
+      if (!name) return;
+      if (*name == "pause") {
+        CheckPause(FindBool(&event, "value"));
+      }
+      const auto value = AsNumber(Find(event, "value"));
+      if (!value || !std::isfinite(*value)) return;
+      if (*name == "demuxer-start-time" && std::abs(*value) <= 1000000) start_ = value;
+      if (*name == "time-pos" && *value >= 0 && *value <= 10000000) {
+        if (start_ && !initial_) initial_ = Sample{*value, *start_};
       }
     }
   }
@@ -90,36 +110,68 @@ class AlignmentFixture {
       // Replace the still-loaded session directly. This exercises mpv's
       // per-file option backup across replacement on the same client.
       Reset();
+      expected_paused_ = true;
       isolation = call("load", {{"uri", argv[8]}, {"loadId", load_}, {"startPaused", true}}) &&
-          Wait(pump, [this] { return ready_; }, 2000) && DemuxerOffset(client) == baseline;
+          Wait(pump, [this] { return ready_; }, 2000) && DemuxerOffset(client) == baseline &&
+          ReadPause(client) == expected_paused_;
       std::cout << "{\"directRestored\":" << (isolation ? "true" : "false") << "}\n";
       Reset();
       isolation = isolation && RunSession(client, call, pump, argv[3], manifest,
                                           offset, target, paused);
     }
     const auto stop_at = Clock::now();
+    stop_sent_ = true;
     const bool retired = call("stop", {{"stopId", load_}}) &&
-        Wait(pump, [&] { return stopped_ && DemuxerOffset(client) == baseline; }, 2000, true);
+        Wait(pump, [&] {
+          return stopped_ && file_stopped_ && DemuxerOffset(client) == baseline;
+        }, 2000, true);
+    // Drain a final adapter turn and confirm the real pause property after stop.
+    pump();
+    const auto paused_after_stop = ReadPause(client);
+    const bool valid_through_stop = !failed_ && !pause_changed_ &&
+                                    paused_after_stop == expected_paused_;
     const auto restored = DemuxerOffset(client);
     std::cout << "{\"restoredOffset\":" << restored.value_or(-1)
               << ",\"baselineOffset\":" << baseline.value_or(-1)
               << ",\"stopResult\":" << (stopped_ ? "true" : "false")
               << ",\"stopMs\":" << ElapsedMs(stop_at)
+              << ",\"fileStopped\":" << (file_stopped_ ? "true" : "false")
+              << ",\"lateOrInvalidEvent\":" << (failed_ ? "true" : "false")
+              << ",\"pauseChanged\":" << (pause_changed_ ? "true" : "false")
+              << ",\"pausedAfterStop\":" << (paused_after_stop ? (*paused_after_stop ? "true" : "false") : "null")
+              << ",\"validThroughStop\":" << (valid_through_stop ? "true" : "false")
               << ",\"restored\":" << (retired ? "true" : "false") << "}\n";
-    return session && isolation && retired ? 0 : 1;
+    return session && isolation && retired && valid_through_stop ? 0 : 1;
   }
 
  private:
+  static int64_t Microseconds(double seconds) {
+    return std::llround(seconds * 1000000);
+  }
+
   struct Sample {
     double position;
     double start;
-    double mapped() const { return position + start - 10; }
+    int64_t mapped_microseconds() const {
+      return Microseconds(position) + Microseconds(start) - 10000000;
+    }
   };
+
+  void CheckPause(const bool* paused) {
+    if (!paused || *paused != expected_paused_) pause_changed_ = true;
+  }
+
+  static std::optional<bool> ReadPause(mpv_handle* client) {
+    int flag = 0;
+    if (mpv_get_property(client, "pause", MPV_FORMAT_FLAG, &flag) < 0) return std::nullopt;
+    return flag != 0;
+  }
 
   bool RunSession(mpv_handle* client, const Call& call, const Pump& pump,
                   const char* variant, const std::string& manifest,
                   int64_t offset, double target_duration, bool paused) {
     using player::ValueMap;
+    expected_paused_ = paused;
     const auto opened_at = Clock::now();
     const double requested = static_cast<double>(offset) / 1000000.0;
     const bool clock_ready = call("load", {
@@ -129,16 +181,13 @@ class AlignmentFixture {
         Wait(pump, [this] { return ready_; }, 15000) &&
         Wait(pump, [this] { return initial_.has_value(); }, 2000);
     const auto effective = DemuxerOffset(client);
-    int native_pause = -1;
-    const bool pause_matches =
-        mpv_get_property(client, "pause", MPV_FORMAT_FLAG, &native_pause) >= 0 &&
-        native_pause == (paused ? 1 : 0);
+    const auto native_pause = ReadPause(client);
     const double clock_ms = ElapsedMs(opened_at);
     bool arrived = false;
     if (clock_ready) {
-      if (requested - initial_->mapped() > 0.5) {
-        const double target = std::max(0.0, requested + 10 - initial_->start);
-        target_ms_ = static_cast<int64_t>(target * 1000);
+      if (std::abs(offset - initial_->mapped_microseconds()) > 500000) {
+        const int64_t target = offset + 10000000 - Microseconds(initial_->start);
+        target_ms_ = std::max(int64_t{0}, target) / 1000;
         seek_at_ = Clock::now();
         seek_sent_ = true;
         arrived = call("alignSession", {{"loadId", load_}, {"seekId", load_},
@@ -149,9 +198,14 @@ class AlignmentFixture {
         arrived = true;
       }
     }
-    const auto error = landed_ ? landed_->mapped() - requested : 0;
-    const bool passed = arrived && effective == target_duration && pause_matches &&
-                        std::abs(error) <= 0.5;
+    const auto error = landed_ ? landed_->mapped_microseconds() - offset : 0;
+    const char* outcome = "noLanding";
+    if (arrived) {
+      outcome = !seek_sent_ ? "noneNeeded" :
+                std::abs(error) > 500000 ? "imprecise" : "landed";
+    }
+    const bool valid = arrived && effective == target_duration && native_pause == paused &&
+                       ReadPause(client) == paused && !failed_ && !pause_changed_;
     std::cout << std::setprecision(12)
               << "{\"loadId\":" << load_ << ",\"clockReady\":" << (clock_ready ? "true" : "false")
               << ",\"requested\":" << requested
@@ -162,17 +216,17 @@ class AlignmentFixture {
               << ",\"landedP\":" << (landed_ ? landed_->position : -1)
               << ",\"landedD\":" << (landed_ ? landed_->start : -1)
               << ",\"landingMs\":" << landing_ms_
-              << ",\"errorSeconds\":" << error
+              << ",\"errorSeconds\":" << static_cast<double>(error) / 1000000
               << ",\"effectiveOffset\":" << effective.value_or(-1)
-              << ",\"paused\":" << (native_pause == 1 ? "true" : "false")
-              << ",\"outcome\":\"" << (arrived ? seek_sent_ ? "landed" : "noneNeeded" : "noLanding")
-              << "\",\"pass\":" << (passed ? "true" : "false") << "}\n";
-    return passed;
+              << ",\"paused\":" << (native_pause ? (*native_pause ? "true" : "false") : "null")
+              << ",\"outcome\":\"" << outcome
+              << "\",\"valid\":" << (valid ? "true" : "false") << "}\n";
+    return valid;
   }
 
   void Reset() {
     ++load_;
-    ready_ = failed_ = stopped_ = seek_sent_ = false;
+    ready_ = stopped_ = file_stopped_ = seek_sent_ = false;
     start_.reset();
     initial_.reset();
     landed_.reset();
@@ -212,6 +266,10 @@ class AlignmentFixture {
   bool ready_ = false;
   bool failed_ = false;
   bool stopped_ = false;
+  bool stop_sent_ = false;
+  bool file_stopped_ = false;
+  bool expected_paused_ = false;
+  bool pause_changed_ = false;
   bool seek_sent_ = false;
   int64_t target_ms_ = -1;
   double landing_ms_ = -1;

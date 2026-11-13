@@ -50,7 +50,8 @@ final class PlexSessionClock {
         );
         if (_canDecide(event, active)) {
           final error =
-              requested - _desktopPosition(event.position, _demuxerStart!);
+              (requested - _desktopPosition(event.position, _demuxerStart!))
+                  .abs();
           _decide(
             error > _tolerance ? requested + _origin - _demuxerStart! : null,
           );

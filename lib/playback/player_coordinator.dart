@@ -3,6 +3,7 @@ import 'dart:io';
 
 import 'package:flutter/foundation.dart';
 import 'package:flutter/services.dart';
+import 'package:flutter/scheduler.dart';
 import 'package:flutter/widgets.dart'
     show AppLifecycleState, WidgetsBinding, WidgetsBindingObserver;
 
@@ -1621,10 +1622,11 @@ class PlayerCoordinator extends ChangeNotifier with WidgetsBindingObserver {
       );
       notifyListeners();
       // Submit the cover before the backend can render the initial frame.
-      await Future.any([
-        WidgetsBinding.instance.endOfFrame,
-        load.cancellation.cancelled,
-      ]);
+      final scheduler = SchedulerBinding.instance;
+      if (scheduler.framesEnabled) {
+        await Future.any([scheduler.endOfFrame, load.cancellation.cancelled])
+            .timeout(const Duration(milliseconds: 250), onTimeout: () {});
+      }
     }
     if (!_ownsLoad(load)) {
       if (part is SessionPartLoad) unawaited(part.handle.stop());
