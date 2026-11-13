@@ -57,7 +57,7 @@ Use the library picker to show one library's channels, or **All libraries**. The
 
 ## See more of the schedule
 
-The Guide shows two hours by default. Switch to three or four hours from the menu next to **Now**. The layout targets five channels at a time, with fewer when window size or larger text leaves less room. You can browse earlier in the schedule with the time controls. The Guide has no separate past-window or row-density setting.
+The Guide shows two hours by default. Switch to three or four hours from the menu next to **Now**. The Guide shows five channels at a time, or six on taller screens such as MacBooks and 16:10 monitors. Small windows and larger text keep the rows comfortable by making the picture smaller first, and show fewer channels only when there isn't room for five. You can browse earlier in the schedule with the time controls. The Guide has no separate past-window or row-density setting.
 
 ## Program details
 

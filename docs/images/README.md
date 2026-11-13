@@ -15,7 +15,7 @@ This file is excluded from the site build.
 | `home-osd.webp` | macOS 27 | Same build | Player with the compact on-screen controls; subtitles off |
 | `home-now-playing.webp` | macOS 27 | Same build | Player with Now Playing expanded |
 | `home-air-check.webp` | macOS 27 | Same build | Channel Studio, unsaved custom draft "Animation Matinee" (discarded after capture) with the schedule preview |
-| `home-tv-guide.webp` | Android TV emulator (`lineup_tv_media`, API 31, 1920×1080) | Debug build of `f7daf2c790d66a1020ebec4767efe2f93d91fa05` (Flutter 3.47.7) | Full Guide, channels 1–5, focus on an airing program, preview artwork in the picture-in-picture (no playback: the emulator cannot decode this library's HEVC/Dolby Vision video or EAC3/AC3 audio). The 16:9 capture is extended at the top with the app background `#090806` to 16:10 |
+| `home-tv-guide.webp` | Android TV emulator (`lineup_tv_media`, API 31, 1920×1080, font scale 1.3) | Debug build of `feat/guide-l40` at `48ca282f` (Flutter 3.47.7), retaken 2026-11-13 | Full Guide with the L40 information band, channels 1–5, focus on an airing program, preview artwork in the picture-in-picture (no playback: the emulator cannot decode this library's HEVC/Dolby Vision video or EAC3/AC3 audio). The 16:9 capture is extended at the top with the app background `#090806` to 16:10 |
 
 The macOS captures were cropped from 3456×2168 to 3456×2160 (bottom 8 px) and
 scaled to 1600×1000.
