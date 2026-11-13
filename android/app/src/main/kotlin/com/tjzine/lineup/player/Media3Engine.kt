@@ -12,6 +12,7 @@ import androidx.media3.common.util.UnstableApi
 import androidx.media3.datasource.DataSource
 import androidx.media3.datasource.okhttp.OkHttpDataSource
 import androidx.media3.exoplayer.ExoPlayer
+import androidx.media3.exoplayer.ExoTimeoutException
 import androidx.media3.exoplayer.SeekParameters
 import androidx.media3.exoplayer.analytics.AnalyticsListener
 import androidx.media3.exoplayer.hls.HlsMediaSource
@@ -73,12 +74,30 @@ internal class Media3Engine(
     private fun observedPaused() = !player.playWhenReady ||
         player.playbackSuppressionReason == Player.PLAYBACK_SUPPRESSION_REASON_TRANSIENT_AUDIO_FOCUS_LOSS
     private val playbackThread = player.playbackLooper.thread
+    private var releasingPlayer = false
+    private var releaseTimedOut = false
     private var releaseReturned = false
+
+    init {
+        if (debug) player.addListener(
+            object : Player.Listener {
+                override fun onPlayerError(error: PlaybackException) {
+                    val timeout = error.cause as? ExoTimeoutException
+                    if (
+                        releasingPlayer &&
+                            error.errorCode == PlaybackException.ERROR_CODE_TIMEOUT &&
+                            timeout?.timeoutOperation ==
+                                ExoTimeoutException.TIMEOUT_OPERATION_RELEASE
+                    ) {
+                        releaseTimedOut = true
+                    }
+                }
+            }
+        )
+    }
 
     private var initialJoinSource: InitialJoinMediaSource? = null
     private val tracks = Media3Tracks()
-    private val debug =
-        context.applicationInfo.flags and android.content.pm.ApplicationInfo.FLAG_DEBUGGABLE != 0
     private val diagnosticId = System.identityHashCode(this)
     private var diagnosticCount = 0
     private var lastProgressDiagnosticMs = Long.MIN_VALUE
@@ -427,11 +446,14 @@ internal class Media3Engine(
         val closingNetwork = network
         closingNetwork?.retire()
         if (firstAttempt) {
+            releasingPlayer = debug
             try {
                 player.release()
                 releaseReturned = true
             } catch (_: Exception) {
                 // Retain cleanup ownership. A failed release call is not proof of teardown.
+            } finally {
+                releasingPlayer = false
             }
         }
         try {
@@ -447,6 +469,7 @@ internal class Media3Engine(
         // release can finish just afterward. Wait for the actual playback thread
         // even after that deadline, and acknowledge only once it has terminated.
         // A later retry observes the same thread; it never calls release() again.
+        val timedOutThisAttempt = firstAttempt && releaseTimedOut
         val returned = releaseReturned
         cleanupExecutor.execute {
             val networkSuccess = closingNetwork?.cancelAndAwait() ?: true
