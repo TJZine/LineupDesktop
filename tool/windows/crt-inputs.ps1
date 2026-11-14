@@ -54,9 +54,29 @@ function Get-LineupCrtSignatureDetail {
     "signer: $signer",
     "issuer: $issuer",
     "subject: $(Read-Field $certificate 'Subject')",
+    "issuer name: $(Read-Field $certificate 'Issuer')",
     "thumbprint: $(Read-Field $certificate 'Thumbprint')",
     "not after: $(Read-Field $certificate 'NotAfter')"
   ) -join '; '
+}
+
+# Return the single organizationName (O, OID 2.5.4.10) of a certificate name.
+# Attribute types come from the name's DER structure, never from its display
+# text, so a CN or OU value containing "O=..." cannot pose as the organisation.
+# A name with no O, more than one O, or any multi-valued RDN (whose elements
+# cannot be inspected individually here) yields $null and fails identity.
+function Get-LineupCertificateOrganization {
+  param([Security.Cryptography.X509Certificates.X500DistinguishedName] $Name)
+  if ($null -eq $Name) { return $null }
+  $organizations = [Collections.Generic.List[string]]::new()
+  foreach ($rdn in $Name.EnumerateRelativeDistinguishedNames($true)) {
+    if ($rdn.HasMultipleElements) { return $null }
+    if ($rdn.GetSingleElementType().Value -ceq '2.5.4.10') {
+      $organizations.Add($rdn.GetSingleElementValue())
+    }
+  }
+  if ($organizations.Count -ne 1) { return $null }
+  $organizations[0]
 }
 
 function Assert-LineupCrtIdentity {
@@ -67,10 +87,18 @@ function Assert-LineupCrtIdentity {
     [Parameter(Mandatory)] [string] $DirectoryVersion,
     [string] $Path = '<unspecified>'
   )
-  # Windows trust validation must succeed, including digest/chain validation.
-  # A Microsoft-looking filename or version resource is not signature proof.
-  if ($Signature.Status.ToString() -cne 'Valid' -or -not $Signature.SignerCertificate -or
-    $Signature.SignerCertificate.GetNameInfo([Security.Cryptography.X509Certificates.X509NameType]::SimpleName, $false) -cne 'Microsoft Corporation') {
+  # Trust comes from Windows Authenticode validation: Status must be exactly
+  # Valid, which covers digest, chain and timestamp checks. Identity comes from
+  # the signer certificate's subject and issuer organisation, not its common
+  # name: Microsoft signs VC redist DLLs under more than one certificate name
+  # (for example "Microsoft Corporation" and "Microsoft Windows Software
+  # Compatibility Publisher"), each a Microsoft Corporation certificate issued
+  # by a Microsoft Corporation CA. A Microsoft-looking filename or version
+  # resource is not signature proof.
+  $certificate = $Signature.SignerCertificate
+  if ($Signature.Status.ToString() -cne 'Valid' -or $null -eq $certificate -or
+    (Get-LineupCertificateOrganization $certificate.SubjectName) -cne 'Microsoft Corporation' -or
+    (Get-LineupCertificateOrganization $certificate.IssuerName) -cne 'Microsoft Corporation') {
     throw "CRT requires a valid Microsoft Corporation Authenticode signature ($(Get-LineupCrtSignatureDetail -Signature $Signature -Path $Path))."
   }
   if ($Version.Major -ne 14 -or $Version.Minor -ne 44 -or
@@ -117,6 +145,8 @@ function Copy-LineupVerifiedCrt {
     $copiedSignature = Microsoft.PowerShell.Security\Get-AuthenticodeSignature -LiteralPath $target -ErrorAction Stop
     Assert-LineupCrtIdentity -Signature $copiedSignature -Version $version `
       -Toolset $Selection.Toolset -DirectoryVersion $Selection.Version -Path $target
-    "$name=$version sha256=$hash signer=Microsoft Corporation"
+    $signer = $signature.SignerCertificate.GetNameInfo(
+      [Security.Cryptography.X509Certificates.X509NameType]::SimpleName, $false)
+    "$name=$version sha256=$hash organization=Microsoft Corporation signer=$signer"
   }
 }

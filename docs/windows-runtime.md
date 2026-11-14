@@ -207,10 +207,18 @@ does not choose the highest directory from another installation. A different
 compiler/runtime generation requires an explicit support-policy update. Microsoft
 requires a [redistributable at least as new as the build tools](https://learn.microsoft.com/en-us/cpp/windows/latest-supported-vc-redist).
 Each of the three app-local CRT DLLs must have a valid Microsoft Corporation
-[Authenticode signature](https://learn.microsoft.com/en-us/powershell/module/microsoft.powershell.security/get-authenticodesignature).
-Missing, untrusted, unverifiable or wrong-publisher signatures stop packaging.
+[Authenticode signature](https://learn.microsoft.com/en-us/powershell/module/microsoft.powershell.security/get-authenticodesignature):
+Windows must report status `Valid`, and the signer certificate's subject and
+issuer must each carry exactly one Organization (O) attribute equal to
+`Microsoft Corporation`. Trust comes from Windows validation; identity comes from
+the X.500 organisation attributes, not the certificate's common name, because
+Microsoft signs VC redist DLLs under more than one certificate name (for example
+Microsoft Windows Software Compatibility Publisher). Missing, untrusted,
+unverifiable or wrong-organisation signatures stop packaging, as do names with
+multi-valued relative distinguished names.
 The copied bytes are checked against the source SHA-256 and reverified, and
-`BUILD-INFO.txt` records toolset/redist selection plus each DLL's version/hash.
+`BUILD-INFO.txt` records toolset/redist selection plus each DLL's version, hash,
+signer organisation and signer common name.
 Existing source, engine, libmpv, package-content and license checks remain required.
 
 `pwsh -File ./tool/windows/verify-release-policy.ps1` includes portable CRT
