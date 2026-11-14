@@ -1,5 +1,6 @@
 import '../channels/channel.dart';
 import '../channels/channel_builder.dart';
+import '../channels/content_resolver.dart';
 import '../plex/plex_models.dart';
 
 typedef ChannelSetupAllocationOptions = ({
@@ -123,6 +124,11 @@ class ChannelSetupProjection {
     required List<Channel> existing,
     required ChannelSetupAllocationOptions options,
     DateTime? anchor,
+    ChannelOrder order = ChannelOrder.mixed,
+    List<BuilderStrategy> strategyOrder = BuilderStrategy.values,
+    List<PlexMediaItem> items = const [],
+    List<PlexPlaylist> playlists = const [],
+    bool reorderExisting = false,
   }) => materializeChannelPlan(
     proposals: proposals,
     existing: existing,
@@ -135,7 +141,13 @@ class ChannelSetupProjection {
     includeSpecials: options.includeSpecials,
     minimumItems: options.minimumItems,
     maximumChannels: options.maximumChannels,
-    anchor: anchor ?? DateTime.now().toUtc(),
+    anchor: anchor,
+    order: order,
+    strategyOrder: strategyOrder,
+    reorderExisting: reorderExisting,
+    resolve: anchor == null
+        ? null
+        : (source) => resolveContent(source, items, playlists),
   );
 }
 

@@ -1058,6 +1058,16 @@ Adaptive, grouped accessibility and physical Windows validation remain pending.
 Independent review is not specifically recommended.
 
 
+### Channel identity and Choose channels / Review channels
+
+UX assessment decision, 2026-11-13/14 (Q1b, Q1c, Q11, N12, N13/D10, D11,
+change 13). Channel identity uses the number, an outlined media-kind glyph
+and name, with a quiet library tag when names collide across libraries. The
+existing rail and row sizes apply. Choose channels adds the saved Channel order
+choice under Lineup rules. Empty Playlists is off and disabled. The setup
+header uses Libraries / Channels / Review and the Review roster reports its
+channel count.
+
 ## September 9 — surface19 delegated correction brief
 
 User: “we dont have a mock, id just like you to consider its purpose and create

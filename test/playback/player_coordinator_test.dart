@@ -3672,7 +3672,8 @@ void main() {
     addTearDown(guide.dispose);
     addTearDown(lineup.dispose);
     coordinator.appendChannelDigit('9');
-    expect(coordinator.channelNumberLabel, '9 · Channel 1');
+    expect(coordinator.enteredChannelNumber, '9');
+    expect(coordinator.enteredChannel?.name, 'Channel 1');
     await tester.pump(const Duration(milliseconds: 1999));
     expect(lineup.currentChannelId, 'channel-0');
     await tester.pump(const Duration(milliseconds: 1));

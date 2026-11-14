@@ -1223,6 +1223,7 @@ class _PendingChannelSetupController extends _MediaChannelSetupController {
     required ChannelBuildMode mode,
     required List<Channel> expectedBase,
     Set<String> removeChannelIds = const {},
+    ChannelOrder? channelOrder,
   }) async {
     await _apply.future;
     fixtureActor.replaceChannels(

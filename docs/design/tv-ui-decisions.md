@@ -291,6 +291,15 @@ Resulting rail widths at 1920:
 - M1 or M2.
 - Whether the details chevron is wanted.
 
+### Setup source rows and channel identity
+
+UX assessment decision, 2026-11-13/14 (Q1b, N12, N13/D10, D11, change 13).
+Choose channels keeps the existing focus fill with at least 16 px between the
+fill boundary and source text. Review channels keeps its roster and footer
+navigation. The Guide, Mini Guide and Player identity keep their existing
+surface widths and heights. Number and media-kind icon remain visible as
+a long channel name truncates or ticks.
+
 ## 5. Review Channels: getting between the roster and the footer
 
 ### Recommendation R1

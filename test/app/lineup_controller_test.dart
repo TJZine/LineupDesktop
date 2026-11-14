@@ -3,6 +3,7 @@ import '../support/test_doubles.dart';
 
 import 'dart:async';
 import 'dart:convert';
+import 'dart:io';
 import 'dart:typed_data';
 
 import 'package:flutter_test/flutter_test.dart';
@@ -3805,12 +3806,14 @@ void main() {
         expectedBase: List.of(controller.channels),
       );
       store.releaseBlockedSave();
-      await editing;
+      final committedEdit = await editing;
       expect(await queuedBehindEdit, ChannelPlanApplyResult.stale);
       expect(store.saveCalls, saves + 1);
 
       store.blockNext();
-      final deleting = controller.deleteChannels(expectedChannels: [edited]);
+      final deleting = controller.deleteChannels(
+        expectedChannels: [committedEdit],
+      );
       await store.blockedSaveStarted.future;
       final queued = controller.applyReviewedChannelPlan(
         [generated],
@@ -5491,6 +5494,163 @@ void main() {
         ),
       );
       expect(controller.channels, hasLength(3));
+    },
+  );
+
+  test(
+    'startup reads a saved lineup written before channel identity fields',
+    () async {
+      final directory = await Directory.systemTemp.createTemp(
+        'lineup-old-identity',
+      );
+      addTearDown(() => directory.delete(recursive: true));
+      final server = _server('server');
+      const scope = LineupScope(profileKey: 'owner', serverId: 'server');
+      final old = _channel('saved');
+      final state = const PersistedState().withLineup(
+        scope,
+        ScopedLineup(
+          libraryIds: {'movies'},
+          channels: [old],
+          currentChannelId: old.id,
+        ),
+      );
+      final payload = state.toJson();
+      expect(payload.containsKey('channelOrderByProfileServer'), isFalse);
+      expect(old.toJson().containsKey('kind'), isFalse);
+      await File('${directory.path}/state.json')
+          .writeAsString(jsonEncode(payload));
+      final controller = LineupController(
+        store: FileAppStore(directory),
+        credentials: _MemoryCredentials(accountToken: 'test-token'),
+        plex: _FakePlex()
+          ..serversResult = [server]
+          ..connectionResult = server.connections.single
+          ..librariesResult = const [
+            PlexLibrary(
+              id: 'movies',
+              title: 'Films',
+              type: PlexLibraryType.movie,
+            ),
+          ]
+          ..libraryItemsHandler = (_, _, _, _) async => [_playableMovie],
+      );
+      addTearDown(controller.dispose);
+      await controller.initialize();
+      expect(controller.startupRecoveryNotice, isNull);
+      expect(controller.channels.single.id, old.id);
+      expect(controller.channelOrder, ChannelOrder.mixed);
+      expect(controller.channels.single.favorite, isFalse);
+    },
+  );
+
+  test(
+    'favourites and grouped order persist with the lineup and survive update',
+    () async {
+      final store = _MemoryStore();
+      final server = _server('server');
+      const scope = LineupScope(profileKey: 'owner', serverId: 'server');
+      const library = PlexLibrary(
+        id: 'movies',
+        title: 'Films',
+        type: PlexLibraryType.movie,
+      );
+      final controller = LineupController(
+        store: store,
+        credentials: _MemoryCredentials(),
+        plex: _FakePlex(),
+        scenario: LineupScenario(
+          account: const PlexAccount(id: 'owner', name: 'Owner', email: ''),
+          server: server,
+          connection: server.connections.single,
+          libraries: [library],
+          selectedLibraryIds: {library.id},
+          availableMedia: [_playableMovie],
+        ),
+      );
+      addTearDown(controller.dispose);
+
+      final original = _generatedChannel('generated', 1);
+      await controller.applyReviewedChannelPlan(
+        [original],
+        mode: ChannelBuildMode.replace,
+        expectedBase: controller.channels,
+        channelOrder: ChannelOrder.grouped,
+      );
+      store.failNextSave = true;
+      await expectLater(
+        controller.toggleFavorite(original.id),
+        throwsStateError,
+      );
+      expect(controller.channels.single.favorite, isFalse);
+      await controller.toggleFavorite(original.id);
+      final favourite = controller.channels.single;
+      expect(favourite.favorite, isTrue);
+
+      await controller.applyReviewedChannelPlan(
+        [favourite],
+        mode: ChannelBuildMode.merge,
+        expectedBase: controller.channels,
+      );
+      final disk = PersistedState.fromJson(
+        jsonDecode(jsonEncode(store.state.toJson())),
+      );
+      expect(disk.lineupFor(scope).channelOrder, ChannelOrder.grouped);
+      expect(disk.lineupFor(scope).channels.single.favorite, isTrue);
+      expect(disk.lineupFor(scope).channels.single.anchor, original.anchor);
+
+      await controller.deleteChannels(expectedChannels: [favourite]);
+      expect(store.state.lineupFor(scope).channels, isEmpty);
+      expect(store.state.lineupFor(scope).channelOrder, ChannelOrder.grouped);
+    },
+  );
+
+  test(
+    'new Studio save derives kind and fixes the initial phase once',
+    () async {
+      final store = _MemoryStore();
+      final server = _server('server');
+      const scope = LineupScope(profileKey: 'owner', serverId: 'server');
+      const library = PlexLibrary(
+        id: 'movies',
+        title: 'Films',
+        type: PlexLibraryType.movie,
+      );
+      final controller = LineupController(
+        store: store,
+        credentials: _MemoryCredentials(),
+        plex: _FakePlex(),
+        scenario: LineupScenario(
+          account: const PlexAccount(id: 'owner', name: 'Owner', email: ''),
+          server: server,
+          connection: server.connections.single,
+          libraries: [library],
+          availableMedia: [_playableMovie],
+          selectedLibraryIds: {library.id},
+        ),
+      );
+      addTearDown(controller.dispose);
+      final draft = _channel('custom');
+      final created = await controller.saveChannel(draft, expectedBase: null);
+      expect(created.name, draft.name);
+      expect(created.kind, ChannelKind.film);
+      expect(created.libraryTitle, 'Films');
+      expect(created.anchor.isBefore(draft.anchor), isTrue);
+      expect(
+        draft.anchor.difference(created.anchor),
+        lessThan(_playableMovie.duration),
+      );
+
+      final renamed = await controller.saveChannel(
+        draft.copyWith(name: 'My station'),
+        expectedBase: created,
+      );
+      expect(renamed.anchor, created.anchor);
+      expect(renamed.name, 'My station');
+      expect(
+        store.state.lineupFor(scope).channels.single.anchor,
+        created.anchor,
+      );
     },
   );
 

@@ -163,7 +163,7 @@ void main() {
       expect(fixture.store.saveCalls, saves);
       expect(fixture.controller.channels, channels);
       expect(tester.widget<TextField>(search).controller!.text, 'Recently');
-      expect(find.text('Review your first lineup'), findsOneWidget);
+      expect(find.text('Review channels'), findsWidgets);
       debugPrint(
         'R1 real controller navigation saveDelta=${fixture.store.saveCalls - saves} query=retained lineup=unchanged',
       );
@@ -253,7 +253,7 @@ void main() {
     );
     controller.commitGate!.complete();
     await tester.pumpAndSettle();
-    expect(find.text('Shape your lineup'), findsOneWidget);
+    expect(find.text('Choose channels'), findsOneWidget);
   });
 
   testWidgets('NAV-I2 desktop picker ignores non-Back navigation keys', (
@@ -284,7 +284,7 @@ void main() {
       await tester.sendKeyEvent(key);
       await tester.pump();
     }
-    expect(find.text('Shape your lineup'), findsOneWidget);
+    expect(find.text('Choose channels'), findsOneWidget);
     expect(state.handleBack(), isTrue);
     await tester.pump();
     expect(
@@ -696,7 +696,7 @@ void main() {
         )
         .onPressed!();
     await tester.pumpAndSettle();
-    expect(find.text('Shape your lineup'), findsOneWidget);
+    expect(find.text('Choose channels'), findsOneWidget);
     expect(fixture.store.saveCalls, saves + 1);
   });
 
@@ -749,7 +749,7 @@ void main() {
               )
               .onPressed!();
           await tester.pumpAndSettle();
-          expect(find.text('Shape your lineup'), findsOneWidget);
+          expect(find.text('Choose channels'), findsOneWidget);
           expect(fixture.store.saveCalls, saves + 2);
         } else {
           expect(fixture.controller.selectedLibraryIds, {'movies'});
@@ -758,7 +758,7 @@ void main() {
               'server': ['movies'],
             },
           });
-          expect(find.text('Shape your lineup'), findsOneWidget);
+          expect(find.text('Choose channels'), findsOneWidget);
         }
       },
     );
@@ -829,7 +829,7 @@ void main() {
 
     await tester.sendKeyEvent(LogicalKeyboardKey.escape);
     await tester.pumpAndSettle();
-    expect(find.text('Shape your lineup'), findsOneWidget);
+    expect(find.text('Choose channels'), findsOneWidget);
 
     await tester.pumpWidget(const SizedBox.shrink());
     final failedController = _SetupController(failApply: true);
@@ -842,7 +842,7 @@ void main() {
 
     await tester.sendKeyEvent(LogicalKeyboardKey.escape);
     await tester.pumpAndSettle();
-    expect(find.text('Review your first lineup'), findsOneWidget);
+    expect(find.text('Review channels'), findsWidgets);
   });
 
   for (final tv in [false, true]) {
@@ -1552,8 +1552,8 @@ void main() {
           await activate(find.byKey(const ValueKey('scan-selected-libraries')));
           expectEntry();
           await activate(find.byKey(const ValueKey('review-channels')));
-          expect(find.text('Back to configure'), findsOneWidget);
-          await activate(find.widgetWithText(TextButton, 'Back to configure'));
+          expect(find.text('Back to channels'), findsOneWidget);
+          await activate(find.widgetWithText(TextButton, 'Back to channels'));
           expectEntry();
           expect(tester.takeException(), isNull);
         } finally {
@@ -1960,7 +1960,7 @@ void main() {
           ),
           findsNothing,
         );
-        expect(find.text('Shape your lineup'), findsOneWidget);
+        expect(find.text('Choose channels'), findsOneWidget);
         expect(controller.channels.single.id, _missingChannel.id);
       },
     );
@@ -2188,7 +2188,7 @@ void main() {
     );
     await tester.tap(find.byKey(const ValueKey('scan-selected-libraries')));
     await tester.pumpAndSettle();
-    expect(find.text('Shape your lineup'), findsOneWidget);
+    expect(find.text('Choose channels'), findsOneWidget);
     await tester.ensureVisible(find.byKey(const ValueKey('review-channels')));
     await tester.tap(find.byKey(const ValueKey('review-channels')));
     await tester.pumpAndSettle();
@@ -2325,7 +2325,7 @@ void main() {
         await tester.pumpAndSettle();
         expect(c.footerRetries, 1);
         expect(c.committedIds, {'movies'});
-        expect(find.text('Shape your lineup'), findsOneWidget);
+        expect(find.text('Choose channels'), findsOneWidget);
       },
     );
   }
@@ -2365,7 +2365,7 @@ void main() {
       await tester.tap(find.text('Retry scan'));
       await tester.pumpAndSettle();
       expect(c.footerRetries, 1);
-      expect(find.text('Shape your lineup'), findsOneWidget);
+      expect(find.text('Choose channels'), findsOneWidget);
     },
   );
 
@@ -2636,8 +2636,44 @@ void main() {
     },
   );
 
+  testWidgets('setup names the steps and offers both channel orders', (
+    tester,
+  ) async {
+    final controller = _SetupController();
+    addTearDown(controller.dispose);
+    await _pump(tester, controller);
+    expect(find.text('Choose libraries'), findsOneWidget);
+    expect(find.text('1 Libraries'), findsOneWidget);
+    expect(find.text('2 Channels'), findsOneWidget);
+    expect(find.text('3 Review'), findsOneWidget);
+
+    await _advanceToConfigure(tester);
+    await tester.tap(find.byKey(const ValueKey('configure-section-2')));
+    await tester.pumpAndSettle();
+    final order = _setupField<ChannelOrder>('Channel order');
+    await tester.ensureVisible(order);
+    expect(find.text('Mixed, like live TV'), findsOneWidget);
+    await tester.tap(order);
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('Grouped by type').last);
+    await tester.pumpAndSettle();
+    expect(
+      find.descendant(of: order, matching: find.text('Grouped by type')),
+      findsOneWidget,
+    );
+
+    await tester.tap(find.byKey(const ValueKey('review-channels')));
+    await tester.pumpAndSettle();
+    final header = find.byKey(const ValueKey('channel-setup-header'));
+    expect(
+      find.descendant(of: header, matching: find.text('Review channels')),
+      findsOneWidget,
+    );
+    expect(find.text('✓ Channels'), findsOneWidget);
+  });
+
   testWidgets(
-    'empty sources stay selectable and disabled sources are not truncation',
+    'empty playlists stay off and disabled sources are not truncation',
     (tester) async {
       final controller = _SetupController();
       addTearDown(controller.dispose);
@@ -2654,13 +2690,8 @@ void main() {
         ),
         findsOneWidget,
       );
-      expect(tester.widget<CheckboxListTile>(playlists).onChanged, isNotNull);
-      await tester.tap(playlists);
-      await tester.pumpAndSettle();
+      expect(tester.widget<CheckboxListTile>(playlists).onChanged, isNull);
       expect(tester.widget<CheckboxListTile>(playlists).value, isFalse);
-      await tester.tap(playlists);
-      await tester.pumpAndSettle();
-      expect(tester.widget<CheckboxListTile>(playlists).value, isTrue);
       final recent = find.ancestor(
         of: find.text(builderStrategyLabels[BuilderStrategy.recentlyAdded]!),
         matching: find.byType(CheckboxListTile),
@@ -3160,7 +3191,7 @@ void main() {
       ),
       findsOneWidget,
     );
-    expect(find.text('No additional versions'), findsOneWidget);
+    expect(find.text('No additional versions'), findsNothing);
   });
 
   testWidgets('stale apply refreshes review and requires another apply', (
@@ -3280,7 +3311,7 @@ void main() {
           await tester.tap(find.text('Back to review'));
         }
         await tester.pumpAndSettle();
-        expect(find.text('Review your lineup'), findsOneWidget);
+        expect(find.text('Review channels'), findsWidgets);
         expect(find.text('Update and add'), findsOneWidget);
         expect(find.text('The lineup could not be saved.'), findsOneWidget);
         expect(tester.widget<CheckboxListTile>(confirmation).value, isTrue);
@@ -3380,7 +3411,7 @@ void main() {
         tester.widget<LineupTopBar>(find.byType(LineupTopBar)).divider,
         isFalse,
       );
-      for (final label in ['✓ Libraries', '✓ Configure', '✓ Review']) {
+      for (final label in ['✓ Libraries', '✓ Channels', '✓ Review']) {
         expect(find.text(label), findsOneWidget);
       }
       expect(find.textContaining('in your lineup'), findsOneWidget);
@@ -3593,7 +3624,7 @@ Future<void> _pumpRetainedSetup(
 Future<void> _advanceToConfigure(WidgetTester tester) async {
   await tester.tap(find.byKey(const ValueKey('scan-selected-libraries')));
   await tester.pumpAndSettle();
-  expect(find.text('Shape your lineup'), findsOneWidget);
+  expect(find.text('Choose channels'), findsOneWidget);
 }
 
 Future<void> _advanceToReview(WidgetTester tester) async {
@@ -4004,6 +4035,7 @@ class _SetupController extends FixtureController {
     required ChannelBuildMode mode,
     required List<Channel> expectedBase,
     Set<String> removeChannelIds = const {},
+    ChannelOrder? channelOrder,
   }) async {
     applyCalls++;
     if (applyGate != null) await applyGate!.future;

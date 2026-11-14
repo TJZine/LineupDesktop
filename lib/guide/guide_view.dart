@@ -14,6 +14,7 @@ import '../ui/media_badges.dart';
 import '../settings/lineup_settings.dart';
 import '../ui/app_theme.dart';
 import '../ui/app_ui.dart';
+import '../ui/channel_identity.dart';
 import '../ui/lineup_canvas.dart';
 import 'focused_ticker.dart';
 import 'guide_controller.dart';
@@ -2797,6 +2798,14 @@ class _GuideRow extends StatelessWidget {
       }
     }
 
+    final libraryTag = ChannelIdentity.libraryTagFor(
+      channel,
+      controller.lineup.channels,
+    );
+    final identityLabel = ChannelIdentity.label(
+      channel,
+      libraryTag: libraryTag,
+    );
     return Padding(
       padding: EdgeInsets.symmetric(vertical: 2),
       child: Row(
@@ -2804,8 +2813,7 @@ class _GuideRow extends StatelessWidget {
           Semantics(
             container: true,
             button: true,
-            label:
-                'Channel ${channel.number}, ${channel.name}${tunedChannel ? ', now watching' : ''}',
+            label: '$identityLabel${tunedChannel ? ', now watching' : ''}',
             selected: selectedChannel,
             focused: focusedChannel,
             onTap: focusCurrentProgram,
@@ -2834,104 +2842,116 @@ class _GuideRow extends StatelessWidget {
                       ),
                     ),
                   ),
-                  child: Row(
-                    children: [
-                      SizedBox(
-                        width: numberColumnWidth,
-                        child: Text(
-                          '${channel.number}',
-                          textAlign: TextAlign.right,
-                          maxLines: 1,
-                          softWrap: false,
-                          style: TextStyle(
+                  child: LayoutBuilder(
+                    builder: (context, constraints) {
+                      final numberStyle = TextStyle(
+                        color: focusChannelRail
+                            ? roles.focusedText
+                            : roles.secondaryText,
+                        fontSize: largeRail ? 28 : 22,
+                        fontWeight: FontWeight.w500,
+                        fontFeatures: const [ui.FontFeature.tabularFigures()],
+                      );
+                      final nameStyle = DefaultTextStyle.of(context).style
+                          .copyWith(
+                            fontSize: 18,
                             color: focusChannelRail
                                 ? roles.focusedText
-                                : roles.secondaryText,
-                            fontSize: (largeRail ? 28 : 22),
+                                : roles.primaryText,
                             fontWeight: FontWeight.w500,
-                            fontFeatures: const [
-                              ui.FontFeature.tabularFigures(),
-                            ],
-                          ),
-                        ),
-                      ),
-                      SizedBox(
-                        width: 14 * MediaQuery.textScalerOf(context).scale(1),
-                      ),
-                      Expanded(
-                        child: LayoutBuilder(
-                          builder: (context, constraints) {
-                            final nameStyle = DefaultTextStyle.of(context).style
-                                .copyWith(
-                                  fontSize: 18,
-                                  color: focusChannelRail
-                                      ? roles.focusedText
-                                      : roles.primaryText,
-                                  fontWeight: FontWeight.w500,
-                                );
-                            final painter = TextPainter(
-                              text: TextSpan(
-                                text: channel.name,
-                                style: nameStyle,
+                          );
+                      final painter = TextPainter(
+                        text: TextSpan(text: channel.name, style: nameStyle),
+                        textDirection: Directionality.of(context),
+                        textScaler: MediaQuery.textScalerOf(context),
+                      )..layout(maxWidth: constraints.maxWidth);
+                      final lineHeight = painter
+                          .computeLineMetrics()
+                          .first
+                          .height;
+                      final supportStyle = DefaultTextStyle.of(context).style
+                          .copyWith(
+                            fontSize: largeRail ? 16 : 14,
+                            color:
+                                focusChannelRail &&
+                                    DeviceProfile.of(context).isTv
+                                ? roles.focusMutedText
+                                : roles.mutedText,
+                          );
+                      final supportHeight = _textHeight(
+                        supportStyle,
+                        MediaQuery.textScalerOf(context),
+                        Directionality.of(context),
+                      );
+                      final supportLabel = tunedChannel
+                          ? 'Watching'
+                          : _channelProvenance(controller, channel);
+                      final availableLines =
+                          ((constraints.maxHeight -
+                                      ((tunedChannel || showSource)
+                                          ? supportHeight
+                                          : 0)) /
+                                  lineHeight)
+                              .floor()
+                              .clamp(1, 2);
+                      painter.dispose();
+                      final showSupport = tunedChannel || showSource;
+                      return Column(
+                        mainAxisAlignment: MainAxisAlignment.center,
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          ChannelIdentity(
+                            channel: channel,
+                            libraryTag: libraryTag,
+                            nameStyle: nameStyle,
+                            numberStyle: numberStyle,
+                            numberWidth: numberColumnWidth,
+                            numberAlignment: TextAlign.right,
+                            supportStyle: supportStyle,
+                            showSemantics: false,
+                            maxLines: availableLines,
+                            nameBuilder: (style) => Tooltip(
+                              message: channel.name,
+                              excludeFromSemantics: true,
+                              child: Text(
+                                channel.name,
+                                maxLines: availableLines,
+                                overflow: TextOverflow.ellipsis,
+                                style: style,
                               ),
-                              textDirection: Directionality.of(context),
-                              textScaler: MediaQuery.textScalerOf(context),
-                            )..layout(maxWidth: constraints.maxWidth);
-                            final lineHeight = painter
-                                .computeLineMetrics()
-                                .first
-                                .height;
-                            final supportStyle = DefaultTextStyle.of(context)
-                                .style
-                                .copyWith(
-                                  fontSize: largeRail ? 16 : 14,
-                                  color:
-                                      focusChannelRail &&
-                                          DeviceProfile.of(context).isTv
-                                      ? roles.focusMutedText
-                                      : roles.mutedText,
-                                );
-                            final supportHeight = _textHeight(
-                              supportStyle,
-                              MediaQuery.textScalerOf(context),
-                              Directionality.of(context),
-                            );
-                            final supportLabel = tunedChannel
-                                ? 'Watching'
-                                : _channelProvenance(controller, channel);
-                            final availableLines =
-                                ((constraints.maxHeight -
-                                            ((tunedChannel || showSource)
-                                                ? supportHeight
-                                                : 0)) /
-                                        lineHeight)
-                                    .floor()
-                                    .clamp(1, 2);
-                            painter.dispose();
-                            final showSupport = tunedChannel || showSource;
-                            return Column(
-                              mainAxisAlignment: MainAxisAlignment.center,
-                              crossAxisAlignment: CrossAxisAlignment.start,
-                              children: [
-                                Tooltip(
-                                  message: channel.name,
-                                  child: Text(
-                                    channel.name,
-                                    softWrap: true,
-                                    maxLines: availableLines,
-                                    overflow: TextOverflow.ellipsis,
-                                    style: nameStyle,
-                                  ),
-                                ),
-                                if (showSupport)
-                                  tunedChannel
-                                      ? ExcludeSemantics(
-                                          child: Row(
-                                            mainAxisSize: MainAxisSize.max,
-                                            children: [
-                                              Icon(
-                                                Icons.play_arrow_rounded,
-                                                size: 14,
+                            ),
+                          ),
+                          if (showSupport)
+                            Padding(
+                              padding: EdgeInsetsDirectional.only(
+                                start:
+                                    numberColumnWidth +
+                                    14 *
+                                        MediaQuery.textScalerOf(context)
+                                            .scale(1),
+                              ),
+                              child: tunedChannel
+                                  ? ExcludeSemantics(
+                                      child: Row(
+                                        mainAxisSize: MainAxisSize.max,
+                                        children: [
+                                          Icon(
+                                            Icons.play_arrow_rounded,
+                                            size: 14,
+                                            color:
+                                                focusChannelRail &&
+                                                    DeviceProfile.of(context)
+                                                        .isTv
+                                                ? roles.focusSecondaryText
+                                                : roles.secondaryText,
+                                          ),
+                                          SizedBox(width: 4),
+                                          Flexible(
+                                            child: Text(
+                                              supportLabel,
+                                              maxLines: 1,
+                                              overflow: TextOverflow.ellipsis,
+                                              style: supportStyle.copyWith(
                                                 color:
                                                     focusChannelRail &&
                                                         DeviceProfile.of(
@@ -2940,40 +2960,21 @@ class _GuideRow extends StatelessWidget {
                                                     ? roles.focusSecondaryText
                                                     : roles.secondaryText,
                                               ),
-                                              SizedBox(width: 4),
-                                              Flexible(
-                                                child: Text(
-                                                  supportLabel,
-                                                  maxLines: 1,
-                                                  overflow:
-                                                      TextOverflow.ellipsis,
-                                                  style: supportStyle.copyWith(
-                                                    color:
-                                                        focusChannelRail &&
-                                                            DeviceProfile.of(
-                                                              context,
-                                                            ).isTv
-                                                        ? roles
-                                                              .focusSecondaryText
-                                                        : roles.secondaryText,
-                                                  ),
-                                                ),
-                                              ),
-                                            ],
+                                            ),
                                           ),
-                                        )
-                                      : Text(
-                                          supportLabel,
-                                          maxLines: 1,
-                                          overflow: TextOverflow.ellipsis,
-                                          style: supportStyle,
-                                        ),
-                              ],
-                            );
-                          },
-                        ),
-                      ),
-                    ],
+                                        ],
+                                      ),
+                                    )
+                                  : Text(
+                                      supportLabel,
+                                      maxLines: 1,
+                                      overflow: TextOverflow.ellipsis,
+                                      style: supportStyle,
+                                    ),
+                            ),
+                        ],
+                      );
+                    },
                   ),
                 ),
               ),
@@ -4459,7 +4460,7 @@ String _channelProvenance(
   Channel channel,
 ) => switch (channel.source) {
   LibrarySource(:final libraryId, :final libraryType) =>
-    '${_libraryName(controller, libraryId)} • ${libraryType == PlexLibraryType.movie ? 'Movies' : 'Shows'}',
+    '${channel.libraryTitle ?? _libraryName(controller, libraryId)} · ${libraryType == PlexLibraryType.movie ? 'Movies' : 'Shows'}',
   PlaylistSource() => 'Playlist',
   ManualSource() => 'Manual lineup',
   MixedSource() => 'Mixed sources',

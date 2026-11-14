@@ -12,6 +12,7 @@ import 'package:lineup_desktop/app/lineup_controller.dart';
 import 'package:lineup_desktop/app/lineup_app.dart';
 import 'package:lineup_desktop/channels/channel.dart';
 import 'package:lineup_desktop/ui/lineup_controls.dart';
+import 'package:lineup_desktop/ui/channel_identity.dart';
 import 'package:lineup_desktop/ui/app_theme.dart';
 import 'package:lineup_desktop/ui/focus_ink.dart';
 import 'package:lineup_desktop/settings/lineup_settings.dart';
@@ -734,8 +735,26 @@ void main() {
         expect(editor().focusNode.hasFocus, isTrue);
         await tester.enterText(field, 'Third');
         await tester.pumpAndSettle();
-        expect(find.text('20 · Third'), findsOneWidget);
-        expect(find.text('7 · Second'), findsNothing);
+        expect(
+          find.descendant(
+            of: find.descendant(
+              of: dialog,
+              matching: find.byType(ChannelIdentity),
+            ),
+            matching: find.text('Third'),
+          ),
+          findsOneWidget,
+        );
+        expect(
+          find.descendant(
+            of: find.descendant(
+              of: dialog,
+              matching: find.byType(ChannelIdentity),
+            ),
+            matching: find.text('Second'),
+          ),
+          findsNothing,
+        );
         // Observed native shown->hidden restores navigation before any arrow.
         visibility.value = true;
         await tester.pump();

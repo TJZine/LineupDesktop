@@ -224,7 +224,7 @@ void main() {
             await tester.pumpAndSettle();
             expect(c.scans, 1);
             expect(find.text('Review your libraries'), findsOneWidget);
-            expect(find.text('Shape your lineup'), findsNothing);
+            expect(find.text('Choose channels'), findsNothing);
           } else {
             expect(
               find.text('Select the Plex libraries to scan for channel ideas.'),
@@ -676,7 +676,7 @@ void main() {
       expect(find.text('Continue with 1 library'), findsOneWidget);
       await tester.tap(find.text('Continue with 1 library'));
       await tester.pumpAndSettle();
-      expect(find.text('Shape your lineup'), findsOneWidget);
+      expect(find.text('Choose channels'), findsOneWidget);
       expect(plex.scans, 1);
       expect(c.channels.single.id, 'saved');
       expect(

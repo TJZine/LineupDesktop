@@ -3821,7 +3821,7 @@ void main() {
 
     await tester.sendKeyEvent(LogicalKeyboardKey.digit1);
     expect(fixture.player.overlay, PlayerOverlay.channelNumber);
-    expect(fixture.player.channelNumberLabel, startsWith('1'));
+    expect(fixture.player.enteredChannelNumber, startsWith('1'));
     expect(propagated, hasLength(2));
     fixture.player.closeOverlay();
     await tester.sendKeyEvent(LogicalKeyboardKey.keyP);

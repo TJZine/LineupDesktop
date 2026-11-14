@@ -226,6 +226,31 @@ ScheduleIndex buildSchedule(
   );
 }
 
+/// Initial phase for a new channel. The caller persists the resulting anchor.
+DateTime staggeredChannelAnchor({
+  required Channel channel,
+  required Iterable<ChannelItem> content,
+  required DateTime createdAt,
+}) {
+  var cycle = 0;
+  for (final item in content) {
+    if (scheduleIncludesItem(
+      item,
+      mode: channel.playbackMode,
+      includeSpecials: channel.includeSpecials,
+      scheduleVersion: channel.scheduleVersion,
+    )) {
+      cycle = _checkedTotal(cycle, item);
+    }
+  }
+  if (cycle == 0) return createdAt.toUtc();
+  final identity = channel.builderKey ?? channel.id;
+  final phase =
+      (stableChannelSeed(identity) << 21) |
+      (stableChannelSeed('phase:$identity') >> 11);
+  return _dateOffset(createdAt.toUtc(), -(phase % cycle));
+}
+
 ScheduleIndex buildChannelSchedule(
   Channel channel,
   List<ChannelItem> content,
@@ -270,6 +295,9 @@ Channel migrateLegacySchedule(
     builderKey: channel.builderKey,
     includeSpecials: channel.includeSpecials,
     scheduleVersion: currentScheduleVersion,
+    kind: channel.kind,
+    sourceLibraries: channel.sourceLibraries,
+    favorite: channel.favorite,
     scheduleTransition: ScheduleTransition(
       boundary: boundary,
       legacyCycleItems: legacy.items,

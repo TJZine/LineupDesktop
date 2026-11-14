@@ -17,6 +17,7 @@ class SetupConfiguration {
     required Set<BuilderStrategy> grouped,
     required List<BuilderStrategy> sourceOrder,
     required this.playback,
+    required this.channelOrder,
     required this.blockSize,
     required this.includeSpecials,
     required this.extras,
@@ -33,6 +34,7 @@ class SetupConfiguration {
   final Set<BuilderStrategy> grouped;
   final List<BuilderStrategy> sourceOrder;
   final PlaybackMode playback;
+  final ChannelOrder channelOrder;
   final int blockSize;
   final bool includeSpecials;
   final bool extras;
@@ -76,8 +78,10 @@ class SetupConfigureStep extends StatefulWidget {
     required this.onBack,
     required this.onReview,
     required this.hasConfirmedMissingSources,
+    required this.orderChanged,
     required this.configuration,
     required this.selectedLibraryCount,
+    required this.hasPlaylists,
     required this.disabledEligibility,
     required this.discoveryFailures,
     required this.collectionRecovery,
@@ -96,6 +100,7 @@ class SetupConfigureStep extends StatefulWidget {
     required this.onMaximumChanged,
     required this.onMinimumChanged,
     required this.onSourceOrderChanged,
+    required this.onChannelOrderChanged,
     super.key,
   });
 
@@ -105,8 +110,10 @@ class SetupConfigureStep extends StatefulWidget {
   final VoidCallback onBack;
   final VoidCallback onReview;
   final bool hasConfirmedMissingSources;
+  final bool orderChanged;
   final SetupConfiguration configuration;
   final int selectedLibraryCount;
+  final bool hasPlaylists;
   final Map<BuilderStrategy, int> disabledEligibility;
   final Map<BuilderStrategy, String> discoveryFailures;
   final String? collectionRecovery;
@@ -126,6 +133,7 @@ class SetupConfigureStep extends StatefulWidget {
   final ValueChanged<int> onMaximumChanged;
   final ValueChanged<int> onMinimumChanged;
   final ValueChanged<List<BuilderStrategy>> onSourceOrderChanged;
+  final ValueChanged<ChannelOrder> onChannelOrderChanged;
 
   @override
   State<SetupConfigureStep> createState() => _SetupConfigureStepState();
@@ -158,7 +166,8 @@ class _SetupConfigureStepState extends State<SetupConfigureStep> {
           onPressed:
               widget.allocation.channels.isNotEmpty ||
                   widget.allocation.existingSkipped > 0 ||
-                  widget.hasConfirmedMissingSources
+                  widget.hasConfirmedMissingSources ||
+                  widget.orderChanged
               ? widget.onReview
               : null,
           child: const Text('Review channels'),
@@ -382,7 +391,7 @@ class _SetupConfigureStepState extends State<SetupConfigureStep> {
             Padding(
               padding: const EdgeInsets.only(bottom: 8),
               child: Text(
-                'Combine matching values to create shared channels across your selected libraries.',
+                'Use one channel across libraries when they share a genre or studio.',
                 style: TextStyle(
                   color: roles.secondaryText,
                   fontSize: 16,
@@ -427,7 +436,7 @@ class _SetupConfigureStepState extends State<SetupConfigureStep> {
             children: [
               _limitControls(allocation),
               const SizedBox(height: 20),
-              _orderControls(focus),
+              _channelOrderControls(focus),
             ],
           );
         }
@@ -436,20 +445,49 @@ class _SetupConfigureStepState extends State<SetupConfigureStep> {
           children: [
             Expanded(flex: 85, child: _limitControls(allocation)),
             const SizedBox(width: 64),
-            Expanded(flex: 115, child: _orderControls(focus)),
+            Expanded(flex: 115, child: _channelOrderControls(focus)),
           ],
         );
       },
     );
   }
 
+  Widget _channelOrderControls(_ConfigureFocus focus) => Column(
+    crossAxisAlignment: CrossAxisAlignment.start,
+    children: [
+      LineupField(
+        label: 'Channel order',
+        child: lineupDropdownField<ChannelOrder>(
+          context: context,
+          initialValue: widget.configuration.channelOrder,
+          iconSize: 24,
+          isExpanded: true,
+          decoration: const InputDecoration(),
+          items: const [
+            DropdownMenuItem(
+              value: ChannelOrder.mixed,
+              child: Text('Mixed, like live TV'),
+            ),
+            DropdownMenuItem(
+              value: ChannelOrder.grouped,
+              child: Text('Grouped by type'),
+            ),
+          ],
+          onChanged: (value) {
+            if (value != null) widget.onChannelOrderChanged(value);
+          },
+        ),
+      ),
+      const SizedBox(height: 20),
+      _orderControls(focus),
+    ],
+  );
+
   Widget _configurationSummary(ChannelPlanAllocation result) {
     final roles = LineupTheme.of(context);
     final total = result.channels.length;
     final details = <String>[
-      if (result.allocatedExtras == 0)
-        'No additional versions'
-      else
+      if (result.allocatedExtras > 0)
         '${result.allocatedOriginals} originals + ${result.allocatedExtras} extra versions',
     ];
     final excluded = [
@@ -630,7 +668,9 @@ class _SetupConfigureStepState extends State<SetupConfigureStep> {
     ChannelPlanAllocation allocation,
   ) {
     final roles = LineupTheme.of(context);
-    final enabled = _strategies.contains(strategy);
+    final emptyPlaylists =
+        strategy == BuilderStrategy.playlists && !widget.hasPlaylists;
+    final enabled = _strategies.contains(strategy) && !emptyPlaylists;
     final discoveryFailure = widget.discoveryFailures[strategy];
     final eligible = enabled
         ? allocation.eligibleOriginalsByStrategy[strategy] ?? 0
@@ -693,10 +733,12 @@ class _SetupConfigureStepState extends State<SetupConfigureStep> {
         CheckboxListTile(
           value: enabled,
           controlAffinity: ListTileControlAffinity.leading,
-          contentPadding: EdgeInsets.zero,
+          contentPadding: DeviceProfile.of(context).isTv
+              ? const EdgeInsets.all(16)
+              : EdgeInsets.zero,
           title: title,
           subtitle: subtitle,
-          onChanged: changed,
+          onChanged: emptyPlaylists ? null : changed,
         ),
         if (collectionRecovery case final recovery?)
           Padding(
@@ -931,21 +973,21 @@ class _SetupConfigureStepState extends State<SetupConfigureStep> {
                   children: [
                     _playbackChoice(
                       PlaybackMode.shuffle,
-                      'Shuffle',
+                      playbackModeLabels[PlaybackMode.shuffle]!,
                       'Mix programs into a shuffled schedule.',
                       focus: focus,
                       width: width,
                     ),
                     _playbackChoice(
                       PlaybackMode.sequential,
-                      'In order',
+                      playbackModeLabels[PlaybackMode.sequential]!,
                       'Keep the order supplied by the channel’s source.',
                       focus: focus,
                       width: width,
                     ),
                     _playbackChoice(
                       PlaybackMode.block,
-                      'Mini-marathons',
+                      playbackModeLabels[PlaybackMode.block]!,
                       'Play a few episodes of one show, then move to another.',
                       focus: focus,
                       width: width,
@@ -1743,7 +1785,9 @@ class _SetupConfigureStepState extends State<SetupConfigureStep> {
         Text('Source order', style: headingStyle),
         SizedBox(height: 8),
         Text(
-          'Take one channel from each source, then repeat.',
+          widget.configuration.channelOrder == ChannelOrder.grouped
+              ? 'Group channels in the order shown below.'
+              : 'Take one channel from each source, then repeat.',
           style: subtitleStyle,
         ),
         SizedBox(height: 24),

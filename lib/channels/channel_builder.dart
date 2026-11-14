@@ -21,6 +21,12 @@ enum BuilderStrategy {
 
 enum ChannelBuildMode { replace, append, merge }
 
+const playbackModeLabels = {
+  PlaybackMode.shuffle: 'Shuffle',
+  PlaybackMode.sequential: 'In order',
+  PlaybackMode.block: 'Mini-marathons',
+};
+
 const builderStrategyLabels = {
   BuilderStrategy.playlists: 'Playlists',
   BuilderStrategy.collections: 'Collections',
@@ -40,6 +46,8 @@ class ChannelProposal {
     required this.itemCount,
     required this.strategy,
     this.series = false,
+    this.sourceLibraries = const {},
+    this.playlistKind = ChannelKind.unknown,
     required this.playableItemCount,
     required this.blockItemCountWithoutSpecials,
   });
@@ -50,6 +58,8 @@ class ChannelProposal {
   final int itemCount;
   final BuilderStrategy strategy;
   final bool series;
+  final Map<String, String> sourceLibraries;
+  final ChannelKind playlistKind;
 
   /// Resolved inventory counts used to allocate each playback version.
   /// Apply validates the current inventory independently of these proposal facts.
@@ -69,6 +79,9 @@ List<ChannelProposal> buildChannelProposals({
 }) {
   final proposals = <ChannelProposal>[];
   final sourceLibraries = libraries.toList();
+  final titleById = {
+    for (final library in libraries) library.id: library.title,
+  };
   final blockInclusion = <PlexMediaItem, bool>{};
   bool includedWithoutSpecials(PlexMediaItem item) =>
       blockInclusion.putIfAbsent(
@@ -167,7 +180,7 @@ List<ChannelProposal> buildChannelProposals({
         for (final counts in countsByLibrary.values) ...counts.keys,
       };
       for (final tag in tags) {
-        final sources = <ContentSource>[];
+        final sources = <LibrarySource>[];
         var count = 0;
         var playableCount = 0;
         var blockCount = 0;
@@ -194,6 +207,10 @@ List<ChannelProposal> buildChannelProposals({
               source: sources.length == 1
                   ? sources.single
                   : MixedSource(sources: sources, interleave: true),
+              sourceLibraries: Map.unmodifiable({
+                for (final source in sources)
+                  source.libraryId: titleById[source.libraryId]!,
+              }),
               mode: PlaybackMode.shuffle,
               itemCount: count,
               playableItemCount: playableCount,
@@ -211,9 +228,8 @@ List<ChannelProposal> buildChannelProposals({
       )) {
         proposals.add(
           ChannelProposal(
-            name: sourceLibraries.length == 1
-                ? tagLabels[entry.key]!
-                : '${library.title} • ${tagLabels[entry.key]!}',
+            name: tagLabels[entry.key]!,
+            sourceLibraries: Map.unmodifiable({library.id: library.title}),
             source: LibrarySource(
               libraryId: library.id,
               libraryType: library.type,
@@ -242,6 +258,15 @@ List<ChannelProposal> buildChannelProposals({
         ChannelProposal(
           name: playlist.title,
           source: PlaylistSource(playlist.id),
+          sourceLibraries: Map.unmodifiable({
+            for (final id
+                in playlist.items.map((item) => item.libraryId).nonNulls)
+              id: ?titleById[id],
+          }),
+          playlistKind: channelKindFor(
+            PlaylistSource(playlist.id),
+            playlists: {playlist.id: playlist.items.map(channelItemFor)},
+          ),
           mode: PlaybackMode.shuffle,
           itemCount: playlist.items.length,
           playableItemCount: counts.playable,
@@ -265,7 +290,8 @@ List<ChannelProposal> buildChannelProposals({
         );
         proposals.add(
           ChannelProposal(
-            name: '${library.title} Recently Added',
+            name: 'Recently Added',
+            sourceLibraries: Map.unmodifiable({library.id: library.title}),
             source: LibrarySource(
               libraryId: library.id,
               libraryType: library.type,
@@ -296,7 +322,11 @@ List<ChannelProposal> buildChannelProposals({
     );
     if (strategy != 0) return strategy;
     final count = b.itemCount.compareTo(a.itemCount);
-    return count != 0 ? count : a.name.compareTo(b.name);
+    if (count != 0) return count;
+    final name = a.name.compareTo(b.name);
+    if (name != 0) return name;
+    return canonicalSourceIdentity(a.source)
+        .compareTo(canonicalSourceIdentity(b.source));
   });
   final buckets = [
     for (final strategy in strategyOrder)
@@ -364,7 +394,14 @@ ChannelPlanAllocation materializeChannelPlan({
   int minimumItems = 1,
   int maximumChannels = 200,
   DateTime? anchor,
+  ChannelOrder order = ChannelOrder.mixed,
+  List<BuilderStrategy> strategyOrder = BuilderStrategy.values,
+  List<ChannelItem> Function(ContentSource source)? resolve,
+  bool reorderExisting = false,
 }) {
+  final createdAt = anchor ?? DateTime.now().toUtc();
+  final resolvedBySource = <String, List<ChannelItem>>{};
+  final proposalByKey = <String, ChannelProposal>{};
   final originals =
       <
         ({
@@ -420,6 +457,9 @@ ChannelPlanAllocation materializeChannelPlan({
             .whereType<String>()
             .toSet()
       : const <String>{};
+  final existingByBuilderKey = mode == ChannelBuildMode.merge
+      ? {for (final channel in existing.reversed) ?channel.builderKey: channel}
+      : const <String, Channel>{};
   final selectedOriginals =
       <
         ({
@@ -453,19 +493,24 @@ ChannelPlanAllocation materializeChannelPlan({
     })
     entry,
   ) {
-    final name = '${entry.proposal.name}${entry.suffix}';
+    final proposal = entry.proposal;
+    final suffix = entry.suffix;
+    final name = switch (suffix) {
+      '' => proposal.name,
+      _ when suffix.startsWith(' Alt ') =>
+        '${proposal.name} ${int.parse(suffix.substring(5)) + 1}',
+      _ when entry.mode == PlaybackMode.sequential =>
+        '${proposal.name} In Order',
+      _ => '${proposal.name} ${playbackModeLabels[entry.mode]!}',
+    };
+    final kind = proposal.source is PlaylistSource
+        ? proposal.playlistKind
+        : channelKindFor(proposal.source);
     final builderKey = _builderKey(entry.proposal, entry.suffix);
+    proposalByKey[builderKey] = proposal;
     final normalizedIncludeSpecials =
         entry.mode == PlaybackMode.block && includeSpecials;
-    final matched = mode == ChannelBuildMode.merge
-        ? existing
-              .where(
-                (channel) =>
-                    channel.builderKey != null &&
-                    channel.builderKey == builderKey,
-              )
-              .firstOrNull
-        : null;
+    final matched = existingByBuilderKey[builderKey];
     while (matched == null && used.contains(next) && next <= 1000) {
       next++;
     }
@@ -476,7 +521,12 @@ ChannelPlanAllocation materializeChannelPlan({
         canonicalSourceEquals(matched.source, entry.proposal.source) &&
         matched.playbackMode == entry.mode &&
         matched.blockSize == entry.blockSize &&
-        matched.includeSpecials == normalizedIncludeSpecials) {
+        matched.includeSpecials == normalizedIncludeSpecials &&
+        matched.kind == kind &&
+        canonicalChannelValueEquals(
+          matched.sourceLibraries,
+          proposal.sourceLibraries,
+        )) {
       return matched;
     }
     final id = matched?.id ?? createChannelId();
@@ -487,7 +537,10 @@ ChannelPlanAllocation materializeChannelPlan({
       name: matched?.name ?? name,
       source: entry.proposal.source,
       playbackMode: entry.mode,
-      anchor: matched?.anchor ?? anchor ?? DateTime.now().toUtc(),
+      anchor: matched?.anchor ?? createdAt,
+      favorite: matched?.favorite ?? false,
+      kind: kind,
+      sourceLibraries: proposal.sourceLibraries,
       shuffleSeed: matched?.shuffleSeed ?? stableChannelSeed(id),
       blockSize: entry.blockSize,
       builderKey: builderKey,
@@ -495,7 +548,19 @@ ChannelPlanAllocation materializeChannelPlan({
     );
     used.add(number);
     if (matched == null) next++;
-    return channel;
+    if (matched != null || resolve == null) return channel;
+    final source = channel.source;
+    final content = resolvedBySource.putIfAbsent(
+      canonicalSourceIdentity(source),
+      () => resolve(source),
+    );
+    return channel.copyWith(
+      anchor: staggeredChannelAnchor(
+        channel: channel,
+        content: content,
+        createdAt: createdAt,
+      ),
+    );
   }
 
   for (final entry in eligibleOriginals) {
@@ -589,8 +654,33 @@ ChannelPlanAllocation materializeChannelPlan({
             )
             .toList()
       : const <Channel>[];
+  final retained = switch (mode) {
+    ChannelBuildMode.replace => existing.where(
+      (channel) => channel.builderKey == null,
+    ),
+    ChannelBuildMode.append => existing,
+    ChannelBuildMode.merge => existing.where(
+      (channel) => !plannedBuilderKeys.contains(channel.builderKey),
+    ),
+  };
+  final named = _nameNewChannels(output, retained, existing, mode);
+  final ordered = switch ((order, reorderExisting)) {
+    (ChannelOrder.grouped, _) => _numberChannelsByOrder(
+      named,
+      retained,
+      proposalByKey,
+      strategyOrder,
+    ),
+    (ChannelOrder.mixed, true) => _numberChannelsByOrder(
+      named,
+      retained,
+      proposalByKey,
+      null,
+    ),
+    _ => named,
+  };
   return (
-    channels: List.unmodifiable(output),
+    channels: List.unmodifiable(ordered),
     allocatedOriginals: selectedOriginals.length,
     excludedOriginals: excludedOriginals,
     allocatedExtras: allocatedExtras,
@@ -670,6 +760,87 @@ _extraVersions(
     }
   }
   return extras;
+}
+
+List<Channel> _nameNewChannels(
+  List<Channel> channels,
+  Iterable<Channel> retained,
+  List<Channel> existing,
+  ChannelBuildMode mode,
+) {
+  final savedIds = mode == ChannelBuildMode.merge
+      ? existing.map((channel) => channel.id).toSet()
+      : const <String>{};
+  final claimed = <String, List<String?>>{};
+  void claim(Channel channel) =>
+      (claimed[channel.name] ??= []).add(channel.libraryTitle);
+  retained.forEach(claim);
+  channels.where((channel) => savedIds.contains(channel.id)).forEach(claim);
+  final requested = channels.map((channel) => channel.name).toSet();
+  return [
+    for (final channel in channels)
+      if (savedIds.contains(channel.id))
+        channel
+      else
+        () {
+          final library = channel.libraryTitle;
+          final prior = claimed[channel.name];
+          if (prior == null ||
+              (library != null &&
+                  prior.every((title) => title != null && title != library))) {
+            claim(channel);
+            return channel;
+          }
+          var twin = 2;
+          var name = '${channel.name} $twin';
+          while (requested.contains(name) || claimed.containsKey(name)) {
+            name = '${channel.name} ${++twin}';
+          }
+          final numbered = channel.copyWith(name: name);
+          claim(numbered);
+          return numbered;
+        }(),
+  ];
+}
+
+List<Channel> _numberChannelsByOrder(
+  List<Channel> planned,
+  Iterable<Channel> retained,
+  Map<String, ChannelProposal> proposalByKey,
+  List<BuilderStrategy>? strategyOrder,
+) {
+  var ordered = planned;
+  if (strategyOrder != null) {
+    final priority = {
+      for (final (index, strategy) in strategyOrder.indexed) strategy: index,
+    };
+    final rows = planned.indexed.toList()
+      ..sort((left, right) {
+        final a = proposalByKey[left.$2.builderKey]!;
+        final b = proposalByKey[right.$2.builderKey]!;
+        final type = (priority[a.strategy] ?? priority.length).compareTo(
+          priority[b.strategy] ?? priority.length,
+        );
+        if (type != 0) return type;
+        final count = b.itemCount.compareTo(a.itemCount);
+        return count != 0 ? count : left.$1.compareTo(right.$1);
+      });
+    ordered = rows.map((row) => row.$2).toList();
+  }
+  final reserved = retained.map((channel) => channel.number).toSet();
+  var next = 1;
+  return [
+    for (final channel in ordered)
+      () {
+        while (reserved.contains(next)) {
+          next++;
+        }
+        final number = next++;
+        return number == channel.number
+            ? channel
+            : channel.copyWith(number: number);
+      }(),
+  ];
 }
 
 List<Channel> composeChannelPlan({

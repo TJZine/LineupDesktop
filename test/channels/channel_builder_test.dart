@@ -475,9 +475,9 @@ void main() {
     expect(channels.map((channel) => channel.number), [1, 2, 3, 4]);
     expect(channels.map((channel) => channel.name), [
       'Series',
-      'Series sequential',
-      'Series Alt 1',
-      'Series Alt 2',
+      'Series In Order',
+      'Series 2',
+      'Series 3',
     ]);
     expect(channels.first.blockSize, 3);
   });
@@ -522,7 +522,7 @@ void main() {
         PlaybackMode.sequential,
       ]);
       expect(recentlyAddedChannels.map((channel) => channel.name), [
-        'Shows Recently Added',
+        'Recently Added',
       ]);
 
       final collection = buildChannelProposals(
@@ -920,6 +920,8 @@ void main() {
       id: generated.id,
       number: generated.number,
       name: generated.name,
+      kind: generated.kind,
+      sourceLibraries: generated.sourceLibraries,
       source: const LibrarySource(
         libraryId: 'movies',
         libraryType: PlexLibraryType.movie,
@@ -1567,10 +1569,10 @@ void main() {
     expect(result.channels.map((channel) => channel.name), [
       'First',
       'Second',
-      'First block',
-      'Second block',
-      'First Alt 1',
-      'Second Alt 1',
+      'First Mini-marathons',
+      'Second Mini-marathons',
+      'First 2',
+      'Second 2',
     ]);
     expect(result.allocatedOriginals, 2);
     expect(result.excludedOriginals, 0);

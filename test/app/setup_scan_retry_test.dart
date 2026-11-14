@@ -60,7 +60,7 @@ void main() {
         fixture.failedLibraries.clear();
         await tester.tap(retry);
         await _settleScan(tester, fixture.controller);
-        expect(find.text('Shape your lineup'), findsOneWidget);
+        expect(find.text('Choose channels'), findsOneWidget);
         expect(fixture.controller.selectedLibraryIds, _libraries);
 
         // Restart the same saved selection with the same service failure. Both
@@ -107,7 +107,7 @@ void main() {
 
       expect(fixture.itemReads.toSet(), _libraries);
       expect(find.byType(UpstreamChannelSetupView), findsOneWidget);
-      expect(find.text('Shape your lineup'), findsNothing);
+      expect(find.text('Choose channels'), findsNothing);
       expect(fixture.controller.error, isNotNull);
       expect(fixture.controller.libraryScanReadyIds, _libraries);
       expect(fixture.controller.libraryScanRetryIds, _libraries);
@@ -124,7 +124,7 @@ void main() {
       await _settleScan(tester, fixture.controller);
 
       expect(fixture.itemReads.toSet(), _libraries);
-      expect(find.text('Shape your lineup'), findsOneWidget);
+      expect(find.text('Choose channels'), findsOneWidget);
       expect(fixture.controller.error, isNull);
       expect(fixture.controller.libraryScanRetryIds, isEmpty);
       expect(
@@ -194,7 +194,7 @@ void main() {
       expect(fixture.itemReads, ['first']);
       expect(fixture.controller.error, isNull);
       expect(fixture.controller.libraryScanRetryIds, {'second'});
-      expect(find.text('Shape your lineup'), findsNothing);
+      expect(find.text('Choose channels'), findsNothing);
       expect(
         find.byKey(const ValueKey('continue-ready-libraries')),
         findsOneWidget,
@@ -206,7 +206,7 @@ void main() {
 
       await tester.tap(find.byKey(const ValueKey('continue-ready-libraries')));
       await _settleScan(tester, fixture.controller);
-      expect(find.text('Shape your lineup'), findsOneWidget);
+      expect(find.text('Choose channels'), findsOneWidget);
       expect(
         fixture.controller.isGeneratedSourceConfirmedGone(_missing),
         isFalse,

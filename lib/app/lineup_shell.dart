@@ -15,6 +15,7 @@ import '../playback/player_coordinator.dart';
 import '../playback/player_view.dart';
 import '../platform/device_profile.dart';
 import '../ui/app_ui.dart';
+import '../ui/channel_identity.dart';
 import '../ui/app_theme.dart';
 import '../ui/lineup_canvas.dart';
 import 'channel_setup_view.dart';
@@ -974,10 +975,38 @@ class _LineupShellState extends State<LineupShell> {
                             crossAxisAlignment: CrossAxisAlignment.start,
                             children: [
                               const Text('Now Playing'),
-                              _menuDetail(
-                                _player.currentProgram!.scheduled.item.title,
-                                detailStyle,
-                              ),
+                              if (_player.currentChannel case final channel?)
+                                Row(
+                                  children: [
+                                    Flexible(
+                                      child: ChannelIdentity(
+                                        channel: channel,
+                                        libraryTag:
+                                            ChannelIdentity.libraryTagFor(
+                                              channel,
+                                              widget.controller.channels,
+                                            ),
+                                        nameStyle: detailStyle,
+                                      ),
+                                    ),
+                                    Text(' · ', style: detailStyle),
+                                    Expanded(
+                                      child: _menuDetail(
+                                        _player
+                                            .currentProgram!
+                                            .scheduled
+                                            .item
+                                            .title,
+                                        detailStyle,
+                                      ),
+                                    ),
+                                  ],
+                                )
+                              else
+                                _menuDetail(
+                                  _player.currentProgram!.scheduled.item.title,
+                                  detailStyle,
+                                ),
                             ],
                           ),
                         ),

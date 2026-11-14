@@ -9,6 +9,7 @@ import '../../channels/channel.dart';
 import '../../channels/channel_builder.dart';
 import '../../ui/app_theme.dart';
 import '../../ui/app_ui.dart';
+import '../../ui/channel_identity.dart';
 import '../setup_review.dart';
 import 'step_scaffold.dart';
 
@@ -31,6 +32,7 @@ class SetupReviewStep extends StatefulWidget {
     required this.onRemovalChanged,
     required this.onRemovalConfirmationChanged,
     required this.onApply,
+    this.orderChanged = false,
     required this.onViewLineup,
     super.key,
   });
@@ -50,6 +52,7 @@ class SetupReviewStep extends StatefulWidget {
   final void Function(String id, bool remove) onRemovalChanged;
   final ValueChanged<bool> onRemovalConfirmationChanged;
   final VoidCallback onApply;
+  final bool orderChanged;
   final VoidCallback onViewLineup;
 
   @override
@@ -83,7 +86,7 @@ class _SetupReviewStepState extends State<SetupReviewStep> {
   }
 
   bool get _primaryEnabled =>
-      !widget.review.counts.hasChanges ||
+      (!widget.review.counts.hasChanges && !widget.orderChanged) ||
       (widget.notice != 'Updating review…' &&
           (widget.review.counts.removed == 0 || widget.removalConfirmed));
 
@@ -287,7 +290,7 @@ class _SetupReviewStepState extends State<SetupReviewStep> {
   @override
   Widget build(BuildContext context) {
     final review = widget.review;
-    final noChanges = !review.counts.hasChanges;
+    final noChanges = !review.counts.hasChanges && !widget.orderChanged;
     final body = SetupStage(
       footer: Focus(
         canRequestFocus: false,
@@ -301,7 +304,7 @@ class _SetupReviewStepState extends State<SetupReviewStep> {
               key: const ValueKey('back-to-configure'),
               focusNode: _backFocus,
               onPressed: widget.onBack,
-              child: const Text('Back to configure'),
+              child: const Text('Back to channels'),
             ),
           ],
           summary: DeviceProfile.of(context).isTv && _rosterFocused
@@ -678,7 +681,7 @@ class _SetupReviewStepState extends State<SetupReviewStep> {
               if (review.entries.isNotEmpty)
                 Semantics(
                   label:
-                      '${review.counts.unchanged} unchanged, ${review.counts.updated} updated, ${review.counts.added} added, ${review.counts.removed} removed. ${review.entries.length} review entries including outgoing channels.',
+                      '${review.counts.unchanged} unchanged, ${review.counts.updated} updated, ${review.counts.added} added, ${review.counts.removed} removed. ${review.finalChannels.length} channels after applying.',
                   child: ExcludeSemantics(
                     child: Row(
                       children: [
@@ -902,7 +905,7 @@ class _SetupReviewStepState extends State<SetupReviewStep> {
                 Text(
                   filtered
                       ? '${_capitalized(_filter.name)} · ${entries.length} matching ${entries.length == 1 ? 'channel' : 'channels'}'
-                      : '${entries.length} of ${review.entries.length} review entries',
+                      : '${entries.length} ${entries.length == 1 ? 'channel' : 'channels'}',
                   style: textStyle,
                 ),
                 const SizedBox(height: 12),
@@ -1079,38 +1082,58 @@ class _SetupReviewStepState extends State<SetupReviewStep> {
       },
     );
     final changeWidth = _reviewChangeWidth();
-    final content = Row(
-      crossAxisAlignment: CrossAxisAlignment.start,
-      children: [
-        SizedBox(
-          width: 80,
-          child: Text('${entry.channel.number}', style: metaStyle),
-        ),
-        Expanded(flex: 60, child: Text(entry.channel.name, style: nameStyle)),
-        Expanded(
-          flex: 16,
-          child: Text(
-            widget.sourceLabel(entry.channel.source),
-            style: metaStyle,
+    final content = LayoutBuilder(
+      builder: (context, constraints) => Row(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          SizedBox(
+            width:
+                80 +
+                (constraints.maxWidth - changeWidth - 80).clamp(
+                      0.0,
+                      double.infinity,
+                    ) *
+                    60 /
+                    92,
+            child: ChannelIdentity(
+              channel: entry.channel,
+              libraryTag: ChannelIdentity.libraryTagFor(
+                entry.channel,
+                entry.kind == SetupReviewKind.removed
+                    ? widget.review.base
+                    : widget.review.finalChannels,
+              ),
+              numberWidth: 80,
+              nameStyle: nameStyle,
+              numberStyle: metaStyle,
+              supportStyle: metaStyle,
+            ),
           ),
-        ),
-        Expanded(
-          flex: 16,
-          child: Text(_playbackLabel(entry.channel), style: metaStyle),
-        ),
-        SizedBox(
-          width: changeWidth,
-          child: Text(
-            switch (entry.kind) {
-              SetupReviewKind.added => '+ Added',
-              SetupReviewKind.updated => '• Updated',
-              _ => _capitalized(entry.kind.name),
-            },
-            textAlign: TextAlign.end,
-            style: changeStyle,
+          Expanded(
+            flex: 16,
+            child: Text(
+              widget.sourceLabel(entry.channel.source),
+              style: metaStyle,
+            ),
           ),
-        ),
-      ],
+          Expanded(
+            flex: 16,
+            child: Text(_playbackLabel(entry.channel), style: metaStyle),
+          ),
+          SizedBox(
+            width: changeWidth,
+            child: Text(
+              switch (entry.kind) {
+                SetupReviewKind.added => '+ Added',
+                SetupReviewKind.updated => '· Updated',
+                _ => _capitalized(entry.kind.name),
+              },
+              textAlign: TextAlign.end,
+              style: changeStyle,
+            ),
+          ),
+        ],
+      ),
     );
     final changes = _changedFields(entry.before, entry.channel);
     return DecoratedBox(

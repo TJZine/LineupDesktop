@@ -11,6 +11,63 @@ enum LibraryOrder { supplied, title, addedDescending }
 
 enum ChannelMediaKind { movie, episode, unknown }
 
+enum ChannelKind { tv, film, both, unknown }
+
+enum ChannelOrder { mixed, grouped }
+
+ChannelKind channelKindFor(
+  ContentSource source, {
+  Map<String, Iterable<ChannelItem>> playlists = const {},
+  Map<String, ChannelItem> resolvedItems = const {},
+}) {
+  final kinds = <ChannelMediaKind>{};
+  void collect(ContentSource value) {
+    switch (value) {
+      case LibrarySource(:final libraryType):
+        kinds.add(
+          libraryType == PlexLibraryType.show
+              ? ChannelMediaKind.episode
+              : ChannelMediaKind.movie,
+        );
+      case ManualSource(:final items):
+        kinds.addAll(
+          items.map((item) {
+            final current = resolvedItems[item.id];
+            return current == null ||
+                    current.mediaKind == ChannelMediaKind.unknown
+                ? item.mediaKind
+                : current.mediaKind;
+          }),
+        );
+      case PlaylistSource(:final playlistId):
+        kinds.addAll(
+          (playlists[playlistId] ?? const <ChannelItem>[]).map(
+            (item) => item.mediaKind,
+          ),
+        );
+      case MixedSource(:final sources):
+        sources.forEach(collect);
+    }
+  }
+
+  collect(source);
+  final tv = kinds.contains(ChannelMediaKind.episode);
+  final film = kinds.contains(ChannelMediaKind.movie);
+  if (tv && film) return ChannelKind.both;
+  if (kinds.contains(ChannelMediaKind.unknown)) return ChannelKind.unknown;
+  if (tv) return ChannelKind.tv;
+  if (film) return ChannelKind.film;
+  return ChannelKind.unknown;
+}
+
+Set<String> channelSourceLibraryIds(ContentSource source) => switch (source) {
+  LibrarySource(:final libraryId) => {libraryId},
+  MixedSource(:final sources) => {
+    for (final child in sources) ...channelSourceLibraryIds(child),
+  },
+  ManualSource() || PlaylistSource() => {},
+};
+
 const currentScheduleVersion = 2;
 
 const maxRichCastMembers = 20;
@@ -509,6 +566,9 @@ class Channel {
     bool includeSpecials = false,
     this.scheduleVersion = currentScheduleVersion,
     this.scheduleTransition,
+    this.kind = ChannelKind.unknown,
+    this.sourceLibraries = const {},
+    this.favorite = false,
   }) : _frozen = false,
        includeSpecials = playbackMode == PlaybackMode.block && includeSpecials;
 
@@ -525,6 +585,33 @@ class Channel {
   final bool includeSpecials;
   final int scheduleVersion;
   final ScheduleTransition? scheduleTransition;
+  final ChannelKind kind;
+  final Map<String, String> sourceLibraries;
+  String? get libraryTitle => sourceLibraries.values.singleOrNull;
+  final bool favorite;
+
+  Channel copyWith({
+    int? number,
+    String? name,
+    DateTime? anchor,
+    bool? favorite,
+  }) => Channel(
+    id: id,
+    number: number ?? this.number,
+    name: name ?? this.name,
+    source: source,
+    playbackMode: playbackMode,
+    anchor: anchor ?? this.anchor,
+    shuffleSeed: shuffleSeed,
+    blockSize: blockSize,
+    builderKey: builderKey,
+    includeSpecials: includeSpecials,
+    scheduleVersion: scheduleVersion,
+    scheduleTransition: scheduleTransition,
+    kind: kind,
+    sourceLibraries: sourceLibraries,
+    favorite: favorite ?? this.favorite,
+  );
 
   void validate(Iterable<Channel> existing) {
     _validateStructure();
@@ -576,7 +663,10 @@ class Channel {
       builderKey = original.builderKey,
       includeSpecials = original.includeSpecials,
       scheduleVersion = original.scheduleVersion,
-      scheduleTransition = original.scheduleTransition?.immutableCopy();
+      scheduleTransition = original.scheduleTransition?.immutableCopy(),
+      kind = original.kind,
+      sourceLibraries = Map.unmodifiable(original.sourceLibraries),
+      favorite = original.favorite;
 
   Channel immutableCopy() => _frozen ? this : Channel._immutable(this);
 
@@ -592,6 +682,9 @@ class Channel {
     if (builderKey != null) 'builderKey': builderKey,
     if (playbackMode == PlaybackMode.block) 'includeSpecials': includeSpecials,
     'scheduleVersion': scheduleVersion,
+    if (kind != ChannelKind.unknown) 'kind': kind.name,
+    if (sourceLibraries.isNotEmpty) 'sourceLibraries': sourceLibraries,
+    if (favorite) 'favorite': true,
     if (scheduleTransition != null)
       'scheduleTransition': scheduleTransition!.toJson(),
   };
@@ -616,6 +709,9 @@ class Channel {
           'includeSpecials',
           'scheduleVersion',
           'scheduleTransition',
+          'kind',
+          'sourceLibraries',
+          'favorite',
         },
       );
       final mode = _enumValue(PlaybackMode.values, json['playbackMode']);
@@ -636,6 +732,17 @@ class Channel {
             ? _boolean(json['includeSpecials'])
             : mode == PlaybackMode.block,
         scheduleVersion: version,
+        kind: json.containsKey('kind')
+            ? _enumValue(ChannelKind.values, json['kind'])
+            : ChannelKind.unknown,
+        sourceLibraries: json.containsKey('sourceLibraries')
+            ? Map.unmodifiable(
+                Map<String, String>.from(
+                  _nonNull(json, 'sourceLibraries') as Map,
+                ),
+              )
+            : const {},
+        favorite: json.containsKey('favorite') && _boolean(json['favorite']),
         scheduleTransition: json.containsKey('scheduleTransition')
             ? ScheduleTransition.fromJson(json['scheduleTransition'])
             : null,

@@ -120,10 +120,10 @@ Channel Setup has three stages:
 
 1. **Choose libraries** and scan their media. You can cancel a running scan,
    retry only failed libraries, or continue with the ready subset.
-2. **Configure channels** using playlists, collections, recently added content,
-   genres, studios, actors, decades, and directors. Select per-library or grouped
-   sources, playback order, minimum programs, and the generated-channel limit.
-3. **Review** the complete roster and explicitly apply the plan.
+2. **Choose channels** from playlists, collections, recently added content,
+   genres, studios, actors, decades, and directors. Choose source grouping,
+   playback order, minimum programs, and the generated-channel limit.
+3. **Review channels** and apply the plan.
 
 Scans report pages, items, and ready, empty, unsupported, cancelled, or failed
 outcomes. Continuing commits the selected ready libraries; cancelled or failed
@@ -145,14 +145,21 @@ If the selected server has no usable movie or show libraries, setup offers
 **Switch server** and a quiet **Sign out** action. Sign out uses the same
 confirmation as the server picker, stops playback, and returns to Plex linking.
 
+Under **Lineup rules**, **Channel order** defaults to **Mixed, like live TV**,
+which interleaves channel types. **Grouped by type** assigns consecutive numbers
+in the source order shown, with the largest channels first within each type.
+Custom channel numbers are reserved. The choice is saved with the lineup for
+**Update lineup…**.
+
 Allocation takes one eligible original from each enabled source in order,
 repeats, and skips exhausted sources. Additional versions are off by default
 and are allocated only after originals. Mini-marathons can include specials
 when enabled, including additional Mini-marathon versions. Exclusions distinguish
-the configured channel limit from exhausted channel numbers.
+the configured channel limit from exhausted channel numbers. Each new channel
+starts at its own point in its schedule, which is saved with the channel.
 
 For an existing lineup, **Update and add** preserves matching generated
-identities, **Replace generated channels** replaces generated programming while
+identities, schedule anchors, and favourites. **Replace generated channels** replaces generated programming while
 keeping custom channels, and **Add as new channels** appends new identities.
 Review shows current/final counts and unchanged, updated, added, and removed
 entries; search by name or number and filter the change categories. Removals
@@ -531,13 +538,19 @@ accepted for remote-only operation in this beta.
 **Generate lineup** is the bulk workflow. It proposes generator-owned channels,
 then lets you replace generated channels, add generated channels, or refresh
 matching generated channels after review. All three modes preserve every custom
-channel. Refresh also preserves a matching generated channel's number, visible
-name, schedule anchor, and shuffle identity while updating its generated
-programming recipe. Before applying, Review shows the full proposed final
+channel. Refresh preserves a matching generated channel's name, schedule anchor,
+shuffle identity, and favourite status while updating its programming recipe.
+Grouped ordering can update generated channel numbers. Before applying, Review shows the full proposed final
 roster. Search it by channel number or name, or filter for protected custom,
 added/updated, or removed entries. Replace keeps its protection confirmation
 visible while you inspect the roster. Completion offers **View lineup** or the
-separate **Add a custom channel** action.
+separate Generated names use the source name, such as **Drama**. Channels with that
+name from different libraries show the library beside the name where it fits.
+Additional schedules use numbers such as **Drama 2** or playback labels such
+as **Drama In Order**. TV, film, and mixed channels have distinct icons.
+Custom names stay as entered.
+
+**Add a custom channel** action.
 
 **Add a custom channel** opens the full-page Channel Studio for one custom channel.
 Studio also opens when you edit a custom channel, inspect a generated channel,
