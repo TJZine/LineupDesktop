@@ -345,6 +345,10 @@ void main() {
     await tester.pumpAndSettle();
 
     _expectLibraryEntryPaint(tester);
+    expect(
+      find.text('Choose the libraries to build channels from.'),
+      findsOneWidget,
+    );
 
     tester
         .widget<FilledButton>(
@@ -443,8 +447,12 @@ void main() {
         semantics.dispose();
 
         if (isTv) {
-          final node = tester.widget<TextButton>(selectAll).focusNode!;
-          expect(node.hasPrimaryFocus, isTrue);
+          await tester.sendKeyEvent(LogicalKeyboardKey.arrowUp);
+          await tester.pumpAndSettle();
+          expect(
+            Focus.of(tester.element(find.text('Select all'))).hasPrimaryFocus,
+            isTrue,
+          );
           final roles = LineupTheme.of(tester.element(selectAll));
           final fill = find
               .descendant(of: selectAll, matching: find.byType(Material))
@@ -494,6 +502,8 @@ void main() {
             .value,
         isTrue,
       );
+      await tester.sendKeyEvent(LogicalKeyboardKey.arrowUp);
+      await tester.pumpAndSettle();
       expect(surface().color, isNot(roles.selectedSurface));
       expect(surface().color, isNot(roles.focusedSurface));
       expect((surface().border! as Border).left.color, Colors.transparent);
@@ -688,7 +698,7 @@ void main() {
       LibraryScanStatus.transientFailure,
     );
     expect(fixture.store.saveCalls, saves);
-    _expectSingleLibraryEntryPaint(tester);
+    _expectLibraryEntryPaint(tester);
     fixture.plex.scanGate = null;
     tester
         .widget<FilledButton>(
@@ -742,7 +752,7 @@ void main() {
             find.byKey(const ValueKey('library-selection-list')),
             findsOneWidget,
           );
-          _expectSingleLibraryEntryPaint(tester);
+          _expectLibraryEntryPaint(tester);
           tester
               .widget<FilledButton>(
                 find.byKey(const ValueKey('continue-ready-libraries')),
@@ -3467,32 +3477,6 @@ Container _cardPaint(WidgetTester tester, Finder card) =>
     );
 
 void _expectLibraryEntryPaint(WidgetTester tester) {
-  final button = find.widgetWithText(TextButton, 'Select all');
-  final node = tester.widget<TextButton>(button).focusNode!;
-  expect(node.hasPrimaryFocus, isTrue);
-  expect(node.canRequestFocus, isTrue);
-  expect(node.context?.mounted, isTrue);
-  final roles = LineupTheme.of(tester.element(button));
-  final material = tester.widget<Material>(
-    find.descendant(of: button, matching: find.byType(Material)).first,
-  );
-  expect(material.color, roles.focusedSurface);
-  final label = find.descendant(of: button, matching: find.text('Select all'));
-  final rich = tester.widget<RichText>(
-    find.descendant(of: label, matching: find.byType(RichText)),
-  );
-  expect(rich.text.style?.color, roles.focusSecondaryText);
-  expect(
-    tester
-        .getRect(button)
-        .overlaps(
-          Offset.zero & tester.view.physicalSize / tester.view.devicePixelRatio,
-        ),
-    isTrue,
-  );
-}
-
-void _expectSingleLibraryEntryPaint(WidgetTester tester) {
   final row = find.byKey(const ValueKey('library-row-movies'));
   final node = tester.widget<InkWell>(row).focusNode!;
   expect(node.hasPrimaryFocus, isTrue);

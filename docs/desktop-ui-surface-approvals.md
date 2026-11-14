@@ -609,6 +609,12 @@ worker assignment yet. Counts/reasons must use real available scan facts; the
 mock's usable-media counts and specific timeout reason are not automatically
 available from LibraryScanFact.
 
+### Surface13 Libraries entry
+
+UX assessment decision, 2026-11-13/14 (N16 and change 13). The first library
+row receives TV entry focus. The selection screen says “Choose the libraries
+to build channels from.”
+
 ### Surface13 first-pass direction
 
 User approved the starting corrections, emphasized closer scrutiny and asked
@@ -893,6 +899,13 @@ capture run passed (10 total). No new layout tests. Candidate remains unlocked
 until explicit user visual approval. Adaptive/enlarged-text/accessibility and
 physical Windows checks remain grouped and outstanding. No additional independent
 review recommended for this bounded presentation change.
+
+### First-run server rows (surface-12)
+
+UX assessment decision, 2026-11-13/14 (N10 and change 13). Server ownership
+labels read “Yours” or “Shared with you.” A measured connection shows its path
+and latency. A failed reachability probe shows “Unreachable.” Focus starts on
+the first server when available, and the whole row activates its action.
 
 ### Linking approved; profiles and servers next
 

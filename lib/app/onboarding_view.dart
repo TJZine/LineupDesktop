@@ -101,6 +101,8 @@ class UpstreamOnboardingViewState extends State<UpstreamOnboardingView>
   final _linkActionFocus = FocusNode(debugLabel: 'Retry secure cancellation');
   final _profileCancelFocus = FocusNode(debugLabel: 'Cancel profile selection');
   final _serverCancelFocus = FocusNode(debugLabel: 'Cancel server selection');
+  final _firstServerFocus = FocusNode(debugLabel: 'First server action');
+  bool _serverEntryFocused = false;
   final _profileReturnFocus = FocusNode(debugLabel: 'Return to profiles');
   final _profilePinKey = GlobalKey<_ProfilePinStepState>();
   late bool _linkingStopped;
@@ -189,6 +191,7 @@ class UpstreamOnboardingViewState extends State<UpstreamOnboardingView>
     if (oldWidget.controller == widget.controller) return;
     oldWidget.controller.removeListener(_controllerChanged);
     _serverRefresh = null;
+    _serverEntryFocused = false;
     _linkingStopped = _isLinkingStopped(widget.controller);
     _wasLinking = widget.controller.stage == SetupStage.linking;
     _busy = widget.controller.busy;
@@ -212,6 +215,7 @@ class UpstreamOnboardingViewState extends State<UpstreamOnboardingView>
       _wasLinking = controller.stage == SetupStage.linking;
       _busy = nextBusy;
       if (controller.stage != SetupStage.profiles) _pinUser = null;
+      if (controller.stage != SetupStage.servers) _serverEntryFocused = false;
     });
     if (retryNeedsFocus || linkNeedsFocus || becameBusy) {
       WidgetsBinding.instance.addPostFrameCallback((_) {
@@ -263,6 +267,7 @@ class UpstreamOnboardingViewState extends State<UpstreamOnboardingView>
     _linkActionFocus.dispose();
     _profileCancelFocus.dispose();
     _serverCancelFocus.dispose();
+    _firstServerFocus.dispose();
     _profileReturnFocus.dispose();
     super.dispose();
   }
@@ -405,6 +410,7 @@ class UpstreamOnboardingViewState extends State<UpstreamOnboardingView>
 
   @override
   Widget build(BuildContext context) {
+    _scheduleServerEntryFocus();
     final roles = LineupTheme.of(context);
     final refinedStage = switch (widget.controller.stage) {
       SetupStage.linking || SetupStage.profiles || SetupStage.servers => true,
@@ -1093,6 +1099,30 @@ class UpstreamOnboardingViewState extends State<UpstreamOnboardingView>
     );
   }
 
+  bool get _serverEntryCanFocus =>
+      _isTv &&
+      !_serverEntryFocused &&
+      widget.controller.stage == SetupStage.servers &&
+      widget.controller.servers.isNotEmpty &&
+      !_actionsBusy &&
+      !_serverAttempt.pending &&
+      _serverRefresh == null;
+
+  void _scheduleServerEntryFocus() {
+    if (!_serverEntryCanFocus) return;
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (!mounted ||
+          !_serverEntryCanFocus ||
+          ModalRoute.of(context)?.isCurrent != true ||
+          _firstServerFocus.context?.mounted != true ||
+          !_firstServerFocus.canRequestFocus) {
+        return;
+      }
+      _serverEntryFocused = true;
+      _firstServerFocus.requestFocus();
+    });
+  }
+
   Widget _servers() => _HeroContent(
     title: 'Choose a server',
     subtitle: 'Select the Plex server you want to watch from.',
@@ -1117,11 +1147,13 @@ class UpstreamOnboardingViewState extends State<UpstreamOnboardingView>
               );
             },
           ),
-        for (final server in widget.controller.servers)
+        for (final (index, server) in widget.controller.servers.indexed)
           Padding(
             padding: EdgeInsets.only(bottom: 12),
             child: _ServerCard(
               server: server,
+              autofocus: index == 0,
+              focusNode: index == 0 ? _firstServerFocus : null,
               current: widget.controller.server?.id == server.id,
               connection: widget.controller.server?.id == server.id
                   ? widget.controller.connection
@@ -1222,6 +1254,7 @@ class UpstreamOnboardingViewState extends State<UpstreamOnboardingView>
     setState(() {
       _serverAttempt = const _NoServerAttempt();
       _serverRefresh = refresh;
+      _serverEntryFocused = true;
     });
     try {
       await controller.refreshServers();
@@ -1739,15 +1772,19 @@ PlexConnection? _measuredConnection(PlexServer server) {
 class _ServerCard extends StatelessWidget {
   const _ServerCard({
     required this.server,
+    required this.autofocus,
     required this.current,
     required this.connection,
     required this.onPressed,
     this.pending = false,
     this.previouslyUsed = false,
+    this.focusNode,
     this.error,
     this.profileCredentialRecoveryNotice,
   });
   final PlexServer server;
+  final bool autofocus;
+  final FocusNode? focusNode;
   final bool current;
   final PlexConnection? connection;
   final VoidCallback? onPressed;
@@ -1759,6 +1796,10 @@ class _ServerCard extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final measuredConnection = connection ?? _measuredConnection(server);
+    // The controller exposes the selection error as display text. Only the
+    // connection probe's explicit failure establishes unreachability.
+    final unreachable =
+        error == 'No reachable connection was found for this server.';
     final supportStyle = TextStyle(
       color: LineupTheme.of(context).secondaryText,
       fontSize: 18,
@@ -1797,14 +1838,16 @@ class _ServerCard extends StatelessWidget {
           ],
         ),
         SizedBox(height: 4),
-        Text(
-          server.owned ? 'Owned server' : 'Shared server',
-          style: supportStyle,
-        ),
+        Text(server.owned ? 'Yours' : 'Shared with you', style: supportStyle),
         if (previouslyUsed && !current)
           Text('Previously used', style: supportStyle),
-        const SizedBox(height: 8),
-        LineupConnectionStatus(connection: measuredConnection),
+        if (unreachable || measuredConnection?.latency != null) ...[
+          const SizedBox(height: 8),
+          if (unreachable)
+            Text('Unreachable', style: supportStyle)
+          else
+            LineupConnectionStatus(connection: measuredConnection),
+        ],
       ],
     );
     final buttonLabel = pending
@@ -1824,10 +1867,14 @@ class _ServerCard extends StatelessWidget {
         // position never promotes a row.
         child: current
             ? FilledButton(
+                autofocus: autofocus && onPressed != null,
+                focusNode: focusNode,
                 onPressed: onPressed,
                 child: ExcludeSemantics(child: Text(buttonLabel)),
               )
             : OutlinedButton(
+                autofocus: autofocus && onPressed != null,
+                focusNode: focusNode,
                 onPressed: onPressed,
                 child: ExcludeSemantics(child: Text(buttonLabel)),
               ),
@@ -1856,35 +1903,47 @@ class _ServerCard extends StatelessWidget {
                   trailing,
                 ],
               );
-        return Container(
-          width: double.infinity,
-          padding: EdgeInsets.symmetric(vertical: 20),
-          decoration: BoxDecoration(
-            border: Border(
-              bottom: BorderSide(color: LineupTheme.of(context).subtleBorder),
-            ),
-          ),
-          child: Column(
-            crossAxisAlignment: CrossAxisAlignment.stretch,
-            children: [
-              content,
-              if (error != null) ...[
-                SizedBox(height: 12),
-                Semantics(
-                  liveRegion: true,
-                  child: Text(
-                    _withRecoveryNotice(
-                      error,
-                      profileCredentialRecoveryNotice,
-                    )!,
-                    style: TextStyle(
-                      color: Theme.of(context).colorScheme.error,
-                      fontSize: 18,
-                    ),
+        return MouseRegion(
+          cursor: onPressed == null
+              ? MouseCursor.defer
+              : SystemMouseCursors.click,
+          child: GestureDetector(
+            behavior: HitTestBehavior.opaque,
+            excludeFromSemantics: true,
+            onTap: onPressed,
+            child: Container(
+              width: double.infinity,
+              padding: EdgeInsets.symmetric(vertical: 20),
+              decoration: BoxDecoration(
+                border: Border(
+                  bottom: BorderSide(
+                    color: LineupTheme.of(context).subtleBorder,
                   ),
                 ),
-              ],
-            ],
+              ),
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.stretch,
+                children: [
+                  content,
+                  if (error != null) ...[
+                    SizedBox(height: 12),
+                    Semantics(
+                      liveRegion: true,
+                      child: Text(
+                        _withRecoveryNotice(
+                          error,
+                          profileCredentialRecoveryNotice,
+                        )!,
+                        style: TextStyle(
+                          color: Theme.of(context).colorScheme.error,
+                          fontSize: 18,
+                        ),
+                      ),
+                    ),
+                  ],
+                ],
+              ),
+            ),
           ),
         );
       },

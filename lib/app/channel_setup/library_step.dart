@@ -131,7 +131,7 @@ class SetupLibraryStep extends StatelessWidget {
       return 'Your selections are preserved. Scan again when you’re ready.';
     }
     if (!_settled || statuses.isEmpty) {
-      return 'Select the Plex libraries to scan for channel ideas.';
+      return 'Choose the libraries to build channels from.';
     }
     final ready = data.libraryScanCommittableIds
         .intersection(selectedLibraryIds)
@@ -469,14 +469,6 @@ class SetupLibraryStep extends StatelessWidget {
                   checked: value ?? false,
                   mixed: value == null,
                   child: TextButton(
-                    focusNode:
-                        DeviceProfile.of(context).isTv &&
-                            data.libraryScanStatus !=
-                                LibraryScanStatus.scanning &&
-                            editable
-                        ? entryFocusNode
-                        : null,
-                    autofocus: DeviceProfile.of(context).isTv && editable,
                     style: const ButtonStyle(
                       padding: WidgetStatePropertyAll(
                         EdgeInsets.symmetric(horizontal: 8),
@@ -676,22 +668,15 @@ class SetupLibraryStep extends StatelessWidget {
                   type,
                 ],
               );
+        final firstTvRow =
+            tv &&
+            index == 0 &&
+            !data.busy &&
+            data.libraryScanStatus != LibraryScanStatus.scanning;
         return InkWell(
           key: ValueKey('library-row-${library.id}'),
-          focusNode:
-              tv &&
-                  index == 0 &&
-                  data.libraries.length == 1 &&
-                  data.libraryScanStatus != LibraryScanStatus.scanning &&
-                  !data.busy
-              ? entryFocusNode
-              : null,
-          autofocus:
-              tv &&
-              index == 0 &&
-              !data.busy &&
-              data.libraryScanStatus != LibraryScanStatus.scanning &&
-              data.libraries.length == 1,
+          focusNode: firstTvRow ? entryFocusNode : null,
+          autofocus: firstTvRow,
           canRequestFocus: tv,
           excludeFromSemantics: !tv,
           onTap: data.busy ? null : () => onToggleLibrary(library.id),

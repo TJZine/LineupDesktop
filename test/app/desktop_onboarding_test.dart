@@ -1056,6 +1056,47 @@ void main() {
     await tester.pumpAndSettle();
   });
 
+  testWidgets('TV opens a protected profile with focus on PIN digit 1', (
+    tester,
+  ) async {
+    final controller = _AuthorizationController(
+      scenario: const LineupScenario(
+        stage: SetupStage.profiles,
+        profiles: [
+          PlexHomeUser(
+            id: 'protected',
+            name: 'Protected viewer',
+            protected: true,
+          ),
+        ],
+      ),
+    );
+    await tester.pumpWidget(
+      UiFixture(controller: controller, profile: tvProfile).build(),
+    );
+    await tester.pumpAndSettle();
+    final profile = tester.widget<TextButton>(
+      find.widgetWithText(TextButton, 'Protected viewer'),
+    );
+    expect(profile.focusNode!.hasPrimaryFocus, isTrue);
+    await tester.sendKeyEvent(LogicalKeyboardKey.select);
+    await tester.pumpAndSettle();
+
+    expect(find.byKey(const Key('profile-pin-sheet')), findsOneWidget);
+    expect(
+      FocusManager.instance.primaryFocus?.debugLabel,
+      'Profile PIN digit 1',
+    );
+    await tester.sendKeyEvent(LogicalKeyboardKey.select);
+    await tester.sendKeyEvent(LogicalKeyboardKey.arrowRight);
+    await tester.sendKeyEvent(LogicalKeyboardKey.select);
+    await tester.sendKeyEvent(LogicalKeyboardKey.digit3);
+    await tester.sendKeyEvent(LogicalKeyboardKey.numpad4);
+    await tester.pumpAndSettle();
+
+    expect(controller.selections, ['profile:1234']);
+  });
+
   testWidgets('NAV-I2 desktop picker ignores non-Back navigation keys', (
     tester,
   ) async {
@@ -1911,6 +1952,110 @@ void main() {
     expect(tester.takeException(), isNull);
   });
 
+  testWidgets('TV moves focus to the first server when discovery settles', (
+    tester,
+  ) async {
+    final plex = _ProfileRecoveryPlex('discovery');
+    final controller = LineupController(
+      store: MemoryAppStore(),
+      credentials: MemoryCredentialStore(accountToken: 'synthetic-account'),
+      plex: plex,
+    );
+    addTearDown(controller.dispose);
+    await controller.initialize();
+    expect(controller.stage, SetupStage.profiles);
+    await tester.pumpWidget(
+      DeviceProfileScope(
+        profile: tvProfile,
+        child: MaterialApp(
+          builder: LineupCanvas.builder,
+          home: LineupShell(
+            controller: controller,
+            player: FixturePlayer(),
+            profile: tvProfile,
+          ),
+        ),
+      ),
+    );
+    await tester.pumpAndSettle();
+    final owner = find.widgetWithText(TextButton, 'Owner');
+    expect(tester.widget<TextButton>(owner).focusNode!.hasPrimaryFocus, isTrue);
+    await tester.sendKeyEvent(LogicalKeyboardKey.select);
+    await tester.pumpAndSettle();
+    expect(plex.gatedRequestStarted, isTrue);
+    expect(find.text('Choose a server'), findsOneWidget);
+    expect(find.text('Connect'), findsNothing);
+    expect(
+      Focus.of(tester.element(find.text('Settings'))).hasPrimaryFocus,
+      isTrue,
+    );
+
+    plex.gate.complete();
+    await tester.pumpAndSettle();
+    expect(
+      Focus.of(tester.element(find.text('Connect'))).hasPrimaryFocus,
+      isTrue,
+    );
+    await tester.sendKeyEvent(LogicalKeyboardKey.select);
+    await tester.pumpAndSettle();
+    expect(controller.server?.id, 'server');
+    expect(find.text('Choose libraries'), findsOneWidget);
+  });
+
+  for (final isTv in [false, true]) {
+    testWidgets('server rows expose one full hit target (TV=$isTv)', (
+      tester,
+    ) async {
+      final controller = _ServerController(
+        scenario: const LineupScenario(
+          stage: SetupStage.servers,
+          servers: [
+            PlexServer(
+              id: 'mine',
+              name: 'Media room',
+              owned: true,
+              connections: [],
+            ),
+            PlexServer(
+              id: 'shared',
+              name: 'Archive',
+              owned: false,
+              connections: [],
+            ),
+          ],
+        ),
+      );
+      addTearDown(controller.dispose);
+      await show(tester, controller, isTv: isTv);
+      await tester.pumpAndSettle();
+      expect(find.text('Yours'), findsOneWidget);
+      expect(find.text('Shared with you'), findsOneWidget);
+      expect(find.text('Not measured yet'), findsNothing);
+      expect(find.text('Unreachable'), findsNothing);
+      final firstAction = find.widgetWithText(OutlinedButton, 'Connect').first;
+      expect(
+        Focus.of(
+          tester.element(
+            find.descendant(of: firstAction, matching: find.text('Connect')),
+          ),
+        ).hasPrimaryFocus,
+        isTrue,
+      );
+
+      controller.selectionFailure =
+          'No reachable connection was found for this server.';
+      await tester.tap(find.text('Media room'));
+      await tester.pumpAndSettle();
+      expect(controller.selectCalls, 1);
+      expect(find.text('Unreachable'), findsOneWidget);
+      controller.selectionFailure = 'Server selection failed.';
+      await tester.tap(find.text('Shared with you'));
+      await tester.pumpAndSettle();
+      expect(controller.selectCalls, 2);
+      expect(find.text('Unreachable'), findsNothing);
+    });
+  }
+
   testWidgets('server action semantics follow pending and error state', (
     tester,
   ) async {
@@ -1985,11 +2130,15 @@ void main() {
     final backFocus = tester.widget<TextButton>(back).focusNode!;
     expect(backFocus.hasFocus, isFalse);
     final gate = plex.refreshGate = Completer<void>();
-
-    await tester.tap(find.text('Refresh servers'));
+    final refresh = find.text('Refresh servers');
+    final refreshFocus = Focus.of(tester.element(refresh));
+    refreshFocus.requestFocus();
     await tester.pump();
+
+    await tester.sendKeyEvent(LogicalKeyboardKey.select);
     await tester.pump();
     expect(controller.busy, isTrue);
+    expect(refreshFocus.hasPrimaryFocus, isTrue);
     expect(backFocus.hasFocus, isFalse);
     await tester.sendKeyEvent(LogicalKeyboardKey.select);
     await tester.pump();
@@ -1998,6 +2147,7 @@ void main() {
     gate.complete();
     await tester.pumpAndSettle();
     expect(controller.busy, isFalse);
+    expect(refreshFocus.hasPrimaryFocus, isTrue);
   }, variant: const TargetPlatformVariant({TargetPlatform.android}));
 
   testWidgets('refresh and profile switch clear stale server errors', (
@@ -2037,6 +2187,50 @@ void main() {
     controller.showServers();
     await tester.pump();
     expect(find.text('Server selection failed.'), findsNothing);
+  });
+
+  testWidgets('Settings Account can switch to another server from its row', (
+    tester,
+  ) async {
+    const current = PlexServer(
+      id: 'current',
+      name: 'Media room',
+      owned: true,
+      connections: [],
+    );
+    const alternate = PlexServer(
+      id: 'alternate',
+      name: 'Archive',
+      owned: false,
+      connections: [],
+    );
+    final controller = _AuthorizationController(
+      scenario: const LineupScenario(
+        stage: SetupStage.ready,
+        account: PlexAccount(id: 'owner', name: 'Owner', email: ''),
+        server: current,
+        servers: [current, alternate],
+      ),
+    );
+    await tester.binding.setSurfaceSize(const Size(1280, 720));
+    addTearDown(() => tester.binding.setSurfaceSize(null));
+    await tester.pumpWidget(UiFixture(controller: controller).build());
+    await tester.pumpAndSettle();
+    await openDestination(tester, 'Settings');
+    await tester.tap(find.text('Account'));
+    await tester.pumpAndSettle();
+    await tester.ensureVisible(find.text('Switch server'));
+    await tester.tap(find.text('Switch server'));
+    await tester.pumpAndSettle();
+    expect(controller.stage, SetupStage.servers);
+    expect(controller.server?.id, current.id);
+    expect(find.text('‹ Settings · Account'), findsOneWidget);
+
+    await tester.tap(find.text('Archive'));
+    await tester.pumpAndSettle();
+    expect(controller.selections, ['server']);
+    expect(controller.server?.id, alternate.id);
+    expect(controller.stage, SetupStage.channelSetup);
   });
 
   testWidgets('current server Continue returns without selecting again', (
@@ -2098,7 +2292,7 @@ void main() {
     );
     expect(find.byType(LineupCompactControls), findsNothing);
     expect(find.text('‹ Settings · Account'), findsOneWidget);
-    expect(find.text('Not measured yet'), findsOneWidget);
+    expect(find.text('Not measured yet'), findsNothing);
     expect(find.text('Direct remote · 126 ms'), findsOneWidget);
 
     await tester.tap(find.widgetWithText(FilledButton, 'Continue'));
@@ -2608,6 +2802,7 @@ class _ServerController extends FixtureController {
 
   Completer<void>? pendingSelection;
   bool failSelection = false;
+  String? selectionFailure;
   bool promoteSelection = false;
   int selectCalls = 0;
 
@@ -2623,9 +2818,11 @@ class _ServerController extends FixtureController {
       await pending.future;
       pendingSelection = null;
     }
-    if (failSelection) {
+    if (failSelection || selectionFailure != null) {
       fixtureActor.present(
-        LineupPresentation(error: ('Server selection failed.',)),
+        LineupPresentation(
+          error: (selectionFailure ?? 'Server selection failed.',),
+        ),
       );
       notifyListeners();
     }

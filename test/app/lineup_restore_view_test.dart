@@ -227,7 +227,7 @@ void main() {
             expect(find.text('Shape your lineup'), findsNothing);
           } else {
             expect(
-              find.text('Select the Plex libraries to scan for channel ideas.'),
+              find.text('Choose the libraries to build channels from.'),
               findsNothing,
             );
             expect(find.text('Scan again'), findsNothing);

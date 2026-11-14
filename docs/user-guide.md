@@ -87,9 +87,9 @@ profile has a ring around its avatar in the active theme's focus color.
 Large focus indicators thicken the ring, and Reduce Motion keeps the avatar
 at its resting size.
 
-Profile cards show `PIN`, `Admin`, and `Restricted` only when the current Plex
-Home response establishes those facts. `Active` identifies the currently
-selected profile when the picker is reopened; it is not a focus indicator.
+A lock on the avatar marks a protected profile. The picker shows **Admin**
+and **Restricted** when those labels apply. **Current** identifies the
+selected profile when you reopen the picker.
 
 The profile determines the secure credential scope, selected server, saved
 lineup, and related persisted state. Switching profiles does not intentionally
@@ -98,11 +98,12 @@ reuse another profile's server or lineup.
 ### 3. Select a Plex Media Server
 
 Choose a discovered server. Lineup prioritizes usable direct connections before
-relay connections. Each row distinguishes an owned server from a shared one. **Current** marks
-the connected server, while **Previously used** identifies a saved selection. Only the selected server shows its measured path and
-latency; 500 ms or more is labeled **Very slow**, and a relay is labeled
-**Limited** rather than failed. Lower measured latencies show their route and
-value without a Slow warning.
+relay connections. Choose anywhere on a server row to select it. **Yours** and **Shared with you**
+show who owns each server. **Current** marks the connected server, while
+**Previously used** identifies a saved selection. When Lineup has measured a
+connection, the row shows its path and latency. A latency of 500 ms or more is
+labeled **Very slow**, a relay is labeled **Limited**, and a failed reachability
+probe shows **Unreachable**. You can change servers later in **Settings → Account**.
 
 Plex supplies each discovered server with its own PMS credential, separate from
 the Plex.tv account or Home-profile credential. Lineup keeps that server
@@ -112,7 +113,7 @@ it is not saved in application state or shown in the interface.
 When no server appears:
 
 - confirm Plex Media Server is running and reachable;
-- select **Retry discovery**;
+- select **Refresh servers**;
 - switch profiles when the expected server belongs to another profile; or
 - select another server. The picker also offers **Sign out** when you need to
   link Plex again; signing out uses a confirmation and stops playback.
@@ -121,8 +122,9 @@ When no server appears:
 
 Channel Setup has three stages:
 
-1. **Choose libraries** and scan their media. You can cancel a running scan,
-   retry only failed libraries, or continue with the ready subset.
+1. **Choose libraries** to build channels from, then scan their media. On TV,
+   focus starts on the first library when the list is available. You can cancel
+   a running scan, retry only failed libraries, or continue with the ready subset.
 2. **Configure channels** using playlists, collections, recently added content,
    genres, studios, actors, decades, and directors. Select per-library or grouped
    sources, playback order, minimum programs, and the generated-channel limit.
