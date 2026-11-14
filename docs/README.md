@@ -10,7 +10,7 @@ campaign results retain their original source, build and platform limits.
 
 | Audience or task | Start here | Continue with |
 | --- | --- | --- |
-| User or private tester | [User Guide](user-guide.md) | [Windows Native Acceptance](windows-native-validation.md) for hardware testing |
+| User or private tester | [Documentation site](https://tjzine.github.io/LineupDesktop/) (source: [Get started](getting-started/index.md), [Guides](guides/index.md), [Reference](reference/index.md)) | [Windows Native Acceptance](windows-native-validation.md) for hardware testing |
 | Contributor | [Contributing](../CONTRIBUTING.md) | [Development](DEVELOPMENT.md), [Architecture](architecture.md) |
 | Agent-assisted work | [Agent entry](../AGENTS.md) | [Project profile](../.agents/project.md), then affected authorities |
 | Pending work or release planning | [Open obligations](open-obligations.md) | Current plans below; [August 23, 2026 product-parity audit](product-parity.md) for dated context |
@@ -23,7 +23,7 @@ campaign results retain their original source, build and platform limits.
 
 ## Current operational authorities
 
-- [User Guide](user-guide.md): setup, navigation, controls, settings, recovery,
+- User documentation ([site](https://tjzine.github.io/LineupDesktop/); source in [Get started](getting-started/index.md), [Guides](guides/index.md) and [Reference](reference/index.md)): setup, navigation, controls, settings, recovery,
   privacy and limitations.
 - [Development](DEVELOPMENT.md): canonical toolchain configuration, commands,
   prerequisites, test tiers, native builds and package evidence boundaries.

@@ -57,7 +57,7 @@ Include:
 - Keep Plex Media Server and the host operating system updated.
 - Use trusted networks for local testing.
 - Download public builds only from the official GitHub Releases page. Follow the
-  [Windows installation instructions](docs/user-guide.md#install-a-windows-release-or-private-build)
+  [Windows installation instructions](https://tjzine.github.io/LineupDesktop/getting-started/windows/)
   for the unsigned MVP package.
 - Use checksum verification to confirm the downloaded bytes and release
   attestation to confirm their provenance. Software safety requires separate

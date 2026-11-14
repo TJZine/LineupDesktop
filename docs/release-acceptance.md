@@ -6,7 +6,7 @@ Use the downloaded signed APK or CI-produced Windows ZIP selected by
 asset SHA-256, version, signer or unsigned status, device/host identity, row
 result, and blocker or limitation. Do not record tokens, server addresses,
 private media titles, or unredacted diagnostics. See [Android runtime](android-runtime.md),
-[Windows native acceptance](windows-native-validation.md), and the [user guide](user-guide.md)
+[Windows native acceptance](windows-native-validation.md), and the [platform support page](reference/platforms.md)
 for detailed platform context.
 
 ## Android TV, Google TV and Fire TV

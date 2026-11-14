@@ -1,0 +1,121 @@
+[project]
+site_name = "Lineup"
+site_description = "Lineup turns your movies and shows into scheduled TV channels with a real program guide. Pick a channel and something is already playing."
+site_url = "https://tjzine.github.io/LineupDesktop/"
+site_author = "Tristan Zine"
+copyright = "© 2026 Tristan Zine. Released under the Apache-2.0 license. Lineup is not affiliated with Plex Inc."
+repo_url = "https://github.com/TJZine/LineupDesktop"
+repo_name = "GitHub"
+edit_uri = "edit/main/docs/"
+docs_dir = "docs"
+site_dir = "site"
+extra_css = ["stylesheets/fonts.css", "stylesheets/lineup.css"]
+exclude_docs = """
+/*
+!/index.md
+!/getting-started/
+!/guides/
+!/reference/
+!/contributing/
+!/assets/
+!/images/
+!/stylesheets/
+/images/README.md
+/assets/**/*.md
+"""
+
+nav = [
+  { "Home" = "index.md" },
+  { "Get started" = [
+    { "Choose your platform" = "getting-started/index.md" },
+    { "Windows" = "getting-started/windows.md" },
+    { "Android TV and Fire TV" = "getting-started/android-tv.md" },
+    { "macOS" = "getting-started/macos.md" },
+    { "Your first lineup" = "getting-started/first-lineup.md" },
+  ] },
+  { "Guides" = [
+    { "Guides overview" = "guides/index.md" },
+    { "Watching" = [
+      { "The Guide" = "guides/guide.md" },
+      { "The Player" = "guides/player.md" },
+      { "Audio, subtitles and sleep" = "guides/tracks-and-sleep.md" },
+      { "Subtitle appearance" = "guides/subtitle-appearance.md" },
+    ] },
+    { "Channels" = [
+      { "Generate a lineup" = "guides/generate-lineup.md" },
+      { "Custom channels" = "guides/custom-channels.md" },
+      { "How schedules work" = "guides/schedules.md" },
+    ] },
+    { "Your setup" = [
+      { "Profiles and servers" = "guides/profiles-and-servers.md" },
+      { "Settings" = "guides/settings.md" },
+      { "Support reports" = "guides/support-reports.md" },
+      { "Troubleshooting" = "guides/troubleshooting.md" },
+    ] },
+  ] },
+  { "Reference" = [
+    { "Reference overview" = "reference/index.md" },
+    { "Keyboard and remote" = "reference/controls.md" },
+    { "Platform support" = "reference/platforms.md" },
+    { "Known limitations" = "reference/limitations.md" },
+    { "Privacy and stored data" = "reference/privacy.md" },
+    { "Glossary" = "reference/glossary.md" },
+  ] },
+  { "Contributing" = "contributing/index.md" },
+]
+
+[project.theme]
+language = "en"
+custom_dir = "tool/docs/overrides"
+font = false
+logo = "assets/brand/logo-mark.png"
+favicon = "assets/brand/favicon-32.png"
+features = [
+  "content.action.edit",
+  "content.code.copy",
+  "content.tabs.link",
+  "navigation.footer",
+  "navigation.instant",
+  "navigation.path",
+  "navigation.sections",
+  "navigation.tabs",
+  "navigation.tabs.sticky",
+  "navigation.tracking",
+  "search.highlight",
+  "toc.follow",
+]
+
+[[project.theme.palette]]
+media = "(prefers-color-scheme: dark)"
+scheme = "slate"
+primary = "custom"
+accent = "custom"
+toggle.icon = "lucide/moon"
+toggle.name = "Switch to light mode"
+
+[[project.theme.palette]]
+media = "(prefers-color-scheme: light)"
+scheme = "default"
+primary = "custom"
+accent = "custom"
+toggle.icon = "lucide/sun"
+toggle.name = "Switch to dark mode"
+
+[project.extra]
+generator = false
+
+[project.markdown_extensions.admonition]
+[project.markdown_extensions.attr_list]
+[project.markdown_extensions.def_list]
+[project.markdown_extensions.md_in_html]
+[project.markdown_extensions.pymdownx.details]
+[project.markdown_extensions.pymdownx.highlight]
+[project.markdown_extensions.pymdownx.superfences]
+[project.markdown_extensions.pymdownx.keys]
+
+[project.markdown_extensions.pymdownx.tabbed]
+alternate_style = true
+
+[project.markdown_extensions.toc]
+permalink = true
+toc_depth = 3

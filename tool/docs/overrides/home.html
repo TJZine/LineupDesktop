@@ -1,0 +1,30 @@
+{% extends "main.html" %}
+
+{% block content %}
+  {{ page.content }}
+{% endblock %}
+
+{% block hero %}
+<section class="lu-hero">
+  <div class="lu-hero__inner md-grid">
+    <div>
+      <div class="lu-hero__eyebrow">Virtual TV channels for Plex</div>
+      <h1>Your Plex library, <em>on the air.</em></h1>
+      <p class="lu-hero__lead">{{ config.site_description }}</p>
+      <div class="lu-hero__actions">
+        <a class="lu-button primary" href="{{ 'getting-started/' | url }}">Install Lineup <span aria-hidden="true">→</span></a>
+        <a class="lu-button" href="{{ 'guides/' | url }}">Read the guides</a>
+      </div>
+      <div class="lu-platforms-mini">
+        <span>Pre-release</span>
+        <span>Windows 10 and 11</span>
+        <span>Android TV, Google TV and Fire TV</span>
+        <span>Mac in private testing</span>
+      </div>
+    </div>
+    <figure class="lu-frame">
+      <img src="{{ 'images/home-guide.webp' | url }}" alt="Lineup Guide with The Bear playing in the corner and its details above a six-channel schedule." width="1600" height="1000">
+    </figure>
+  </div>
+</section>
+{% endblock %}

@@ -105,8 +105,7 @@ implementation. In particular:
 
 Read [current ownership](../docs/architecture.md#accepted-ownership) and
 [async/persistence contracts](../docs/architecture.md#changing-asynchronous-and-persisted-state)
-when those decisions matter. Use [the user guide](../docs/user-guide.md) for
-intended user behavior and [the documentation index](../docs/README.md) for
+when those decisions matter. Use the user documentation in [docs/getting-started](../docs/getting-started/index.md), [docs/guides](../docs/guides/index.md) and [docs/reference](../docs/reference/index.md) for intended user behavior and [the documentation index](../docs/README.md) for
 unfamiliar areas.
 
 ## Architecture and current owners
