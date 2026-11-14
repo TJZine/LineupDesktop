@@ -596,11 +596,13 @@ class _GuideViewState extends State<GuideView>
       return existing;
     }
 
+    var focusWasVisible = false;
     if (!_rowHeightAdjustmentScheduled && existing.hasClients) {
       widget.controller.rememberVerticalOffset(
         existing.offset,
         previousRowHeight,
       );
+      focusWasVisible = _focusedRowVisible(existing.offset, previousRowHeight);
     }
     _effectiveRowHeight = rowHeight;
     if (!_rowHeightAdjustmentScheduled) {
@@ -611,15 +613,31 @@ class _GuideViewState extends State<GuideView>
         if (!mounted || currentRowHeight == null || !existing.hasClients) {
           return;
         }
-        existing.jumpTo(
-          widget.controller
-              .verticalOffsetFor(currentRowHeight)
-              .clamp(0.0, existing.position.maxScrollExtent),
-        );
+        final maxOffset = existing.position.maxScrollExtent;
+        var offset = widget.controller
+            .verticalOffsetFor(currentRowHeight)
+            .clamp(0.0, maxOffset);
+        // A row-count drop can push a visible focused row past the last
+        // visible row; scroll only as far as that row needs.
+        if (focusWasVisible && !_focusedRowVisible(offset, currentRowHeight)) {
+          final index = widget.controller.focusedChannelIndex;
+          offset = ((index - _visibleRows + 1) * currentRowHeight).clamp(
+            0.0,
+            maxOffset,
+          );
+        }
+        existing.jumpTo(offset);
         _scheduleViewportRequest();
       });
     }
     return existing;
+  }
+
+  bool _focusedRowVisible(double offset, double rowHeight) {
+    final index = widget.controller.focusedChannelIndex;
+    if (index < 0) return false;
+    final first = ((offset + 0.000001) / rowHeight).floor();
+    return index >= first && index < first + _visibleRows;
   }
 
   void _changed() {
@@ -670,8 +688,7 @@ class _GuideViewState extends State<GuideView>
       }
       final index = widget.controller.focusedChannelIndex;
       if (index < 0) return;
-      final first = ((scroll.offset + 0.000001) / rowHeight).floor();
-      if (index < first || index >= first + _visibleRows) {
+      if (!_focusedRowVisible(scroll.offset, rowHeight)) {
         final target = (index * rowHeight).clamp(
           0.0,
           scroll.position.maxScrollExtent,

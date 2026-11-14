@@ -5520,6 +5520,78 @@ void main() {
     guide.dispose();
     lineup.dispose();
   });
+
+  testWidgets('a visible focused row stays visible when the row count drops', (
+    tester,
+  ) async {
+    final lineup = _Lineup(
+      40,
+      scenario: LineupScenario(
+        settings: const LineupSettings(reduceMotion: true),
+      ),
+    );
+    addTearDown(lineup.dispose);
+    final guide = GuideController(
+      lineup: lineup,
+      loadSchedule: (channel) async => _schedule(channel),
+    );
+    addTearDown(guide.dispose);
+    tester.view
+      ..devicePixelRatio = 1
+      ..physicalSize = const Size(1920, 1200);
+    addTearDown(tester.view.resetPhysicalSize);
+    addTearDown(tester.view.resetDevicePixelRatio);
+    await tester.pumpWidget(
+      MaterialApp(
+        builder: _guideCanvasBuilder,
+        home: GuideView(
+          controller: guide,
+          pictureInPicture: const SizedBox.expand(),
+          onClose: (_, _) {},
+          onTune: (_) async {},
+        ),
+      ),
+    );
+    await tester.pump();
+    final scrollable = tester.state<ScrollableState>(
+      find.descendant(
+        of: find.byKey(const Key('guide-schedule-list')),
+        matching: find.byType(Scrollable),
+      ),
+    );
+    double rowHeight() => tester
+        .widget<ListView>(find.byKey(const Key('guide-schedule-list')))
+        .itemExtent!;
+    int visibleRows() =>
+        (scrollable.position.viewportDimension / rowHeight()).floor();
+    expect(visibleRows(), 6);
+
+    // Focus the last visible row; it is already visible, so nothing scrolls.
+    guide.moveVertical(5);
+    await tester.pump();
+    await tester.pump();
+    expect(scrollable.position.pixels, 0);
+
+    tester.view.physicalSize = const Size(1920, 1080);
+    await tester.pump();
+    await tester.pump();
+    expect(visibleRows(), 5);
+    final first = (scrollable.position.pixels / rowHeight()).round();
+    expect(first, 1, reason: 'scroll only as far as the focused row needs');
+    expect(guide.focusedChannelIndex, lessThan(first + visibleRows()));
+
+    // A focused row the user scrolled away from is not pulled back.
+    scrollable.position.jumpTo(rowHeight() * 20);
+    await tester.pump();
+    tester.view.physicalSize = const Size(1920, 1200);
+    await tester.pump();
+    await tester.pump();
+    expect((scrollable.position.pixels / rowHeight()).round(), 20);
+
+    await tester.pumpWidget(const SizedBox.shrink());
+    guide.dispose();
+    lineup.dispose();
+  });
 }
 
 String _detailsMetadata(WidgetTester tester) => [
