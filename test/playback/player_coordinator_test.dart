@@ -50,7 +50,7 @@ void main() {
       testWidgets(
         '$action $failure blocks mutation and playback until cleanup retry',
         (tester) async {
-          final lineup = _AuthorizationLineup();
+          final lineup = _AuthorizationLineup()..diagnostics.enabled = true;
           final guide = GuideController(
             lineup: lineup,
             loadSchedule: (channel) async => _schedule(channel),
@@ -94,6 +94,10 @@ void main() {
             contains('Playback could not be stopped'),
           );
           expect(coordinator.canRetry, isTrue);
+          expect(
+            _supportReport(lineup, coordinator),
+            contains('(operation=authorization_stop, code=player_unavailable)'),
+          );
           expect(await coordinator.tune('channel-0'), isFalse);
           final background = coordinator.setApplicationForeground(false);
           await coordinator.setApplicationForeground(true);
