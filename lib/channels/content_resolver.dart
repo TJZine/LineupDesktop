@@ -4,6 +4,16 @@ import 'library_facets.dart';
 
 export 'library_facets.dart' show channelDecadeForYear, matchesLibraryFacets;
 
+/// Plex playlist rows may omit their library. A scanned match can supply it
+/// within the current inventory without guessing for unseen members.
+Set<String> playlistLibraryIds(
+  Iterable<PlexMediaItem> items,
+  Map<String, PlexMediaItem> scannedById,
+) => {
+  for (final item in items.where((item) => item.isPlayable))
+    ?(scannedById[item.id]?.libraryId ?? item.libraryId),
+};
+
 List<ChannelItem> resolveContent(
   ContentSource source,
   List<PlexMediaItem> media, [

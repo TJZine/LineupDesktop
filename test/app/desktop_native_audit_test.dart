@@ -1,3 +1,5 @@
+import 'dart:ui' show SemanticsAction;
+
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_test/flutter_test.dart';
@@ -73,6 +75,17 @@ void main() {
       await tester.pumpAndSettle();
       final action = find.byKey(const Key('app-menu-now-playing'));
       expect(action, findsOneWidget);
+      final semantics = find.bySemanticsLabel(
+        'Now Playing, Channel ${_channel.number}, ${_channel.name}, ${_program.title}',
+      );
+      expect(semantics, findsOneWidget);
+      expect(
+        tester
+            .getSemantics(semantics)
+            .getSemanticsData()
+            .hasAction(SemanticsAction.tap),
+        isTrue,
+      );
       expect(
         find.descendant(of: action, matching: find.text(_program.title)),
         findsOneWidget,
@@ -93,7 +106,7 @@ void main() {
       expect(find.byType(PlayerView), findsOneWidget);
       expect(player.commands, before);
       await tester.pumpWidget(const SizedBox.shrink());
-    });
+    }, semanticsEnabled: true);
   }
 
   for (final hasPlayback in [false, true]) {

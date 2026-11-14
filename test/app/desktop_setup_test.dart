@@ -120,6 +120,36 @@ void main() {
     }, skip: reviewEvidence.isEmpty);
   }
 
+  testWidgets('Grouped cannot advance an empty first lineup', (tester) async {
+    final fixture = await _createBoundarySetup();
+    addTearDown(fixture.controller.dispose);
+    await _pump(tester, fixture.controller);
+    await _advanceToConfigure(tester);
+    await tester.tap(find.byKey(const ValueKey('configure-section-2')));
+    await tester.pumpAndSettle();
+    final dropdown = _setupField<ChannelOrder>('Channel order');
+    await tester.ensureVisible(dropdown);
+    await tester.tap(dropdown);
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('Grouped by type').last);
+    await tester.pumpAndSettle();
+    final minimum = find.byKey(const ValueKey('rules-minimum'));
+    await tester.ensureVisible(minimum);
+    await tester.tap(minimum);
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('50').last);
+    await tester.pumpAndSettle();
+    final review = find.byKey(const ValueKey('review-channels'));
+    expect(tester.widget<FilledButton>(review).onPressed, isNull);
+    final saves = fixture.store.saveCalls;
+    await tester.tap(review);
+    await tester.pumpAndSettle();
+    expect(find.text('Choose channels'), findsOneWidget);
+    expect(fixture.controller.stage, SetupStage.channelSetup);
+    expect(fixture.controller.channels, isEmpty);
+    expect(fixture.store.saveCalls, saves);
+  });
+
   testWidgets(
     'R1 real controller saves and review choices stay unchanged across region keys',
     (tester) async {
@@ -1985,7 +2015,7 @@ void main() {
     await tester.pumpAndSettle();
     expect(
       find.text(
-        'Keep your existing lineup and add channels whose sources are not already in it.',
+        'Keep existing channel numbers. The chosen order applies to the new channels only.',
       ),
       findsOneWidget,
     );
@@ -2675,7 +2705,23 @@ void main() {
   testWidgets(
     'empty playlists stay off and disabled sources are not truncation',
     (tester) async {
-      final controller = _SetupController();
+      final controller = _SetupController(
+        playlists: [
+          PlexPlaylist(
+            id: 'empty',
+            title: 'Empty playlist',
+            items: [
+              PlexMediaItem(
+                id: 'unusable',
+                title: 'Unusable',
+                type: 'movie',
+                duration: const Duration(minutes: 1),
+                parts: [PlexMediaPart(path: 'https://different.invalid/media')],
+              ),
+            ],
+          ),
+        ],
+      );
       addTearDown(controller.dispose);
       await _pump(tester, controller);
       await _advanceToConfigure(tester);
@@ -4036,6 +4082,7 @@ class _SetupController extends FixtureController {
     required List<Channel> expectedBase,
     Set<String> removeChannelIds = const {},
     ChannelOrder? channelOrder,
+    Map<String, int> reviewedNumbers = const {},
   }) async {
     applyCalls++;
     if (applyGate != null) await applyGate!.future;

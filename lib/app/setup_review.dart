@@ -70,6 +70,12 @@ final class Completed extends SetupPhase {
   const Completed(super.review);
 }
 
+typedef SetupReviewOrdering = ({
+  ChannelOrder order,
+  List<BuilderStrategy> strategyOrder,
+  Map<String, int> sourceCounts,
+});
+
 class SetupReview {
   SetupReview({
     required List<Channel> base,
@@ -77,6 +83,7 @@ class SetupReview {
     required ChannelBuildMode mode,
     required Map<String, BuilderStrategy> strategyBySource,
     SetupReviewPlanFactory? planFactory,
+    SetupReviewOrdering? ordering,
     Set<String> removeSourceIds = const {},
   }) : this._(
          base: List.unmodifiable(
@@ -87,6 +94,13 @@ class SetupReview {
          removeSourceIds: Set.unmodifiable(removeSourceIds),
          strategyBySource: Map.unmodifiable(strategyBySource),
          planFactory: planFactory,
+         ordering: ordering == null
+             ? null
+             : (
+                 order: ordering.order,
+                 strategyOrder: List.unmodifiable(ordering.strategyOrder),
+                 sourceCounts: Map.unmodifiable(ordering.sourceCounts),
+               ),
        );
 
   SetupReview._({
@@ -95,16 +109,17 @@ class SetupReview {
     required this.mode,
     required this.removeSourceIds,
     required this.strategyBySource,
+    required this.ordering,
     required this._planFactory,
   }) : finalChannels = _finalChannels(
          base: base,
          planned: plan.channels,
          mode: mode,
          removeSourceIds: removeSourceIds,
+         ordering: ordering,
        ) {
     final computedEntries = _reviewEntries(
       base: base,
-      planned: plan.channels,
       finalChannels: finalChannels,
     );
     entries = List.unmodifiable(computedEntries);
@@ -117,6 +132,15 @@ class SetupReview {
   final Set<String> removeSourceIds;
   final Map<String, BuilderStrategy> strategyBySource;
   final List<Channel> finalChannels;
+  final SetupReviewOrdering? ordering;
+
+  Map<String, int> get reviewedNumbers =>
+      mode == ChannelBuildMode.merge && ordering != null
+      ? {
+          for (final channel in finalChannels)
+            if (channel.builderKey != null) channel.id: channel.number,
+        }
+      : const {};
   late final List<SetupReviewEntry> entries;
   late final SetupReviewCounts counts;
   final SetupReviewPlanFactory? _planFactory;
@@ -133,6 +157,7 @@ class SetupReview {
       mode: mode,
       strategyBySource: result.strategyBySource,
       planFactory: factory,
+      ordering: ordering,
     );
   }
 
@@ -150,6 +175,7 @@ class SetupReview {
       removeSourceIds: next,
       strategyBySource: strategyBySource,
       planFactory: _planFactory,
+      ordering: ordering,
     );
   }
 
@@ -158,22 +184,30 @@ class SetupReview {
     required List<Channel> planned,
     required ChannelBuildMode mode,
     required Set<String> removeSourceIds,
-  }) => composeChannelPlan(
-    existing: base
-        .where((channel) => !removeSourceIds.contains(channel.id))
-        .toList(),
-    planned: planned,
-    mode: mode,
-  );
+    required SetupReviewOrdering? ordering,
+  }) {
+    final channels = composeChannelPlan(
+      existing: base
+          .where((channel) => !removeSourceIds.contains(channel.id))
+          .toList(),
+      planned: planned,
+      mode: mode,
+    );
+    if (mode != ChannelBuildMode.merge || ordering == null) return channels;
+    return orderSurvivingChannels(
+      channels: channels,
+      order: ordering.order,
+      strategyOrder: ordering.strategyOrder,
+      sourceCounts: ordering.sourceCounts,
+    );
+  }
 
   static List<SetupReviewEntry> _reviewEntries({
     required List<Channel> base,
-    required List<Channel> planned,
     required List<Channel> finalChannels,
   }) {
     final before = {for (final channel in base) channel.id: channel};
     final finalIds = finalChannels.map((channel) => channel.id).toSet();
-    final plannedIds = planned.map((channel) => channel.id).toSet();
     final entries = <SetupReviewEntry>[
       for (final channel in finalChannels)
         (
@@ -181,11 +215,10 @@ class SetupReview {
           before: before[channel.id],
           kind: before[channel.id] == null
               ? SetupReviewKind.added
-              : plannedIds.contains(channel.id) &&
-                    !canonicalChannelValueEquals(
-                      before[channel.id]!.toJson(),
-                      channel.toJson(),
-                    )
+              : !canonicalChannelValueEquals(
+                  before[channel.id]!.toJson(),
+                  channel.toJson(),
+                )
               ? SetupReviewKind.updated
               : SetupReviewKind.unchanged,
         ),

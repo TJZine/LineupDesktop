@@ -4,6 +4,7 @@ import 'package:lineup_desktop/platform/device_profile.dart';
 
 import '../channels/channel.dart';
 import '../channels/channel_builder.dart';
+import '../channels/content_resolver.dart';
 import '../ui/app_theme.dart';
 import '../ui/app_ui.dart';
 import 'channel_setup_projection.dart';
@@ -319,6 +320,30 @@ class UpstreamChannelSetupViewState extends State<UpstreamChannelSetupView> {
         () => proposal.strategy,
       );
     }
+    SetupReviewOrdering? ordering;
+    if (_channelOrder == ChannelOrder.grouped ||
+        _channelOrder != widget.controller.channelOrder) {
+      final inventory = widget.controller.playableInventory;
+      final counts = {
+        for (final proposal in proposals)
+          canonicalSourceIdentity(proposal.source): proposal.itemCount,
+      };
+      for (final channel in existing.where((c) => c.builderKey != null)) {
+        counts.putIfAbsent(
+          canonicalSourceIdentity(channel.source),
+          () => resolveContent(
+            channel.source,
+            inventory.media,
+            inventory.playlists,
+          ).length,
+        );
+      }
+      ordering = (
+        order: _channelOrder,
+        strategyOrder: _sourceOrder,
+        sourceCounts: counts,
+      );
+    }
     return SetupReview(
       base: existing,
       plan: _allocate(
@@ -329,6 +354,7 @@ class UpstreamChannelSetupViewState extends State<UpstreamChannelSetupView> {
       ),
       mode: mode,
       strategyBySource: strategyBySource,
+      ordering: ordering,
       planFactory: (nextMode, nextAnchor) {
         final nextProposals = _buildProposals();
         final nextStrategies = <String, BuilderStrategy>{};
@@ -654,7 +680,13 @@ class UpstreamChannelSetupViewState extends State<UpstreamChannelSetupView> {
           setState(() => _configurationSection = section),
       onBack: _backToLibraries,
       onReview: _prepareReview,
-      orderChanged: _channelOrder != widget.controller.channelOrder,
+      orderChanged:
+          widget.controller.channels.isNotEmpty &&
+          (_mode != ChannelBuildMode.replace ||
+              widget.controller.channels.any(
+                (channel) => channel.builderKey == null,
+              )) &&
+          _channelOrder != widget.controller.channelOrder,
       hasConfirmedMissingSources:
           _mode == ChannelBuildMode.merge &&
           allocation.unmatchedGenerated.any(
@@ -675,7 +707,9 @@ class UpstreamChannelSetupViewState extends State<UpstreamChannelSetupView> {
         maximum: _maximum,
         minimum: _minimum,
       ),
-      hasPlaylists: widget.controller.playableInventory.playlists.isNotEmpty,
+      hasPlaylists: widget.controller.playableInventory.playlists.any(
+        (playlist) => playlist.items.any((item) => item.isPlayable),
+      ),
       selectedLibraryCount: _selectedLibraries.length,
       disabledEligibility: Map.unmodifiable({
         for (final strategy in BuilderStrategy.values)
@@ -829,11 +863,14 @@ class UpstreamChannelSetupViewState extends State<UpstreamChannelSetupView> {
 
   void _prepareReview() {
     final base = List<Channel>.of(widget.controller.channels);
+    final review = _allocateReview(
+      base,
+      mode: _mode,
+      anchor: DateTime.now().toUtc(),
+    );
+    if (base.isEmpty && review.finalChannels.isEmpty) return;
     setState(() {
-      _phase = Reviewing(
-        _allocateReview(base, mode: _mode, anchor: DateTime.now().toUtc()),
-        confirmed: false,
-      );
+      _phase = Reviewing(review, confirmed: false);
       _error = null;
       _notice = null;
       _step = _SetupStep.review;
@@ -923,7 +960,8 @@ class UpstreamChannelSetupViewState extends State<UpstreamChannelSetupView> {
         mode: review.mode,
         expectedBase: review.base,
         removeChannelIds: review.removeSourceIds,
-        channelOrder: _channelOrder,
+        channelOrder: review.finalChannels.isEmpty ? null : _channelOrder,
+        reviewedNumbers: review.reviewedNumbers,
       );
       if (!mounted) return;
       if (result == ChannelPlanApplyResult.stale) {

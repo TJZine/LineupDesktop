@@ -1676,6 +1676,7 @@ class LineupController extends ChangeNotifier {
     required List<Channel> expectedBase,
     Set<String> removeChannelIds = const {},
     ChannelOrder? channelOrder,
+    Map<String, int> reviewedNumbers = const {},
   }) async {
     final operation = _mutationScope;
     final expected = expectedBase
@@ -1685,6 +1686,7 @@ class LineupController extends ChangeNotifier {
       planned.map((channel) => channel.immutableCopy()),
     );
     final removals = Set<String>.unmodifiable(removeChannelIds);
+    final numbers = Map<String, int>.unmodifiable(reviewedNumbers);
     var result = ChannelPlanApplyResult.stale;
     await _queueScopeOperation(operation, () async {
       if (!canonicalChannelValueEquals(
@@ -1713,13 +1715,39 @@ class LineupController extends ChangeNotifier {
           );
         }
       }
-      final next = composeChannelPlan(
+      var next = composeChannelPlan(
         existing: channels
             .where((channel) => !removals.contains(channel.id))
             .toList(),
         planned: plan,
         mode: mode,
       );
+      if (numbers.isNotEmpty) {
+        final generatedIds = {
+          for (final channel in next)
+            if (channel.builderKey != null) channel.id,
+        };
+        if (mode != ChannelBuildMode.merge ||
+            numbers.length != generatedIds.length ||
+            !generatedIds.containsAll(numbers.keys)) {
+          throw const FormatException(
+            'Reviewed numbers must match the generated roster',
+          );
+        }
+        next = [
+          for (final channel in next)
+            if (numbers[channel.id] case final int number
+                when number != channel.number)
+              channel.copyWith(number: number)
+            else
+              channel,
+        ]..sort((a, b) => a.number.compareTo(b.number));
+      }
+      if (channels.isEmpty && next.isEmpty) {
+        throw const FormatException(
+          'Choose at least one channel for your first lineup',
+        );
+      }
       validateChannels(next);
       final validatedSources = <String>{};
       for (final channel in plan) {
@@ -1991,6 +2019,7 @@ class LineupController extends ChangeNotifier {
     final inventory = playableInventory;
     final libraryIds = channelSourceLibraryIds(incoming.source);
     final playlistItems = <String, Iterable<ChannelItem>>{};
+    final scannedById = {for (final item in inventory.media) item.id: item};
     final resolvedItems = <String, ChannelItem>{};
     void collectLibraries(ContentSource source) {
       switch (source) {
@@ -2009,7 +2038,7 @@ class LineupController extends ChangeNotifier {
               .expand((playlist) => playlist.items)
               .where((item) => item.isPlayable);
           playlistItems[playlistId] = items.map(channelItemFor);
-          libraryIds.addAll(items.map((item) => item.libraryId).nonNulls);
+          libraryIds.addAll(playlistLibraryIds(items, scannedById));
         case MixedSource(:final sources):
           sources.forEach(collectLibraries);
       }
@@ -2055,7 +2084,7 @@ class LineupController extends ChangeNotifier {
           inventory.media,
           inventory.playlists,
         ),
-        createdAt: incoming.anchor,
+        createdAt: _scheduleClock(),
       ),
     );
   }

@@ -161,7 +161,8 @@ starts at its own point in its schedule, which is saved with the channel.
 For an existing lineup, **Update and add** preserves matching generated
 identities, schedule anchors, and favourites. **Replace generated channels**
 replaces generated programming while keeping custom channels. **Add as new
-channels** appends new identities.
+channels** keeps all existing numbers and applies Channel order to the new
+channels only. The saved preference applies to the next generation.
 Review shows current/final counts and unchanged, updated, added, and removed
 entries; search by name or number and filter the change categories. Removals
 require confirmation. A changed lineup invalidates the review and requires a

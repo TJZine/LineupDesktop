@@ -18,33 +18,6 @@ const _sourceTypes = <BuilderStrategy, String>{
   BuilderStrategy.playlists: 'Playlists',
 };
 
-BuilderStrategy? channelSourceType(Channel channel) =>
-    channel.builderKey == null ? null : _generatedSourceType(channel.source);
-
-BuilderStrategy? _generatedSourceType(ContentSource source) {
-  switch (source) {
-    case PlaylistSource():
-      return BuilderStrategy.playlists;
-    case MixedSource(:final sources):
-      return sources.map(_generatedSourceType).nonNulls.firstOrNull;
-    case LibrarySource(:final filters, :final order):
-      if (order == LibraryOrder.addedDescending) {
-        return BuilderStrategy.recentlyAdded;
-      }
-      return switch (filters.keys.firstOrNull) {
-        LibraryFilter.collection => BuilderStrategy.collections,
-        LibraryFilter.genre => BuilderStrategy.genres,
-        LibraryFilter.studio => BuilderStrategy.studios,
-        LibraryFilter.actor => BuilderStrategy.actors,
-        LibraryFilter.decade => BuilderStrategy.decades,
-        LibraryFilter.director => BuilderStrategy.directors,
-        null => null,
-      };
-    case ManualSource():
-      return null;
-  }
-}
-
 /// A snapshot of the channels and their filter choices, in presentation order.
 class ChannelFilter {
   ChannelFilter(Iterable<Channel> channels) {

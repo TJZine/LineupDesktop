@@ -966,50 +966,7 @@ class _LineupShellState extends State<LineupShell> {
                             : 'Choose a channel in Guide',
                         detailStyle: detailStyle,
                       ),
-                      if (_canShowNowPlaying)
-                        LineupNavigationRow(
-                          key: const Key('app-menu-now-playing'),
-                          selected: false,
-                          onPressed: () => unawaited(_openNowPlaying()),
-                          child: Column(
-                            crossAxisAlignment: CrossAxisAlignment.start,
-                            children: [
-                              const Text('Now Playing'),
-                              if (_player.currentChannel case final channel?)
-                                Row(
-                                  children: [
-                                    Flexible(
-                                      child: ChannelIdentity(
-                                        channel: channel,
-                                        libraryTag:
-                                            ChannelIdentity.libraryTagFor(
-                                              channel,
-                                              widget.controller.channels,
-                                            ),
-                                        nameStyle: detailStyle,
-                                      ),
-                                    ),
-                                    Text(' · ', style: detailStyle),
-                                    Expanded(
-                                      child: _menuDetail(
-                                        _player
-                                            .currentProgram!
-                                            .scheduled
-                                            .item
-                                            .title,
-                                        detailStyle,
-                                      ),
-                                    ),
-                                  ],
-                                )
-                              else
-                                _menuDetail(
-                                  _player.currentProgram!.scheduled.item.title,
-                                  detailStyle,
-                                ),
-                            ],
-                          ),
-                        ),
+                      if (_canShowNowPlaying) _nowPlayingMenuRow(detailStyle),
                       _menuDestination(
                         destination: ShellDestination.channels,
                         label: 'Channels',
@@ -1069,9 +1026,85 @@ class _LineupShellState extends State<LineupShell> {
     );
   }
 
-  Widget _menuDetail(String text, TextStyle? style) => Builder(
+  Widget _nowPlayingMenuRow(TextStyle? detailStyle) {
+    final program = _player.currentProgram!.scheduled.item.title;
+    final channel = _player.currentChannel;
+    final tag = channel == null
+        ? null
+        : ChannelIdentity.libraryTagFor(channel, widget.controller.channels);
+    return LineupNavigationRow(
+      key: const Key('app-menu-now-playing'),
+      selected: false,
+      onPressed: () => unawaited(_openNowPlaying()),
+      child: Semantics(
+        label: channel == null
+            ? 'Now Playing, $program'
+            : 'Now Playing, ${ChannelIdentity.label(channel, libraryTag: tag)}, $program',
+        excludeSemantics: true,
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            const Text('Now Playing'),
+            if (channel == null)
+              _menuDetail(program, detailStyle, maxLines: 1)
+            else
+              Builder(
+                builder: (context) {
+                  final style = DeviceProfile.of(context).isTv
+                      ? detailStyle?.copyWith(
+                          color: LineupTheme.of(context).secondaryText,
+                        )
+                      : detailStyle;
+                  return Stack(
+                    children: [
+                      // Use the existing program-detail line for the row's
+                      // height, independently of icon and text baselines.
+                      SizedBox(
+                        width: double.infinity,
+                        child: _menuDetail(' ', detailStyle, maxLines: 1),
+                      ),
+                      Positioned.fill(
+                        child: Align(
+                          alignment: AlignmentDirectional.centerStart,
+                          child: Row(
+                            mainAxisSize: MainAxisSize.min,
+                            children: [
+                              Flexible(
+                                flex: 2,
+                                child: ChannelIdentity(
+                                  channel: channel,
+                                  libraryTag: tag,
+                                  nameStyle: style,
+                                  showSemantics: false,
+                                ),
+                              ),
+                              Text(' · ', style: style),
+                              Flexible(
+                                child: _menuDetail(
+                                  program,
+                                  detailStyle,
+                                  maxLines: 1,
+                                ),
+                              ),
+                            ],
+                          ),
+                        ),
+                      ),
+                    ],
+                  );
+                },
+              ),
+          ],
+        ),
+      ),
+    );
+  }
+
+  Widget _menuDetail(String text, TextStyle? style, {int? maxLines}) => Builder(
     builder: (context) => Text(
       text,
+      maxLines: maxLines,
+      overflow: maxLines == null ? null : TextOverflow.ellipsis,
       style: DeviceProfile.of(context).isTv
           ? style?.copyWith(color: LineupTheme.of(context).secondaryText)
           : style,

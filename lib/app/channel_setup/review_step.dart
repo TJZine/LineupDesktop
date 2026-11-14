@@ -86,9 +86,10 @@ class _SetupReviewStepState extends State<SetupReviewStep> {
   }
 
   bool get _primaryEnabled =>
-      (!widget.review.counts.hasChanges && !widget.orderChanged) ||
-      (widget.notice != 'Updating review…' &&
-          (widget.review.counts.removed == 0 || widget.removalConfirmed));
+      !(_firstSetup && widget.review.finalChannels.isEmpty) &&
+      ((!widget.review.counts.hasChanges && !widget.orderChanged) ||
+          (widget.notice != 'Updating review…' &&
+              (widget.review.counts.removed == 0 || widget.removalConfirmed)));
 
   void _rememberRow(String id) {
     _returnId = id;
@@ -290,7 +291,10 @@ class _SetupReviewStepState extends State<SetupReviewStep> {
   @override
   Widget build(BuildContext context) {
     final review = widget.review;
-    final noChanges = !review.counts.hasChanges && !widget.orderChanged;
+    final noChanges =
+        !review.counts.hasChanges &&
+        (!widget.orderChanged || review.finalChannels.isEmpty) &&
+        !_firstSetup;
     final body = SetupStage(
       footer: Focus(
         canRequestFocus: false,
@@ -1197,7 +1201,7 @@ String _modeDescription(ChannelBuildMode mode) => switch (mode) {
   ChannelBuildMode.merge =>
     'Update matching generated channels, add new ones, and keep the rest.',
   ChannelBuildMode.replace => 'Replace all generated channels with this selection. Custom channels will be kept.',
-  ChannelBuildMode.append => 'Keep your existing lineup and add channels whose sources are not already in it.',
+  ChannelBuildMode.append => 'Keep existing channel numbers. The chosen order applies to the new channels only.',
 };
 
 String _playbackLabel(Channel channel) => switch (channel.playbackMode) {

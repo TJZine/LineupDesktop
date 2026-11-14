@@ -105,6 +105,46 @@ void main() {
     );
   });
 
+  test(
+    'a combined or custom collision cannot displace a cross-library pair',
+    () {
+      final separate = proposals()
+          .where((proposal) => proposal.name == 'Drama')
+          .toList();
+      final combined = proposals(combine: {BuilderStrategy.genres}).first;
+      final custom = channel('custom', 8, 'Drama');
+      for (final input in [
+        [combined, ...separate],
+        [...separate, combined],
+      ]) {
+        final fresh = plan(input, existing: [custom]).channels;
+        expect(
+          fresh.where((row) => row.libraryTitle != null).map((row) => row.name),
+          everyElement('Drama'),
+        );
+        expect(
+          fresh.singleWhere((row) => row.libraryTitle == null).name,
+          'Drama 2',
+        );
+      }
+
+      final saved = plan([combined]).channels.single;
+      final update = plan(
+        [combined, ...separate],
+        existing: [custom, saved],
+        mode: ChannelBuildMode.merge,
+      ).channels;
+      expect(
+        update.where((row) => row.libraryTitle != null).map((row) => row.name),
+        everyElement('Drama'),
+      );
+      expect(
+        update.singleWhere((row) => row.libraryTitle == null),
+        same(saved),
+      );
+    },
+  );
+
   test('same-library duplicates get twins while custom names stay intact', () {
     final generated = proposals(
       libraries: [tv],

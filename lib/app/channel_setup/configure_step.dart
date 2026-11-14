@@ -1795,7 +1795,9 @@ class _SetupConfigureStepState extends State<SetupConfigureStep> {
           rowFor(index, _sourceOrder[index]),
         SizedBox(height: 24),
         Text(
-          'Repeat this order until the limit is reached. Skip sources with no remaining channels.',
+          widget.configuration.channelOrder == ChannelOrder.grouped
+              ? 'Selection still takes one candidate at a time from each source until the limit is reached. Grouping assigns their channel numbers.'
+              : 'Repeat this order until the limit is reached. Skip sources with no remaining channels.',
           style: subtitleStyle,
         ),
       ],
