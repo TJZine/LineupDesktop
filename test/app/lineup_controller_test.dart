@@ -14,6 +14,7 @@ import 'package:lineup_desktop/app/setup_review.dart';
 import 'package:lineup_desktop/channels/channel.dart';
 import 'package:lineup_desktop/channels/channel_builder.dart';
 import 'package:lineup_desktop/channels/channel_filter.dart';
+import 'package:lineup_desktop/ui/channel_identity.dart';
 import 'package:lineup_desktop/channels/content_resolver.dart';
 import 'package:lineup_desktop/channels/schedule_worker.dart';
 import 'package:lineup_desktop/channels/scheduler.dart';
@@ -5583,9 +5584,94 @@ void main() {
       2,
     );
     expect(
-      playlistLibraryIds(playlist.items.skip(1), {'movie': _playableMovie}),
+      playlistLibraryMembership(playlist.items.skip(1), {
+        'movie': _playableMovie,
+      }).ids,
       isEmpty,
     );
+  });
+
+  test('custom playlist replaces known provenance and distinguishes partial membership', () async {
+    final store = _MemoryStore();
+    final server = _server('server');
+    const scope = LineupScope(profileKey: 'owner', serverId: 'server');
+    PlexMediaItem item(String id, {String? libraryId}) => PlexMediaItem(
+      id: id,
+      libraryId: libraryId,
+      title: id,
+      type: id == 'episode' ? 'episode' : 'movie',
+      duration: const Duration(minutes: 1),
+      parts: [PlexMediaPart(path: '/synthetic/$id')],
+    );
+    final controller = LineupController(
+      store: store,
+      credentials: _MemoryCredentials(),
+      plex: _FakePlex(),
+      scenario: LineupScenario(
+        account: const PlexAccount(id: 'owner', name: 'Owner', email: ''),
+        server: server,
+        connection: server.connections.single,
+        libraries: const [
+          PlexLibrary(id: 'films', title: 'Films', type: PlexLibraryType.movie),
+          PlexLibrary(id: 'tv', title: 'TV Shows', type: PlexLibraryType.show),
+        ],
+        selectedLibraryIds: {'films', 'tv'},
+        availableMedia: [
+          item('movie', libraryId: 'films'),
+          item('episode', libraryId: 'tv'),
+        ],
+      ),
+    );
+    addTearDown(controller.dispose);
+    const source = PlaylistSource('plex-list');
+    final draft = Channel(
+      id: 'playlist',
+      number: 2,
+      name: 'Drama',
+      source: source,
+      playbackMode: PlaybackMode.sequential,
+      anchor: DateTime.utc(2026),
+      shuffleSeed: 1,
+    );
+    final filmPeer = Channel.fromJson({
+      ...draft.toJson(),
+      'id': 'peer',
+      'number': 3,
+      'sourceLibraries': {'films': 'Films'},
+    });
+    Future<Channel> save(List<PlexMediaItem> items, Channel? previous) async {
+      controller.fixtureActor.publishInventory(
+        playlists: [
+          PlexPlaylist(id: source.playlistId, title: 'Drama', items: items),
+        ],
+      );
+      await controller.saveChannel(draft, expectedBase: previous);
+      return PersistedState.fromJson(
+        jsonDecode(jsonEncode(store.state.toJson())),
+      ).lineupFor(scope).channels.single;
+    }
+
+    final film = await save([item('movie')], null);
+    expect(film.libraryTitle, 'Films');
+    final tv = await save([item('episode')], film);
+    expect(tv.sourceLibraries, {'tv': 'TV Shows'});
+    expect(tv.kind, ChannelKind.tv);
+    expect(ChannelIdentity.libraryTagFor(tv, [tv, filmPeer]), 'TV Shows');
+
+    final partial = await save([item('episode'), item('unscanned')], tv);
+    expect(partial.sourceLibraries, {'tv': 'TV Shows'});
+    expect(ChannelIdentity.libraryTagFor(partial, [partial, filmPeer]), isNull);
+    final unknown = await save([item('unscanned')], partial);
+    expect(unknown.sourceLibraries, {'tv': 'TV Shows'});
+    expect(unknown.libraryTitle, isNull);
+    for (final channel in [tv, partial, unknown]) {
+      final filter = ChannelFilter([channel]);
+      expect(
+        filter.entries.singleWhere((entry) => entry.label == 'TV Shows').count,
+        1,
+      );
+      expect(filter.entries.any((entry) => entry.label == 'Films'), isFalse);
+    }
   });
 
   test(

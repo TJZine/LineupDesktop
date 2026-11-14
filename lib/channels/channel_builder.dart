@@ -74,6 +74,7 @@ class ChannelProposal {
     required this.strategy,
     this.series = false,
     this.sourceLibraries = const {},
+    this.sourceLibrariesIncomplete = false,
     this.playlistKind = ChannelKind.unknown,
     required this.playableItemCount,
     required this.blockItemCountWithoutSpecials,
@@ -86,6 +87,7 @@ class ChannelProposal {
   final BuilderStrategy strategy;
   final bool series;
   final Map<String, String> sourceLibraries;
+  final bool sourceLibrariesIncomplete;
   final ChannelKind playlistKind;
 
   /// Resolved inventory counts used to allocate each playback version.
@@ -282,14 +284,17 @@ List<ChannelProposal> buildChannelProposals({
     for (final playlist in playlists) {
       if (playlist.items.length < minimumItems) continue;
       final counts = contentCounts(playlist.items);
+      final membership = playlistLibraryMembership(playlist.items, scannedById);
       proposals.add(
         ChannelProposal(
           name: playlist.title,
           source: PlaylistSource(playlist.id),
           sourceLibraries: Map.unmodifiable({
-            for (final id in playlistLibraryIds(playlist.items, scannedById))
-              id: ?titleById[id],
+            for (final id in membership.ids) id: ?titleById[id],
           }),
+          sourceLibrariesIncomplete:
+              membership.incomplete ||
+              !membership.ids.every(titleById.containsKey),
           playlistKind: channelKindFor(
             PlaylistSource(playlist.id),
             playlists: {playlist.id: playlist.items.map(channelItemFor)},
@@ -550,6 +555,8 @@ ChannelPlanAllocation materializeChannelPlan({
         matched.blockSize == entry.blockSize &&
         matched.includeSpecials == normalizedIncludeSpecials &&
         matched.kind == kind &&
+        matched.sourceLibrariesIncomplete ==
+            proposal.sourceLibrariesIncomplete &&
         canonicalChannelValueEquals(
           matched.sourceLibraries,
           proposal.sourceLibraries,
@@ -568,6 +575,7 @@ ChannelPlanAllocation materializeChannelPlan({
       favorite: matched?.favorite ?? false,
       kind: kind,
       sourceLibraries: proposal.sourceLibraries,
+      sourceLibrariesIncomplete: proposal.sourceLibrariesIncomplete,
       shuffleSeed: matched?.shuffleSeed ?? stableChannelSeed(id),
       blockSize: entry.blockSize,
       builderKey: builderKey,

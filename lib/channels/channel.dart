@@ -568,6 +568,7 @@ class Channel {
     this.scheduleTransition,
     this.kind = ChannelKind.unknown,
     this.sourceLibraries = const {},
+    this.sourceLibrariesIncomplete = false,
     this.favorite = false,
   }) : _frozen = false,
        includeSpecials = playbackMode == PlaybackMode.block && includeSpecials;
@@ -587,7 +588,9 @@ class Channel {
   final ScheduleTransition? scheduleTransition;
   final ChannelKind kind;
   final Map<String, String> sourceLibraries;
-  String? get libraryTitle => sourceLibraries.values.singleOrNull;
+  final bool sourceLibrariesIncomplete;
+  String? get libraryTitle =>
+      sourceLibrariesIncomplete ? null : sourceLibraries.values.singleOrNull;
   final bool favorite;
 
   Channel copyWith({
@@ -610,6 +613,7 @@ class Channel {
     scheduleTransition: scheduleTransition,
     kind: kind,
     sourceLibraries: sourceLibraries,
+    sourceLibrariesIncomplete: sourceLibrariesIncomplete,
     favorite: favorite ?? this.favorite,
   );
 
@@ -666,6 +670,7 @@ class Channel {
       scheduleTransition = original.scheduleTransition?.immutableCopy(),
       kind = original.kind,
       sourceLibraries = Map.unmodifiable(original.sourceLibraries),
+      sourceLibrariesIncomplete = original.sourceLibrariesIncomplete,
       favorite = original.favorite;
 
   Channel immutableCopy() => _frozen ? this : Channel._immutable(this);
@@ -684,6 +689,7 @@ class Channel {
     'scheduleVersion': scheduleVersion,
     if (kind != ChannelKind.unknown) 'kind': kind.name,
     if (sourceLibraries.isNotEmpty) 'sourceLibraries': sourceLibraries,
+    if (sourceLibrariesIncomplete) 'sourceLibrariesIncomplete': true,
     if (favorite) 'favorite': true,
     if (scheduleTransition != null)
       'scheduleTransition': scheduleTransition!.toJson(),
@@ -711,6 +717,7 @@ class Channel {
           'scheduleTransition',
           'kind',
           'sourceLibraries',
+          'sourceLibrariesIncomplete',
           'favorite',
         },
       );
@@ -742,6 +749,9 @@ class Channel {
                 ),
               )
             : const {},
+        sourceLibrariesIncomplete:
+            json.containsKey('sourceLibrariesIncomplete') &&
+            _boolean(json['sourceLibrariesIncomplete']),
         favorite: json.containsKey('favorite') && _boolean(json['favorite']),
         scheduleTransition: json.containsKey('scheduleTransition')
             ? ScheduleTransition.fromJson(json['scheduleTransition'])

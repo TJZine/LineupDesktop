@@ -297,6 +297,7 @@ Channel migrateLegacySchedule(
     scheduleVersion: currentScheduleVersion,
     kind: channel.kind,
     sourceLibraries: channel.sourceLibraries,
+    sourceLibrariesIncomplete: channel.sourceLibrariesIncomplete,
     favorite: channel.favorite,
     scheduleTransition: ScheduleTransition(
       boundary: boundary,

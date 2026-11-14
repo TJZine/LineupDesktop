@@ -120,6 +120,91 @@ void main() {
     }, skip: reviewEvidence.isEmpty);
   }
 
+  testWidgets('Grouped reorder reaches Review with every proposal suppressed', (
+    tester,
+  ) async {
+    Channel saved(String id, int number, ContentSource source) => Channel(
+      id: id,
+      number: number,
+      name: id,
+      source: source,
+      builderKey: id,
+      playbackMode: PlaybackMode.sequential,
+      anchor: DateTime.utc(2026),
+      shuffleSeed: number,
+    );
+    const scope = LineupScope(profileKey: 'owner', serverId: 'server');
+    final collection = saved(
+      'Collection',
+      1,
+      const LibrarySource(
+        libraryId: 'movies',
+        libraryType: PlexLibraryType.movie,
+        filters: {
+          LibraryFilter.collection: ['Archive'],
+        },
+      ),
+    );
+    final genre = saved(
+      'Drama',
+      2,
+      const LibrarySource(
+        libraryId: 'movies',
+        libraryType: PlexLibraryType.movie,
+        filters: {
+          LibraryFilter.genre: ['Drama'],
+        },
+      ),
+    );
+    final initial = const PersistedState(profileId: 'owner').withLineup(
+      scope,
+      ScopedLineup(
+        libraryIds: {'movies'},
+        channels: [collection, genre],
+        currentChannelId: collection.id,
+        channelOrder: ChannelOrder.grouped,
+      ),
+    );
+    final fixture = await _createBoundarySetup(initial: initial);
+    addTearDown(fixture.controller.dispose);
+    await _pump(tester, fixture.controller);
+    await tester.pumpAndSettle();
+    await tester.tap(find.byKey(const ValueKey('continue-ready-libraries')));
+    await tester.pumpAndSettle();
+    expect(find.text('Choose channels'), findsOneWidget);
+    await tester.tap(find.byKey(const ValueKey('configure-section-2')));
+    await tester.pumpAndSettle();
+    final minimum = find.byKey(const ValueKey('rules-minimum'));
+    await tester.ensureVisible(minimum);
+    await tester.tap(minimum);
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('50').last);
+    await tester.pumpAndSettle();
+    final review = find.byKey(const ValueKey('review-channels'));
+    expect(tester.widget<FilledButton>(review).onPressed, isNull);
+    for (var step = 0; step < 3; step++) {
+      final row = find.byKey(const ValueKey('source-order-genres'));
+      await tester.ensureVisible(row);
+      await tester.tap(
+        find.descendant(of: row, matching: find.byTooltip('Move earlier')),
+      );
+      await tester.pumpAndSettle();
+    }
+    expect(tester.widget<FilledButton>(review).onPressed, isNotNull);
+    await tester.tap(review);
+    await tester.pumpAndSettle();
+    final saves = fixture.store.saveCalls;
+    await tester.tap(find.text('Apply changes'));
+    await tester.pumpAndSettle();
+    expect(fixture.store.saveCalls, saves + 1);
+    final lineup = fixture.store.state.lineupFor(scope);
+    expect(lineup.channelOrder, ChannelOrder.grouped);
+    expect(lineup.channels.map((row) => (row.id, row.number)), [
+      ('Drama', 1),
+      ('Collection', 2),
+    ]);
+  });
+
   testWidgets('Grouped cannot advance an empty first lineup', (tester) async {
     final fixture = await _createBoundarySetup();
     addTearDown(fixture.controller.dispose);
@@ -3746,20 +3831,23 @@ Finder _setupField<T>(String label) => find.descendant(
 Future<
   ({LineupController controller, _BoundaryStore store, _BoundaryPlex plex})
 >
-_createBoundarySetup() async {
+_createBoundarySetup({PersistedState? initial}) async {
   final store = _BoundaryStore(
-    initial: const PersistedState(
-      profileId: 'owner',
-      selectedServerByProfile: {'owner': 'server'},
-    ),
+    initial:
+        initial ??
+        const PersistedState(
+          profileId: 'owner',
+          selectedServerByProfile: {'owner': 'server'},
+        ),
   );
-  final plex = _BoundaryPlex();
+  final plex = _BoundaryPlex()..includeGroupingTags = initial != null;
   final controller = LineupController(
     store: store,
     credentials: MemoryCredentialStore(accountToken: 'account-token'),
     plex: plex,
   );
   await controller.initialize();
+  if (initial != null) await controller.enterChannelSetup();
   expect(controller.stage, SetupStage.channelSetup);
   return (controller: controller, store: store, plex: plex);
 }
@@ -3830,6 +3918,7 @@ class _BoundaryPlex extends PlexClient {
         httpClient: testPlexHttpClient(),
       );
 
+  bool includeGroupingTags = false;
   Completer<PlexLibraryScan>? scanGate;
   final scanStarted = Completer<void>();
 
@@ -3877,6 +3966,12 @@ class _BoundaryPlex extends PlexClient {
     final gate = scanGate;
     if (gate != null) return gate.future;
     return PlexLibraryScan(
+      collections: PlexCollectionMembership(
+        titlesByMember: {
+          if (includeGroupingTags)
+            for (var index = 0; index < 5; index++) 'movie-$index': {'Archive'},
+        },
+      ),
       items: [
         for (var index = 0; index < 5; index++)
           PlexMediaItem(
@@ -3885,6 +3980,8 @@ class _BoundaryPlex extends PlexClient {
             type: 'movie',
             libraryId: 'movies',
             duration: const Duration(minutes: 30),
+            genres: includeGroupingTags ? const ['Drama'] : const [],
+            collections: includeGroupingTags ? const ['Archive'] : const [],
             parts: [PlexMediaPart(path: '/synthetic/movie-$index')],
           ),
       ],

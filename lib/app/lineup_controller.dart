@@ -2021,6 +2021,8 @@ class LineupController extends ChangeNotifier {
     final playlistItems = <String, Iterable<ChannelItem>>{};
     final scannedById = {for (final item in inventory.media) item.id: item};
     final resolvedItems = <String, ChannelItem>{};
+    var hasPlaylist = false;
+    var playlistProvenanceIncomplete = false;
     void collectLibraries(ContentSource source) {
       switch (source) {
         case LibrarySource():
@@ -2033,18 +2035,30 @@ class LineupController extends ChangeNotifier {
             }
           }
         case PlaylistSource(:final playlistId):
+          hasPlaylist = true;
           final items = inventory.playlists
               .where((playlist) => playlist.id == playlistId)
               .expand((playlist) => playlist.items)
               .where((item) => item.isPlayable);
           playlistItems[playlistId] = items.map(channelItemFor);
-          libraryIds.addAll(playlistLibraryIds(items, scannedById));
+          final membership = playlistLibraryMembership(items, scannedById);
+          playlistProvenanceIncomplete |=
+              membership.incomplete || items.isEmpty;
+          libraryIds.addAll(membership.ids);
         case MixedSource(:final sources):
           sources.forEach(collectLibraries);
       }
     }
 
     collectLibraries(incoming.source);
+    final sourceLibraries = {
+      if (sameProgramming && (!hasPlaylist || libraryIds.isEmpty))
+        ...current.sourceLibraries,
+      if (sameProgramming && hasPlaylist)
+        for (final id in libraryIds) id: ?current.sourceLibraries[id],
+      for (final library in libraries)
+        if (libraryIds.contains(library.id)) library.id: library.title,
+    };
     final saved = Channel(
       id: incoming.id,
       number: incoming.number,
@@ -2069,11 +2083,11 @@ class LineupController extends ChangeNotifier {
         ChannelKind.unknown when sameProgramming => current.kind,
         final kind => kind,
       },
-      sourceLibraries: {
-        if (sameProgramming) ...current.sourceLibraries,
-        for (final library in libraries)
-          if (libraryIds.contains(library.id)) library.id: library.title,
-      },
+      sourceLibraries: sourceLibraries,
+      sourceLibrariesIncomplete:
+          hasPlaylist &&
+          (playlistProvenanceIncomplete ||
+              !libraryIds.every(sourceLibraries.containsKey)),
     );
     if (current != null || saved.builderKey != null) return saved;
     return saved.copyWith(

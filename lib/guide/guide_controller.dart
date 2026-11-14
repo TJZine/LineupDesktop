@@ -1426,6 +1426,7 @@ bool _channelEquals(Channel left, Channel right) =>
     left.builderKey == right.builderKey &&
     left.kind == right.kind &&
     left.favorite == right.favorite &&
+    left.sourceLibrariesIncomplete == right.sourceLibrariesIncomplete &&
     canonicalChannelValueEquals(left.sourceLibraries, right.sourceLibraries) &&
     canonicalScheduleIdentity(left) == canonicalScheduleIdentity(right);
 

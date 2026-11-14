@@ -320,30 +320,6 @@ class UpstreamChannelSetupViewState extends State<UpstreamChannelSetupView> {
         () => proposal.strategy,
       );
     }
-    SetupReviewOrdering? ordering;
-    if (_channelOrder == ChannelOrder.grouped ||
-        _channelOrder != widget.controller.channelOrder) {
-      final inventory = widget.controller.playableInventory;
-      final counts = {
-        for (final proposal in proposals)
-          canonicalSourceIdentity(proposal.source): proposal.itemCount,
-      };
-      for (final channel in existing.where((c) => c.builderKey != null)) {
-        counts.putIfAbsent(
-          canonicalSourceIdentity(channel.source),
-          () => resolveContent(
-            channel.source,
-            inventory.media,
-            inventory.playlists,
-          ).length,
-        );
-      }
-      ordering = (
-        order: _channelOrder,
-        strategyOrder: _sourceOrder,
-        sourceCounts: counts,
-      );
-    }
     return SetupReview(
       base: existing,
       plan: _allocate(
@@ -354,7 +330,7 @@ class UpstreamChannelSetupViewState extends State<UpstreamChannelSetupView> {
       ),
       mode: mode,
       strategyBySource: strategyBySource,
-      ordering: ordering,
+      ordering: _reviewOrdering(existing, proposals),
       planFactory: (nextMode, nextAnchor) {
         final nextProposals = _buildProposals();
         final nextStrategies = <String, BuilderStrategy>{};
@@ -374,6 +350,37 @@ class UpstreamChannelSetupViewState extends State<UpstreamChannelSetupView> {
           strategyBySource: nextStrategies,
         );
       },
+    );
+  }
+
+  SetupReviewOrdering? _reviewOrdering(
+    List<Channel> existing,
+    List<ChannelProposal> proposals,
+  ) {
+    if (_channelOrder != ChannelOrder.grouped &&
+        _channelOrder == widget.controller.channelOrder) {
+      return null;
+    }
+
+    final inventory = widget.controller.playableInventory;
+    final counts = {
+      for (final proposal in proposals)
+        canonicalSourceIdentity(proposal.source): proposal.itemCount,
+    };
+    for (final channel in existing.where((c) => c.builderKey != null)) {
+      counts.putIfAbsent(
+        canonicalSourceIdentity(channel.source),
+        () => resolveContent(
+          channel.source,
+          inventory.media,
+          inventory.playlists,
+        ).length,
+      );
+    }
+    return (
+      order: _channelOrder,
+      strategyOrder: _sourceOrder,
+      sourceCounts: counts,
     );
   }
 
@@ -668,11 +675,31 @@ class UpstreamChannelSetupViewState extends State<UpstreamChannelSetupView> {
   }
 
   Widget _configureStep() {
-    _buildProposals();
+    final proposals = _buildProposals();
+    final existing = widget.controller.channels;
     final allocation = _projection.configure(
-      existing: widget.controller.channels,
+      existing: existing,
       options: _allocationOptions(_mode),
     );
+    final canSavePreference =
+        existing.isNotEmpty &&
+        (_mode != ChannelBuildMode.replace ||
+            existing.any((channel) => channel.builderKey == null)) &&
+        _channelOrder != widget.controller.channelOrder;
+    // Only the otherwise disabled path needs to resolve and compare retained
+    // recipes. Builds with candidates already allow Review.
+    final canReorderRetained =
+        existing.isNotEmpty &&
+        allocation.channels.isEmpty &&
+        _mode == ChannelBuildMode.merge &&
+        _channelOrder == ChannelOrder.grouped &&
+        SetupReview(
+          base: existing,
+          plan: allocation,
+          mode: _mode,
+          strategyBySource: const {},
+          ordering: _reviewOrdering(existing, proposals),
+        ).counts.hasChanges;
     return SetupConfigureStep(
       allocation: freezeSetupAllocation(allocation),
       section: _configurationSection,
@@ -680,13 +707,7 @@ class UpstreamChannelSetupViewState extends State<UpstreamChannelSetupView> {
           setState(() => _configurationSection = section),
       onBack: _backToLibraries,
       onReview: _prepareReview,
-      orderChanged:
-          widget.controller.channels.isNotEmpty &&
-          (_mode != ChannelBuildMode.replace ||
-              widget.controller.channels.any(
-                (channel) => channel.builderKey == null,
-              )) &&
-          _channelOrder != widget.controller.channelOrder,
+      orderChanged: canSavePreference || canReorderRetained,
       hasConfirmedMissingSources:
           _mode == ChannelBuildMode.merge &&
           allocation.unmatchedGenerated.any(

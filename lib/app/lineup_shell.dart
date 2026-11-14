@@ -1066,27 +1066,51 @@ class _LineupShellState extends State<LineupShell> {
                       Positioned.fill(
                         child: Align(
                           alignment: AlignmentDirectional.centerStart,
-                          child: Row(
-                            mainAxisSize: MainAxisSize.min,
-                            children: [
-                              Flexible(
-                                flex: 2,
-                                child: ChannelIdentity(
-                                  channel: channel,
-                                  libraryTag: tag,
-                                  nameStyle: style,
-                                  showSemantics: false,
-                                ),
-                              ),
-                              Text(' · ', style: style),
-                              Flexible(
-                                child: _menuDetail(
-                                  program,
-                                  detailStyle,
-                                  maxLines: 1,
-                                ),
-                              ),
-                            ],
+                          child: LayoutBuilder(
+                            builder: (context, constraints) {
+                              final textStyle = DefaultTextStyle.of(context)
+                                  .style
+                                  .merge(style);
+                              double widthOf(
+                                String text,
+                              ) => TextPainter.computeWidth(
+                                text: TextSpan(text: text, style: textStyle),
+                                textDirection: Directionality.of(context),
+                                textScaler: MediaQuery.textScalerOf(context),
+                              );
+                              const separator = ' · ';
+                              final width = math.max(
+                                0.0,
+                                constraints.maxWidth - widthOf(separator),
+                              );
+                              final programAllowance = math.min(
+                                widthOf(program).ceilToDouble(),
+                                width / 2,
+                              );
+                              return Row(
+                                children: [
+                                  ConstrainedBox(
+                                    constraints: BoxConstraints(
+                                      maxWidth: width - programAllowance,
+                                    ),
+                                    child: ChannelIdentity(
+                                      channel: channel,
+                                      libraryTag: tag,
+                                      nameStyle: style,
+                                      showSemantics: false,
+                                    ),
+                                  ),
+                                  Text(separator, style: style),
+                                  Expanded(
+                                    child: _menuDetail(
+                                      program,
+                                      detailStyle,
+                                      maxLines: 1,
+                                    ),
+                                  ),
+                                ],
+                              );
+                            },
                           ),
                         ),
                       ),
