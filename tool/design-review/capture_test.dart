@@ -52,6 +52,7 @@ const List<Config> _configs = [
   (label: '1366x768', logical: Size(1366, 768), dpr: 1, text: 1),
   (label: '1536x864@125', logical: Size(1536, 864), dpr: 1.25, text: 1),
   (label: '1920x1080', logical: Size(1920, 1080), dpr: 1, text: 1),
+  (label: '1512x949', logical: Size(1512, 949), dpr: 1, text: 1),
   (label: '1920x1200', logical: Size(1920, 1200), dpr: 1, text: 1),
   (label: '2560x1440', logical: Size(2560, 1440), dpr: 1, text: 1),
   (label: '3440x1440', logical: Size(3440, 1440), dpr: 1, text: 1),
@@ -312,11 +313,15 @@ final Map<String, Scene> _scenes = {
     final textScale = MediaQuery.textScalerOf(
       tester.element(find.byType(GuideView)),
     ).scale(1);
+    final list = tester.widget<ListView>(
+      find.byKey(const Key('guide-schedule-list')),
+    );
+    final showsSources = list.itemExtent! + .000001 >= 92.8 * textScale;
     expect(
       find.text('Manual lineup'),
-      textScale > 1 ? findsNothing : findsWidgets,
+      showsSources ? findsWidgets : findsNothing,
     );
-    await shot('sources-visible');
+    await shot(showsSources ? 'sources-visible' : 'sources-hidden');
   },
   'guide-pip': (tester, shot) async {
     final f = _readyFixture(
@@ -329,6 +334,12 @@ final Map<String, Scene> _scenes = {
       ),
     );
     await _pump(tester, f.build());
+    final picture = find.byKey(const Key('guide-picture-in-picture'));
+    final information = find.byKey(const Key('guide-information-area'));
+    expect(
+      tester.getSize(picture).height,
+      closeTo(tester.getSize(information).height, .01),
+    );
     await shot('pip');
   },
   'guide-rich': (tester, shot) async {
@@ -878,6 +889,9 @@ void main() {
     if (configs != null && !configs.contains(config.label)) continue;
     for (final entry in _scenes.entries) {
       if (only != null && !only.contains(entry.key)) continue;
+      if (config.label == '1512x949' && !entry.key.startsWith('guide')) {
+        continue;
+      }
       testWidgets('${entry.key} @ ${config.label}', (tester) async {
         tester.view
           ..devicePixelRatio = config.dpr

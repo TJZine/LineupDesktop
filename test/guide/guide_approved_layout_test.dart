@@ -292,7 +292,16 @@ void main() {
                   tester.widget<ListView>(list).itemExtent!,
               closeTo(5, .001),
             );
-            if (tv) {
+            if (!tv) {
+              expect(
+                (metrics['picture'] as List<double>)[2],
+                closeTo(switch (scale) {
+                  1.15 => 757.87,
+                  1.3 => 747.73,
+                  _ => 768,
+                }, .01),
+              );
+            } else {
               expect(
                 (metrics['picture'] as List<double>)[2],
                 closeTo(576, .01),

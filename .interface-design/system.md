@@ -75,6 +75,13 @@ blanket decoration. Focus light and on-air coral retain separate meanings.
 - Program-derived color must not redefine focus, live, error, or tuned-state
   semantics.
 
+The typography change approved on 2026-11-13 centres a program-independent
+information block and caps the synopsis measure at 34 em. Title art is sized by
+its visible pixels, with a full-width title line in the identity column as the
+fallback. In the non-dense desktop band, `k = clamp((band − 28)/296, 1, 1.4)`
+scales the title, episode line and title art. The synopsis scales by
+`1 + (k − 1)/2`. Use the base title size when the scaled title exceeds one line.
+
 ## Player: Protected Baseline
 
 The OSD and its expanded Now Playing state are the approved structural

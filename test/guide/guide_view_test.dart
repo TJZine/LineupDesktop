@@ -259,18 +259,19 @@ void main() {
     (tester) async {
       tester.view.devicePixelRatio = 1;
       addTearDown(tester.view.reset);
-      for (final (size, textScale) in [
-        (const Size(1280, 720), 1.0),
-        (const Size(1920, 1080), 1.0),
-        (const Size(1920, 1200), 1.0),
-        (const Size(2560, 1440), 1.0),
-        (const Size(3440, 1440), 1.0),
-        (const Size(1920, 1080), 1.5),
+      for (final (size, textScale, rowCount) in [
+        (const Size(1280, 720), 1.0, 5),
+        (const Size(1920, 1080), 1.0, 5),
+        (const Size(1920, 1200), 1.0, 6),
+        (const Size(2560, 1440), 1.0, 5),
+        (const Size(3440, 1440), 1.0, 5),
+        (const Size(1920, 1080), 1.5, 5),
       ]) {
         tester.view.physicalSize = size;
         final lineup = _Lineup(40);
         final guide = GuideController(
           lineup: lineup,
+          clock: () => DateTime.utc(2026, 1, 15, 3, 17),
           loadSchedule: (c) async => _schedule(c),
         );
         await tester.pumpWidget(
@@ -304,7 +305,7 @@ void main() {
         expect(bounds.left, closeTo(0, .001));
         expect(bounds.right, closeTo(size.width, .001));
         expect(bounds.bottom, closeTo(size.height, .001));
-        expect(tester.getSize(finder).height / row, closeTo(5, .000001));
+        expect(tester.getSize(finder).height / row, closeTo(rowCount, .000001));
         final controls = _drawnRect(
           tester,
           find.byKey(const Key('guide-control-content')),
@@ -354,7 +355,7 @@ void main() {
         final beforePage = guide.focusedChannelIndex;
         await tester.sendKeyEvent(LogicalKeyboardKey.pageDown);
         await tester.pumpAndSettle();
-        expect(guide.focusedChannelIndex, beforePage + 5);
+        expect(guide.focusedChannelIndex, beforePage + rowCount);
         expectSnapped();
         await tester.sendKeyEvent(LogicalKeyboardKey.pageUp);
         await tester.pumpAndSettle();
@@ -457,18 +458,18 @@ void main() {
   );
 
   testWidgets(
-    'Guide PiP preserves pre-full-bleed dimensions and native alignment across the matrix',
+    'Guide PiP fills the L40 band and preserves native alignment across the matrix',
     (tester) async {
       addTearDown(tester.view.reset);
       for (final (size, textScale, expectedPicture, expectedInformationHeight)
           in const [
-            (Size(1280.0, 720.0), 1.0, Size(296.967111, 167.044), 167.036),
-            (Size(1920.0, 1080.0), 1.0, Size(576.0, 324.0), 323.995),
-            (Size(1920.0, 1200.0), 1.0, Size(576.0, 324.0), 443.995),
-            (Size(2560.0, 1440.0), 1.0, Size(768.0, 432.0), 431.993333),
-            (Size(3440.0, 1440.0), 1.0, Size(768.0, 432.0), 431.993333),
-            (Size(3840.0, 2160.0), 1.0, Size(1152.0, 648.0), 647.99),
-            (Size(1920.0, 1080.0), 1.5, Size(576.0, 324.0), 323.995),
+            (Size(1280.0, 720.0), 1.0, Size(358.4, 201.6), 201.6),
+            (Size(1920.0, 1080.0), 1.0, Size(768.0, 432.0), 432.0),
+            (Size(1920.0, 1200.0), 1.0, Size(768.0, 432.0), 432.0),
+            (Size(2560.0, 1440.0), 1.0, Size(1024.0, 576.0), 576.0),
+            (Size(3440.0, 1440.0), 1.0, Size(1024.0, 576.0), 576.0),
+            (Size(3840.0, 2160.0), 1.0, Size(1536.0, 864.0), 864.0),
+            (Size(1920.0, 1080.0), 1.5, Size(707.111111, 397.75), 397.75),
           ]) {
         for (final dpr in [1.0, 1.5]) {
           tester.view
@@ -1008,6 +1009,7 @@ void main() {
       addTearDown(lineup.dispose);
       final guide = GuideController(
         lineup: lineup,
+        clock: () => DateTime.utc(2026, 1, 15, 3, 17),
         loadSchedule: (c) async => _schedule(c),
       );
       addTearDown(guide.dispose);
@@ -1032,7 +1034,7 @@ void main() {
         expect(tester.getSize(progress).width, greaterThan(920));
         expect(
           tester.getSize(identity).width,
-          closeTo((tester.getSize(progress).width - 32) * .4, .1),
+          closeTo((tester.getSize(progress).width - 32) * .5, .1),
         );
         expect(
           tester.getTopLeft(synopsis).dx,
@@ -1049,6 +1051,10 @@ void main() {
         );
         expect(tester.getTopLeft(meta).dx, tester.getTopLeft(progress).dx);
         final summary = tester.widget<Text>(synopsis);
+        expect(
+          tester.getSize(synopsis).width,
+          lessThanOrEqualTo(34 * summary.style!.fontSize!),
+        );
         expect(summary.maxLines, greaterThan(3));
         expect(summary.overflow, TextOverflow.ellipsis);
         final metadata = tester.widget<Text>(meta);
@@ -1275,6 +1281,49 @@ void main() {
     expect(find.text('Watching'), findsOneWidget);
   });
 
+  testWidgets('L40 keeps the large channel number at 115% text', (
+    tester,
+  ) async {
+    tester.view.physicalSize = const Size(1920, 1080);
+    tester.view.devicePixelRatio = 1;
+    addTearDown(tester.view.resetPhysicalSize);
+    addTearDown(tester.view.resetDevicePixelRatio);
+    final lineup = _Lineup(2);
+    addTearDown(lineup.dispose);
+    await lineup.updateSettings(
+      (s) => s.copyWith(guideShowChannelSources: true),
+    );
+    final guide = GuideController(
+      lineup: lineup,
+      loadSchedule: (c) async => _schedule(c),
+    );
+    addTearDown(guide.dispose);
+    await tester.pumpWidget(
+      MaterialApp(
+        builder: (context, child) => MediaQuery(
+          data: MediaQuery.of(context)
+              .copyWith(textScaler: const TextScaler.linear(1.15)),
+          child: _guideCanvasBuilder(context, child),
+        ),
+        home: GuideView(
+          controller: guide,
+          onClose: (_, _) {},
+          onTune: (_) async {},
+          pictureInPicture: const SizedBox.expand(),
+        ),
+      ),
+    );
+    await tester.pumpAndSettle();
+    // Rows sit at the L40 floor (92.8 cu): the source line hides at 115 %
+    // text, but the channel number keeps its larger pre-L40 size.
+    expect(find.text('Manual lineup'), findsNothing);
+    final numbers = tester
+        .widgetList<Text>(find.text('1'))
+        .where((text) => text.style?.fontSize != null);
+    expect(numbers, isNotEmpty);
+    expect(numbers.first.style!.fontSize, 28);
+  });
+
   testWidgets(
     'shared idle backdrop rejects stale focus artwork and honors Reduce Motion',
     (tester) async {
@@ -1378,21 +1427,6 @@ void main() {
     },
   );
 
-  test('16:10 height extends information without enlarging five rows', () {
-    final reference = GuideLayoutPolicy.forSize(
-      const Size(1920, 1080),
-      hasPicture: true,
-    );
-    final tall = GuideLayoutPolicy.forSize(
-      const Size(1920, 1200),
-      hasPicture: true,
-    );
-    expect(tall.minimumRows, 5);
-    expect(tall.rowHeight, reference.rowHeight);
-    expect(tall.pictureWidth, reference.pictureWidth);
-    expect(tall.showcaseHeight - reference.showcaseHeight, closeTo(120, .001));
-  });
-
   test('clear logo usability follows decoded size and actual constraints', () {
     const ordinary = Size(1200, 400);
     const extremeWide = Size(1200, 20);
@@ -1422,7 +1456,7 @@ void main() {
     );
   });
 
-  test('layout policy stays bounded and keeps one five-row composition', () {
+  test('layout policy stays bounded at small and non-finite sizes', () {
     for (final size in const [
       Size.zero,
       Size(320, 240),
@@ -1448,10 +1482,10 @@ void main() {
       hasPicture: true,
       textScale: 2,
     );
-    expect(comfortable.rowHeight, closeTo(114.4, 0.1));
+    expect(comfortable.rowHeight, closeTo(92.8, 0.1));
     expect(enlarged.rowHeight, greaterThanOrEqualTo(116));
-    expect(comfortable.minimumRows, 5);
-    expect(enlarged.minimumRows, 5);
+    expect(comfortable.rowCount, 5);
+    expect(enlarged.rowCount, 5);
   });
 
   testWidgets('non-positive timeline slots render safely', (tester) async {
@@ -2086,6 +2120,7 @@ void main() {
     addTearDown(lineup.dispose);
     final guide = GuideController(
       lineup: lineup,
+      clock: () => DateTime.utc(2026, 1, 15, 3, 17),
       loadSchedule: (channel) async => _schedule(channel),
     );
     addTearDown(guide.dispose);
@@ -2183,9 +2218,10 @@ void main() {
       expect(tester.takeException(), isNull, reason: '$size');
     }
 
-    expect(tallGeometry[1200]!.$1, tallGeometry[1080]!.$1);
+    expect(tallGeometry[1080]!.$1, closeTo(92.8, .001));
+    expect(tallGeometry[1200]!.$1, closeTo(97.333, .001));
     expect(tallGeometry[1200]!.$2, tallGeometry[1080]!.$2);
-    expect(tallGeometry[1200]!.$3 - tallGeometry[1080]!.$3, closeTo(120, .001));
+    expect(tallGeometry[1200]!.$3, tallGeometry[1080]!.$3);
     final pictureSemantics = find.bySemanticsLabel(
       'Now playing picture in picture. Open full player.',
     );
@@ -3599,6 +3635,147 @@ void main() {
     );
   }
 
+  for (final tv in [false, true]) {
+    testWidgets(
+      'Guide information starts stay fixed through focus and logo loading (tv=$tv)',
+      (tester) async {
+        await tester.runAsync(loadPinnedTestFonts);
+        tester.view
+          ..devicePixelRatio = 1
+          ..physicalSize = tv ? const Size(1920, 1080) : const Size(1512, 949);
+        addTearDown(tester.view.reset);
+        final now = DateTime(2026, 1, 14, 22, 17);
+        final anchor = DateTime(2026, 1, 14, 22);
+        const longTitle = 'The Long Journey Home';
+        final logo = await _artI1LogoPng(
+          tester,
+          padded: false,
+          size: const Size(540, 60),
+        );
+        final pendingLogo = Completer<Uint8List?>();
+        final lineup = _Lineup(
+          3,
+          artworkLoader: (path) async => switch (path.path) {
+            '/unusable' => _narrowLogoPng,
+            '/wide' => pendingLogo.future,
+            _ => null,
+          },
+          scenario: const LineupScenario(
+            settings: LineupSettings(
+              preferClearLogos: true,
+              reduceMotion: true,
+            ),
+          ),
+        );
+        addTearDown(lineup.dispose);
+        lineup.fixtureActor.replaceChannels([
+          for (final (i, item) in [
+            ChannelItem(
+              id: 'rich',
+              title: 'The Beginning',
+              showTitle: longTitle,
+              duration: const Duration(hours: 2),
+              year: 2026,
+              genres: const ['Drama'],
+              resolution: '4k',
+              summary: 'A signal arrives.',
+              clearLogo: Uri.parse('/unusable'),
+            ),
+            const ChannelItem(
+              id: 'sparse',
+              title: 'A Quiet Evening',
+              duration: Duration(hours: 2),
+              summary: 'A quiet evening in the city.',
+            ),
+            ChannelItem(
+              id: 'wide',
+              title: 'The Long Way Home Again',
+              duration: const Duration(hours: 2),
+              summary: 'The long way home.',
+              clearLogo: Uri.parse('/wide'),
+            ),
+          ].indexed)
+            Channel(
+              id: 'c$i',
+              number: i + 1,
+              name: 'Cinema',
+              source: ManualSource([item]),
+              playbackMode: PlaybackMode.sequential,
+              anchor: anchor,
+              shuffleSeed: i,
+            ),
+        ]);
+        final guide = GuideController(
+          lineup: lineup,
+          clock: () => now,
+          loadSchedule: (channel) async => _schedule(channel),
+        );
+        addTearDown(guide.dispose);
+        const boundary = Key('l40-information-boundary');
+        await tester.pumpWidget(
+          RepaintBoundary(
+            key: boundary,
+            child: MaterialApp(
+              theme: LineupTheme.forName(
+                LineupThemeName.emberSteel,
+                formFactor: profileFor(tv).formFactor,
+              ),
+              builder: _guideCanvasBuilderFor(tv),
+              home: GuideView(
+                controller: guide,
+                pictureInPicture: const ColoredBox(color: Colors.black),
+                onClose: (_, _) {},
+                onTune: (_) async {},
+              ),
+            ),
+          ),
+        );
+        await tester.pumpAndSettle();
+        await tester.runAsync(clearLogoDecodesSettled);
+        await tester.pump();
+        final title = find.byKey(const Key('guide-clear-logo-fallback'));
+        final eyebrow = find.byKey(const Key('guide-info-channel'));
+        final synopsis = find.byKey(const Key('guide-program-synopsis'));
+        final identity = find.byKey(const Key('guide-program-identity'));
+        List<Offset> starts() => [
+          tester.getTopLeft(eyebrow),
+          tester.getTopLeft(title),
+          tester.getTopLeft(synopsis),
+        ];
+        expect(find.byType(ClearLogoImage), findsOneWidget);
+        final paragraph = tester.renderObject<RenderParagraph>(title);
+        expect(paragraph.text.toPlainText(), longTitle);
+        expect(paragraph.didExceedMaxLines, isFalse);
+        final painter = TextPainter(
+          text: paragraph.text,
+          textDirection: paragraph.textDirection,
+          textScaler: paragraph.textScaler,
+          maxLines: 1,
+        )..layout(maxWidth: tester.getSize(identity).width);
+        expect(paragraph.size.height, painter.height);
+        painter.dispose();
+
+        final rich = starts();
+        guide.moveVertical(1);
+        await tester.pumpAndSettle();
+        expect(tester.widget<Text>(title).data, 'A Quiet Evening');
+        expect(starts(), rich);
+
+        guide.moveVertical(1);
+        await tester.pumpAndSettle();
+        expect(starts(), rich);
+        pendingLogo.complete(logo);
+        final capture = await _waitForArtI1GuideRaster(tester, boundary);
+        expect(title, findsNothing);
+        expect(tester.getTopLeft(eyebrow), rich[0]);
+        expect(tester.getTopLeft(synopsis), rich[2]);
+        expect(capture.visibleBounds.top, closeTo(rich[1].dy, 2));
+        expect(tester.takeException(), isNull);
+        await tester.pumpWidget(const SizedBox.shrink());
+      },
+    );
+  }
+
   testWidgets('TV Guide keeps the title for a decoded transparent clear logo', (
     tester,
   ) async {
@@ -3783,7 +3960,7 @@ void main() {
         tester,
         find.byKey(const Key('guide-picture-in-picture')),
       ).width,
-      closeTo(576, 0.01),
+      closeTo(768, 0.01),
     );
     final list = tester.widget<ListView>(
       find.byKey(const Key('guide-schedule-list')),
@@ -5343,6 +5520,78 @@ void main() {
     guide.dispose();
     lineup.dispose();
   });
+
+  testWidgets('a visible focused row stays visible when the row count drops', (
+    tester,
+  ) async {
+    final lineup = _Lineup(
+      40,
+      scenario: LineupScenario(
+        settings: const LineupSettings(reduceMotion: true),
+      ),
+    );
+    addTearDown(lineup.dispose);
+    final guide = GuideController(
+      lineup: lineup,
+      loadSchedule: (channel) async => _schedule(channel),
+    );
+    addTearDown(guide.dispose);
+    tester.view
+      ..devicePixelRatio = 1
+      ..physicalSize = const Size(1920, 1200);
+    addTearDown(tester.view.resetPhysicalSize);
+    addTearDown(tester.view.resetDevicePixelRatio);
+    await tester.pumpWidget(
+      MaterialApp(
+        builder: _guideCanvasBuilder,
+        home: GuideView(
+          controller: guide,
+          pictureInPicture: const SizedBox.expand(),
+          onClose: (_, _) {},
+          onTune: (_) async {},
+        ),
+      ),
+    );
+    await tester.pump();
+    final scrollable = tester.state<ScrollableState>(
+      find.descendant(
+        of: find.byKey(const Key('guide-schedule-list')),
+        matching: find.byType(Scrollable),
+      ),
+    );
+    double rowHeight() => tester
+        .widget<ListView>(find.byKey(const Key('guide-schedule-list')))
+        .itemExtent!;
+    int visibleRows() =>
+        (scrollable.position.viewportDimension / rowHeight()).floor();
+    expect(visibleRows(), 6);
+
+    // Focus the last visible row; it is already visible, so nothing scrolls.
+    guide.moveVertical(5);
+    await tester.pump();
+    await tester.pump();
+    expect(scrollable.position.pixels, 0);
+
+    tester.view.physicalSize = const Size(1920, 1080);
+    await tester.pump();
+    await tester.pump();
+    expect(visibleRows(), 5);
+    final first = (scrollable.position.pixels / rowHeight()).round();
+    expect(first, 1, reason: 'scroll only as far as the focused row needs');
+    expect(guide.focusedChannelIndex, lessThan(first + visibleRows()));
+
+    // A focused row the user scrolled away from is not pulled back.
+    scrollable.position.jumpTo(rowHeight() * 20);
+    await tester.pump();
+    tester.view.physicalSize = const Size(1920, 1200);
+    await tester.pump();
+    await tester.pump();
+    expect((scrollable.position.pixels / rowHeight()).round(), 20);
+
+    await tester.pumpWidget(const SizedBox.shrink());
+    guide.dispose();
+    lineup.dispose();
+  });
 }
 
 String _detailsMetadata(WidgetTester tester) => [
@@ -5444,18 +5693,20 @@ Future<Uint8List> _transparentLogoPng(WidgetTester tester) async {
 Future<Uint8List> _artI1LogoPng(
   WidgetTester tester, {
   required bool padded,
+  Size size = const Size(600, 120),
 }) async {
   final bytes = await tester.runAsync(() async {
     final recorder = ui.PictureRecorder();
     final canvas = Canvas(recorder);
     canvas.drawRect(
-      padded
-          ? const Rect.fromLTWH(140, 20, 320, 80)
-          : const Rect.fromLTWH(0, 0, 600, 120),
+      padded ? const Rect.fromLTWH(140, 20, 320, 80) : Offset.zero & size,
       Paint()..color = _artI1LogoColor,
     );
     final picture = recorder.endRecording();
-    final image = await picture.toImage(600, 120);
+    final image = await picture.toImage(
+      size.width.toInt(),
+      size.height.toInt(),
+    );
     final data = await image.toByteData(format: ui.ImageByteFormat.png);
     image.dispose();
     picture.dispose();

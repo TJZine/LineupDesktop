@@ -530,7 +530,11 @@ class CoverResizeImageKey {
   int get hashCode => Object.hash(_providerKey, width, height);
 }
 
-bool clearLogoIsUsable(Size intrinsicSize, BoxConstraints constraints) {
+bool clearLogoIsUsable(
+  Size intrinsicSize,
+  BoxConstraints constraints, {
+  double? visibleSlotHeight,
+}) {
   if (!intrinsicSize.width.isFinite ||
       !intrinsicSize.height.isFinite ||
       intrinsicSize.width <= 0 ||
@@ -544,7 +548,7 @@ bool clearLogoIsUsable(Size intrinsicSize, BoxConstraints constraints) {
     intrinsicSize,
     constraints.biggest,
   ).destination;
-  return fitted.height >= constraints.maxHeight * 0.35 &&
+  return fitted.height >= (visibleSlotHeight ?? constraints.maxHeight) * 0.35 &&
       fitted.width >= constraints.maxWidth * 0.2;
 }
 
@@ -558,6 +562,7 @@ class ClearLogoImage extends StatefulWidget {
     this.maximumSize,
     this.minimumVisibleSize,
     this.maximumVisibleHeight,
+    this.reserveVisibleSlot = false,
     super.key,
   });
 
@@ -572,6 +577,10 @@ class ClearLogoImage extends StatefulWidget {
   /// Optional cap on the actual alpha-bearing artwork after padding is cropped.
   /// Existing consumers retain their original contain scale when omitted.
   final double? maximumVisibleHeight;
+
+  /// Reserve [maximumVisibleHeight] for accepted artwork and use that height
+  /// for the usability check. The fallback keeps its own dimensions.
+  final bool reserveVisibleSlot;
 
   @override
   State<ClearLogoImage> createState() => _ClearLogoImageState();
@@ -662,7 +671,13 @@ class _ClearLogoImageState extends State<ClearLogoImage> {
       if (request != _request) _load(request);
       final raster = _raster;
       if (raster == null ||
-          !clearLogoIsUsable(raster.intrinsicSize, constraints)) {
+          !clearLogoIsUsable(
+            raster.intrinsicSize,
+            constraints,
+            visibleSlotHeight: widget.reserveVisibleSlot
+                ? widget.maximumVisibleHeight
+                : null,
+          )) {
         return widget.fallback;
       }
       final fraction = raster.visibleFraction;
@@ -707,7 +722,7 @@ class _ClearLogoImageState extends State<ClearLogoImage> {
         );
       }
       if (!crop) return image;
-      return SizedBox(
+      final cropped = SizedBox(
         width: fitted.width * fraction.width,
         height: fitted.height * fraction.height,
         child: Stack(
@@ -720,6 +735,17 @@ class _ClearLogoImageState extends State<ClearLogoImage> {
               child: image,
             ),
           ],
+        ),
+      );
+      if (!widget.reserveVisibleSlot || widget.maximumVisibleHeight == null) {
+        return cropped;
+      }
+      return SizedBox(
+        height: widget.maximumVisibleHeight,
+        child: Align(
+          alignment: Alignment.topLeft,
+          widthFactor: 1,
+          child: cropped,
         ),
       );
     },

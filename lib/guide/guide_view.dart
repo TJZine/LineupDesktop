@@ -24,6 +24,8 @@ const _guideEdgeContentInset = 12.0;
 const _guidePictureAspectRatio = 16 / 9;
 const _guideReferencePictureHeight = 324.0;
 const _guideSynopsisWidthFloor = 400.0;
+const _guideDesktopRowFloor = 92.8;
+const _guideExtraRowMinimum = 96.0;
 
 /// A width and height in physical pixels.
 typedef _PixelSize = ({int width, int height});
@@ -37,7 +39,7 @@ class GuideLayoutPolicy {
     required this.showcaseHeight,
     required this.pictureWidth,
     required this.rowHeight,
-    required this.minimumRows,
+    required this.rowCount,
     required this.compactLogo,
     required this.minimumIdentityWidth,
   });
@@ -97,7 +99,7 @@ class GuideLayoutPolicy {
       ),
     );
     const showcaseHeightAdjustment = 0.01;
-    final showcaseHeight = tvControlsHeight == null
+    var showcaseHeight = tvControlsHeight == null
         ? math.max(0.0, pictureAllocation - showcaseHeightAdjustment)
         : math.min(
             math.max(
@@ -106,14 +108,51 @@ class GuideLayoutPolicy {
             ),
             math.max(0.0, available - minimumRowHeight * minimumRows),
           );
+    final widthBudget = math.max(0.0, width - 360 - 12 - 40);
+    var rowCount = minimumRows;
+    var pictureHeight = showcaseHeight;
+    if (tvControlsHeight == null && hasPicture) {
+      // Today's visible picture: the band capped at the 324 cu reference.
+      final todayPicture = math.min(
+        showcaseHeight,
+        _guideReferencePictureHeight,
+      );
+      final todayRow = math.max(
+        minimumRowHeight,
+        (available - showcaseHeight) / minimumRows,
+      );
+      // Use the approved study estimate: the bundled row styles measure 44 cu
+      // at 100%, outside the handoff tolerance for the 52.7 cu estimate.
+      final rowFloor = math.max(_guideDesktopRowFloor, 52.7 * textScale + 16.8);
+      final target = width * 0.40 / _guidePictureAspectRatio;
+      final rowLimitedBand =
+          available - minimumRows * math.min(rowFloor, todayRow);
+      final widthLimitedBand =
+          math.min(widthBudget, width * 0.5) / _guidePictureAspectRatio;
+      // Never smaller than today's visible picture; the 50 % width cap only
+      // limits growth (narrow windows keep today's picture).
+      final todayVisible = math.min(
+        todayPicture,
+        widthBudget / _guidePictureAspectRatio,
+      );
+      showcaseHeight = math.max(
+        todayVisible,
+        math.min(widthLimitedBand, math.min(target, rowLimitedBand)),
+      );
+      pictureHeight = showcaseHeight;
+      rowCount = math.max(
+        minimumRows,
+        ((available - showcaseHeight) /
+                math.max(_guideExtraRowMinimum, rowFloor))
+            .floor(),
+      );
+    } else if (tvControlsHeight == null) {
+      pictureHeight = math.min(_guideReferencePictureHeight, pictureAllocation);
+    }
     final rowHeight = math.max(
       minimumRowHeight,
-      (available - showcaseHeight) / minimumRows,
+      (available - showcaseHeight) / rowCount,
     );
-    final pictureHeight = tvControlsHeight == null
-        ? math.min(_guideReferencePictureHeight, pictureAllocation)
-        : showcaseHeight;
-    final widthBudget = math.max(0.0, width - 360 - 12 - 40);
     final pictureWidth = tvControlsHeight == null
         ? (hasPicture
               ? math.min(pictureHeight * 16 / 9, widthBudget)
@@ -152,7 +191,7 @@ class GuideLayoutPolicy {
       showcaseHeight: showcaseHeight,
       pictureWidth: pictureWidth,
       rowHeight: rowHeight,
-      minimumRows: minimumRows,
+      rowCount: rowCount,
       compactLogo: showcaseHeight < 180 * textScale,
       minimumIdentityWidth: tvControlsHeight == null ? 0 : tvIdentityWidth,
     );
@@ -190,7 +229,7 @@ class GuideLayoutPolicy {
         : math.max(56, height);
   }
 
-  /// Whole-row offsets, including the trailing edge of a five-row viewport.
+  /// Whole-row offsets, including the trailing edge of the viewport.
   static double snapRowOffset(
     double offset,
     double rowHeight,
@@ -208,7 +247,7 @@ class GuideLayoutPolicy {
   final double showcaseHeight;
   final double pictureWidth;
   final double rowHeight;
-  final int minimumRows;
+  final int rowCount;
   final bool compactLogo;
   final double minimumIdentityWidth;
 }
@@ -557,11 +596,13 @@ class _GuideViewState extends State<GuideView>
       return existing;
     }
 
+    var focusWasVisible = false;
     if (!_rowHeightAdjustmentScheduled && existing.hasClients) {
       widget.controller.rememberVerticalOffset(
         existing.offset,
         previousRowHeight,
       );
+      focusWasVisible = _focusedRowVisible(existing.offset, previousRowHeight);
     }
     _effectiveRowHeight = rowHeight;
     if (!_rowHeightAdjustmentScheduled) {
@@ -572,15 +613,31 @@ class _GuideViewState extends State<GuideView>
         if (!mounted || currentRowHeight == null || !existing.hasClients) {
           return;
         }
-        existing.jumpTo(
-          widget.controller
-              .verticalOffsetFor(currentRowHeight)
-              .clamp(0.0, existing.position.maxScrollExtent),
-        );
+        final maxOffset = existing.position.maxScrollExtent;
+        var offset = widget.controller
+            .verticalOffsetFor(currentRowHeight)
+            .clamp(0.0, maxOffset);
+        // A row-count drop can push a visible focused row past the last
+        // visible row; scroll only as far as that row needs.
+        if (focusWasVisible && !_focusedRowVisible(offset, currentRowHeight)) {
+          final index = widget.controller.focusedChannelIndex;
+          offset = ((index - _visibleRows + 1) * currentRowHeight).clamp(
+            0.0,
+            maxOffset,
+          );
+        }
+        existing.jumpTo(offset);
         _scheduleViewportRequest();
       });
     }
     return existing;
+  }
+
+  bool _focusedRowVisible(double offset, double rowHeight) {
+    final index = widget.controller.focusedChannelIndex;
+    if (index < 0) return false;
+    final first = ((offset + 0.000001) / rowHeight).floor();
+    return index >= first && index < first + _visibleRows;
   }
 
   void _changed() {
@@ -631,8 +688,7 @@ class _GuideViewState extends State<GuideView>
       }
       final index = widget.controller.focusedChannelIndex;
       if (index < 0) return;
-      final first = ((scroll.offset + 0.000001) / rowHeight).floor();
-      if (index < first || index >= first + _visibleRows) {
+      if (!_focusedRowVisible(scroll.offset, rowHeight)) {
         final target = (index * rowHeight).clamp(
           0.0,
           scroll.position.maxScrollExtent,
@@ -967,6 +1023,15 @@ class _GuideViewState extends State<GuideView>
 
   Widget _schedule(GuideLayoutPolicy policy, List<Channel> channels) {
     final scroll = _scrollFor(policy.rowHeight);
+    final sourceRowFloor = DeviceProfile.of(context).isTv
+        ? 78.0
+        : _guideDesktopRowFloor;
+    final textScale = MediaQuery.textScalerOf(context).scale(1);
+    final showProvenance =
+        policy.rowHeight + 0.000001 >= sourceRowFloor * textScale;
+    // The larger channel number and label keep their pre-L40 threshold; only
+    // the source line moved to the L40 row floor.
+    final largeRail = policy.rowHeight + 0.000001 >= 78 * textScale;
     return Column(
       key: _scheduleKey,
       children: [
@@ -1098,11 +1163,8 @@ class _GuideViewState extends State<GuideView>
                                   clock: _presentationClock,
                                   railWidth: policy.channelRailWidth,
                                   hideSchedule: _allVisibleFailed,
-                                  showProvenance:
-                                      policy.rowHeight >=
-                                      78 *
-                                          MediaQuery.textScalerOf(context)
-                                              .scale(1),
+                                  showProvenance: showProvenance,
+                                  largeRail: largeRail,
                                   onTune: widget.onTune,
                                   activityPulse: _activityPulse,
                                   onGridKey: _gridKey,
@@ -2663,6 +2725,7 @@ class _GuideRow extends StatelessWidget {
     required this.railWidth,
     required this.numberColumnWidth,
     required this.showProvenance,
+    required this.largeRail,
     required this.hideSchedule,
     required this.onTune,
     required this.activityPulse,
@@ -2675,6 +2738,7 @@ class _GuideRow extends StatelessWidget {
   final double railWidth;
   final double numberColumnWidth;
   final bool showProvenance;
+  final bool largeRail;
   final bool hideSchedule;
   final Future<void> Function(String channelId) onTune;
   final Animation<double> activityPulse;
@@ -2783,7 +2847,7 @@ class _GuideRow extends StatelessWidget {
                             color: focusChannelRail
                                 ? roles.focusedText
                                 : roles.secondaryText,
-                            fontSize: (showProvenance ? 28 : 22),
+                            fontSize: (largeRail ? 28 : 22),
                             fontWeight: FontWeight.w500,
                             fontFeatures: const [
                               ui.FontFeature.tabularFigures(),
@@ -2820,7 +2884,7 @@ class _GuideRow extends StatelessWidget {
                             final supportStyle = DefaultTextStyle.of(context)
                                 .style
                                 .copyWith(
-                                  fontSize: showProvenance ? 16 : 14,
+                                  fontSize: largeRail ? 16 : 14,
                                   color:
                                       focusChannelRail &&
                                           DeviceProfile.of(context).isTv
@@ -3565,27 +3629,31 @@ double debugMeasureGuideTextWidth(String text) => _textWidth(
 double _textHeight(
   TextStyle? style,
   TextScaler scaler,
-  TextDirection direction,
-) => _guideTextMetrics.measure(
-  (
-    kind: _GuideTextMetricKind.height,
-    text: 'Ag',
-    style: style,
-    scaler: scaler,
-    direction: direction,
-  ),
-  () {
-    final painter = TextPainter(
-      text: TextSpan(text: 'Ag', style: style),
-      textDirection: direction,
-      textScaler: scaler,
-      maxLines: 1,
-    )..layout();
-    final height = painter.height.ceilToDouble();
-    painter.dispose();
-    return height;
-  },
-);
+  TextDirection direction, {
+  bool roundUp = true,
+}) {
+  final height = _guideTextMetrics.measure(
+    (
+      kind: _GuideTextMetricKind.height,
+      text: 'Ag',
+      style: style,
+      scaler: scaler,
+      direction: direction,
+    ),
+    () {
+      final painter = TextPainter(
+        text: TextSpan(text: 'Ag', style: style),
+        textDirection: direction,
+        textScaler: scaler,
+        maxLines: 1,
+      )..layout();
+      final height = painter.height;
+      painter.dispose();
+      return height;
+    },
+  );
+  return roundUp ? height.ceilToDouble() : height;
+}
 
 double _textWidth(
   String text,
@@ -3969,6 +4037,11 @@ class _ProgramDetails extends StatelessWidget {
     final roles = LineupTheme.of(context);
     final scaler = MediaQuery.textScalerOf(context);
     final enlarged = scaler.scale(1) > 1;
+    final isTv = DeviceProfile.of(context).isTv;
+    final direction = Directionality.of(context);
+    final inherited = DefaultTextStyle.of(context).style;
+    double line(TextStyle style) =>
+        _textHeight(inherited.merge(style), scaler, direction, roundUp: false);
     final metadataSeparator = enlarged ? '\u00a0· ' : ' · ';
     final hasSynopsis = item.summary?.trim().isNotEmpty == true;
     final duration = program.scheduled.end.difference(program.scheduled.start);
@@ -4007,13 +4080,7 @@ class _ProgramDetails extends StatelessWidget {
       maxLines: 1,
       overflow: TextOverflow.ellipsis,
     );
-    final title = Text(
-      item.showTitle ?? item.title,
-      key: const Key('guide-clear-logo-fallback'),
-      maxLines: 1,
-      overflow: TextOverflow.ellipsis,
-      style: _GuideStyles.title.copyWith(color: roles.primaryText),
-    );
+    final title = item.showTitle ?? item.title;
     final episode = [
       ?_episodeCode(item),
       if (item.showTitle != null) item.title,
@@ -4027,17 +4094,86 @@ class _ProgramDetails extends StatelessWidget {
         );
         final mergeFacts = dense && !enlarged;
         final gap = dense ? 4.0 : 10.0;
-        final desktopLogoHeight = compactLogo || dense ? 42.0 : 64.0;
-        final logoHeight = DeviceProfile.of(context).isTv
-            ? math.max(
-                desktopLogoHeight,
-                _lineHeight(context, _GuideStyles.title),
-              )
-            : desktopLogoHeight;
+        final unscaledLogoSlot = dense ? 42.0 : 64.0;
+        final contentScale = isTv || dense
+            ? 1.0
+            : (box.maxHeight / 296).clamp(1.0, 1.4);
+        final logoSlot = unscaledLogoSlot * contentScale;
+        final baseTitleStyle = _GuideStyles.title.copyWith(
+          color: roles.primaryText,
+        );
+        final scaledTitleStyle = baseTitleStyle.copyWith(
+          fontSize: 54 * contentScale,
+        );
+        final episodeStyle = _GuideStyles.episode.copyWith(
+          color: roles.secondaryText,
+          fontSize: 22 * contentScale,
+        );
+        final synopsisStyle = bodyStyle.copyWith(
+          fontSize: 18 * (1 + (contentScale - 1) / 2),
+        );
         final identityFlex = _GuideInformationLayout.identityFlex(
           height: box.maxHeight,
           compactLogo: compactLogo,
           enlarged: enlarged,
+        );
+        final rowWidth = math.max(0.0, box.maxWidth - 32);
+        final synopsisMeasure = 34 * scaler.scale(synopsisStyle.fontSize!);
+        final identityWidth = hasSynopsis
+            ? math
+                  .max(
+                    minimumIdentityWidth,
+                    math.max(
+                      rowWidth *
+                          math.max(
+                            identityFlex / 10,
+                            contentScale > 1 ? .5 : 0,
+                          ),
+                      rowWidth - synopsisMeasure,
+                    ),
+                  )
+                  .clamp(0.0, rowWidth)
+            : box.maxWidth;
+        final titleStyle =
+            contentScale > 1 &&
+                _textWidth(
+                      title,
+                      inherited.merge(scaledTitleStyle),
+                      scaler,
+                      direction,
+                    ) >
+                    identityWidth
+            ? baseTitleStyle
+            : scaledTitleStyle;
+        final fallbackTitle = Text(
+          title,
+          key: const Key('guide-clear-logo-fallback'),
+          maxLines: 1,
+          overflow: TextOverflow.ellipsis,
+          style: titleStyle,
+        );
+        final eyebrowToTitle = line(channelStyle) + gap;
+        final metadataHeight = line(metadataStyle);
+        final badgeHeight = line(_GuideStyles.badge(context)) + 8;
+        final reservedIdentity =
+            eyebrowToTitle +
+            math.max(line(scaledTitleStyle), logoSlot) +
+            gap +
+            line(episodeStyle) +
+            gap +
+            metadataHeight +
+            (mergeFacts ? 0 : gap + metadataHeight) +
+            gap +
+            badgeHeight;
+        final progressReserve = gap + 4;
+        final messageReserve = playbackMessage == null ? 0 : metadataHeight;
+        final centerOffset = math.max(
+          0.0,
+          (box.maxHeight -
+                  progressReserve -
+                  messageReserve -
+                  reservedIdentity) /
+              2,
         );
         final identity = Column(
           key: const Key('guide-program-identity'),
@@ -4047,26 +4183,18 @@ class _ProgramDetails extends StatelessWidget {
             eyebrow,
             SizedBox(height: gap),
             if (clearLogo != null)
-              SizedBox(
-                height: logoHeight,
-                child: ConstrainedBox(
-                  constraints: BoxConstraints(
-                    maxWidth: compactLogo || dense ? 280 : 420,
-                  ),
-                  child: ClearLogoImage(
-                    clearLogo!,
-                    imageKey: const Key('guide-clear-logo'),
-                    fallback: title,
-                    semanticLabel: '${item.showTitle ?? item.title} logo',
-                    maximumSize: Size(
-                      compactLogo || dense ? 280 : 420,
-                      logoHeight,
-                    ),
-                  ),
-                ),
+              ClearLogoImage(
+                clearLogo!,
+                imageKey: const Key('guide-clear-logo'),
+                fallback: fallbackTitle,
+                semanticLabel: '$title logo',
+                maximumSize: Size(logoSlot * 12, logoSlot * 2),
+                maximumVisibleHeight: logoSlot,
+                minimumVisibleSize: Size(96, unscaledLogoSlot * .4),
+                reserveVisibleSlot: true,
               )
             else
-              title,
+              fallbackTitle,
             if (episode.isNotEmpty) ...[
               SizedBox(height: gap),
               Text(
@@ -4074,9 +4202,7 @@ class _ProgramDetails extends StatelessWidget {
                 key: const Key('guide-info-episode'),
                 maxLines: 1,
                 overflow: TextOverflow.ellipsis,
-                style: _GuideStyles.episode.copyWith(
-                  color: roles.secondaryText,
-                ),
+                style: episodeStyle,
               ),
             ],
             SizedBox(height: gap),
@@ -4085,10 +4211,8 @@ class _ProgramDetails extends StatelessWidget {
                   ? '$timeLine · $factsLine'
                   : timeLine,
               key: const Key('guide-program-meta'),
-              maxLines: DeviceProfile.of(context).isTv ? 1 : null,
-              overflow: DeviceProfile.of(context).isTv
-                  ? TextOverflow.ellipsis
-                  : null,
+              maxLines: isTv ? 1 : null,
+              overflow: isTv ? TextOverflow.ellipsis : null,
               style: metadataStyle,
             ),
             if (!mergeFacts && factsLine.isNotEmpty) ...[
@@ -4096,16 +4220,14 @@ class _ProgramDetails extends StatelessWidget {
               Text(
                 factsLine,
                 key: const Key('guide-info-genres'),
-                maxLines: DeviceProfile.of(context).isTv ? 1 : null,
-                overflow: DeviceProfile.of(context).isTv
-                    ? TextOverflow.ellipsis
-                    : null,
+                maxLines: isTv ? 1 : null,
+                overflow: isTv ? TextOverflow.ellipsis : null,
                 style: metadataStyle,
               ),
             ],
             if (badges.isNotEmpty) ...[
               SizedBox(height: gap),
-              if (DeviceProfile.of(context).isTv)
+              if (isTv)
                 Row(
                   key: const Key('guide-program-badges'),
                   mainAxisSize: MainAxisSize.min,
@@ -4144,56 +4266,52 @@ class _ProgramDetails extends StatelessWidget {
           crossAxisAlignment: CrossAxisAlignment.stretch,
           children: [
             Expanded(
-              child: Row(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  if (DeviceProfile.of(context).isTv && hasSynopsis)
+              child: Padding(
+                padding: EdgeInsets.only(top: centerOffset),
+                child: Row(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
                     SizedBox(
-                      width: math.max(
-                        minimumIdentityWidth,
-                        (box.maxWidth - 32) * identityFlex / 10,
-                      ),
-                      child: identity,
-                    )
-                  else
-                    Expanded(
-                      flex: hasSynopsis ? identityFlex : 1,
-                      child: DeviceProfile.of(context).isTv
+                      width: identityWidth,
+                      child: isTv
                           ? identity
                           : SingleChildScrollView(child: identity),
                     ),
-                  if (hasSynopsis) ...[
-                    const SizedBox(width: 32),
-                    Expanded(
-                      flex: 10 - identityFlex,
-                      child: Padding(
-                        padding: EdgeInsets.only(
-                          top: _lineHeight(context, channelStyle) + gap,
-                        ),
-                        child: LayoutBuilder(
-                          builder: (context, synopsisBox) {
-                            final lineHeight = _lineHeight(context, bodyStyle);
-                            final lines = math.max(
-                              1,
-                              (synopsisBox.maxHeight / lineHeight).floor(),
-                            );
-                            return Text(
+                    if (hasSynopsis && rowWidth > identityWidth) ...[
+                      const SizedBox(width: 32),
+                      Expanded(
+                        child: Padding(
+                          padding: EdgeInsets.only(top: eyebrowToTitle),
+                          child: LayoutBuilder(
+                            builder: (context, synopsisBox) => Text(
                               item.summary!,
                               key: const Key('guide-program-synopsis'),
-                              maxLines: lines,
+                              maxLines: math.max(
+                                1,
+                                (synopsisBox.maxHeight / line(synopsisStyle))
+                                    .floor(),
+                              ),
                               overflow: TextOverflow.ellipsis,
-                              style: bodyStyle,
-                            );
-                          },
+                              style: synopsisStyle,
+                            ),
+                          ),
                         ),
                       ),
-                    ),
+                    ],
                   ],
-                ],
+                ),
               ),
             ),
-            if (current) ...[
-              SizedBox(height: gap),
+            if (playbackMessage != null)
+              Text(
+                playbackMessage!,
+                key: const Key('guide-playback-message'),
+                maxLines: 1,
+                overflow: TextOverflow.ellipsis,
+                style: metadataStyle,
+              ),
+            SizedBox(height: gap),
+            if (current)
               Semantics(
                 label: '${_duration(elapsed)} elapsed, $remaining remaining',
                 child: LinearProgressIndicator(
@@ -4203,35 +4321,13 @@ class _ProgramDetails extends StatelessWidget {
                       : elapsed.inMilliseconds / duration.inMilliseconds,
                   minHeight: 4,
                 ),
-              ),
-            ],
-            if (playbackMessage != null)
-              Text(
-                playbackMessage!,
-                key: const Key('guide-playback-message'),
-                maxLines: 1,
-                overflow: TextOverflow.ellipsis,
-                style: metadataStyle,
-              ),
+              )
+            else
+              const SizedBox(height: 4),
           ],
         );
       },
     );
-  }
-
-  double _lineHeight(BuildContext context, TextStyle style) {
-    final painter = TextPainter(
-      text: TextSpan(
-        text: 'Ag',
-        style: DefaultTextStyle.of(context).style.merge(style),
-      ),
-      textDirection: Directionality.of(context),
-      textScaler: MediaQuery.textScalerOf(context),
-      maxLines: 1,
-    )..layout();
-    final height = painter.height;
-    painter.dispose();
-    return height;
   }
 }
 

@@ -7,9 +7,14 @@ import 'package:lineup_desktop/ui/app_ui.dart';
 void main() {
   tearDown(debugResetClearLogoCache);
 
-  for (final padded in [false, true]) {
+  for (final (padded, reserve) in [
+    (false, false),
+    (true, false),
+    (true, true),
+  ]) {
+    final boxHeight = reserve ? 128.0 : 64.0;
     testWidgets(
-      'every frame has fallback or the validated bounded logo ($padded)',
+      'every frame has fallback or the validated bounded logo (padded=$padded, reserved=$reserve)',
       (tester) async {
         final bytes = await tester.runAsync(() async {
           final recorder = ui.PictureRecorder();
@@ -40,7 +45,9 @@ void main() {
               child: Center(
                 child: ClearLogoImage(
                   bytes!,
-                  maximumSize: const Size(420, 64),
+                  maximumSize: Size(420, boxHeight),
+                  maximumVisibleHeight: reserve ? 64 : null,
+                  reserveVisibleSlot: reserve,
                   minimumVisibleSize: const Size(96, 28),
                   fallback: const Text('Readable title'),
                 ),
@@ -60,7 +67,7 @@ void main() {
           );
           if (image != null) {
             expect(image.width, lessThanOrEqualTo(840));
-            expect(image.height, lessThanOrEqualTo(128));
+            expect(image.height, lessThanOrEqualTo(boxHeight * 2));
             expect(find.byType(Image), findsNothing);
             ready = image;
             break;
@@ -86,10 +93,10 @@ void main() {
           }
         }
         expect(right, greaterThanOrEqualTo(left));
-        final fitted = applyBoxFit(
+        var fitted = applyBoxFit(
           BoxFit.contain,
           const Size(3800, 1000),
-          const Size(420, 64),
+          Size(420, boxHeight),
         ).destination;
         final fractionWidth =
             ((right + 2).clamp(0, ready.width) -
@@ -99,9 +106,15 @@ void main() {
             ((bottom + 2).clamp(0, ready.height) -
                 (top - 1).clamp(0, ready.height)) /
             ready.height;
+        if (reserve && fitted.height * fractionHeight > 64) {
+          fitted *= 64 / (fitted.height * fractionHeight);
+        }
         final actual = tester.getSize(find.byType(ClearLogoImage));
         expect(actual.width, closeTo(fitted.width * fractionWidth, .01));
-        expect(actual.height, closeTo(fitted.height * fractionHeight, .01));
+        expect(
+          actual.height,
+          reserve ? 64 : closeTo(fitted.height * fractionHeight, .01),
+        );
         expect(tester.takeException(), isNull);
       },
     );
