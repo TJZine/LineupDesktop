@@ -159,8 +159,9 @@ the configured channel limit from exhausted channel numbers. Each new channel
 starts at its own point in its schedule, which is saved with the channel.
 
 For an existing lineup, **Update and add** preserves matching generated
-identities, schedule anchors, and favourites. **Replace generated channels** replaces generated programming while
-keeping custom channels, and **Add as new channels** appends new identities.
+identities, schedule anchors, and favourites. **Replace generated channels**
+replaces generated programming while keeping custom channels. **Add as new
+channels** appends new identities.
 Review shows current/final counts and unchanged, updated, added, and removed
 entries; search by name or number and filter the change categories. Removals
 require confirmation. A changed lineup invalidates the review and requires a
@@ -540,17 +541,17 @@ then lets you replace generated channels, add generated channels, or refresh
 matching generated channels after review. All three modes preserve every custom
 channel. Refresh preserves a matching generated channel's name, schedule anchor,
 shuffle identity, and favourite status while updating its programming recipe.
-Grouped ordering can update generated channel numbers. Before applying, Review shows the full proposed final
-roster. Search it by channel number or name, or filter for protected custom,
-added/updated, or removed entries. Replace keeps its protection confirmation
-visible while you inspect the roster. Completion offers **View lineup** or the
-separate Generated names use the source name, such as **Drama**. Channels with that
+Grouped ordering can update generated channel numbers. **Review channels**
+shows the proposed roster. Search by channel number or name, or filter by
+change category. If the plan removes channels, its confirmation stays visible
+while you inspect the roster. Completion offers **View lineup** and
+**Add a custom channel**.
+
+Generated names use the source name, such as **Drama**. Channels with that
 name from different libraries show the library beside the name where it fits.
 Additional schedules use numbers such as **Drama 2** or playback labels such
 as **Drama In Order**. TV, film, and mixed channels have distinct icons.
 Custom names stay as entered.
-
-**Add a custom channel** action.
 
 **Add a custom channel** opens the full-page Channel Studio for one custom channel.
 Studio also opens when you edit a custom channel, inspect a generated channel,
