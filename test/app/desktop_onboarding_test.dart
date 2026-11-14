@@ -843,7 +843,7 @@ void main() {
         ),
         theme: LineupTheme.forName(
           themeName,
-          largeFocusIndicators: false,
+          largeFocusIndicators: controller.settings.largeFocusIndicators,
           formFactor: profileFor(isTv).formFactor,
         ),
         home: UpstreamOnboardingView(
@@ -970,6 +970,57 @@ void main() {
       expect(cancellable.serverSelectionCanCancel, isFalse);
     },
   );
+
+  testWidgets('TV PIN Back reveals the invoking profile in a scrolling grid', (
+    tester,
+  ) async {
+    tester.platformDispatcher.textScaleFactorTestValue = 1.75;
+    addTearDown(tester.platformDispatcher.clearTextScaleFactorTestValue);
+    final controller = _AuthorizationController(
+      scenario: LineupScenario(
+        stage: SetupStage.profiles,
+        profiles: [
+          for (var index = 0; index < 15; index++)
+            PlexHomeUser(
+              id: 'viewer-$index',
+              name: 'Viewer ${index + 1}',
+              protected: index == 14,
+            ),
+        ],
+      ),
+    );
+    await tester.pumpWidget(
+      UiFixture(controller: controller, profile: tvProfile).build(),
+    );
+    await tester.pumpAndSettle();
+    final tile = find.widgetWithText(TextButton, 'Viewer 15');
+    final focus = tester.widget<TextButton>(tile).focusNode!;
+    final scrollView = find
+        .ancestor(of: tile, matching: find.byType(SingleChildScrollView))
+        .first;
+    final ring = find.byKey(const ValueKey('tv-profile-focus-ring'));
+    for (var row = 0; row < 7; row++) {
+      await tester.sendKeyEvent(LogicalKeyboardKey.arrowDown);
+      await tester.pumpAndSettle();
+    }
+    expect(focus.hasPrimaryFocus, isTrue);
+    expect(
+      tester.getRect(scrollView).intersect(tester.getRect(ring)),
+      tester.getRect(ring),
+    );
+    await tester.sendKeyEvent(LogicalKeyboardKey.select);
+    await tester.pumpAndSettle();
+    expect(find.byKey(const Key('profile-pin-sheet')), findsOneWidget);
+
+    await tester.binding.handlePopRoute();
+    await tester.pumpAndSettle();
+    expect(tester.widget<TextButton>(tile).focusNode!.hasPrimaryFocus, isTrue);
+    expect(
+      tester.getRect(scrollView).intersect(tester.getRect(ring)),
+      tester.getRect(ring),
+    );
+    expect(tester.takeException(), isNull);
+  });
 
   testWidgets('NAV-I2 submitting PIN Back is claimed by the PIN owner', (
     tester,
@@ -1189,24 +1240,9 @@ void main() {
               FocusHighlightMode.touch,
             );
             final focused = LineupTheme.of(tester.element(current));
-            expect(
-              ink('Current'),
-              tv ? focused.primaryText : base.progressFill,
-            );
+            expect(ink('Current'), base.progressFill);
             expect(ink('Admin'), focused.secondaryText);
             expect(ink('Restricted'), focused.secondaryText);
-            if (tv) {
-              final badge = tester.widget<DecoratedBox>(
-                find
-                    .ancestor(of: current, matching: find.byType(DecoratedBox))
-                    .first,
-              );
-              final inset = (badge.decoration as BoxDecoration).color!;
-              expect(inset, focused.elevatedSurface);
-              final light = inset.computeLuminance();
-              final dark = ink('Current').computeLuminance();
-              expect((light + .05) / (dark + .05), greaterThanOrEqualTo(4.7));
-            }
             expect(tester.element(current), same(element));
             otherNode.requestFocus();
             await tester.pumpAndSettle();
@@ -1268,69 +1304,103 @@ void main() {
     );
   }, semanticsEnabled: true);
 
-  testWidgets('Android TV profile focus uses shared fill ink and scale', (
-    tester,
-  ) async {
-    const active = PlexHomeUser(
-      id: 'active',
-      name: 'Active viewer',
-      protected: false,
-    );
-    final controller = FixtureController(
-      scenario: const LineupScenario(
-        stage: SetupStage.profiles,
-        profile: active,
-        profiles: [active],
-      ),
-    );
-    addTearDown(controller.dispose);
+  const tvFocusColors = {
+    LineupThemeName.emberSteel: Color(0xFFE9DCC3),
+    LineupThemeName.slatePine: Color(0xFFD3DECF),
+    LineupThemeName.swiss: Color(0xFFC6EEDB),
+    LineupThemeName.directv: Color(0xFFFFCC00),
+  };
+  for (final (theme, largeFocus, reduceMotion) in [
+    for (final theme in tvFocusColors.keys) ...[
+      (theme, false, false),
+      (theme, true, false),
+    ],
+    (LineupThemeName.emberSteel, false, true),
+  ]) {
+    testWidgets(
+      'TV profile ring follows ${theme.name} and reserves space (large=$largeFocus, reduced=$reduceMotion)',
+      (tester) async {
+        final controller = FixtureController(
+          scenario: LineupScenario(
+            stage: SetupStage.profiles,
+            settings: LineupSettings(
+              theme: theme,
+              largeFocusIndicators: largeFocus,
+              reduceMotion: reduceMotion,
+            ),
+            profiles: const [
+              PlexHomeUser(id: 'one', name: 'First viewer', protected: false),
+              PlexHomeUser(id: 'two', name: 'Second viewer', protected: false),
+            ],
+          ),
+        );
+        addTearDown(controller.dispose);
 
-    await show(tester, controller, isTv: true);
-    await tester.sendKeyEvent(LogicalKeyboardKey.arrowRight);
-    await tester.pump(const Duration(milliseconds: 160));
+        await show(tester, controller, isTv: true, themeName: theme);
+        await tester.pumpAndSettle();
+        final firstName = find.text('First viewer');
+        final secondName = find.text('Second viewer');
+        final firstOrigin = tester.getTopLeft(firstName);
+        final secondOrigin = tester.getTopLeft(secondName);
+        final ring = find.byKey(const ValueKey('tv-profile-focus-ring'));
+        final decoration =
+            tester
+                    .widget<DecoratedBox>(
+                      find.descendant(
+                        of: ring,
+                        matching: find.byType(DecoratedBox),
+                      ),
+                    )
+                    .decoration
+                as BoxDecoration;
+        final roles = LineupTheme.of(tester.element(firstName));
+        final stroke = largeFocus ? 5.0 : 3.0;
+        expect(decoration.color, roles.deepBackground);
+        expect(decoration.border!.top.width, stroke);
+        expect(roles.focusedSurface, tvFocusColors[theme]);
+        expect(decoration.border!.top.color, tvFocusColors[theme]);
+        final avatarSize = reduceMotion ? 120.0 : 120 * 1.08;
+        expect(
+          tester.getSize(ring).width,
+          closeTo(avatarSize + 8 + 2 * stroke, .001),
+        );
+        expect(
+          (firstOrigin.dy - tester.getBottomLeft(ring).dy) /
+              LineupCanvas.scaleOf(tester.element(firstName)),
+          greaterThanOrEqualTo(16 - .001),
+        );
+        expect(tester.widget<Text>(firstName).style!.color, roles.primaryText);
+        expect(
+          tester.widget<Text>(secondName).style!.color,
+          roles.secondaryText.withValues(alpha: .8),
+        );
+        expect(
+          tester.getSize(find.byType(LineupProfileAvatar).first).width,
+          120,
+        );
+        final avatarTransform = find
+            .ancestor(
+              of: find.byType(LineupProfileAvatar).first,
+              matching: find.byType(Transform),
+            )
+            .first;
+        expect(
+          tester.widget<Transform>(avatarTransform).transform.entry(0, 0),
+          closeTo(reduceMotion ? 1 : 1.08, .001),
+        );
 
-    expect(
-      tester
-          .widgetList<AnimatedScale>(find.byType(AnimatedScale))
-          .any((scale) => scale.scale == 1.06),
-      isTrue,
+        await tester.sendKeyEvent(LogicalKeyboardKey.arrowRight);
+        await tester.pumpAndSettle();
+        expect(tester.getTopLeft(firstName), firstOrigin);
+        expect(tester.getTopLeft(secondName), secondOrigin);
+        expect(tester.widget<Text>(secondName).style!.color, roles.primaryText);
+        expect(
+          tester.widget<Text>(firstName).style!.color,
+          roles.secondaryText.withValues(alpha: .8),
+        );
+      },
     );
-    expect(
-      LineupTheme.of(tester.element(find.text('Active viewer').last))
-          .primaryText,
-      const Color(0xFF090806),
-    );
-  });
-
-  testWidgets('Android TV profile focus does not scale under Reduce Motion', (
-    tester,
-  ) async {
-    const active = PlexHomeUser(
-      id: 'active',
-      name: 'Active viewer',
-      protected: false,
-    );
-    final controller = FixtureController(
-      scenario: const LineupScenario(
-        settings: LineupSettings(reduceMotion: true),
-        stage: SetupStage.profiles,
-        profile: active,
-        profiles: [active],
-      ),
-    );
-    addTearDown(controller.dispose);
-
-    await show(tester, controller, isTv: true);
-    await tester.sendKeyEvent(LogicalKeyboardKey.arrowRight);
-    await tester.pump(const Duration(milliseconds: 160));
-
-    expect(
-      tester
-          .widgetList<AnimatedScale>(find.byType(AnimatedScale))
-          .every((scale) => scale.scale == 1.0),
-      isTrue,
-    );
-  });
+  }
 
   testWidgets('profile card clamp accepts a sub-pixel width constraint', (
     tester,

@@ -82,7 +82,10 @@ credential state before returning to the welcome screen.
 ### 2. Choose a Plex Home profile
 
 Select the person who is watching. Protected profiles open a four-digit PIN
-keypad and also accept number-row or numpad input.
+keypad and also accept number-row or numpad input. On TV, the focused
+profile has a ring around its avatar in the active theme's focus color.
+Large focus indicators thicken the ring, and Reduce Motion keeps the avatar
+at its resting size.
 
 Profile cards show `PIN`, `Admin`, and `Restricted` only when the current Plex
 Home response establishes those facts. `Active` identifies the currently

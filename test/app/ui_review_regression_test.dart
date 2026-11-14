@@ -125,7 +125,7 @@ void main() {
     );
   });
 
-  testWidgets('Swiss profile rows keep square production surfaces', (
+  testWidgets('Swiss TV profile uses the Large avatar ring on a clear tile', (
     tester,
   ) async {
     const profile = PlexHomeUser(
@@ -158,27 +158,30 @@ void main() {
     await tester.pumpAndSettle();
 
     final card = find.byKey(const ValueKey('profile-card-movies'));
-    final row = find.descendant(
+    final ring = find.descendant(
       of: card,
-      matching: find.byType(LineupRowSurface),
+      matching: find.byKey(const ValueKey('tv-profile-focus-ring')),
     );
-    expect(row, findsOneWidget);
-    final surface = tester.widget<Container>(
-      find.descendant(of: row, matching: find.byType(Container)).first,
+    final decoration =
+        tester
+                .widget<DecoratedBox>(
+                  find.descendant(
+                    of: ring,
+                    matching: find.byType(DecoratedBox),
+                  ),
+                )
+                .decoration
+            as BoxDecoration;
+    expect(decoration.shape, BoxShape.circle);
+    expect(decoration.border!.top.width, 5);
+    expect(decoration.border!.top.color, const Color(0xFFC6EEDB));
+    expect(LineupTheme.of(tester.element(ring)).panelRadius, 0);
+    final materials = tester.widgetList<Material>(
+      find.descendant(of: card, matching: find.byType(Material)),
     );
-    expect((surface.decoration! as BoxDecoration).borderRadius, isNull);
-    expect(LineupTheme.of(tester.element(row)).panelRadius, 0);
-    final frame = find.descendant(
-      of: row,
-      matching: find.byType(LineupFocusFrame),
-    );
-    expect(frame, findsNWidgets(2));
+    expect(materials, isNotEmpty);
     expect(
-      tester
-          .widgetList<CustomPaint>(
-            find.descendant(of: frame, matching: find.byType(CustomPaint)),
-          )
-          .any((paint) => paint.foregroundPainter != null),
+      materials.every((material) => material.color == Colors.transparent),
       isTrue,
     );
   });
