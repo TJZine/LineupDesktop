@@ -80,7 +80,7 @@ void main() {
       mode: ChannelBuildMode.merge,
       strategyBySource: const {},
       removeSourceIds: const {'retired'},
-      planFactory: (mode, anchor, existing) {
+      planFactory: (mode, anchor, existing, reviewed) {
         receivedMode = mode;
         receivedAnchor = anchor;
         return _allocation(replacement);

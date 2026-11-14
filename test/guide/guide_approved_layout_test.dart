@@ -87,6 +87,106 @@ void main() {
       );
     }
   }
+  testWidgets('Guide speaks tagged library provenance once with its type', (
+    tester,
+  ) async {
+    tester.view
+      ..physicalSize = const Size(1920, 1080)
+      ..devicePixelRatio = 1;
+    addTearDown(tester.view.reset);
+    final semantics = tester.ensureSemantics();
+    final now = DateTime(2026, 10, 25, 6, 40);
+    Channel row(
+      int number,
+      String name,
+      String library,
+      PlexLibraryType type,
+    ) => Channel(
+      id: 'channel-$number',
+      number: number,
+      name: name,
+      source: LibrarySource(libraryId: library, libraryType: type),
+      playbackMode: PlaybackMode.shuffle,
+      anchor: now,
+      shuffleSeed: number,
+      kind: type == PlexLibraryType.movie ? ChannelKind.film : ChannelKind.tv,
+      sourceLibraries: {library: library},
+    );
+
+    final lineup = FixtureController(
+      scenario: LineupScenario(
+        stage: SetupStage.ready,
+        channels: [
+          row(1, 'Drama', 'Feature Films', PlexLibraryType.movie),
+          row(2, 'Drama', 'TV Shows', PlexLibraryType.show),
+          row(3, 'Classics', 'Archive', PlexLibraryType.movie),
+        ],
+        settings: const LineupSettings(
+          guideShowChannelSources: true,
+          reduceMotion: true,
+        ),
+      ),
+    );
+    addTearDown(lineup.dispose);
+    final guide = GuideController(
+      lineup: lineup,
+      clock: () => now,
+      loadSchedule: (channel) async => buildChannelSchedule(channel, const [
+        ChannelItem(
+          id: 'synthetic',
+          title: 'City Stories',
+          duration: Duration(hours: 2),
+        ),
+      ]),
+    );
+    addTearDown(guide.dispose);
+
+    await tester.pumpWidget(
+      DeviceProfileScope(
+        profile: profileFor(false),
+        child: MaterialApp(
+          theme: LineupTheme.forName(LineupThemeName.emberSteel),
+          builder: (context, child) =>
+              LineupCanvas(reduceMotion: true, child: child!),
+          home: GuideView(
+            controller: guide,
+            watchingChannelId: 'channel-2',
+            pictureInPicture: const ColoredBox(color: Color(0xff203747)),
+            onClose: (_, _) {},
+            onOpenPlayer: () {},
+            onTune: (_) async {},
+          ),
+        ),
+      ),
+    );
+    await tester.pumpAndSettle();
+
+    expect(find.text('Feature Films · Movies'), findsOneWidget);
+    final tagged = find.bySemanticsLabel(
+      'Channel 1, Drama, Film, Feature Films library, Movies',
+    );
+    expect(tagged, findsOneWidget);
+    expect(
+      tester
+          .getSemantics(tagged)
+          .getSemanticsData()
+          .hasAction(ui.SemanticsAction.tap),
+      isTrue,
+    );
+    expect(
+      find.bySemanticsLabel(
+        'Channel 2, Drama, TV, TV Shows library, now watching',
+      ),
+      findsOneWidget,
+    );
+    expect(
+      find.bySemanticsLabel('Channel 3, Classics, Film, Archive · Movies'),
+      findsOneWidget,
+    );
+    semantics.dispose();
+    await tester.pumpWidget(const SizedBox.shrink());
+  });
+
   final output = Platform.environment['GUIDE_CAPTURE'];
   final baseline = Platform.environment['GUIDE_BASELINE'] == '1';
   for (final tv in [true, false]) {

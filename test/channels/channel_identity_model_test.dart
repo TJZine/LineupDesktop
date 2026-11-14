@@ -43,6 +43,8 @@ void main() {
     PlaybackMode? variant,
     int alternates = 0,
     DateTime? time,
+    int maximum = 200,
+    List<Channel> reviewed = const [],
   }) => materializeChannelPlan(
     proposals: proposals,
     existing: existing,
@@ -51,6 +53,8 @@ void main() {
     variantMode: variant,
     alternateCopies: alternates,
     order: order,
+    maximumChannels: maximum,
+    reviewedChannels: reviewed,
     anchor: time ?? createdAt,
     resolve: (source) => resolveContent(source, items),
   );
@@ -304,6 +308,60 @@ void main() {
         channel.number,
       );
     }
+  });
+
+  test('Grouped recovery reserves a reviewed alternate before allocating originals', () {
+    final genres = proposals(libraries: [tv]);
+    final collections = proposals(
+      libraries: [film],
+      strategies: {BuilderStrategy.collections},
+    );
+    final source = [...collections, ...genres];
+    final savedGenre = plan(genres).channels.single;
+    final missing = Channel(
+      id: 'missing',
+      number: 1000,
+      name: 'Missing studio',
+      source: const LibrarySource(
+        libraryId: 'film',
+        libraryType: PlexLibraryType.movie,
+        filters: {
+          LibraryFilter.studio: ['Missing studio'],
+        },
+      ),
+      builderKey: 'missing',
+      playbackMode: PlaybackMode.shuffle,
+      anchor: createdAt,
+      shuffleSeed: 1,
+    );
+    final initial = plan(
+      source,
+      existing: [savedGenre, missing],
+      mode: ChannelBuildMode.merge,
+      order: ChannelOrder.grouped,
+      maximum: 3,
+      alternates: 1,
+    );
+    expect(initial.allocatedOriginals, 1);
+    expect(initial.allocatedExtras, 1);
+    expect(initial.numberLimitExcluded, collections.length);
+
+    final recovered = plan(
+      source,
+      existing: [savedGenre],
+      reviewed: initial.channels,
+      mode: ChannelBuildMode.merge,
+      order: ChannelOrder.grouped,
+      maximum: 3,
+      alternates: 1,
+    );
+    expect(recovered.allocatedOriginals, 2);
+    expect(recovered.allocatedExtras, 1);
+    expect(recovered.excludedOriginals, 1);
+    expect(recovered.excludedExtras, 0);
+    expect(recovered.numberLimitExcluded, 0);
+    expect(recovered.channels.map((row) => row.number), [3, 1, 2]);
+    expect(recovered.channels.skip(1), orderedEquals(initial.channels));
   });
 
   test('Replace carries favourites by builder key with fresh anchors', () {

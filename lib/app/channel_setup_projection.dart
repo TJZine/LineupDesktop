@@ -177,6 +177,7 @@ class ChannelSetupProjection {
     List<PlexMediaItem> items = const [],
     List<PlexPlaylist> playlists = const [],
     bool reorderExisting = false,
+    List<Channel> reviewedChannels = const [],
   }) => materializeChannelPlan(
     proposals: proposals,
     existing: existing,
@@ -193,6 +194,7 @@ class ChannelSetupProjection {
     order: order,
     strategyOrder: strategyOrder,
     reorderExisting: reorderExisting,
+    reviewedChannels: reviewedChannels,
     resolve: anchor == null
         ? null
         : (source) => resolveContent(source, items, playlists),

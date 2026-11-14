@@ -40,6 +40,7 @@ typedef SetupReviewPlanFactory = ChannelPlanAllocation Function(
   ChannelBuildMode mode,
   DateTime anchor,
   List<Channel> existing,
+  List<Channel> reviewed,
 );
 
 sealed class SetupPhase {
@@ -165,7 +166,7 @@ class SetupReview {
     }
     return SetupReview(
       base: base,
-      plan: factory(mode, anchor, base),
+      plan: factory(mode, anchor, base, const []),
       mode: mode,
       strategyBySource: strategyBySource,
       planFactory: factory,
@@ -208,28 +209,21 @@ class SetupReview {
       return null;
     }
     final survivors = base.where((row) => !removeIds.contains(row.id)).toList();
-    final candidate = factory(mode, anchor, survivors);
-    final candidateKeys = candidate.channels
-        .map((row) => row.builderKey)
-        .toSet();
-    // A removal can free a number while the user's channel limit still keeps
-    // new recipes from being added. Keep the original choices in that case.
-    if (candidate.channels.length <= _initialPlan.channels.length ||
-        !_initialPlan.channels.every(
-          (row) => candidateKeys.contains(row.builderKey),
-        )) {
+    final candidate = factory(mode, anchor, survivors, _initialPlan.channels);
+    if (candidate.channels.length < _initialPlan.channels.length) {
       return null;
     }
 
-    final priorByKey = {
-      for (final row in _initialPlan.channels) row.builderKey: row,
+    final priorRecoveries = {
       for (final row in plan.channels) row.builderKey: row,
     };
+    final initialIds = _initialPlan.channels.map((row) => row.id).toSet();
     return freezeSetupAllocation(
       candidate,
       channels: [
         for (final row in candidate.channels)
-          if (priorByKey[row.builderKey] case final prior?)
+          if (priorRecoveries[row.builderKey] case final prior?
+              when !initialIds.contains(row.id))
             prior.copyWith(name: row.name, number: row.number)
           else
             row,

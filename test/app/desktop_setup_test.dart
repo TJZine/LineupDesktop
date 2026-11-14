@@ -334,6 +334,145 @@ void main() {
     },
   );
 
+  testWidgets(
+    'Grouped Review reserves reviewed recipes before filling the cap',
+    (tester) async {
+      final genres = [for (var i = 10; i < 36; i++) 'Genre $i'];
+      final collections = [for (var i = 10; i < 36; i++) 'Collection $i'];
+      final movies = [
+        for (var i = 0; i < 5; i++)
+          PlexMediaItem(
+            id: 'movie-$i',
+            title: 'Movie $i',
+            type: 'movie',
+            libraryId: 'movies',
+            duration: const Duration(minutes: 30),
+            genres: genres,
+            collections: collections,
+            parts: [PlexMediaPart(path: '/synthetic/movie-$i')],
+          ),
+      ];
+      final genrePlan = materializeChannelPlan(
+        proposals: buildChannelProposals(
+          libraries: [_boundaryLibrary],
+          items: movies,
+          strategies: {BuilderStrategy.genres},
+          minimumItems: 5,
+        ),
+        existing: [],
+        mode: ChannelBuildMode.replace,
+        anchor: DateTime.utc(2026),
+      );
+      expect(genrePlan.channels, hasLength(26));
+      final genre = genrePlan.channels.last.copyWith(number: 1);
+      final retired = Channel(
+        id: 'studio',
+        number: 1000,
+        name: 'Missing studio',
+        source: const LibrarySource(
+          libraryId: 'movies',
+          libraryType: PlexLibraryType.movie,
+          filters: {
+            LibraryFilter.studio: ['Missing studio'],
+          },
+        ),
+        playbackMode: PlaybackMode.shuffle,
+        anchor: DateTime.utc(2026),
+        shuffleSeed: 1000,
+        builderKey: 'studio',
+      );
+      const scope = LineupScope(profileKey: 'owner', serverId: 'server');
+      final fixture = await _createBoundarySetup(
+        initial: const PersistedState(profileId: 'owner').withLineup(
+          scope,
+          ScopedLineup(
+            libraryIds: const {'movies'},
+            channels: [genre, retired],
+            currentChannelId: genre.id,
+            channelOrder: ChannelOrder.grouped,
+          ),
+        ),
+        scanResult: PlexLibraryScan(
+          collections: PlexCollectionMembership(
+            titlesByMember: {
+              for (final item in movies) item.id: collections.toSet(),
+            },
+          ),
+          items: movies,
+        ),
+      );
+      addTearDown(fixture.controller.dispose);
+      await _pump(tester, fixture.controller);
+      await tester.pumpAndSettle();
+      await tester.tap(find.byKey(const ValueKey('continue-ready-libraries')));
+      await tester.pumpAndSettle();
+      final recent = find.widgetWithText(CheckboxListTile, 'Recently Added');
+      await tester.ensureVisible(recent);
+      await tester.tap(recent);
+      await tester.pumpAndSettle();
+      await tester.tap(find.byKey(const ValueKey('configure-section-2')));
+      await tester.pumpAndSettle();
+      final maximum = find.byKey(const ValueKey('rules-maximum'));
+      await tester.ensureVisible(maximum);
+      await tester.tap(maximum);
+      await tester.pumpAndSettle();
+      await tester.tap(find.text('50').last);
+      await tester.pumpAndSettle();
+      final reviewButton = find.byKey(const ValueKey('review-channels'));
+      await tester.ensureVisible(reviewButton);
+      await tester.tap(reviewButton);
+      await tester.pumpAndSettle();
+
+      final step = find.byType(SetupReviewStep);
+      final initial = tester.widget<SetupReviewStep>(step).review;
+      expect(initial.plan.channels, hasLength(26));
+      expect(initial.plan.channels.last.id, genre.id);
+      expect(initial.plan.numberLimitExcluded, 26);
+      final choice = find.byKey(const ValueKey('missing-source-choice-studio'));
+      expect(
+        fixture.controller.isGeneratedSourceConfirmedGone(retired),
+        isTrue,
+      );
+      tester.widget<LineupSegmentedControl<bool>>(choice).onSelectionChanged!({
+        true,
+      });
+      await tester.pumpAndSettle();
+
+      final reviewed = tester.widget<SetupReviewStep>(step).review;
+      expect(reviewed.plan.allocatedOriginals, 50);
+      expect(reviewed.plan.excludedOriginals, 2);
+      expect(reviewed.plan.numberLimitExcluded, 0);
+      expect(
+        reviewed.plan.allocatedOriginalsByStrategy[BuilderStrategy.collections],
+        24,
+      );
+      final reviewedById = {
+        for (final row in reviewed.finalChannels) row.id: row,
+      };
+      for (final before in initial.plan.channels) {
+        expect(reviewedById[before.id], channelValue(before));
+      }
+      expect(
+        reviewed.finalChannels.skip(26).map((row) => (row.name, row.number)),
+        [for (var i = 0; i < 24; i++) (collections[i], i + 27)],
+      );
+
+      final confirmation = find.byKey(
+        const ValueKey('channel-setup-replace-confirmation'),
+      );
+      await tester.ensureVisible(confirmation);
+      await tester.tap(confirmation);
+      await tester.pumpAndSettle();
+      final saves = fixture.store.saveCalls;
+      await tester.tap(find.byKey(const ValueKey('apply-reviewed-lineup')));
+      await tester.pumpAndSettle();
+      final persisted = fixture.store.state.lineupFor(scope);
+      expect(fixture.store.saveCalls, saves + 1);
+      expect(persisted.channels, channelValues(reviewed.finalChannels));
+      expect(persisted.currentChannelId, genre.id);
+    },
+  );
+
   testWidgets('Grouped cannot advance an empty first lineup', (tester) async {
     final fixture = await _createBoundarySetup();
     addTearDown(fixture.controller.dispose);
@@ -3960,7 +4099,10 @@ Finder _setupField<T>(String label) => find.descendant(
 Future<
   ({LineupController controller, _BoundaryStore store, _BoundaryPlex plex})
 >
-_createBoundarySetup({PersistedState? initial}) async {
+_createBoundarySetup({
+  PersistedState? initial,
+  PlexLibraryScan? scanResult,
+}) async {
   final store = _BoundaryStore(
     initial:
         initial ??
@@ -3969,7 +4111,9 @@ _createBoundarySetup({PersistedState? initial}) async {
           selectedServerByProfile: {'owner': 'server'},
         ),
   );
-  final plex = _BoundaryPlex()..includeGroupingTags = initial != null;
+  final plex = _BoundaryPlex()
+    ..includeGroupingTags = initial != null
+    ..scanResult = scanResult;
   final controller = LineupController(
     store: store,
     credentials: MemoryCredentialStore(accountToken: 'account-token'),
@@ -4048,6 +4192,7 @@ class _BoundaryPlex extends PlexClient {
       );
 
   bool includeGroupingTags = false;
+  PlexLibraryScan? scanResult;
   Completer<PlexLibraryScan>? scanGate;
   final scanStarted = Completer<void>();
 
@@ -4094,6 +4239,7 @@ class _BoundaryPlex extends PlexClient {
     if (!scanStarted.isCompleted) scanStarted.complete();
     final gate = scanGate;
     if (gate != null) return gate.future;
+    if (scanResult case final result?) return result;
     return PlexLibraryScan(
       collections: PlexCollectionMembership(
         titlesByMember: {

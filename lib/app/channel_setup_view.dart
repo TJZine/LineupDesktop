@@ -307,6 +307,7 @@ class UpstreamChannelSetupViewState extends State<UpstreamChannelSetupView> {
       ChannelBuildMode nextMode,
       DateTime nextAnchor,
       List<Channel> roster,
+      List<Channel> reviewed,
     ) => ChannelSetupProjection.allocate(
       proposals,
       existing: roster,
@@ -317,11 +318,12 @@ class UpstreamChannelSetupViewState extends State<UpstreamChannelSetupView> {
       items: inventory.media,
       playlists: inventory.playlists,
       reorderExisting: reorderExisting,
+      reviewedChannels: reviewed,
     );
 
     return SetupReview(
       base: existing,
-      plan: planFactory(mode, anchor, existing),
+      plan: planFactory(mode, anchor, existing, const []),
       mode: mode,
       strategyBySource: strategyBySource,
       ordering: _reviewOrdering(existing),

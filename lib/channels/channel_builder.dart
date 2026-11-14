@@ -399,6 +399,13 @@ String? _peopleSeriesKey(String libraryId, PlexMediaItem item) {
   return null;
 }
 
+typedef _ChannelVersion = ({
+  ChannelProposal proposal,
+  String suffix,
+  PlaybackMode mode,
+  int? blockSize,
+});
+
 typedef ChannelPlanAllocation = ({
   List<Channel> channels,
   int allocatedOriginals,
@@ -431,19 +438,12 @@ ChannelPlanAllocation materializeChannelPlan({
   List<BuilderStrategy> strategyOrder = BuilderStrategy.values,
   List<ChannelItem> Function(ContentSource source)? resolve,
   bool reorderExisting = false,
+  List<Channel> reviewedChannels = const [],
 }) {
   final createdAt = anchor ?? DateTime.now().toUtc();
   final resolvedBySource = <String, List<ChannelItem>>{};
   final proposalByKey = <String, ChannelProposal>{};
-  final originals =
-      <
-        ({
-          ChannelProposal proposal,
-          String suffix,
-          PlaybackMode mode,
-          int? blockSize,
-        })
-      >[];
+  final originals = <_ChannelVersion>[];
   for (final proposal in proposals) {
     final isSeries =
         proposal.mode == PlaybackMode.shuffle &&
@@ -459,15 +459,7 @@ ChannelPlanAllocation materializeChannelPlan({
       blockSize: baseBlockSize,
     ));
   }
-  bool eligible(
-    ({
-      ChannelProposal proposal,
-      String suffix,
-      PlaybackMode mode,
-      int? blockSize,
-    })
-    entry,
-  ) {
+  bool eligible(_ChannelVersion entry) {
     final count = entry.mode == PlaybackMode.block && !includeSpecials
         ? entry.proposal.blockItemCountWithoutSpecials
         : entry.proposal.playableItemCount;
@@ -497,11 +489,25 @@ ChannelPlanAllocation materializeChannelPlan({
       mode == ChannelBuildMode.merge &&
       order == ChannelOrder.grouped &&
       !reorderExisting;
+  // Recovery keeps the original review's recipes and channel identities.
+  // Reserve their slots before trying any newly eligible channel numbers.
+  final reviewedByKey = {
+    if (stableGrouped)
+      for (final channel in reviewedChannels) ?channel.builderKey: channel,
+  };
+  final pendingReviewed = reviewedByKey.keys.toSet();
+  var openSlots = maximumChannels - reviewedByKey.length;
+  bool canAllocateMore() => openSlots > 0 || pendingReviewed.isNotEmpty;
+  void recordAllocation(String key) {
+    if (!pendingReviewed.remove(key)) openSlots--;
+  }
+
   final lastByType = <BuilderStrategy, int>{};
-  final existingGeneratedNumbers = <int>[];
+  final existingGeneratedNumbers = <int>{};
   var highest = 0;
   if (stableGrouped) {
-    for (final channel in existing) {
+    for (final channel in [...existing, ...reviewedByKey.values]) {
+      used.add(channel.number);
       if (channel.number > highest) highest = channel.number;
       if (channel.builderKey != null) {
         existingGeneratedNumbers.add(channel.number);
@@ -512,16 +518,15 @@ ChannelPlanAllocation materializeChannelPlan({
         }
       }
     }
-    existingGeneratedNumbers.sort();
   }
+
+  final sortedGeneratedNumbers = existingGeneratedNumbers.toList()..sort();
 
   int groupedNumber(BuilderStrategy type) {
     final last = lastByType[type];
     if (last != null) {
       final end =
-          existingGeneratedNumbers
-              .where((number) => number > last)
-              .firstOrNull ??
+          sortedGeneratedNumbers.where((number) => number > last).firstOrNull ??
           (highest + 1);
       for (var number = last + 1; number < end; number++) {
         if (!used.contains(number)) return number;
@@ -530,39 +535,15 @@ ChannelPlanAllocation materializeChannelPlan({
     return highest + 1;
   }
 
-  final selectedOriginals =
-      <
-        ({
-          ChannelProposal proposal,
-          String suffix,
-          PlaybackMode mode,
-          int? blockSize,
-        })
-      >[];
-  final expansionOriginals =
-      <
-        ({
-          ChannelProposal proposal,
-          String suffix,
-          PlaybackMode mode,
-          int? blockSize,
-        })
-      >[];
+  var allocatedOriginals = 0;
   var next = 1;
   var numberLimitExcluded = 0;
   var existingSkipped = 0;
   var skippedOriginals = 0;
   var skippedExtras = 0;
 
-  Channel? materialize(
-    ({
-      ChannelProposal proposal,
-      String suffix,
-      PlaybackMode mode,
-      int? blockSize,
-    })
-    entry,
-  ) {
+  Channel? materialize(_ChannelVersion entry, String builderKey) {
+    if (reviewedByKey[builderKey] case final reviewed?) return reviewed;
     final proposal = entry.proposal;
     final suffix = entry.suffix;
     final name = switch (suffix) {
@@ -576,7 +557,6 @@ ChannelPlanAllocation materializeChannelPlan({
     final kind = proposal.source is PlaylistSource
         ? proposal.playlistKind
         : channelKindFor(proposal.source);
-    final builderKey = _builderKey(entry.proposal, entry.suffix);
     proposalByKey[builderKey] = proposal;
     final normalizedIncludeSpecials =
         entry.mode == PlaybackMode.block && includeSpecials;
@@ -656,30 +636,47 @@ ChannelPlanAllocation materializeChannelPlan({
     );
   }
 
+  final extrasByOriginal = <List<_ChannelVersion>>[];
+
   for (final entry in eligibleOriginals) {
-    if (output.length == maximumChannels) break;
-    if (existingBuilderKeys.contains(
-      _builderKey(entry.proposal, entry.suffix),
-    )) {
-      existingSkipped++;
-      skippedOriginals++;
-      expansionOriginals.add(entry);
+    if (!canAllocateMore()) break;
+    final key = _builderKey(entry.proposal, entry.suffix);
+    final extras = _extraVersions(
+      entry,
+      alternateCopies: alternateCopies,
+      variantMode: variantMode,
+      variantBlockSize: variantBlockSize,
+    ).where(eligible).toList();
+    if (openSlots <= 0 && !pendingReviewed.contains(key)) {
+      // An alternate can be reviewed even when its original was excluded
+      // for lack of a number. Keep those reviewed alternates in their rounds.
+      if (extras.any(
+        (extra) =>
+            pendingReviewed.contains(_builderKey(extra.proposal, extra.suffix)),
+      )) {
+        extrasByOriginal.add(extras);
+      }
       continue;
     }
-    final channel = materialize(entry);
+    extrasByOriginal.add(extras);
+    if (existingBuilderKeys.contains(key)) {
+      existingSkipped++;
+      skippedOriginals++;
+      continue;
+    }
+    final channel = materialize(entry, key);
     if (channel == null) {
       numberLimitExcluded++;
-      expansionOriginals.add(entry);
       continue;
     }
     output.add(channel);
+    recordAllocation(key);
     allocatedChannelsByStrategy.update(
       entry.proposal.strategy,
       (count) => count + 1,
       ifAbsent: () => 1,
     );
-    selectedOriginals.add(entry);
-    expansionOriginals.add(entry);
+    allocatedOriginals++;
     allocatedOriginalsByStrategy.update(
       entry.proposal.strategy,
       (count) => count + 1,
@@ -687,15 +684,6 @@ ChannelPlanAllocation materializeChannelPlan({
     );
   }
 
-  final extrasByOriginal = [
-    for (final original in expansionOriginals)
-      _extraVersions(
-        original,
-        alternateCopies: alternateCopies,
-        variantMode: variantMode,
-        variantBlockSize: variantBlockSize,
-      ).where(eligible).toList(),
-  ];
   final eligibleExtras = extrasByOriginal.fold<int>(
     0,
     (total, extras) => total + extras.length,
@@ -703,36 +691,38 @@ ChannelPlanAllocation materializeChannelPlan({
   var allocatedExtras = 0;
   for (
     var round = 0;
-    output.length < maximumChannels &&
+    canAllocateMore() &&
         extrasByOriginal.any((extras) => round < extras.length);
     round++
   ) {
     for (final extras in extrasByOriginal) {
       if (round >= extras.length) continue;
-      if (existingBuilderKeys.contains(
-        _builderKey(extras[round].proposal, extras[round].suffix),
-      )) {
+      final entry = extras[round];
+      final key = _builderKey(entry.proposal, entry.suffix);
+      if (openSlots <= 0 && !pendingReviewed.contains(key)) continue;
+      if (existingBuilderKeys.contains(key)) {
         existingSkipped++;
         skippedExtras++;
         continue;
       }
-      final channel = materialize(extras[round]);
+      final channel = materialize(entry, key);
       if (channel == null) {
         numberLimitExcluded++;
         continue;
       }
       output.add(channel);
+      recordAllocation(key);
       allocatedChannelsByStrategy.update(
-        extras[round].proposal.strategy,
+        entry.proposal.strategy,
         (count) => count + 1,
         ifAbsent: () => 1,
       );
       allocatedExtras++;
-      if (output.length == maximumChannels) break;
+      if (!canAllocateMore()) break;
     }
   }
   final excludedOriginals =
-      eligibleOriginals.length - selectedOriginals.length - skippedOriginals;
+      eligibleOriginals.length - allocatedOriginals - skippedOriginals;
   final excludedExtras = eligibleExtras - allocatedExtras - skippedExtras;
   final plannedBuilderKeys = output
       .map((channel) => channel.builderKey)
@@ -756,7 +746,10 @@ ChannelPlanAllocation materializeChannelPlan({
       (channel) => !plannedBuilderKeys.contains(channel.builderKey),
     ),
   };
-  final named = _nameNewChannels(output, retained, existing, mode);
+  final named = _nameNewChannels(output, retained, [
+    ...existing,
+    ...reviewedByKey.values,
+  ], mode);
   final ordered = switch ((order, reorderExisting)) {
     (ChannelOrder.grouped, _) when mode != ChannelBuildMode.merge =>
       _numberChannelsByOrder(named, retained, proposalByKey, strategyOrder),
@@ -766,7 +759,7 @@ ChannelPlanAllocation materializeChannelPlan({
   };
   return (
     channels: List.unmodifiable(ordered),
-    allocatedOriginals: selectedOriginals.length,
+    allocatedOriginals: allocatedOriginals,
     excludedOriginals: excludedOriginals,
     allocatedExtras: allocatedExtras,
     excludedExtras: excludedExtras,
@@ -791,12 +784,8 @@ ChannelPlanAllocation materializeChannelPlan({
   );
 }
 
-List<
-  ({ChannelProposal proposal, String suffix, PlaybackMode mode, int? blockSize})
->
-_extraVersions(
-  ({ChannelProposal proposal, String suffix, PlaybackMode mode, int? blockSize})
-  original, {
+List<_ChannelVersion> _extraVersions(
+  _ChannelVersion original, {
   required int alternateCopies,
   required PlaybackMode? variantMode,
   required int variantBlockSize,
@@ -809,15 +798,7 @@ _extraVersions(
         BuilderStrategy.directors,
       }.contains(proposal.strategy);
   if (!replicable) return const [];
-  final extras =
-      <
-        ({
-          ChannelProposal proposal,
-          String suffix,
-          PlaybackMode mode,
-          int? blockSize,
-        })
-      >[];
+  final extras = <_ChannelVersion>[];
   if (variantMode != null) {
     final blockSize = variantMode == PlaybackMode.block
         ? variantBlockSize

@@ -2809,7 +2809,17 @@ class _GuideRow extends StatelessWidget {
       channel,
       libraryTag: libraryTag,
     );
-    final supportLabel = tunedChannel ? 'now watching' : provenance;
+    final supportLabel = switch ((
+      tunedChannel,
+      provenance,
+      libraryTag,
+      channel.source,
+    )) {
+      (true, _, _, _) => 'now watching',
+      (false, String(), String(), LibrarySource(:final libraryType)) =>
+        _librarySourceTypeLabel(libraryType),
+      _ => provenance,
+    };
     return Padding(
       padding: EdgeInsets.symmetric(vertical: 2),
       child: Row(
@@ -4431,8 +4441,11 @@ String _channelProvenance(
   Channel channel,
 ) => switch (channel.source) {
   LibrarySource(:final libraryId, :final libraryType) =>
-    '${channel.libraryTitle ?? _libraryName(controller, libraryId)} · ${libraryType == PlexLibraryType.movie ? 'Movies' : 'Shows'}',
+    '${channel.libraryTitle ?? _libraryName(controller, libraryId)} · ${_librarySourceTypeLabel(libraryType)}',
   PlaylistSource() => 'Playlist',
   ManualSource() => 'Manual lineup',
   MixedSource() => 'Mixed sources',
 };
+
+String _librarySourceTypeLabel(PlexLibraryType libraryType) =>
+    libraryType == PlexLibraryType.movie ? 'Movies' : 'Shows';
