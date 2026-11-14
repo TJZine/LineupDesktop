@@ -104,7 +104,8 @@ standing routine bypass. Preserve unrelated ownership rules. The current
 
 `tool/security/osv-scan.sh` downloads pinned OSV-Scanner 2.7.1 release bytes,
 checks the committed upstream digest, runs live affected/fixed Pub controls, and
-scans explicit committed inputs. The scheduled Security workflow scans only the
+scans explicit committed inputs. The Security workflow, which runs on pushes to
+`main`, pull requests, its weekly schedule and manual dispatch, scans only the
 current `pubspec.lock`. Scanner failures and vulnerabilities fail visibly.
 Network or API errors cannot satisfy the affected/fixed controls.
 
