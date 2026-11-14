@@ -317,7 +317,8 @@ Run candidate binaries only in the separate acceptance context.
 
 ## Manual advisory review
 
-The scheduled Security workflow scans `pubspec.lock`. Gradle verification
+The Security workflow (pushes to `main`, pull requests, its weekly schedule and
+manual dispatch) scans `pubspec.lock`. Gradle verification
 metadata is a conservative inventory, not proof of runtime resolution. At
 release time, run the documented inventory scan and review the resolved
 `runtime-dependencies.txt` from the CI artifact:
