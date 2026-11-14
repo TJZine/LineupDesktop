@@ -1057,7 +1057,9 @@ class UpstreamOnboardingViewState extends State<UpstreamOnboardingView>
   );
 
   Widget _onboardingFeedback(Key key, {String? recoveryNotice}) {
-    final message = _actionsBusy ? 'Working…' : _selectionError;
+    final message = _actionsBusy
+        ? 'Working…'
+        : _withRecoveryNotice(_selectionError, recoveryNotice);
     final roles = LineupTheme.of(context);
     if (message == null) return SizedBox.shrink(key: key);
     return Padding(
@@ -1066,7 +1068,7 @@ class UpstreamOnboardingViewState extends State<UpstreamOnboardingView>
       child: Semantics(
         liveRegion: true,
         child: Text(
-          _withRecoveryNotice(message, _actionsBusy ? null : recoveryNotice),
+          message,
           textAlign: TextAlign.center,
           style: TextStyle(
             color: _actionsBusy
@@ -1170,8 +1172,7 @@ class UpstreamOnboardingViewState extends State<UpstreamOnboardingView>
               ),
           ],
         ),
-        if ((_serverAttempt.message ?? _selectionError) != null &&
-            _serverAttempt.serverId == null)
+        if (_serverFeedback case final feedback?)
           Align(
             alignment: Alignment.center,
             child: Padding(
@@ -1179,10 +1180,7 @@ class UpstreamOnboardingViewState extends State<UpstreamOnboardingView>
               child: Semantics(
                 liveRegion: true,
                 child: Text(
-                  _withRecoveryNotice(
-                    _serverAttempt.message ?? _selectionError!,
-                    widget.controller.profileCredentialRecoveryNotice,
-                  ),
+                  feedback,
                   style: TextStyle(color: Theme.of(context).colorScheme.error),
                 ),
               ),
@@ -1191,6 +1189,14 @@ class UpstreamOnboardingViewState extends State<UpstreamOnboardingView>
       ],
     ),
   );
+
+  /// A server-specific failure and its notice render in that server's row.
+  String? get _serverFeedback => _serverAttempt.serverId != null
+      ? null
+      : _withRecoveryNotice(
+          _serverAttempt.message ?? _selectionError,
+          widget.controller.profileCredentialRecoveryNotice,
+        );
 
   void _clearServerError() {
     if (!mounted) return;
@@ -1286,8 +1292,14 @@ class UpstreamOnboardingViewState extends State<UpstreamOnboardingView>
   );
 }
 
-String _withRecoveryNotice(String message, String? notice) =>
-    notice == null ? message : '$message\n$notice';
+/// Joins the credential-recovery notice to another error, or shows it alone in
+/// the same slot. Its request may be superseded, so it cannot rely on an error.
+String? _withRecoveryNotice(String? message, String? notice) =>
+    switch ((message, notice)) {
+      (null, _) => notice,
+      (_, null) => message,
+      _ => '$message\n$notice',
+    };
 
 class _LinkStatusDot extends StatelessWidget {
   const _LinkStatusDot({required this.animated, required this.phase});
@@ -1769,9 +1781,9 @@ class _ServerCard extends StatelessWidget {
                   liveRegion: true,
                   child: Text(
                     _withRecoveryNotice(
-                      error!,
+                      error,
                       profileCredentialRecoveryNotice,
-                    ),
+                    )!,
                     style: TextStyle(
                       color: Theme.of(context).colorScheme.error,
                       fontSize: 18,
@@ -1924,7 +1936,7 @@ class _ProfilePinStepState extends State<_ProfilePinStep> {
     final isTv = DeviceProfile.of(context).isTv;
     final error = _error;
     final notice = widget.profileCredentialRecoveryNotice;
-    final message = error == null ? null : _withRecoveryNotice(error, notice);
+    final message = _withRecoveryNotice(error, notice);
     const gap = 16.0;
     return PopScope(
       canPop: AndroidBackScope.claims(context),
@@ -2014,9 +2026,7 @@ class _ProfilePinStepState extends State<_ProfilePinStep> {
                   SizedBox(height: gap),
                   SizedBox(
                     key: const Key('profile-pin-status'),
-                    height: !_submitting && error != null && notice != null
-                        ? null
-                        : 44,
+                    height: !_submitting && notice != null ? null : 44,
                     child: _submitting
                         ? Semantics(
                             label: 'Checking PIN',

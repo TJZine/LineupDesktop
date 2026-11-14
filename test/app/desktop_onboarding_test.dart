@@ -866,29 +866,72 @@ void main() {
     SetupStage.servers,
     SetupStage.welcome,
   ]) {
-    testWidgets(
-      'credential recovery appears only within the $stage error surface',
-      (tester) async {
-        const error = 'Synthetic selection failure';
-        const notice = 'Synthetic credential recovery notice';
-        final controller = _AuthorizationController(
-          scenario: LineupScenario(stage: stage, error: error),
-          profileCredentialRecoveryNotice: notice,
-        );
-        addTearDown(controller.dispose);
-        await show(tester, controller);
-        expect(
-          find.text('$error\n$notice'),
-          stage == SetupStage.welcome ? findsNothing : findsOneWidget,
-        );
-        expect(
-          find.textContaining(notice),
-          stage == SetupStage.welcome ? findsNothing : findsOneWidget,
-        );
-        expect(find.text(notice), findsNothing);
-      },
-    );
+    for (final withError in [true, false]) {
+      testWidgets(
+        'credential recovery appears only within the $stage error surface '
+        '${withError ? 'with' : 'without'} another error',
+        (tester) async {
+          const error = 'Synthetic selection failure';
+          const notice = 'Synthetic credential recovery notice';
+          final controller = _AuthorizationController(
+            scenario: LineupScenario(
+              stage: stage,
+              error: withError ? error : null,
+            ),
+            profileCredentialRecoveryNotice: notice,
+          );
+          addTearDown(controller.dispose);
+          await show(tester, controller);
+          final shown = stage != SetupStage.welcome;
+          final text = withError ? '$error\n$notice' : notice;
+          expect(find.text(text), shown ? findsOneWidget : findsNothing);
+          expect(
+            find.textContaining(notice),
+            shown ? findsOneWidget : findsNothing,
+          );
+          if (shown) {
+            final semantics = tester.widget<Semantics>(
+              find.ancestor(
+                of: find.text(text),
+                matching: find.byWidgetPredicate(
+                  (widget) =>
+                      widget is Semantics &&
+                      widget.properties.liveRegion == true,
+                ),
+              ),
+            );
+            expect(semantics.properties.liveRegion, isTrue);
+          }
+        },
+      );
+    }
   }
+
+  testWidgets('credential recovery appears alone on the PIN surface', (
+    tester,
+  ) async {
+    const notice = 'Synthetic credential recovery notice';
+    final controller = _AuthorizationController(
+      scenario: const LineupScenario(
+        stage: SetupStage.profiles,
+        profiles: [
+          PlexHomeUser(id: 'protected', name: 'Protected', protected: true),
+        ],
+      ),
+      profileCredentialRecoveryNotice: notice,
+    );
+    addTearDown(controller.dispose);
+    await show(tester, controller);
+    expect(find.text(notice), findsOneWidget);
+    await tester.tap(find.byKey(const ValueKey('profile-card-protected')));
+    await tester.pumpAndSettle();
+    expect(find.byKey(const Key('profile-pin-sheet')), findsOneWidget);
+    final status = tester.widget<Semantics>(
+      find.byKey(const Key('profile-pin-error')),
+    );
+    expect(status.properties.liveRegion, isTrue);
+    expect(status.properties.label, notice);
+  });
 
   testWidgets(
     'NAV-I2 onboarding roots are side-effect-free and pickers cancel',
