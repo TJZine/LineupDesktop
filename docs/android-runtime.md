@@ -286,13 +286,16 @@ configuration, and remain non-debuggable. Both cloud backup and device transfer
 must exclude every storage domain. Packaged extraction XML is decoded with
 `apkanalyzer`; harness code and fixture CA bytes are rejected separately.
 
-The aligned handoff is `build/android-release/lineup-unsigned-aligned.apk`, with
+The build writes `build/android-release/lineup-unsigned-aligned.apk`, with
 ordinary `SHA256SUMS`, resolved dependency reports and `build-evidence.txt` in the
 same directory. Evidence records full source commit, supplied CI run URL,
 application/version identity and tool versions. The CI run URL is a recorded
-input. The release verifier checks GitHub run identity and artifact digest before
-accepting transfer. A local working-diff build establishes build behavior only.
-The reviewed clean candidate gate stays mandatory.
+input. Signing never takes this local output. It takes the
+`android-unsigned-<SHA>` CI artifact after the release verifier checks its GitHub
+run identity and artifact digest; see
+[release security](release-security.md#android-apk). A local working-diff build
+establishes build behavior only. The reviewed clean candidate gate stays
+mandatory.
 
 Production signing uses maintained Android tools in a separate signing context.
 Candidate scripts and build tools execute only in the build context. The release
