@@ -298,7 +298,10 @@ Choose channels keeps the existing focus fill with at least 16 px between the
 fill boundary and source text. Review channels keeps its roster and footer
 navigation. The Guide, Mini Guide and Player identity keep their existing
 surface widths and heights. Number and media-kind icon remain visible as
-a long channel name truncates or ticks.
+a long channel name truncates or ticks. The November 14 Wave 1 review
+approved the TV, Movie and Video library icons. Measure the name column
+after that prefix. Guide and Mini Guide can use a spare line for the library
+tag, and support lines start at the name.
 
 ## 5. Review Channels: getting between the roster and the footer
 

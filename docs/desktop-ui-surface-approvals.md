@@ -1066,7 +1066,10 @@ and name, with a quiet library tag when names collide across libraries. The
 existing rail and row sizes apply. Choose channels adds the saved Channel order
 choice under Lineup rules. Empty Playlists is off and disabled. The setup
 header uses Libraries / Channels / Review and the Review roster reports its
-channel count.
+channel count. The November 14 Wave 1 review keeps word wrapping in Channels,
+Move to and Review, with a single-line ellipsis when a word exceeds the
+available name width. Update and add keeps existing channel numbers unless the
+Channel order setting changes.
 
 ## September 9 — surface19 delegated correction brief
 
