@@ -13,6 +13,10 @@ from pathlib import Path
 
 import verify
 
+# Literal names keep fixture credential values out of generated script text.
+SIGNING_ENV_NAMES = ('ANDROID_KEYSTORE_BASE64', 'ANDROID_KEY_ALIAS',
+                     'ANDROID_KEYSTORE_PASSWORD', 'ANDROID_KEY_PASSWORD')
+
 
 def _sdk_rehearsal_enabled():
     return bool(os.environ.get('LINEUP_RELEASE_TEST_SDK') or
@@ -65,9 +69,9 @@ class HostedSigningRehearsal(unittest.TestCase):
             cert = subprocess.check_output([keytool, '-exportcert', '-keystore', str(key),
                                             '-storepass', 'disposable-only', '-alias', 'rehearsal'])
             cert_digest = hashlib.sha256(cert).hexdigest()
-            secrets = dict(ANDROID_KEYSTORE_BASE64=base64.b64encode(key.read_bytes()).decode(),
-                           ANDROID_KEY_ALIAS='rehearsal', ANDROID_KEYSTORE_PASSWORD='disposable-only',
-                           ANDROID_KEY_PASSWORD='disposable-only')
+            secrets = dict(zip(SIGNING_ENV_NAMES, (
+                base64.b64encode(key.read_bytes()).decode(), 'rehearsal',
+                'disposable-only', 'disposable-only'), strict=True))
 
             repo = 'TJZine/LineupDesktop'
             source = 'a' * 40
@@ -100,12 +104,12 @@ class HostedSigningRehearsal(unittest.TestCase):
 import json, os, sys
 from pathlib import Path
 assert sys.argv[1] == 'api'
-assert not any(name in os.environ for name in {tuple(secrets)!r})
+assert not any(name in os.environ for name in {SIGNING_ENV_NAMES!r})
 response = json.loads(Path({str(fixture)!r}).read_text())[sys.argv[-1]]
 sys.stdout.buffer.write(Path(response['file']).read_bytes() if isinstance(response, dict) else response.encode())
 ''')
             gh.chmod(0o700)
-            env = {key: value for key, value in os.environ.items() if key not in secrets}
+            env = {key: value for key, value in os.environ.items() if key not in SIGNING_ENV_NAMES}
             env['PATH'] = f'{root}{os.pathsep}{env["PATH"]}'
 
             def run(action, work, *options, error=None, credentials=None):
