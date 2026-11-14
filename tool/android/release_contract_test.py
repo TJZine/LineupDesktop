@@ -136,6 +136,29 @@ class ReleaseContractTest(unittest.TestCase):
             with self.assertRaisesRegex(ValueError, 'OnBackInvokedCallback'):
                 manifest.check(invalid)
 
+    def test_packaged_rules_bind_manifest_id_to_renamed_resource(self):
+        root = Path(__file__).resolve().parents[2]
+        source = (root / 'android/app/src/main/AndroidManifest.xml').read_text()
+        xml = source.replace('@xml/data_extraction_rules', '@ref/0x7f110000')
+        rules = (root / 'android/app/src/main/res/xml/data_extraction_rules.xml').read_text()
+        table = ('    resource 0x7f110000 xml/data_extraction_rules\n'
+                 '      () (file) res/4j.xml type=XML\n')
+        with patch.object(manifest.subprocess, 'check_output',
+                          side_effect=[xml, table, 'res/4j.xml\n', rules]) as run:
+            manifest.check_packaged(Path('app.apk'), Path('analyzer'), Path('aapt2'))
+            self.assertEqual('res/4j.xml', run.call_args.args[0][-2])
+        for invalid_xml, invalid_table, invalid_rules in (
+            (xml.replace('@ref/0x7f110000', '@ref/0x7f110001'), table, rules),
+            (xml, table.replace('data_extraction_rules', 'other'), rules),
+            (xml, table + table, rules),
+            (xml, table + '      (v31) (file) res/other.xml type=XML\n', rules),
+            (xml, table, rules.replace('path="."', 'path="partial"', 1)),
+        ):
+            with patch.object(manifest.subprocess, 'check_output',
+                              side_effect=[invalid_xml, invalid_table, 'res/4j.xml', invalid_rules]):
+                with self.assertRaises(ValueError):
+                    manifest.check_packaged(Path('app.apk'), Path('analyzer'), Path('aapt2'))
+
     def test_rejects_fixture_bytes_at_any_apk_path(self):
         with tempfile.TemporaryDirectory() as directory:
             root = Path(directory)
@@ -182,75 +205,155 @@ class ReleaseContractTest(unittest.TestCase):
                     self.assertEqual(expected, report.split())
                     self.assertEqual(inherited, os.environ.get('GRADLE_OPTS'))
 
-    def test_release_refuses_notice_drift_before_packaging(self):
-        with tempfile.TemporaryDirectory() as directory:
-            root = Path(directory)
-            tools = root / 'tool/android'
-            tools.mkdir(parents=True)
-            for name in ('build-release.sh', 'generate-licenses.py', 'check-manifest.py',
-                         'check-harness-absence.py'):
-                shutil.copy(Path(__file__).with_name(name), tools / name)
-            signing = tools / 'with-signing.sh'
-            signing.write_text('#!/bin/sh\ntouch "$(dirname "$0")/signing-called"\n')
-            signing.chmod(0o755)
-            (root / 'lib').mkdir()
-            (root / 'lib/main.dart').write_text('void main() {}\n')
-            android = root / 'android'
-            android.mkdir()
-            wrapper = android / 'gradlew'
-            wrapper.write_text('#!/bin/sh\necho "+--- io.flutter:flutter_embedding_release:1.0.0"\n')
-            wrapper.chmod(0o755)
-            source = android / 'app/src/main'
-            source.mkdir(parents=True)
-            (source / 'AndroidManifest.xml').write_text(
-                '<manifest xmlns:android="http://schemas.android.com/apk/res/android">'
-                '<application android:enableOnBackInvokedCallback="true"/></manifest>')
-            (root / 'pubspec.yaml').write_text('version: 1.0.0+1\n')
-            sdk = root / 'flutter'
-            (sdk / 'bin').mkdir(parents=True)
-            (sdk / 'LICENSE').write_text('SDK terms\n')
-            flutter = sdk / 'bin/flutter'
-            flutter.write_text("#!/bin/sh\necho '{\"frameworkVersion\":\"fixture\"}'\n")
-            flutter.chmod(0o755)
-            assets = source / 'assets'
-            generator.generate('+--- io.flutter:flutter_embedding_release:1.0.0', assets, [], sdk, None, 'fixture')
-            notice = assets / 'licenses/flutter/Flutter-SDK-LICENSE.txt'
-            notice.write_text('stale SDK terms\n')
-            commit_lockfile(root)
-            result = subprocess.run(['bash', str(tools / 'build-release.sh')],
-                env={**os.environ, 'PATH': str(sdk / 'bin') + os.pathsep + os.environ['PATH']},
-                capture_output=True, text=True)
-            self.assertNotEqual(0, result.returncode)
-            self.assertEqual('stale SDK terms\n', notice.read_text())
-            self.assertIn('notices differ', result.stderr)
-            self.assertFalse((tools / 'signing-called').exists())
-
-    def test_release_refuses_changed_lockfile_before_packaging(self):
+    def test_release_requires_reviewed_clean_source(self):
         with tempfile.TemporaryDirectory() as directory:
             root = Path(directory)
             tools = root / 'tool/android'
             tools.mkdir(parents=True)
             shutil.copy(Path(__file__).with_name('build-release.sh'), tools)
-            signing = tools / 'with-signing.sh'
-            signing.write_text('#!/bin/sh\ntouch "$(dirname "$0")/signing-called"\n')
-            signing.chmod(0o755)
-            wrapper = root / 'android/gradlew'
-            wrapper.parent.mkdir()
-            wrapper.write_text('#!/bin/sh\n')
-            wrapper.chmod(0o755)
-            sdk_bin = root / 'flutter/bin'
-            sdk_bin.mkdir(parents=True)
-            flutter = sdk_bin / 'flutter'
-            flutter.write_text('#!/bin/sh\n')
-            flutter.chmod(0o755)
             commit_lockfile(root)
-            (root / 'pubspec.lock').write_text('packages: floated\n')
-            result = subprocess.run(['bash', str(tools / 'build-release.sh')],
-                env={**os.environ, 'PATH': str(sdk_bin) + os.pathsep + os.environ['PATH']},
-                capture_output=True, text=True)
+            commit = subprocess.check_output(['git', '-C', str(root), 'rev-parse', 'HEAD'], text=True).strip()
+            command = ['bash', str(tools / 'build-release.sh'), commit,
+                       'https://github.com/example/lineup/actions/runs/1']
+            # The script itself is an untracked build input.
+            result = subprocess.run(command, capture_output=True, text=True)
             self.assertNotEqual(0, result.returncode)
-            self.assertIn('pubspec.lock differs', result.stderr)
-            self.assertFalse((tools / 'signing-called').exists())
+            self.assertIn('completely clean checkout', result.stderr)
+            (root / 'pubspec.lock').write_text('packages: floated\n')
+            result = subprocess.run(command, capture_output=True, text=True)
+            self.assertNotEqual(0, result.returncode)
+            self.assertIn('completely clean checkout', result.stderr)
+            command[-2] = '0' * 40
+            result = subprocess.run(command, capture_output=True, text=True)
+            self.assertNotEqual(0, result.returncode)
+            self.assertIn('full reviewed commit', result.stderr)
+
+    def test_clean_release_reaches_toolchain_and_rejects_prior_outputs(self):
+        with tempfile.TemporaryDirectory() as directory:
+            scratch = Path(directory)
+            root = scratch / 'source'
+            tools = root / 'tool/android'
+            tools.mkdir(parents=True)
+            for name in ('build-release.sh', 'check-wrapper.py'):
+                shutil.copy(Path(__file__).with_name(name), tools)
+            source = Path(__file__).resolve().parents[2] / 'android'
+            wrapper = module('positive_wrapper', 'check-wrapper.py')
+            for name in wrapper.HASHES:
+                target = root / 'android' / name
+                target.parent.mkdir(parents=True, exist_ok=True)
+                shutil.copy(source / name, target)
+            (root / '.gitignore').write_text('build/\n')
+            commit_lockfile(root)
+            git = ['git', '-C', str(root), '-c', 'user.name=fixture',
+                   '-c', 'user.email=fixture@example.invalid', '-c', 'commit.gpgsign=false',
+                   '-c', 'core.hooksPath=/dev/null']
+            subprocess.run([*git, 'add', '.'], check=True)
+            subprocess.run([*git, 'commit', '-q', '-m', 'clean release fixture'], check=True)
+            commit = subprocess.check_output([*git, 'rev-parse', 'HEAD'], text=True).strip()
+            bin_dir = scratch / 'bin'
+            bin_dir.mkdir()
+            dart = bin_dir / 'dart'
+            dart.write_text('#!/bin/sh\necho TOOLCHAIN_REACHED\nexit 42\n')
+            dart.chmod(0o755)
+            command = ['bash', str(tools / 'build-release.sh'), commit,
+                       'https://github.com/example/lineup/actions/runs/1']
+            environment = {**os.environ, 'PATH': str(bin_dir) + os.pathsep + os.environ['PATH']}
+            result = subprocess.run(command, env=environment, capture_output=True, text=True)
+            self.assertEqual(42, result.returncode, result.stderr)
+            self.assertIn('Official Gradle', result.stdout)
+            self.assertIn('TOOLCHAIN_REACHED', result.stdout)
+            (root / 'build').mkdir()
+            result = subprocess.run(command, env=environment, capture_output=True, text=True)
+            self.assertEqual(1, result.returncode)
+            self.assertIn('prior Android build outputs', result.stderr)
+
+    def test_official_wrapper_rejects_changed_bytes_and_distribution(self):
+        wrapper = module('wrapper', 'check-wrapper.py')
+        source = Path(__file__).resolve().parents[2] / 'android'
+        wrapper.check(source)
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            for name in wrapper.HASHES:
+                target = root / name
+                target.parent.mkdir(parents=True, exist_ok=True)
+                shutil.copy(source / name, target)
+            for name in wrapper.HASHES:
+                target = root / name
+                original = target.read_bytes()
+                target.write_bytes(original.replace(b'17f277', b'000000') if name.endswith('.properties')
+                                   else original + b'changed')
+                with self.subTest(name=name), self.assertRaises(ValueError):
+                    wrapper.check(root)
+                target.write_bytes(original)
+            wrapper.check(root)
+            properties = root / 'gradle/wrapper/gradle-wrapper.properties'
+            properties.write_text(properties.read_text() + '\ndistributionUrl=https://invalid.example/gradle.zip\n')
+            with self.assertRaises(ValueError):
+                wrapper.check(root)
+
+    def test_resolved_dependency_reports_reject_affected_missing_and_multiple(self):
+        dependencies = module('resolved', 'check-resolved-dependencies.py')
+        report = ('+--- org.jetbrains.kotlin:kotlin-gradle-plugin:2.4.21\n'
+                  '+--- com.android.tools.build:gradle:9.1.0\n'
+                  '+--- com.google.guava:guava:31.1-android -> 33.7.2-android\n')
+        dependencies.check(report)
+        for invalid in (report.replace('2.4.21', '2.4.0'),
+                        report.replace('33.7.2-android', '31.1-android'),
+                        report.replace('com.android.tools.build:gradle', 'missing:gradle'),
+                        report + '+--- org.jetbrains.kotlin:kotlin-gradle-plugin:2.4.0\n',
+                        report + '+--- missing:artifact:1 FAILED\n'):
+            with self.assertRaises(ValueError):
+                dependencies.check(invalid)
+
+    def test_unsigned_apk_rejects_both_signature_formats(self):
+        unsigned = module('unsigned', 'check-unsigned-apk.py')
+        with tempfile.TemporaryDirectory() as directory:
+            apk = Path(directory) / 'app.apk'
+            with zipfile.ZipFile(apk, 'w') as archive:
+                archive.writestr('classes.dex', b'fixture')
+            unsigned.check(apk)
+            with zipfile.ZipFile(apk, 'a') as archive:
+                archive.writestr('META-INF/CERT.RSA', b'certificate')
+            with self.assertRaisesRegex(ValueError, 'JAR signing'):
+                unsigned.check(apk)
+            with zipfile.ZipFile(apk, 'w') as archive:
+                archive.writestr('classes.dex', b'fixture')
+            data = apk.read_bytes()
+            with zipfile.ZipFile(apk) as archive:
+                offset = archive.start_dir
+            # Insert an APK signing block and update the central directory offset.
+            block = b'\x18' + b'\0' * 7 + b'\x18' + b'\0' * 7 + b'APK Sig Block 42'
+            data = bytearray(data[:offset] + block + data[offset:])
+            import struct
+            eocd = data.rfind(b'PK\x05\x06')
+            struct.pack_into('<I', data, eocd + 16, offset + len(block))
+            apk.write_bytes(data)
+            with self.assertRaisesRegex(ValueError, 'Signing Block'):
+                unsigned.check(apk)
+
+    def test_release_manifest_and_extraction_policy_negative_controls(self):
+        root = Path(__file__).resolve().parents[2]
+        xml = (root / 'android/app/src/main/AndroidManifest.xml').read_text()
+        for name, value in (('allowBackup', 'false'), ('fullBackupContent', 'false'),
+                            ('usesCleartextTraffic', 'false'),
+                            ('dataExtractionRules', '@xml/data_extraction_rules')):
+            for replacement in ('', f'android:{name}="invalid"'):
+                invalid = xml.replace(f'android:{name}="{value}"', replacement)
+                with self.subTest(name=name, replacement=replacement), self.assertRaises(ValueError):
+                    manifest.check_release(invalid)
+        rules = (root / 'android/app/src/main/res/xml/data_extraction_rules.xml').read_text()
+        manifest.check_extraction_rules(rules)
+        for mode in ('cloud-backup', 'device-transfer'):
+            parsed = ET.fromstring(rules)
+            for entry in parsed.find(mode):
+                original = entry.get('path')
+                entry.set('path', 'only-part')
+                with self.assertRaises(ValueError):
+                    manifest.check_extraction_rules(ET.tostring(parsed, encoding='unicode'))
+                entry.set('path', original)
+            parsed.remove(parsed.find(mode))
+            with self.assertRaises(ValueError):
+                manifest.check_extraction_rules(ET.tostring(parsed, encoding='unicode'))
 
     def test_notice_check_detects_all_drift_without_writing(self):
         with tempfile.TemporaryDirectory() as directory:

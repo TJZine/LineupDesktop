@@ -58,6 +58,10 @@ class MemoryCredentialStore implements CredentialStore {
       profileTokens[profileId] = token;
 
   @override
+  Future<void> deleteProfileToken(String profileId) async =>
+      profileTokens.remove(profileId);
+
+  @override
   Future<void> clear() async {
     accountToken = null;
     profileTokens.clear();

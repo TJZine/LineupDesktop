@@ -1,3 +1,4 @@
+import 'dart:async';
 import 'dart:io';
 
 import 'package:flutter/foundation.dart';
@@ -36,7 +37,11 @@ void main() {
     }
   }
 
-  for (final platform in [TargetPlatform.macOS, TargetPlatform.android]) {
+  for (final platform in [
+    TargetPlatform.windows,
+    TargetPlatform.macOS,
+    TargetPlatform.android,
+  ]) {
     test(
       '$platform asks native code to open the fixed link with no arguments',
       () {
@@ -54,6 +59,7 @@ void main() {
         in <(String, Future<Object?> Function(MethodCall))>[
           ('false', (_) async => false),
           ('null', (_) async => null),
+          ('an invalid result', (_) async => 'unexpected'),
           ('a platform error', (_) async => throw PlatformException(code: 'x')),
           ('a missing handler', (_) async => throw MissingPluginException()),
         ]) {
@@ -77,5 +83,23 @@ void main() {
         },
       );
     }
+    testWidgets('$platform times out with a generic browser error', (tester) {
+      debugDefaultTargetPlatformOverride = platform;
+      return run(() async {
+        mock((_) => Completer<Object?>().future);
+        final failure = expectLater(
+          openPlexLink(),
+          throwsA(
+            isA<ProcessException>().having(
+              (error) => error.message,
+              'message',
+              'Could not open browser.',
+            ),
+          ),
+        );
+        await tester.pump(const Duration(seconds: 5));
+        await failure;
+      });
+    });
   }
 }

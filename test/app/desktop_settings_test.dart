@@ -24,6 +24,45 @@ const _longServerName =
     'A deliberately long Plex Media Server name for the desktop settings acceptance fixture';
 
 void main() {
+  testWidgets('pending authorization transition disables Account actions', (
+    tester,
+  ) async {
+    final controller = FixtureController(
+      scenario: LineupScenario(
+        stage: SetupStage.ready,
+        profiles: const [
+          PlexHomeUser(id: 'owner', name: 'Owner', protected: false),
+        ],
+      ),
+    );
+    addTearDown(controller.dispose);
+    await tester.pumpWidget(
+      MaterialApp(
+        builder: LineupCanvas.builder,
+        home: Scaffold(
+          body: SettingsView(
+            controller: controller,
+            category: SettingsCategory.account,
+            authorizationTransitionPending: true,
+            onSwitchProfile: () => fail('Profile action must be disabled.'),
+            onSwitchServer: () => fail('Server action must be disabled.'),
+            onSignOut: () async => fail('Sign-out action must be disabled.'),
+          ),
+        ),
+      ),
+    );
+    await tester.pumpAndSettle();
+    for (final label in [
+      'Switch profile',
+      'Switch server',
+      'Sign out of Plex',
+    ]) {
+      final button = find.widgetWithText(OutlinedButton, label);
+      expect(button, findsOneWidget);
+      expect(tester.widget<OutlinedButton>(button).onPressed, isNull);
+    }
+  });
+
   testWidgets(
     'Player overlays uses descriptive choices and optimistic persistence',
     (tester) async {
@@ -249,7 +288,7 @@ void main() {
       if (category == SettingsCategory.account) {
         expect(find.byType(LineupProfileAvatar), findsOneWidget);
         expect(find.text(_longProfileName), findsOneWidget);
-        expect(find.text(_longAccountName), findsOneWidget);
+        expect(find.textContaining(_longAccountName), findsOneWidget);
         expect(find.textContaining(_longServerName), findsOneWidget);
       }
     }

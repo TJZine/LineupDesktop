@@ -515,6 +515,8 @@ class UpstreamChannelSetupViewState extends State<UpstreamChannelSetupView> {
       canSwitchServer: widget.controller.canSwitchServer,
       channelSetupCanCancel: widget.controller.channelSetupCanCancel,
       error: widget.controller.error,
+      profileCredentialRecoveryNotice:
+          widget.controller.profileCredentialRecoveryNotice,
       collectionRecoveryByLibrary: Map.unmodifiable({
         for (final library in widget.controller.libraries)
           library.id: ?widget.controller.collectionScaleRecovery({library.id}),
@@ -528,7 +530,7 @@ class UpstreamChannelSetupViewState extends State<UpstreamChannelSetupView> {
     onCancelSetup: widget.controller.cancelChannelSetup,
     onCancelScan: widget.controller.cancelLibraryScan,
     selectedLibraryIds: Set.unmodifiable(_selectedLibraries),
-    error: _error,
+    error: _error ?? widget.controller.libraryScanLimitError,
     onScan: _scan,
     onCommit: _commitLibraries,
     onToggleLibrary: (id) => setState(() {

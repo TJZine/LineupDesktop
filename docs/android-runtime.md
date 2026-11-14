@@ -1,8 +1,10 @@
 # Android TV runtime
 
 Lineup's Android host targets Android TV / Google TV and Android-based Fire TV
-(Fire OS), API 28 or later. The application ID is `com.tjzine.lineup`, with
-launcher label **Lineup**. Vega OS, phones and tablets are outside this beta.
+(Fire OS), API 28 or later. Release builds use application ID
+`com.tjzine.lineup` with launcher label **Lineup**. Debug and profile builds use
+`com.tjzine.lineup.dev` with launcher label **Lineup Dev**. Vega OS, phones and
+tablets are outside this beta.
 The private sideload APK contains `armeabi-v7a` and `arm64-v8a` only.
 
 Flutter/Dart owns application policy, focus and interaction. `MainActivity` hosts
@@ -80,8 +82,8 @@ D8 does not establish its one-display-frame transition bound.
 
 Use the Flutter identity in [tool/flutter_version.json](../tool/flutter_version.json)
 (currently 3.47.7). Android uses the stock Flutter engine; desktop engine patches
-are unrelated. The generated host uses Gradle 9.3.1, Android Gradle Plugin 9.1.0,
-Kotlin 2.4.0 and JDK 17. Compile/target SDK and NDK follow the pinned Flutter
+are unrelated. The host uses Gradle 9.3.1, Android Gradle Plugin 9.1.0,
+application KGP 2.4.21 and JDK 17. Compile/target SDK and NDK follow the pinned Flutter
 SDK defaults (currently API 36 and NDK 28.2.13676358); minimum SDK is 28.
 Install Android SDK platform-tools, platform 36 and build-tools 36.0.0, and the
 NDK when required by the build. Current plugin/native-asset builds also require
@@ -94,8 +96,8 @@ On the maintainer's Mac:
 export PATH="$HOME/.cache/lineup-flutter/3.47.7/flutter/bin:$HOME/Library/Android/sdk/platform-tools:$PATH"
 export JAVA_HOME=/opt/homebrew/opt/openjdk@17/libexec/openjdk.jdk/Contents/Home
 flutter pub get
-# Dedicated Lineup signing key, for BOTH debug and release:
-tool/android/with-signing.sh flutter build apk --debug --target-platform android-arm,android-arm64
+# Disposable Android development key:
+flutter build apk --debug --target-platform android-arm,android-arm64
 ```
 
 The host explicitly filters native libraries to the two ARM ABIs, including
@@ -103,20 +105,34 @@ assets contributed by Dart native hooks. Its pinned-Flutter configuration keeps
 Flutter from replacing that filter with the default ABI list.
 
 The universal debug APK is `build/app/outputs/flutter-apk/app-debug.apk`.
-Contributors and CI without the Lineup key can set
-`LINEUP_ANDROID_SIGNING=debug-key` to build **debug only**, using Android's
-standard debug key. Release packaging fails closed without the dedicated key;
-there is no release debug-key fallback.
+Debug and profile use the disposable standard Android debug key. Release has no
+Gradle signing configuration and produces an unsigned APK. The compatibility
+`with-signing.sh` entrypoint only disables persistent Gradle daemons. Build code
+has no production credential retrieval path. Run builds in an account/context
+without production signing material or usable backups.
 
-The signing wrapper reads the password from the macOS login Keychain service
-`lineup-android-release` for the current user, exports it only to the build
-process, and disables persistent Gradle daemons. It never prints the password
-or puts it in command arguments. Do not enable shell/Gradle debug tracing around
-signing. The keystore is outside Git at
-`~/.config/lineup-android/lineup-release.jks`, alias `lineup`; `LINEUP_ANDROID_KEYSTORE`
-and `LINEUP_ANDROID_KEY_ALIAS` can override those non-secret defaults.
-**Back up the keystore securely.** Losing it prevents in-place updates and forces
-an uninstall, deleting on-device lineups and sign-in.
+Development-key APKs cannot upgrade production-key installations. Use a separate
+disposable emulator/device and preserve existing production installations and
+data. Keep the authorized production key and protected backups in the isolated
+signing context. Losing that key prevents in-place production updates.
+
+The wrapper scripts and JAR are committed official Gradle 9.3.1 bytes.
+`python3 tool/android/check-wrapper.py` checks their published identities and the
+distribution checksum before Gradle execution. CI also runs the maintained
+Gradle wrapper-validation action. Wrapper regeneration is a reviewed toolchain
+update.
+
+KGP 2.4.21 addresses CVE-2026-53914. The exact Guava 33.7.2-android runtime
+constraint addresses the affected older transitive Android dependency. Actual
+settings buildscript classpath and `releaseRuntimeClasspath` reports establish selected
+versions through `check-resolved-dependencies.py`. [Kotlin advisory](https://github.com/advisories/GHSA-r937-wjx7-w2jp),
+[Guava advisory](https://github.com/google/guava/security/advisories/GHSA-xxph-c9ww-hj94).
+The pinned Flutter SDK's separate included build still compiles its Gradle
+plugin with KGP 2.2.20, and the build-tool classpath includes Guava 33.3.1-jre.
+The app's resolved settings classpath selects KGP 2.4.21 and its shipped runtime
+selects Guava 33.7.2-android. Keep the older SDK/build-tool advisory exposure
+visible separately from those application dependency results.
+
 
 Gradle verifies downloaded Maven metadata and artifacts against the committed
 SHA-256 digests in `android/gradle/verification-metadata.xml`. After an Android
@@ -135,9 +151,8 @@ Start from a clean checkout with the intended dependency pins. Set
 `FLUTTER_SDK` to the pinned SDK directory and `JAVA_HOME` to the JDK 17
 directory before running these commands from the repository root in Bash.
 The temporary Gradle home starts empty, and the Flutter copy keeps Gradle
-writes out of the original SDK. Generate the wrapper with
-`flutter build apk --config-only`, not `flutter create`, which replaces
-`pubspec.lock` and `.metadata` and adds a stock activity.
+writes out of the original SDK. Verify the committed wrapper before running Gradle. `flutter create` replaces
+reviewed application inputs and is unsuitable for metadata regeneration.
 
 ```bash
 set -euo pipefail
@@ -152,7 +167,7 @@ export GRADLE_USER_HOME="$scratch/gradle"
 export GRADLE_OPTS=-Dorg.gradle.project.android.builder.sdkDownload=false
 
 flutter pub get --enforce-lockfile
-flutter build apk --config-only --debug
+python3 tool/android/check-wrapper.py
 flutter --version
 dart tool/check_toolchain.dart
 
@@ -165,26 +180,19 @@ apk_properties=(
 )
 (
   cd android
-  LINEUP_ANDROID_SIGNING=debug-key ./gradlew --write-verification-metadata sha256 \
+  ./gradlew --write-verification-metadata sha256 \
     --no-daemon :app:assembleDebug :app:testDebugUnitTest \
     "${apk_properties[@]}" -Ptree-shake-icons=false
 )
 
-# Use a disposable key for this metadata-generation APK.
-keytool -genkeypair -keystore "$scratch/throwaway.p12" -alias metadata-only \
-  -storepass metadata-only -keyalg RSA -keysize 2048 -dname 'CN=Metadata only' -validity 1
+# Release is unsigned, including during metadata generation.
 (
   cd android
-  unset LINEUP_ANDROID_SIGNING
-  LINEUP_ANDROID_KEYSTORE="$scratch/throwaway.p12" \
-    LINEUP_ANDROID_KEY_ALIAS=metadata-only LINEUP_ANDROID_KEY_PASSWORD=metadata-only \
-    ./gradlew --write-verification-metadata sha256 --no-daemon :app:assembleRelease \
+  ./gradlew --write-verification-metadata sha256 --no-daemon :app:assembleRelease \
     "${apk_properties[@]}" -Ptree-shake-icons=true \
     "-Pflutter.androidSdkRoot=$sdk" -Pflutter.installedNdkVersions=28.2.13676358 \
     "-Pflutter.sdkManagerPath=$sdk/cmdline-tools/latest/bin/sdkmanager"
 )
-rm -f "$scratch/throwaway.p12" build/app/outputs/apk/release/app-release.apk \
-  build/app/outputs/flutter-apk/app-release.apk
 
 # Inject metadata generation into the notice generator's exact Gradle command.
 python3 - <<'PYTHON'
@@ -211,13 +219,24 @@ metadata.
 
 ## Release packaging and runtime notices
 
-Run the release recipe from the repository root:
+The Android `versionCode` is the build number after `+` in `pubspec.yaml`.
+It must strictly increase and exceed every build ever installed on maintainer
+devices. Once a candidate has been signed with the production key, retire its
+number permanently, even if the candidate is rejected. Before signing the
+first public candidate, confirm that the planned build number `20` is higher
+than every previously installed build.
+
+Prepare a fresh full checkout at the reviewed commit, with every source input
+committed and no untracked build inputs. Use non-shallow, non-sparse source
+with no prior `build/` output or Android project cache. Run in a credential-free build context.
+Supply the full 40-character reviewed commit and the applicable GitHub CI run URL.
+The release verifier independently checks that run and its artifact digest.
 
 ```sh
 export PATH="$HOME/.cache/lineup-flutter/3.47.7/flutter/bin:$HOME/Library/Android/sdk/platform-tools:$PATH"
 export JAVA_HOME=/opt/homebrew/opt/openjdk@17/libexec/openjdk.jdk/Contents/Home
 export GRADLE_OPTS=-Dorg.gradle.project.android.builder.sdkDownload=false
-tool/android/build-release.sh
+tool/android/build-release.sh "$REVIEWED_COMMIT" "$CI_RUN_URL"
 ```
 
 The recipe resolves `releaseRuntimeClasspath`, requires Maven POM license
@@ -250,18 +269,41 @@ actual cached JAR. It is served offline through the existing `lineup/platform`
 license operations using opaque asset IDs and bounded UTF-8 reads. Android
 ships no LGPL runtime or Sources-and-rebuilding group.
 
-`build-release.sh` runs through `with-signing.sh`, builds the universal
-`armeabi-v7a` plus `arm64-v8a` release APK, and prints the APK SHA-256,
-versionName/versionCode, verified signing certificate fingerprint, Flutter
-version and resolved Media3 version. It verifies the final APK with the
-Android SDK `apksigner` and fails unless the expected Lineup certificate is
-present. Source and packaged manifests must opt in to `OnBackInvokedCallback`
-so Back works on API 33–35; the release script checks both using the SDK's
-`apkanalyzer` for the APK. A missing Lineup key fails before release packaging;
-`LINEUP_ANDROID_SIGNING=debug-key` is accepted only by the CI debug job and is
-never a release fallback. The Android CI job uses pinned Flutter, the debug-key
-mode, the ARM debug build, and `:app:testDebugUnitTest`; hosted CI execution is
-separate from the maintainer's signed release and device acceptance.
+`build-release.sh` checks the full HEAD and clean source before and after the
+build, invokes the pinned Flutter checker, verifies official wrapper bytes and
+uses a fresh temporary Gradle home. The `build-environment.init.gradle` adapter
+uses Gradle's standard `DependencyReportTask` on the settings buildscript
+classpath. The ordinary app/root `buildEnvironment` reports are empty because
+this host declares its plugin dependencies in settings. It verifies committed notices and actual
+resolved build/runtime dependencies, builds the two-ARM unsigned release APK,
+then aligns it with SDK build-tools 36.0.0 `zipalign -P 16`. ZIP integrity and the
+absence of JAR signature entries and APK Signing Blocks are checked before and
+after alignment. `apksigner verify` must fail on the unsigned candidate.
+
+Source and packaged manifests must disable backups and cleartext traffic, refer
+to the reviewed extraction rules, enable modern Back, omit debug network
+configuration, and remain non-debuggable. Both cloud backup and device transfer
+must exclude every storage domain. Packaged extraction XML is decoded with
+`apkanalyzer`; harness code and fixture CA bytes are rejected separately.
+
+The build writes `build/android-release/lineup-unsigned-aligned.apk`, with
+ordinary `SHA256SUMS`, resolved dependency reports and `build-evidence.txt` in the
+same directory. Evidence records full source commit, supplied CI run URL,
+application/version identity and tool versions. The CI run URL is a recorded
+input. Signing never takes this local output. It takes the
+`android-unsigned-<SHA>` CI artifact after the release verifier checks its GitHub
+run identity and artifact digest; see
+[release security](release-security.md#android-apk). A local working-diff build
+establishes build behavior only. The reviewed clean candidate gate stays
+mandatory.
+
+Production signing uses maintained Android tools in a separate signing context.
+Candidate scripts and build tools execute only in the build context. The release
+verifier checks unsigned identity and alignment, the authorized production
+certificate, the application and version, and the final signature and digest.
+See [release acceptance](release-acceptance.md) for physical Android TV and Fire
+TV upgrade and playback checks.
+
 
 ## Install, launch and logs
 
@@ -270,23 +312,26 @@ actual assigned serial; never assume the default device.
 
 ```sh
 adb -s emulator-5554 install -r -d build/app/outputs/flutter-apk/app-debug.apk
-adb -s emulator-5554 shell am start -n com.tjzine.lineup/.MainActivity
+adb -s emulator-5554 shell am start -n com.tjzine.lineup.dev/com.tjzine.lineup.MainActivity
 adb -s emulator-5554 shell input keyevent KEYCODE_DPAD_DOWN
 adb -s emulator-5554 shell input keyevent KEYCODE_DPAD_CENTER
 ```
 
-After sign-in, update only with `adb -s <serial> install -r -d <apk>` using the
-same Lineup key. `flutter install` uninstalls by default, and `flutter run` can
-uninstall after an install failure, losing sign-in and lineups. Use those tools
-only on disposable emulators.
+For a production-signed release upgrade, use
+`adb -s <serial> install -r <apk>` with the same authorized signing key.
+
+Debug/profile APKs use the `.dev` application ID and may use
+`install -r -d` on a disposable emulator. `flutter install` uninstalls by
+default, and `flutter run` can uninstall after an install failure, losing
+sign-in and lineups. Use those tools only on disposable emulators.
 
 For development media, Flutter 3.47.7 requires a **String ArrayList** extra
 (`--esal`); `--esa` produces a `String[]` and crashes the embedding. Stop the
 existing process first so the entrypoint runs again:
 
 ```sh
-adb -s emulator-5554 shell am force-stop com.tjzine.lineup
-adb -s emulator-5554 shell am start -n com.tjzine.lineup/.MainActivity --esal dart_entrypoint_args "'--media=https://localhost:8443/fixture.mp4?case=join&n=1'"
+adb -s emulator-5554 shell am force-stop com.tjzine.lineup.dev
+adb -s emulator-5554 shell am start -n com.tjzine.lineup.dev/com.tjzine.lineup.MainActivity --esal dart_entrypoint_args "'--media=https://localhost:8443/fixture.mp4?case=join&n=1'"
 ```
 
 The nested quotes preserve `&` and `?` across the host/device shells. Escape any
@@ -297,9 +342,9 @@ debug/profile synthetic media only; never pass credentials. Dart ignores
 Capture diagnostics locally, then sanitize before sharing:
 
 ```sh
-adb -s emulator-5554 logcat --pid="$(adb -s emulator-5554 shell pidof com.tjzine.lineup)" > /tmp/lineup-android-local.log
-adb -s emulator-5554 shell dumpsys meminfo com.tjzine.lineup
-adb -s emulator-5554 shell dumpsys gfxinfo com.tjzine.lineup
+adb -s emulator-5554 logcat --pid="$(adb -s emulator-5554 shell pidof com.tjzine.lineup.dev)" > /tmp/lineup-android-local.log
+adb -s emulator-5554 shell dumpsys meminfo com.tjzine.lineup.dev
+adb -s emulator-5554 shell dumpsys gfxinfo com.tjzine.lineup.dev
 adb -s emulator-5554 exec-out screencap -p > /tmp/lineup-android.png
 ```
 
@@ -334,17 +379,22 @@ The app permits HTTPS traffic only and requests no cleartext exception.
 
 The runtime smoke entrypoint in
 [test/persistence/android_credential_smoke.dart](../test/persistence/android_credential_smoke.dart)
-uses synthetic values and checks real native secure storage plus saved state.
+uses synthetic values and checks real native secure storage, exact-profile-key
+restore/deletion, account/other-profile isolation, saved state and installation
+identity across process restarts.
 Run it **only on a fresh disposable emulator**, never a signed-in device:
 
 ```sh
-tool/android/with-signing.sh flutter build apk --debug --target-platform android-arm,android-arm64 --target test/persistence/android_credential_smoke.dart
+flutter build apk --debug --target-platform android-arm,android-arm64 --target test/persistence/android_credential_smoke.dart
 adb -s emulator-5554 install -r -d build/app/outputs/flutter-apk/app-debug.apk
-adb -s emulator-5554 shell am start -n com.tjzine.lineup/.MainActivity --esal dart_entrypoint_args "'write'"
+adb -s emulator-5554 shell am start -n com.tjzine.lineup.dev/com.tjzine.lineup.MainActivity --esal dart_entrypoint_args "'write'"
 # Observe U1_STORAGE_WRITE_PASS, force-stop, and install the same signed APK again.
-adb -s emulator-5554 shell am force-stop com.tjzine.lineup
+adb -s emulator-5554 shell am force-stop com.tjzine.lineup.dev
 adb -s emulator-5554 install -r -d build/app/outputs/flutter-apk/app-debug.apk
-adb -s emulator-5554 shell am start -n com.tjzine.lineup/.MainActivity --esal dart_entrypoint_args "'verify-and-clear'"
+adb -s emulator-5554 shell am start -n com.tjzine.lineup.dev/com.tjzine.lineup.MainActivity --esal dart_entrypoint_args "'verify-and-delete'"
+# Observe U1_STORAGE_RESTART_EXACT_DELETE_PASS. Restart to check deletion persisted.
+adb -s emulator-5554 shell am force-stop com.tjzine.lineup.dev
+adb -s emulator-5554 shell am start -n com.tjzine.lineup.dev/com.tjzine.lineup.MainActivity --esal dart_entrypoint_args "'verify-and-clear'"
 # Observe U1_STORAGE_RESTART_UPGRADE_DELETE_PASS. Rebuild normal lib/main.dart.
 ```
 

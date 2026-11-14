@@ -1314,8 +1314,10 @@ void PlayerCore::EventLoop(uint64_t generation) {
     if (event && event->event_id != MPV_EVENT_NONE) {
       HandleMpvEvent(*event, generation);
     } else if (playback_.pending_stop()) {
-      // Empty idle is a reclamation barrier only after queued START/END events
-      // have drained. Polling before wait_event can discard their identities.
+      // Poll idle only after an empty wait. libmpv queues START_FILE before
+      // `stop` returns and never starts a cleared entry afterwards, so every
+      // START_FILE whose identity reclamation could discard has drained here.
+      // A later END_FILE belongs to a started entry, which reclamation keeps.
       int idle = 0;
       int64_t playlist_count = -1;
       if (mpv_operations_.get_property(mpv_, "idle-active", MPV_FORMAT_FLAG,

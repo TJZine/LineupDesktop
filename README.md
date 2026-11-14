@@ -7,8 +7,8 @@
 </p>
 
 <p align="center">
-  <a href="https://github.com/TJZine/LineupDesktop/actions/workflows/ci.yml?query=branch%3Aflutter-mvp">
-    <img src="https://github.com/TJZine/LineupDesktop/actions/workflows/ci.yml/badge.svg?branch=flutter-mvp" alt="CI status">
+  <a href="https://github.com/TJZine/LineupDesktop/actions/workflows/ci.yml?query=branch%3Amain">
+    <img src="https://github.com/TJZine/LineupDesktop/actions/workflows/ci.yml/badge.svg?branch=main" alt="CI status">
   </a>
   <a href="LICENSE">
     <img src="https://img.shields.io/badge/license-Apache--2.0-blue.svg" alt="Apache 2.0 license">
@@ -17,10 +17,11 @@
 </p>
 
 > [!IMPORTANT]
-> Lineup Desktop is under active development. There is no supported public
-> installer or release yet. Windows and Apple Silicon macOS native playback are
-> implemented. Platform, signed-package and release acceptance remain incomplete;
-> see [the reconciled backlog](docs/open-obligations.md).
+> Lineup Desktop is under active development. Use the official
+> [GitHub Releases](https://github.com/TJZine/LineupDesktop/releases) page for
+> any public build. If no application release is listed, no public build is
+> available yet. See [the reconciled backlog](docs/open-obligations.md) for the
+> remaining Windows and Android release acceptance work.
 
 Lineup Desktop turns a Plex library into a deterministic, television-style
 lineup. It combines channel creation, a responsive electronic program guide,
@@ -45,9 +46,9 @@ the native media/platform boundary deliberately narrow.
 
 | Platform | Current status |
 | --- | --- |
-| Windows 10/11 x64 | Primary target. Flutter UI, libmpv playback, native video presentation, and portable packaging are implemented. Final real-hardware and release acceptance remains pending. |
+| Windows 10/11 x64 | Primary desktop target. The public-release path is an unsigned portable ZIP. Use a current GPU driver or Vulkan Runtime providing `vulkan-1.dll`. Final real-hardware and release acceptance remains pending. |
 | macOS, Apple Silicon | Native libmpv playback, Guide/PiP, HDR presentation and Mac integration are implemented for development/private testing. The supported minimum is macOS 14 Sonoma; the preserved beta candidate still builds with a macOS 12 deployment target, and runtime coverage is recorded on macOS 27. Sonoma hardware validation and signed distribution remain open. |
-| Android TV / Google TV / Android-based Fire TV | Sideloaded APK (Android 9+, 32- and 64-bit ARM) with a Kotlin Media3 player adapter and a D-pad interface following the [TV UI decisions](docs/design/tv-ui-decisions.md). Signed builds run on a Fire TV Stick 4K Max (Fire OS 8). Real-media, HDR/Dolby Vision, subtitle, CEC/sleep and couch acceptance remain pending. Vega OS Fire TV devices cannot run APKs. See [Android runtime](docs/android-runtime.md). |
+| Android TV / Google TV / Android-based Fire TV | Sideloaded APK for Android 9+ on ARM (`armeabi-v7a` and `arm64-v8a`) with a Kotlin Media3 player adapter and a D-pad interface following the [TV UI decisions](docs/design/tv-ui-decisions.md). Vega OS Fire TV devices cannot run APKs. Direct Play and couch acceptance remain platform gates. See [Android runtime](docs/android-runtime.md). |
 | Apple TV | Feasibility research only; no tvOS implementation. |
 | Linux | Not currently targeted. |
 
@@ -57,7 +58,7 @@ still required before broader release claims.
 
 ## First run
 
-A private test build guides the user through:
+The app guides you through these steps.
 
 1. Link a Plex account with a QR code or four-character PIN.
 2. Choose a Plex Home profile, including protected-profile PIN entry.
@@ -71,10 +72,40 @@ settings, privacy behavior, and troubleshooting steps.
 
 ## Getting a build
 
-No public release artifacts are published yet. Private testers should use only a
-build supplied by the maintainer and should verify its source commit and package
-hash before running it. Do not copy only the executable out of the portable
-package; the adjacent runtime files and `data` directory are required.
+For a public build, use the [GitHub Releases](https://github.com/TJZine/LineupDesktop/releases)
+page and download only the assets attached to the selected release. Windows
+releases are portable ZIPs and are unsigned. Android TV, Google TV and
+Android-based Fire TV releases are APKs for Android 9+ ARM devices. If the
+release page has no suitable asset, use a private build supplied by the
+maintainer instead of an unofficial mirror.
+
+For a Windows ZIP, optionally compare its digest with the attached `.sha256`
+file and the release notes before extracting it:
+
+```powershell
+Get-FileHash -Algorithm SHA256 .\FILE.zip
+```
+
+Use **Extract All**, keep the package together, and run `lineup_desktop.exe`.
+The package needs its adjacent DLLs, `data` directory, and a GPU driver or
+Vulkan Runtime providing `vulkan-1.dll`. Windows may show “Windows protected
+your PC” because the MVP package is unsigned. Choose **More info → Run anyway**
+only for a ZIP downloaded from the official release page. [Smart App Control](https://learn.microsoft.com/en-us/windows/apps/develop/smart-app-control/overview)
+has no per-app exception. If Smart App Control is on, this unsigned version
+cannot run on that PC. Leave it on. Run Lineup Desktop as a standard user.
+
+To update, extract the new ZIP into a new folder and then delete the old
+application folder. Settings and lineups are kept in app data. To uninstall,
+sign out first to remove your Plex sign-in from this PC. Then delete the
+application folder. Saved data remains until you separately remove
+it, which permanently deletes settings and lineups.
+
+On Android TV, Google TV or Android-based Fire TV, enable installation from
+unknown sources for the installer app (such as Downloader or a file manager),
+or use `adb install`. Update an existing installation with `adb install -r`
+or the equivalent file-manager action. Uninstalling first deletes lineups and
+sign-in. Media the device cannot decode natively, such as
+DTS/TrueHD-only audio on many sticks, will not play in this version.
 
 Developers can build the native development player on macOS or Windows.
 Start with [Development](docs/DEVELOPMENT.md).
@@ -105,6 +136,8 @@ unpinned components; follow the exact Windows procedure in
 | [Development](docs/DEVELOPMENT.md) | Toolchain, commands, native build setup, and engineering practices |
 | [Architecture](docs/architecture.md) | Component ownership, implemented state, and dependency decisions |
 | [Windows Native Acceptance](docs/windows-native-validation.md) | Physical-machine test campaign and Codex handoff |
+| [Release security](docs/release-security.md) | Maintainer release, artifact and publication checks |
+| [Release acceptance](docs/release-acceptance.md) | One-pass Android TV, Fire TV and Windows acceptance |
 | [Windows Runtime Provenance](docs/windows-runtime.md) | libmpv/FFmpeg/libplacebo provenance and redistribution obligations |
 | [Open obligations and historical evidence](docs/open-obligations.md) | Pending product/platform work and recoverable campaign evidence |
 | [Product Parity — August 23, 2026 audit](docs/product-parity.md) | Dated audit with explicitly dated updates |

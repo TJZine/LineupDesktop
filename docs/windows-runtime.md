@@ -168,7 +168,7 @@ alpha. This inventory records engineering evidence and delivery coverage.
 | --- | --- | --- |
 | Flutter Windows engine | Flutter 3.47.7 framework `abaf9c523780a608bd46686fd5e53740a07077f8`, engine `deb287481e3ce9468f3434937ced4240a70539ca`, plus the repository-owned DirectComposition, desktop AX and native test-fixture patches | BSD-3-Clause and upstream third-party notices. Include Flutter's generated `NOTICES.Z` and `tool/flutter_engine/NOTICE`. |
 | flutter_secure_storage_windows | Version 4.2.2 from the locked Dart dependency graph | BSD-3-Clause; its notice is generated into Flutter `NOTICES.Z`. |
-| Microsoft Visual C++ runtime | Retail x64 VC143 runtime matching the build toolset | Microsoft redistributable code. A portable package uses unmodified app-local retail DLLs from `VC/Redist`; never include debug/nonredistributable files. |
+| Microsoft Visual C++ runtime | Supported VS2022 17.14 / 14.44 retail x64 VC143 runtime, at least the build toolset version | Microsoft redistributable code. A portable package uses unmodified app-local retail DLLs from `VC/Redist`; never include debug/nonredistributable files. |
 | Khronos Vulkan loader | `vulkan-1.dll` supplied by the installed GPU driver or Vulkan Runtime | System prerequisite. The selected libmpv DLL imports the loader even though Lineup selects D3D11. The portable package records this requirement instead of copying a machine-specific display-driver file. |
 | Universal C Runtime and Windows SDK | Windows 10/11 system components | Do not bundle for the supported Windows baseline. |
 
@@ -183,6 +183,68 @@ rechecks it against the clean current commit and pinned metadata, and rejects
 stale identities or modified build artifacts before creating output.
 `BUILD-INFO.txt` and `BUILD-PROVENANCE.json` preserve that verified identity in
 the portable package.
+
+## Windows boundary and CRT checks
+
+The release entrypoint installs `debugPrint` suppression before Flutter binding
+or plugin initialization. Framework and unhandled Dart errors emit only fixed
+`Lineup: framework_error` / `Lineup: unhandled_error` categories; development
+error output and redacted structured diagnostics retain their existing behavior.
+This application-level control does not claim to intercept every possible native
+or vendor logging API.
+
+Windows browser linking uses the window-owned `lineup/platform` channel. Only
+argument-free `openPlexLink` is accepted; native code opens the fixed
+`https://plex.tv/link` URL with `ShellExecuteW`, returning true only for a result
+greater than 32. The channel detaches before the engine is destroyed. There is
+no executable-name/PATH fallback. See Microsoft's
+[ShellExecute contract](https://learn.microsoft.com/en-us/windows/win32/api/shellapi/nf-shellapi-shellexecutew).
+
+Packaging reads CMake's recorded x64 compiler path, selects that Visual Studio
+installation's `Microsoft.VCRedistVersion.default.txt`, and requires the supported
+VS2022 17.14 / 14.44 VC143 servicing family at least as new as the toolset. It
+does not choose the highest directory from another installation. A different
+compiler/runtime generation requires an explicit support-policy update. Microsoft
+requires a [redistributable at least as new as the build tools](https://learn.microsoft.com/en-us/cpp/windows/latest-supported-vc-redist).
+Each of the three app-local CRT DLLs must have a valid Microsoft Corporation
+[Authenticode signature](https://learn.microsoft.com/en-us/powershell/module/microsoft.powershell.security/get-authenticodesignature):
+Windows must report status `Valid`, and the signer certificate's subject and
+issuer must each carry exactly one Organization (O) attribute equal to
+`Microsoft Corporation`. Trust comes from Windows validation; identity comes from
+the X.500 organisation attributes, not the certificate's common name, because
+Microsoft signs VC redist DLLs under more than one certificate name (for example
+Microsoft Windows Software Compatibility Publisher). Missing, untrusted,
+unverifiable or wrong-organisation signatures stop packaging, as do names with
+multi-valued relative distinguished names.
+The copied bytes are checked against the source SHA-256 and reverified, and
+`BUILD-INFO.txt` records toolset/redist selection plus each DLL's version, hash,
+signer organisation and signer common name.
+Existing source, engine, libmpv, package-content and license checks remain required.
+
+`pwsh -File ./tool/windows/verify-release-policy.ps1` includes portable CRT
+selection and rejection fixtures. These use controlled signature objects and do
+not establish Windows trust validation. Compile/run `runner_lifecycle_test` on
+Windows for the native method's fixed URL, argument rejection, success/failure
+boundary and channel retirement, alongside the focused Dart launcher/logging tests.
+
+Before accepting the exact release candidate on disposable Windows targets:
+
+- Capture release stdout/stderr and debugger output with ordinary Windows capture
+  facilities. First demonstrate that the capture sees a harmless positive-control
+  line through the same output path; an empty capture without that control proves
+  nothing. In a disposable instrumented build, inject non-secret canaries before
+  binding initialization and in framework/unhandled errors. Confirm raw canaries
+  are absent and the two fixed categories are present. Never corrupt real stored
+  credentials; remove instrumentation and identify both tested build digests.
+- Open the actual browser through onboarding, then exercise a controlled browser
+  association failure and confirm the generic error. Place harmless sentinel
+  executables named `rundll32.exe` in a disposable working directory/PATH and
+  confirm they never execute. Preserve the user's real browser settings.
+- Run the exact package on a supported clean host without a separately installed
+  VC runtime, checking startup and playback. Record CRT versions/hashes and
+  candidate ZIP identity. This is distinct from signature fixtures and compilation.
+
+These physical checks remain pending until their observations are recorded.
 
 ## CI-only Vulkan loader
 
@@ -237,6 +299,39 @@ package excludes it.
 - exact builder and LGPL patch: <https://github.com/zhongfly/mpv-winbuild/tree/88bdc4db67bb476a7606921eb2d68b273440d59b>
 - exact successful build: <https://github.com/zhongfly/mpv-winbuild/actions/runs/37004200613>
 - Microsoft VC runtime redistribution terms: <https://learn.microsoft.com/en-us/visualstudio/releases/2022/redistribution>
+
+## Disposable credential backend smoke
+
+The shared [storage smoke entrypoint](../test/persistence/android_credential_smoke.dart)
+checks native save/read/restore, exact-profile-key deletion, account/other-profile
+isolation, saved state and installation identity across restarts. Use a fresh
+Windows VM or disposable Windows user with no Lineup credentials or saved data.
+The smoke refuses existing account/state data and clears its synthetic credentials
+at the end. Its guard does not make an existing signed-in installation suitable.
+
+With the pinned Flutter and existing Windows build/runtime prerequisites from
+[Development](DEVELOPMENT.md), build and run the smoke in that disposable account.
+Close its window after observing each expected status so the next launch starts
+a new process.
+
+```powershell
+flutter build windows --debug --target test/persistence/android_credential_smoke.dart
+$smokeCandidate = (Resolve-Path -LiteralPath './build/windows/x64/runner/Debug/lineup_desktop.exe').Path
+Get-FileHash -Algorithm SHA256 -LiteralPath $smokeCandidate
+Start-Process -FilePath $smokeCandidate -ArgumentList 'write' -Wait
+# Observe U1_STORAGE_WRITE_PASS, then close the window.
+Start-Process -FilePath $smokeCandidate -ArgumentList 'verify-and-delete' -Wait
+# Observe U1_STORAGE_RESTART_EXACT_DELETE_PASS, then close the window.
+Start-Process -FilePath $smokeCandidate -ArgumentList 'verify-and-clear' -Wait
+# Observe U1_STORAGE_RESTART_UPGRADE_DELETE_PASS, then close the window.
+```
+
+Record the source/candidate digest, Windows version, plugin/backend version and
+each observed status. `U1_STORAGE_FAIL` is a failed check. Preserve a normal
+application build separately and rebuild `lib/main.dart` after the smoke. Dart
+method-channel mocks establish payloads and error propagation. Actual backend
+save/read/delete/restart acceptance requires this disposable Windows run and the
+corresponding [Android smoke](android-runtime.md#storage-and-backup).
 
 ## Subtitle presentation
 

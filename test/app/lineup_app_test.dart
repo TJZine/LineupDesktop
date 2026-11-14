@@ -1488,6 +1488,11 @@ void main() {
         builder: LineupCanvas.builder,
         home: UpstreamOnboardingView(
           controller: controller,
+          onSelectProfile: controller.selectProfile,
+          onSelectServer: (server) async {
+            await controller.selectServer(server);
+            return controller.error == null;
+          },
           onLogout: () async {},
         ),
       ),
@@ -1523,6 +1528,11 @@ void main() {
         builder: LineupCanvas.builder,
         home: UpstreamOnboardingView(
           controller: controller,
+          onSelectProfile: controller.selectProfile,
+          onSelectServer: (server) async {
+            await controller.selectServer(server);
+            return controller.error == null;
+          },
           onLogout: () async {},
         ),
       ),
@@ -1633,6 +1643,11 @@ void main() {
         builder: LineupCanvas.builder,
         home: UpstreamOnboardingView(
           controller: controller,
+          onSelectProfile: controller.selectProfile,
+          onSelectServer: (server) async {
+            await controller.selectServer(server);
+            return controller.error == null;
+          },
           onLogout: () async {},
         ),
       ),

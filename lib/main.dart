@@ -2,7 +2,7 @@ import 'dart:io';
 import 'dart:ui';
 
 import 'package:flutter/foundation.dart'
-    show defaultTargetPlatform, kReleaseMode;
+    show defaultTargetPlatform, debugPrintSynchronously, kReleaseMode;
 import 'package:flutter/material.dart';
 
 import 'app/lineup_app.dart';
@@ -18,25 +18,10 @@ void nativeRunnerLifecycleTestMain() {
 }
 
 void main(List<String> arguments) {
+  configureRuntimeErrors();
   WidgetsFlutterBinding.ensureInitialized();
   final profile = DeviceProfile.fallbackFor(defaultTargetPlatform);
   configureImageCache(PaintingBinding.instance.imageCache, isTv: profile.isTv);
-
-  FlutterError.onError = (details) {
-    FlutterError.presentError(details);
-  };
-  ErrorWidget.builder = (_) => const LineupRuntimeFailure();
-
-  PlatformDispatcher.instance.onError = (error, stack) {
-    FlutterError.reportError(
-      FlutterErrorDetails(
-        exception: error,
-        stack: stack,
-        library: 'Lineup Desktop',
-      ),
-    );
-    return true;
-  };
 
   String? mediaArgument;
   for (final argument
@@ -68,4 +53,34 @@ void main(List<String> arguments) {
       },
     ),
   );
+}
+
+/// Must run before bindings/plugins can emit diagnostic output.
+void configureRuntimeErrors({bool release = kReleaseMode}) {
+  if (release) {
+    debugPrint = (String? message, {int? wrapWidth}) {};
+  }
+  FlutterError.onError = (details) {
+    if (release) {
+      debugPrintSynchronously('Lineup: framework_error');
+    } else {
+      FlutterError.presentError(details);
+    }
+  };
+  ErrorWidget.builder = (_) => const LineupRuntimeFailure();
+
+  PlatformDispatcher.instance.onError = (error, stack) {
+    if (release) {
+      debugPrintSynchronously('Lineup: unhandled_error');
+      return true;
+    }
+    FlutterError.reportError(
+      FlutterErrorDetails(
+        exception: error,
+        stack: stack,
+        library: 'Lineup Desktop',
+      ),
+    );
+    return true;
+  };
 }

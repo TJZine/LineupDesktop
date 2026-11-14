@@ -13,6 +13,7 @@ import 'package:lineup_desktop/channels/channel.dart';
 import 'package:lineup_desktop/persistence/app_store.dart';
 import 'package:lineup_desktop/plex/plex_client.dart';
 import 'package:lineup_desktop/plex/plex_models.dart';
+import 'package:lineup_desktop/plex/plex_scan_budget.dart';
 import 'package:lineup_desktop/settings/lineup_settings.dart';
 
 import '../support/ui_fixture.dart';
@@ -497,6 +498,48 @@ void main() {
     },
   );
 
+  testWidgets(
+    'restore scan exhaustion opens library selection with the saved lineup',
+    (tester) async {
+      tester.view.physicalSize = const Size(1920, 1080);
+      tester.view.devicePixelRatio = 1;
+      addTearDown(tester.view.reset);
+      final fixture = _realRestoreFixture(exhaustScan: true);
+      await tester.pumpWidget(
+        LineupBootstrap(
+          controller: fixture.controller,
+          player: FixturePlayer(),
+        ),
+      );
+      await _waitForRestore(tester, fixture.plex);
+      expect(find.text('Loading your lineup…'), findsOneWidget);
+
+      fixture.plex.finish.complete();
+      await tester.pumpAndSettle();
+
+      expect(
+        find.byKey(const ValueKey('library-selection-list')),
+        findsOneWidget,
+      );
+      expect(find.text('Movies'), findsWidgets);
+      expect(
+        find.text(const PlexScanLimitException('retained-entries').message),
+        findsOneWidget,
+      );
+      expect(fixture.controller.stage, SetupStage.channelSetup);
+      expect(fixture.controller.channels.single.id, 'saved');
+      expect(
+        fixture
+            .store
+            .state
+            .channelsByProfileServer['owner']!['server']!
+            .single
+            .id,
+        'saved',
+      );
+    },
+  );
+
   testWidgets('native initialization remains a barrier during real restore', (
     tester,
   ) async {
@@ -560,7 +603,9 @@ void main() {
           await tester.pumpAndSettle();
           expect(fixture.controller.restoringSavedLineup, isTrue);
           expect(find.text('Loading your lineup…'), findsOneWidget);
-          expect(fixture.plex.scans, 2);
+          // The replacement restore remains visible, but cannot admit IO until
+          // the obsolete, cancellation-ignoring fixture has actually retired.
+          expect(fixture.plex.scans, 1);
           expect(fixture.plex.completedScans, 0);
           expect(
             find.byKey(const ValueKey('library-selection-list')),
@@ -570,11 +615,17 @@ void main() {
         }
         fixture.plex.finish.complete();
         await tester.pumpAndSettle();
+        expect(fixture.plex.scans, cancelPicker ? 2 : 1);
+        expect(fixture.plex.completedScans, cancelPicker ? 2 : 1);
         expect(
           fixture.controller.stage,
           cancelPicker ? SetupStage.ready : SetupStage.servers,
         );
-        if (!cancelPicker) expect(find.text('Choose a server'), findsOneWidget);
+        if (!cancelPicker) {
+          expect(find.text('Choose a server'), findsOneWidget);
+          expect(fixture.controller.availableMedia, isEmpty);
+          expect(fixture.controller.libraryScanReadyIds, isEmpty);
+        }
         expect(
           fixture
               .store
@@ -659,7 +710,7 @@ Future<void> _waitForRestore(WidgetTester tester, _RestorePlex plex) async {
 }
 
 ({LineupController controller, _RestorePlex plex, _RestoreStore store})
-_realRestoreFixture({bool legacy = false}) {
+_realRestoreFixture({bool legacy = false, bool exhaustScan = false}) {
   final channel = Channel(
     id: 'saved',
     scheduleVersion: legacy ? 1 : currentScheduleVersion,
@@ -688,7 +739,7 @@ _realRestoreFixture({bool legacy = false}) {
         },
       },
     );
-  final plex = _RestorePlex();
+  final plex = _RestorePlex(exhaustScan: exhaustScan);
   final controller = LineupController(
     store: store,
     credentials: MemoryCredentialStore(accountToken: 'synthetic-token'),
@@ -727,11 +778,13 @@ class _GatedPlayer extends FixturePlayer {
 }
 
 class _RestorePlex extends PlexClient {
-  _RestorePlex()
+  _RestorePlex({required this.exhaustScan})
     : super(
         clientIdentifier: 'lineup-desktop-test-abcdefghijklmnopqrst',
         httpClient: testPlexHttpClient(),
+        scanLimits: const PlexScanLimits(retainedEntries: 1),
       );
+  final bool exhaustScan;
   final finish = Completer<void>();
   int scans = 0;
   int completedScans = 0;
@@ -786,6 +839,7 @@ class _RestorePlex extends PlexClient {
     onPhase?.call(PlexLibraryScanPhase.items);
     await finish.future;
     completedScans++;
+    if (exhaustScan) PlexScanBudget.current!.retain(2);
     return PlexLibraryScan(
       items: [
         PlexMediaItem(

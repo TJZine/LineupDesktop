@@ -4,6 +4,46 @@
 #include <filesystem>
 
 struct RunnerLifecycleTestAccess {
+  inline static INT_PTR shell_result = 33;
+  inline static int shell_calls = 0;
+  static HINSTANCE WINAPI Open(HWND, LPCWSTR verb, LPCWSTR url,
+                              LPCWSTR parameters, LPCWSTR directory, INT show) {
+    native_test::Check(std::wstring(verb) == L"open" &&
+        std::wstring(url) == L"https://plex.tv/link" && !parameters &&
+        !directory && show == SW_SHOWNORMAL, "fixed native browser request");
+    ++shell_calls;
+    return reinterpret_cast<HINSTANCE>(shell_result);
+  }
+  static void Platform(FlutterWindow& window, const char* name,
+                       std::unique_ptr<flutter::EncodableValue> arguments,
+                       bool* opened, int* errors, int* missing) {
+    window.HandlePlatformMethod(
+        flutter::MethodCall<flutter::EncodableValue>(name, std::move(arguments)),
+        std::make_unique<flutter::MethodResultFunctions<flutter::EncodableValue>>(
+            [opened](const auto* value) { *opened = std::get<bool>(*value); },
+            [errors](const auto&, const auto&, const auto*) { ++*errors; },
+            [missing]() { ++*missing; }), &Open);
+  }
+  static void CheckPlatform(FlutterWindow& window) {
+    bool opened = false;
+    int errors = 0, missing = 0;
+    for (const auto code : {0, 2, 31, 32, 33, 42}) {
+      shell_result = code;
+      Platform(window, "openPlexLink", nullptr, &opened, &errors, &missing);
+      native_test::Check(opened == (code > 32), "documented ShellExecute result");
+    }
+    Platform(window, "openPlexLink",
+             std::make_unique<flutter::EncodableValue>(),
+             &opened, &errors, &missing);
+    native_test::Check(opened, "codec null is an argument-free request");
+    const auto calls = shell_calls;
+    Platform(window, "openPlexLink",
+             std::make_unique<flutter::EncodableValue>("https://untrusted.invalid"),
+             &opened, &errors, &missing);
+    Platform(window, "unknown", nullptr, &opened, &errors, &missing);
+    native_test::Check(errors == 1 && missing == 1 && shell_calls == calls,
+                       "arguments and unknown methods never invoke shell");
+  }
   static WindowsNativePlayer& Player(FlutterWindow& window) {
     native_test::Check(window.native_player_ != nullptr, "actual runner native owner");
     return *window.native_player_;
@@ -13,7 +53,8 @@ struct RunnerLifecycleTestAccess {
            window.flutter_controller_->engine()->messenger();
   }
   static bool Retired(FlutterWindow& window) {
-    return !window.native_player_ && !window.flutter_controller_;
+    return !window.platform_channel_ && !window.native_player_ &&
+           !window.flutter_controller_;
   }
 };
 
@@ -32,6 +73,7 @@ int main(int argc, char** argv) {
     FlutterWindow window(project);
     Check(window.Create(L"Lineup runner lifecycle test", {10, 10}, {64, 64}),
           "actual FlutterWindow creation with pinned engine and isolated entrypoint");
+    RunnerLifecycleTestAccess::CheckPlatform(window);
     window.SetQuitOnClose(false);
     const HWND hwnd = window.GetHandle();
     auto& player = RunnerLifecycleTestAccess::Player(window);

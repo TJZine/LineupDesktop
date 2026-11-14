@@ -49,6 +49,7 @@ Recent events:
 2026-10-15T11:59:00.000Z plex-library: Some collections could not be loaded
 2026-10-15T11:59:00.000Z plex-library: Collection discovery unavailable
 2026-10-15T11:59:00.000Z plex-library: Library scan timing
+2026-10-15T11:59:00.000Z plex-library: Library scan budget usage
 2026-10-15T11:59:00.000Z plex: Cast enrichment
 2026-10-15T11:59:00.000Z plex: Cast portrait unavailable
 2026-10-15T11:59:00.000Z guide: Guide current program wait timed out
@@ -74,6 +75,7 @@ const _eventPairs = <(String, String)>[
   ('plex-library', 'Some collections could not be loaded'),
   ('plex-library', 'Collection discovery unavailable'),
   ('plex-library', 'Library scan timing'),
+  ('plex-library', 'Library scan budget usage'),
   ('plex', 'Cast enrichment'),
   ('plex', 'Cast portrait unavailable'),
   ('guide', 'Guide current program wait timed out'),
@@ -209,6 +211,68 @@ void main() {
       ]),
     );
     expect(forged, isNot(contains('private')));
+  });
+
+  test('scan budget and authorization stop export fixed facts only', () {
+    final diagnostics = Diagnostics()..enabled = true;
+    addTearDown(diagnostics.dispose);
+    const limits = [
+      'received-bytes',
+      'retained-entries',
+      'requests',
+      'elapsed',
+    ];
+    for (final limit in limits) {
+      diagnostics.add(DiagnosticEvent.operationFailed, {
+        'code': 'scan-limit-exceeded',
+        'limit': limit,
+      });
+    }
+    diagnostics.add(DiagnosticEvent.playbackRequestFailed, {
+      'operation': 'authorization_stop',
+    });
+    const usage = {
+      'bytes': 536870912,
+      'entries': 1200000,
+      'requests': 2500,
+      'elapsedMs': 1800000,
+    };
+    diagnostics.add(DiagnosticEvent.libraryScanBudgetUsage, usage);
+    diagnostics.add(DiagnosticEvent.libraryScanBudgetUsage, {
+      'bytes': 'private-bytes',
+      'entries': -1,
+      'requests': 1.5,
+      'elapsedMs': true,
+      'limit': 'private-limit',
+    });
+    expect(diagnostics.entries[5].context, usage);
+    expect(diagnostics.entries.last.context, isEmpty);
+
+    final time = DateTime.utc(2026, 10, 15, 11, 59);
+    final report = diagnostics.buildSupportReport(
+      _snapshot([
+        ...diagnostics.entries,
+        DiagnosticEntry(time, 'application', 'Operation failed', {
+          'code': 'private-code',
+          'operation': 'private-operation',
+          'limit': 'private-limit',
+        }),
+        DiagnosticEntry(time, 'plex-library', 'Library scan budget usage', {
+          for (final key in usage.keys) key: 'private-number',
+        }),
+      ]),
+    );
+    for (final limit in limits) {
+      expect(report, contains('(code=scan-limit-exceeded, limit=$limit)'));
+    }
+    expect(report, contains('(operation=authorization_stop)'));
+    expect(
+      report,
+      contains(
+        '(bytes=536870912, entries=1200000, requests=2500, elapsedMs=1800000)',
+      ),
+    );
+    expect(report, isNot(contains('private-')));
   });
 
   test(

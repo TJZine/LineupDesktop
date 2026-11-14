@@ -1,7 +1,8 @@
 # Lineup Desktop User Guide
 
-**Status:** Pre-release guidance for private Windows testers and portable
-Flutter UI evaluation.
+**Status:** Pre-release guidance for Windows and Android TV/Fire TV testers.
+When a public build is available, use only the assets on the official
+[GitHub Releases](https://github.com/TJZine/LineupDesktop/releases) page.
 
 Lineup Desktop builds scheduled virtual television channels from a Plex library
 and presents them through a desktop Guide and Player. This guide describes the
@@ -12,20 +13,24 @@ Electron implementation preserved on `electron-ui`.
 
 | Requirement | Current expectation |
 | --- | --- |
-| Operating system | Windows 10 or Windows 11, x64, for native playback and packaged testing |
-| Graphics runtime | A current GPU driver or Vulkan Runtime that provides `vulkan-1.dll` |
+| Operating system | Windows 10 or Windows 11, x64, or Android 9+ on ARM for Android TV, Google TV and Android-based Fire TV |
+| Windows graphics runtime | A current GPU driver or Vulkan Runtime that provides `vulkan-1.dll` |
 | Plex | A Plex account and a reachable Plex Media Server with accessible movie or TV libraries |
-| Build | A complete private portable package supplied by the maintainer; no public release is available yet |
+| Build | A complete portable ZIP or APK from the official GitHub Releases page, or a complete private package supplied by the maintainer |
 | Network | Access to Plex authentication and to the selected Plex server, directly or through an available remote/relay connection |
 
-macOS 12 or newer can run the portable Flutter application for UI and workflow
-development, but media playback is intentionally reported as unsupported.
+Windows packages require the adjacent runtime files and `data` directory. Vega
+OS Fire TV devices cannot run Android APKs. The
+[macOS runtime](macos-runtime.md) is available for development and private
+testing.
 
-## Install a private Windows build
+## Install a Windows release or private build
 
-1. Obtain the package and its SHA-256 hash directly from the maintainer.
-2. Verify the archive hash before extracting it.
-3. Extract the entire archive to a normal user-writable directory.
+1. Download the ZIP from the official GitHub Releases page. For a private build,
+   obtain it and its SHA-256 hash directly from the maintainer.
+2. Optionally run `Get-FileHash -Algorithm SHA256 .\FILE.zip` and compare the
+   result with the attached `.sha256` asset and release notes.
+3. In Explorer, use **Extract All** to a normal user-writable directory.
 4. Read `SYSTEM-REQUIREMENTS.txt`, `BUILD-INFO.txt`, and
    `BUILD-PROVENANCE.json` in the package.
 5. Launch `lineup_desktop.exe`.
@@ -33,9 +38,32 @@ development, but media playback is intentionally reported as unsupported.
 Do not move only `lineup_desktop.exe`; the adjacent DLLs and `data` directory
 are part of the application. Do not run Lineup Desktop as Administrator.
 
-A private pre-release build may be unsigned. Proceed past an operating-system
-warning only when the package came through the expected private testing channel
-and its hash matches the maintainer-provided value.
+The MVP Windows package is unsigned. Windows may show “Windows protected your
+PC”. Choose **More info → Run anyway** only for a ZIP downloaded from the
+official release page. [Smart App Control](https://learn.microsoft.com/en-us/windows/apps/develop/smart-app-control/overview)
+has no per-app exception. If Smart App Control is on, this unsigned version
+cannot run on that PC. Leave it on.
+
+To update, extract the new release into a new folder and delete the old
+application folder after confirming the new copy works. Settings and lineups
+are kept in app data. To uninstall, sign out first to remove your Plex sign-in
+from this PC. Then delete the application folder. Saved data
+remains until you separately remove it, which permanently deletes settings
+and lineups.
+
+## Install an Android TV, Google TV or Fire TV APK
+
+Supported devices are Android 9+ on ARM. Vega OS Fire TV devices are not
+compatible. For sideloading, enable installation from unknown sources for the
+installer app (for example Downloader or a file manager), then open the APK.
+Alternatively, install it with `adb install` from a computer.
+
+For an update, install the new APK over the existing production app with
+`adb install -r <apk>` or the equivalent file-manager action. Never uninstall
+the old app first: Android removes its saved lineups and sign-in credentials.
+Media the device cannot decode natively, such as DTS/TrueHD-only audio on many
+sticks, will not play in this version. See [Android runtime](android-runtime.md)
+for the platform details.
 
 ## First-run setup
 
@@ -570,6 +598,10 @@ Settings save immediately. The edited control is temporarily disabled while its
 save is pending. When persistence fails, the previous value remains active and
 the screen shows an error.
 
+Sign-out stops playback and removes Plex sign-in credentials. Saved lineup and
+media metadata remain in local app data. Removing that data through the operating
+system is destructive and removes saved local setup and preferences as well.
+
 ## Diagnostics and safe support reports
 
 Diagnostics are disabled by default. Enable **Record redacted diagnostics** in
@@ -579,6 +611,10 @@ Technical details and the support report include **Windows display**, **HDR
 matching**, and **Renderer output**, with normalized values. Display state is
 reported by Windows; it does not verify the TV's picture. Source HDR metadata,
 renderer output, and Windows display state are separate observations.
+
+When diagnostics are enabled, a completed or failed library scan can add the
+numeric **Library scan budget usage** entry with `bytes`, `entries`, `requests`,
+and `elapsedMs`. The entry measures admitted scan work.
 
 The application stores diagnostic context only from a small allowlist of
 bounded structured facts; arbitrary exception and native message text is not
@@ -604,20 +640,23 @@ vulnerabilities only through the private process in
 | --- | --- |
 | Plex link code expired | Select **Request a new code** and complete linking before the new timer expires. |
 | No Plex servers found | Confirm the server is online and reachable, retry discovery, switch profile, choose another server, or use the server picker's confirmed **Sign out** action to link Plex again. |
-| The app reports playback unsupported on macOS | This is expected. macOS currently supports portable UI development, not native playback. |
+| A portable macOS build reports playback unsupported | Use the [native macOS development build](macos-runtime.md) to test playback. |
 | Windows reports that `vulkan-1.dll` is missing | Install or update the GPU vendor's current driver or an appropriate Vulkan Runtime. Do not copy a driver DLL from another machine into the package. |
+| Smart App Control blocks the Windows app | If Smart App Control is on, this unsigned version cannot run on that PC. Leave it on. |
 | Audio plays but video is black or hidden | Record the exact window size, display scaling, fullscreen state, Guide layout, whether audio continues, and whether the problem follows a resize/minimize/restore transition. Treat this as a native-composition failure and report it with the current commit. |
 | A replacement channel leaves stale audio/video | Stop testing that scenario, record both channel transitions and timestamps, and report it as a native playback-lifetime failure. |
 | A setting or lineup change fails | The previous state should remain. Retry after confirming the Plex server and local storage are available. |
 | A banner says saved app data was corrupt | Lineup preserved state with invalid text encoding, malformed JSON, or invalid schema in a separate file and started with empty state. Dismiss the banner after reviewing the resulting setup. Other storage read failures stop startup instead of resetting data. |
 | A private portable package does not launch | Verify the complete package was extracted, `SYSTEM-REQUIREMENTS.txt` is satisfied, the archive hash matches, and the GPU driver supplies `vulkan-1.dll`. |
+| Android says the APK cannot be installed | Confirm the device is Android 9+ on ARM, unknown-source installation is enabled for the installer, and you are updating with `install -r` rather than uninstalling first. Vega OS Fire TV devices cannot run the APK. |
+| Android cannot play a format | Direct Play uses the device's own decoder. For DTS/TrueHD-only audio or another unsupported format, choose media that the device can play. |
 
 ## Known limitations
 
-- There is no supported public installer, updater, or release channel.
+- Check the official release page for builds available on your platform.
 - Windows native playback and packaging have not yet completed the full
   physical acceptance matrix on the current branch.
-- macOS playback is intentionally unsupported.
+- macOS distribution and runtime acceptance remain in progress.
 - Scheduled program continuation is implemented; its native end-of-file
   behavior and boundary scenarios still require physical Windows acceptance.
 - Audio-output selection and passthrough controls are not exposed.
@@ -629,6 +668,8 @@ vulnerabilities only through the private process in
 - Alternate Plex media-version selection and failed/cancelled Home-profile token
   compensation remain later work. Sequential parts of the selected version are
   implemented and deterministically tested.
-- Gamepad, signing, and clean-system package coverage remain later release work.
+- Gamepad and clean-system package coverage remain later release work. Windows
+  MVP packages are unsigned, and Android releases require a production-signed
+  APK for upgrade testing.
 - Pre-release behavior and persisted state may change before the first public
   version.

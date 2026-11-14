@@ -36,6 +36,10 @@ campaign results retain their original source, build and platform limits.
   acceptance. Other backends are absent.
 - [Windows Native Acceptance](windows-native-validation.md): exact-candidate
   physical-machine scenarios and safety requirements; a procedure, not proof.
+- [Release security](release-security.md) covers release artifact verification
+  and publication.
+- [Release acceptance](release-acceptance.md) covers the final Android TV,
+  Fire TV, and Windows checks.
 - [Windows Runtime Provenance](windows-runtime.md): pinned libmpv/FFmpeg sources,
   hashes, licenses, package policy and redistribution obligations.
 - [Open obligations](open-obligations.md): unfinished acceptance and product work,

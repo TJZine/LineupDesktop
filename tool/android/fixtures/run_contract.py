@@ -13,16 +13,18 @@ parser.add_argument('--evidence', type=pathlib.Path, required=True)
 args = parser.parse_args()
 args.evidence.mkdir(parents=True, exist_ok=True)
 adb = ['adb', '-s', args.serial]
+package = 'com.tjzine.lineup.dev'
+component = package + '/com.tjzine.lineup.MainActivity'
 
 def run(*command):
     return subprocess.check_output([*adb, *command], text=True, stderr=subprocess.STDOUT)
 
-run('shell', 'am', 'force-stop', 'com.tjzine.lineup')
-launch = run('shell', 'am', 'start', '-n', 'com.tjzine.lineup/.MainActivity', '--esal', 'dart_entrypoint_args', f"'--case={args.case}'")
+run('shell', 'am', 'force-stop', package)
+launch = run('shell', 'am', 'start', '-n', component, '--esal', 'dart_entrypoint_args', f"'--case={args.case}'")
 (args.evidence / 'launch.txt').write_text(launch)
 process = ''
 for _ in range(100):
-    query = subprocess.run([*adb, 'shell', 'pidof', 'com.tjzine.lineup'], capture_output=True, text=True)
+    query = subprocess.run([*adb, 'shell', 'pidof', package], capture_output=True, text=True)
     if query.returncode not in (0, 1):
         raise RuntimeError('adb_process_query_failed')
     process = query.stdout.strip()
@@ -67,7 +69,7 @@ while time.monotonic() - start < 150:
         backgrounded = True
     if backgrounded and not resumed and time.monotonic() - start > 6:
         (args.evidence / 'background-window.txt').write_text(run('shell', 'dumpsys', 'window', 'windows'))
-        run('shell', 'am', 'start', '-n', 'com.tjzine.lineup/.MainActivity')
+        run('shell', 'am', 'start', '-n', component)
         resumed = True
     if any(f.get('phase') == 'PASS' for f in facts):
         # Retain a later observation: a success followed by rejection is not a pass.

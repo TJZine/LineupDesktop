@@ -144,6 +144,12 @@ struct FakeMpv {
   std::atomic<int> created{0};
   std::atomic<int> destroyed{0};
   std::atomic<bool> idle{true};
+  // Guarded by `mutex`. Set with `injected` so idle becomes visible in the
+  // wait that delivers the next injected event. libmpv queues START_FILE
+  // before `stop` returns, so no empty wait precedes it after stop. Setting
+  // `idle` from the test thread could land between an empty wait and the
+  // worker's idle poll, an order libmpv cannot produce.
+  bool idle_at_next_wait = false;
   std::deque<mpv_event> injected;
   mpv_event current{};
 };
@@ -322,6 +328,10 @@ mpv_event* FakeWaitEvent(mpv_handle*, double) {
   std::lock_guard lock(fake->mutex);
   fake->current = mpv_event{};
   if (!fake->injected.empty()) {
+    if (fake->idle_at_next_wait) {
+      fake->idle = true;
+      fake->idle_at_next_wait = false;
+    }
     fake->current = fake->injected.front();
     fake->injected.pop_front();
   }
@@ -2093,7 +2103,8 @@ void Lifecycle() {
   {
     std::lock_guard lock(fake->mutex);
     // The authenticated replacement accepted entry 77 but has not started in
-    // the core yet. Its lifecycle may still be queued when stop is empty idle.
+    // the core yet. Its lifecycle may still be queued when stop is empty idle;
+    // idle appears with the wait that delivers its START_FILE.
     mpv_event start_event{};
     start_event.event_id = MPV_EVENT_START_FILE;
     start_event.data = &start;
@@ -2102,7 +2113,7 @@ void Lifecycle() {
     end_event.data = &end;
     fake->injected.push_back(start_event);
     fake->injected.push_back(end_event);
-    fake->idle = true;
+    fake->idle_at_next_wait = true;
   }
   PumpUntil(core, events, [&] {
     return std::any_of(received.begin(), received.end(), [](const ValueMap& event) {

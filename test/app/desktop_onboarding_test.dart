@@ -9,12 +9,17 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:lineup_desktop/app/lineup_shell.dart';
 import 'package:lineup_desktop/app/lineup_restore_view.dart';
 import 'package:lineup_desktop/channels/channel.dart';
+import 'package:lineup_desktop/channels/content_resolver.dart';
+import 'package:lineup_desktop/channels/schedule_worker.dart';
+import 'package:lineup_desktop/channels/scheduler.dart';
+import 'package:lineup_desktop/guide/guide_view.dart';
 import 'package:lineup_desktop/persistence/app_store.dart';
 import 'package:lineup_desktop/plex/plex_client.dart';
 import 'package:lineup_desktop/ui/lineup_canvas.dart';
 import 'package:lineup_desktop/app/lineup_controller.dart';
 import 'package:lineup_desktop/app/onboarding_view.dart';
 import 'package:lineup_desktop/plex/plex_models.dart';
+import 'package:lineup_desktop/playback/native_player.dart';
 import 'package:lineup_desktop/settings/lineup_settings.dart';
 import 'package:lineup_desktop/ui/app_theme.dart';
 import 'package:lineup_desktop/ui/app_ui.dart';
@@ -22,6 +27,296 @@ import 'package:lineup_desktop/ui/app_ui.dart';
 import '../support/ui_fixture.dart';
 
 void main() {
+  for (final action in ['profile', 'pin', 'server', 'logout']) {
+    testWidgets(
+      'shell $action waits for stop and retries from a current choice',
+      (tester) async {
+        const targetProfile = PlexHomeUser(
+          id: 'target',
+          name: 'Target',
+          protected: false,
+        );
+        const protectedProfile = PlexHomeUser(
+          id: 'protected',
+          name: 'Protected',
+          protected: true,
+        );
+        const targetServer = PlexServer(
+          id: 'target',
+          name: 'Target server',
+          connections: [],
+        );
+        final controller = _AuthorizationController(
+          scenario: LineupScenario(
+            stage: action == 'server'
+                ? SetupStage.servers
+                : SetupStage.profiles,
+            account: const PlexAccount(id: 'owner', name: 'Owner', email: ''),
+            profile: const PlexHomeUser(
+              id: 'owner',
+              name: 'Owner',
+              protected: false,
+            ),
+            profiles: const [targetProfile, protectedProfile],
+            servers: const [targetServer],
+          ),
+        );
+        final player = _AuthorizationGatePlayer();
+        addTearDown(controller.dispose);
+        addTearDown(player.dispose);
+        await tester.pumpWidget(
+          MaterialApp(
+            builder: LineupCanvas.builder,
+            home: LineupShell(
+              controller: controller,
+              player: player,
+              profile: desktopProfile,
+              initialMediaPath: 'https://example.invalid/synthetic.mp4',
+            ),
+          ),
+        );
+        await tester.pumpAndSettle();
+        expect(player.loads, hasLength(1));
+        Future<void> choose() async {
+          switch (action) {
+            case 'profile':
+              await tester.tap(
+                find.byKey(const ValueKey('profile-card-target')),
+              );
+            case 'pin':
+              if (find
+                  .byKey(const Key('profile-pin-sheet'))
+                  .evaluate()
+                  .isEmpty) {
+                await tester.tap(
+                  find.byKey(const ValueKey('profile-card-protected')),
+                );
+                await tester.pumpAndSettle();
+              }
+              for (final key in [
+                LogicalKeyboardKey.digit1,
+                LogicalKeyboardKey.digit2,
+                LogicalKeyboardKey.digit3,
+                LogicalKeyboardKey.digit4,
+              ]) {
+                await tester.sendKeyEvent(key);
+              }
+            case 'server':
+              await tester.tap(
+                find.widgetWithText(
+                  OutlinedButton,
+                  player.stopResults.isEmpty ? 'Connect' : 'Retry',
+                ),
+              );
+            case 'logout':
+              await tester.tap(find.text('Sign out'));
+          }
+          await tester.pump();
+        }
+
+        await choose();
+        expect(player.stopResults, hasLength(1));
+        expect(controller.selections, isEmpty);
+        expect(controller.busy, isFalse);
+        final onboarding = tester.widget<UpstreamOnboardingView>(
+          find.byType(UpstreamOnboardingView),
+        );
+        expect(onboarding.authorizationTransitionPending, isTrue);
+        expect(
+          tester
+              .state<UpstreamOnboardingViewState>(
+                find.byType(UpstreamOnboardingView),
+              )
+              .handleBack(),
+          isTrue,
+        );
+        player.stopResults.single.completeError(
+          const PlayerUnavailable('Synthetic stop failure.'),
+        );
+        await tester.pumpAndSettle();
+        expect(controller.selections, isEmpty);
+        expect(
+          find.textContaining('Playback could not be stopped'),
+          findsWidgets,
+        );
+        if (action == 'logout') {
+          final retry = find.widgetWithText(
+            TextButton,
+            'Retry stopping playback',
+          );
+          expect(find.text('You are still signed in.'), findsOneWidget);
+          await tester.tap(retry);
+          await tester.pump();
+          expect(player.stopResults, hasLength(2));
+          expect(controller.selections, isEmpty);
+          expect(find.text('You are still signed in.'), findsNothing);
+          expect(tester.widget<TextButton>(retry).onPressed, isNull);
+          player.stopResults.last.complete();
+          await tester.pumpAndSettle();
+          expect(find.text('Could not sign out'), findsNothing);
+          expect(controller.selections, isEmpty);
+        }
+        if (action == 'pin') {
+          expect(
+            find.bySemanticsLabel('0 of 4 digits entered'),
+            findsOneWidget,
+          );
+        }
+        await choose();
+        expect(player.stopResults, hasLength(action == 'logout' ? 3 : 2));
+        expect(controller.selections, isEmpty);
+        player.stopResults.last.complete();
+        await tester.pumpAndSettle();
+        expect(controller.selections, [
+          action == 'pin'
+              ? 'profile:1234'
+              : action == 'profile'
+              ? 'profile:'
+              : action,
+        ]);
+        expect(player.loads, hasLength(1));
+        expect(tester.takeException(), isNull);
+        await tester.pumpWidget(const SizedBox.shrink());
+      },
+    );
+  }
+
+  for (final picker in ['server', 'profile']) {
+    testWidgets('TV can cancel a slow $picker selection after native stop', (
+      tester,
+    ) async {
+      final selectingServer = picker == 'server';
+      tester.view.physicalSize = const Size(1920, 1080);
+      tester.view.devicePixelRatio = 1;
+      addTearDown(tester.view.reset);
+      final store = _ProfileRecoveryStore('none')
+        ..state = PersistedState(
+          settings: const LineupSettings(reduceMotion: true),
+          profileId: 'owner',
+          selectedServerByProfile: const {'owner': 'server'},
+          selectedLibraryIdsByProfileServer: const {
+            'owner': {
+              'server': ['movies'],
+            },
+          },
+          channelsByProfileServer: {
+            'owner': {
+              'server': [
+                Channel(
+                  id: 'saved',
+                  number: 1,
+                  name: 'Saved channel',
+                  source: const LibrarySource(
+                    libraryId: 'movies',
+                    libraryType: PlexLibraryType.movie,
+                  ),
+                  playbackMode: PlaybackMode.sequential,
+                  anchor: DateTime.utc(2026),
+                  shuffleSeed: 1,
+                ),
+              ],
+            },
+          },
+          currentChannelByProfileServer: const {
+            'owner': {'server': 'saved'},
+          },
+        );
+      final plex = _SlowAuthorizationPlex();
+      final credentials = MemoryCredentialStore(
+        accountToken: 'synthetic-account',
+      );
+      final controller = LineupController(
+        store: store,
+        credentials: credentials,
+        plex: plex,
+        scheduleWorkerFactory: _InlineScheduleWorker.new,
+      );
+      final player = _AuthorizationGatePlayer();
+      addTearDown(controller.dispose);
+      addTearDown(player.dispose);
+      await controller.initialize();
+      expect(controller.stage, SetupStage.ready);
+      final before = store.state;
+      final saveCalls = store.saveCalls;
+      if (selectingServer) {
+        controller.showServers();
+      } else {
+        controller.showProfiles();
+      }
+      await tester.pumpWidget(
+        MaterialApp(
+          builder: LineupCanvas.builder,
+          home: LineupShell(
+            controller: controller,
+            player: player,
+            profile: tvProfile,
+            guideClock: () => DateTime.utc(2026, 1, 1, 0, 0, 5),
+          ),
+        ),
+      );
+      await tester.pumpAndSettle();
+      if (selectingServer) {
+        await tester.tap(find.widgetWithText(OutlinedButton, 'Connect'));
+      } else {
+        await tester.tap(find.byKey(const ValueKey('profile-card-guest')));
+      }
+      await tester.pump();
+      final cancel = find.widgetWithText(TextButton, 'Back');
+      final view = find.byType(UpstreamOnboardingView);
+      expect(
+        tester.widget<UpstreamOnboardingView>(view).authorizationStopPending,
+        isTrue,
+      );
+      expect(tester.widget<TextButton>(cancel).onPressed, isNull);
+      await tester.binding.handlePopRoute();
+      await tester.pump();
+      expect(find.byType(UpstreamOnboardingView), findsOneWidget);
+      expect(plex.gatedRequestStarted, isFalse);
+
+      player.stopResults.single.complete();
+      await tester.pumpAndSettle();
+      expect(plex.gatedRequestStarted, isTrue);
+      expect(controller.busy, isTrue);
+      final onboarding = tester.widget<UpstreamOnboardingView>(view);
+      expect(onboarding.authorizationStopPending, isFalse);
+      expect(onboarding.authorizationTransitionPending, isTrue);
+      final button = tester.widget<TextButton>(cancel);
+      expect(button.onPressed, isNotNull);
+      expect(button.focusNode?.hasPrimaryFocus, isTrue);
+
+      if (selectingServer) {
+        await tester.tap(cancel);
+      } else {
+        await tester.binding.handlePopRoute();
+      }
+      await tester.pumpAndSettle();
+      expect(controller.stage, SetupStage.ready);
+      expect(controller.busy, isFalse);
+      expect(plex.gate.isCompleted, isFalse);
+
+      final guide = tester.widget<GuideView>(find.byType(GuideView));
+      final tune = guide.onTune('saved');
+      await tester.pump();
+      expect(plex.gate.isCompleted, isFalse);
+      expect(player.loads, hasLength(1));
+      expect(player.loads.last.path, '/synthetic/movie');
+      player.emit(
+        const PlayerStatus(state: PlayerState.playing, message: 'Playing'),
+      );
+      await tester.pumpAndSettle();
+      await tune;
+
+      plex.gate.complete();
+      await tester.pumpAndSettle();
+      expect(controller.server?.id, 'server');
+      expect(controller.profile?.id, 'owner');
+      expect(store.state, same(before));
+      expect(store.saveCalls, saveCalls);
+      expect(await credentials.readProfileToken('guest'), isNull);
+      expect(player.loads, hasLength(1));
+    }, variant: const TargetPlatformVariant({TargetPlatform.android}));
+  }
+
   for (final picker in ['profiles', 'servers']) {
     for (final fail in [false, true]) {
       testWidgets('NAV-I2 cancellable $picker real save fail=$fail', (
@@ -84,6 +379,11 @@ void main() {
               ),
               home: UpstreamOnboardingView(
                 controller: controller,
+                onSelectProfile: controller.selectProfile,
+                onSelectServer: (server) async {
+                  await controller.selectServer(server);
+                  return controller.error == null;
+                },
                 onLogout: () async {},
                 openBrowser: () async {},
               ),
@@ -382,6 +682,11 @@ void main() {
         builder: LineupCanvas.builder,
         home: UpstreamOnboardingView(
           controller: controller,
+          onSelectProfile: controller.selectProfile,
+          onSelectServer: (server) async {
+            await controller.selectServer(server);
+            return controller.error == null;
+          },
           onLogout: () async {},
           onRequestLogout: () async {},
         ),
@@ -444,6 +749,11 @@ void main() {
               builder: LineupCanvas.builder,
               home: UpstreamOnboardingView(
                 controller: controller,
+                onSelectProfile: controller.selectProfile,
+                onSelectServer: (server) async {
+                  await controller.selectServer(server);
+                  return controller.error == null;
+                },
                 onLogout: () async {},
                 openBrowser: () async {},
               ),
@@ -484,6 +794,11 @@ void main() {
           builder: LineupCanvas.builder,
           home: UpstreamOnboardingView(
             controller: controller,
+            onSelectProfile: controller.selectProfile,
+            onSelectServer: (server) async {
+              await controller.selectServer(server);
+              return controller.error == null;
+            },
             onLogout: () async {},
           ),
         ),
@@ -533,6 +848,11 @@ void main() {
         ),
         home: UpstreamOnboardingView(
           controller: controller,
+          onSelectProfile: controller.selectProfile,
+          onSelectServer: (server) async {
+            await controller.selectServer(server);
+            return controller.error == null;
+          },
           onLogout: () async {},
           openBrowser: browser ?? () async {},
           accountOrigin: accountOrigin,
@@ -541,6 +861,78 @@ void main() {
     );
     await tester.pump(const Duration(milliseconds: 200));
   }
+
+  for (final stage in [
+    SetupStage.profiles,
+    SetupStage.servers,
+    SetupStage.welcome,
+  ]) {
+    for (final withError in [true, false]) {
+      testWidgets(
+        'credential recovery appears only within the $stage error surface '
+        '${withError ? 'with' : 'without'} another error',
+        (tester) async {
+          const error = 'Synthetic selection failure';
+          const notice = 'Synthetic credential recovery notice';
+          final controller = _AuthorizationController(
+            scenario: LineupScenario(
+              stage: stage,
+              error: withError ? error : null,
+            ),
+            profileCredentialRecoveryNotice: notice,
+          );
+          addTearDown(controller.dispose);
+          await show(tester, controller);
+          final shown = stage != SetupStage.welcome;
+          final text = withError ? '$error\n$notice' : notice;
+          expect(find.text(text), shown ? findsOneWidget : findsNothing);
+          expect(
+            find.textContaining(notice),
+            shown ? findsOneWidget : findsNothing,
+          );
+          if (shown) {
+            final semantics = tester.widget<Semantics>(
+              find.ancestor(
+                of: find.text(text),
+                matching: find.byWidgetPredicate(
+                  (widget) =>
+                      widget is Semantics &&
+                      widget.properties.liveRegion == true,
+                ),
+              ),
+            );
+            expect(semantics.properties.liveRegion, isTrue);
+          }
+        },
+      );
+    }
+  }
+
+  testWidgets('credential recovery appears alone on the PIN surface', (
+    tester,
+  ) async {
+    const notice = 'Synthetic credential recovery notice';
+    final controller = _AuthorizationController(
+      scenario: const LineupScenario(
+        stage: SetupStage.profiles,
+        profiles: [
+          PlexHomeUser(id: 'protected', name: 'Protected', protected: true),
+        ],
+      ),
+      profileCredentialRecoveryNotice: notice,
+    );
+    addTearDown(controller.dispose);
+    await show(tester, controller);
+    expect(find.text(notice), findsOneWidget);
+    await tester.tap(find.byKey(const ValueKey('profile-card-protected')));
+    await tester.pumpAndSettle();
+    expect(find.byKey(const Key('profile-pin-sheet')), findsOneWidget);
+    final status = tester.widget<Semantics>(
+      find.byKey(const Key('profile-pin-error')),
+    );
+    expect(status.properties.liveRegion, isTrue);
+    expect(status.properties.label, notice);
+  });
 
   testWidgets(
     'NAV-I2 onboarding roots are side-effect-free and pickers cancel',
@@ -962,6 +1354,11 @@ void main() {
             width: 0.5,
             child: UpstreamOnboardingView(
               controller: controller,
+              onSelectProfile: controller.selectProfile,
+              onSelectServer: (server) async {
+                await controller.selectServer(server);
+                return controller.error == null;
+              },
               onLogout: () async {},
             ),
           ),
@@ -1496,6 +1893,42 @@ void main() {
       'Retry',
     );
   }, semanticsEnabled: true);
+
+  testWidgets('TV Refresh servers leaves Back unfocused while busy', (
+    tester,
+  ) async {
+    final plex = _SlowAuthorizationPlex();
+    final controller = LineupController(
+      store: MemoryAppStore()
+        ..state = const PersistedState(
+          profileId: 'owner',
+          selectedServerByProfile: {'owner': 'server'},
+        ),
+      credentials: MemoryCredentialStore(accountToken: 'synthetic-account'),
+      plex: plex,
+    );
+    addTearDown(controller.dispose);
+    await controller.initialize();
+    controller.showServers();
+    await show(tester, controller, isTv: true);
+    final back = find.widgetWithText(TextButton, 'Back');
+    final backFocus = tester.widget<TextButton>(back).focusNode!;
+    expect(backFocus.hasFocus, isFalse);
+    final gate = plex.refreshGate = Completer<void>();
+
+    await tester.tap(find.text('Refresh servers'));
+    await tester.pump();
+    await tester.pump();
+    expect(controller.busy, isTrue);
+    expect(backFocus.hasFocus, isFalse);
+    await tester.sendKeyEvent(LogicalKeyboardKey.select);
+    await tester.pump();
+    expect(controller.stage, SetupStage.servers);
+    expect(controller.busy, isTrue);
+    gate.complete();
+    await tester.pumpAndSettle();
+    expect(controller.busy, isFalse);
+  }, variant: const TargetPlatformVariant({TargetPlatform.android}));
 
   testWidgets('refresh and profile switch clear stale server errors', (
     tester,
@@ -2233,6 +2666,57 @@ class _PickerBoundaryPlex extends _ProfileRecoveryPlex {
   );
 }
 
+class _SlowAuthorizationPlex extends _PickerBoundaryPlex {
+  Completer<void>? refreshGate;
+
+  @override
+  Future<List<PlexServerAccess>> discoverServers(String token) async {
+    await refreshGate?.future;
+    return [
+      ...await super.discoverServers(token),
+      PlexServerAccess(
+        server: const PlexServer(
+          id: 'alternate',
+          name: 'Alternate server',
+          connections: [],
+        ),
+        token: 'synthetic-alternate-access',
+      ),
+    ];
+  }
+
+  @override
+  Future<PlexConnection> selectConnection(
+    PlexServer server,
+    String token,
+  ) async {
+    if (server.id == 'alternate') {
+      gatedRequestStarted = true;
+      await gate.future;
+    }
+    return super.selectConnection(server, token);
+  }
+
+  @override
+  Future<String> switchHomeUser(String token, String id, String? pin) async {
+    if (id == 'guest') {
+      gatedRequestStarted = true;
+      await gate.future;
+    }
+    return super.switchHomeUser(token, id, pin);
+  }
+}
+
+class _InlineScheduleWorker extends ScheduleWorker {
+  _InlineScheduleWorker(super.media, super.playlists);
+
+  @override
+  Future<ScheduleIndex> build(Channel channel) async => buildChannelSchedule(
+    channel,
+    resolveContent(channel.source, media, playlists),
+  );
+}
+
 class _ProfileRecoveryPlex extends PlexClient {
   _ProfileRecoveryPlex(this.failure)
     : super(
@@ -2325,4 +2809,47 @@ class _ProfileRecoveryPlex extends PlexClient {
     Future<void>? cancelled,
     void Function(PlexPlaylistProgress)? onProgress,
   }) async => const PlexPlaylistCatalog(playlists: [], failedIds: {});
+}
+
+class _AuthorizationController extends FixtureController {
+  _AuthorizationController({
+    super.scenario,
+    this.profileCredentialRecoveryNotice,
+  });
+  @override
+  final String? profileCredentialRecoveryNotice;
+  final selections = <String>[];
+
+  @override
+  Future<bool> selectProfile(PlexHomeUser user, {String? pin}) async {
+    selections.add('profile:${pin ?? ''}');
+    fixtureActor.profileSelected(user);
+    return true;
+  }
+
+  @override
+  Future<void> selectServer(PlexServer server) async {
+    selections.add('server');
+    fixtureActor.serverSelected(server);
+    fixtureActor.present(LineupPresentation(stage: SetupStage.channelSetup));
+    notifyListeners();
+  }
+
+  @override
+  Future<bool> logout() {
+    selections.add('logout');
+    return super.logout();
+  }
+}
+
+class _AuthorizationGatePlayer extends FixturePlayer {
+  final stopResults = <Completer<void>>[];
+
+  @override
+  Future<void> stop() {
+    stops++;
+    final result = Completer<void>();
+    stopResults.add(result);
+    return result.future;
+  }
 }

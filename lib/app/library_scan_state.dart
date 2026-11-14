@@ -327,6 +327,37 @@ class _LibraryScanState {
     return retainedIds;
   }
 
+  void chargeReusedRows(PlexScanBudget budget, Iterable<String> ids) {
+    for (final id in ids) {
+      if (rows[id]?.items case final items?) budget.retainMedia(items);
+    }
+  }
+
+  void chargeFailedRetryRows(PlexScanBudget budget, Set<String> skippedIds) =>
+      chargeReusedRows(budget, [
+        for (final entry in rows.entries)
+          if (entry.value.retainedAfterFailure &&
+              !skippedIds.contains(entry.key))
+            entry.key,
+      ]);
+
+  void failAttempt(int contentScope) {
+    _retainPrevious(contentScope);
+    if (_ready == null) {
+      rows = Map.unmodifiable({
+        for (final entry in rows.entries)
+          entry.key: _LibraryScanRow(
+            fact: LibraryScanFact(status: LibraryScanStatus.transientFailure),
+          ),
+      });
+      status = LibraryScanStatus.transientFailure;
+    }
+    // Never offer partial output from an exhausted attempt for Continue/retry.
+    _retainedRetry = null;
+    _retryBaseline = const {};
+    _attempt = null;
+  }
+
   void _setFact(String id, LibraryScanFact fact) {
     rows = Map.unmodifiable({...rows, id: rows[id]!.withFact(fact)});
   }

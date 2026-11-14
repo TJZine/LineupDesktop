@@ -33,9 +33,9 @@ void main() {
         fixture.failedLibraries.add('second');
         fixture.itemReads.clear();
         await tester.tap(find.byKey(const ValueKey('library-row-second')));
-        await tester.pumpAndSettle();
+        await _settleScan(tester, fixture.controller);
         await tester.tap(find.byKey(const ValueKey('scan-again-libraries')));
-        await tester.pumpAndSettle();
+        await _settleScan(tester, fixture.controller);
 
         expect(fixture.itemReads.toSet(), _libraries);
         expect(fixture.controller.error, isNotNull);
@@ -52,24 +52,26 @@ void main() {
         expect(find.text('Couldn’t scan · Try again.'), findsOneWidget);
         fixture.itemReads.clear();
         await tester.tap(retry);
-        await tester.pumpAndSettle();
+        await _settleScan(tester, fixture.controller);
         expect(fixture.itemReads, ['second']);
         expect(retry, findsOneWidget);
         expect(fixture.store.state, same(previous));
 
         fixture.failedLibraries.clear();
         await tester.tap(retry);
-        await tester.pumpAndSettle();
+        await _settleScan(tester, fixture.controller);
         expect(find.text('Shape your lineup'), findsOneWidget);
         expect(fixture.controller.selectedLibraryIds, _libraries);
 
         // Restart the same saved selection with the same service failure. Both
         // paths must expose the failed row, without installing controller facts.
         await tester.pumpWidget(const SizedBox.shrink());
-        final restarted = await _ScanFixture.restored(
-          failedLibraryIds: {'second'},
-          initialState: fixture.store.state,
-        );
+        final restarted = (await tester.runAsync(
+          () => _ScanFixture.restored(
+            failedLibraryIds: {'second'},
+            initialState: fixture.store.state,
+          ),
+        ))!;
         addTearDown(restarted.controller.dispose);
         await _showSetup(tester, restarted, size: size);
         expect(
@@ -91,7 +93,7 @@ void main() {
       await _showSetup(tester, fixture);
       fixture.failedLibraries.addAll(_libraries);
       await tester.tap(find.byKey(const ValueKey('scan-again-libraries')));
-      await tester.pumpAndSettle();
+      await _settleScan(tester, fixture.controller);
 
       expect(fixture.controller.libraryScanReadyIds, _libraries);
       expect(fixture.store.state, same(previous));
@@ -101,7 +103,7 @@ void main() {
       );
       fixture.itemReads.clear();
       await tester.tap(find.byKey(const ValueKey('retry-failed-libraries')));
-      await tester.pumpAndSettle();
+      await _settleScan(tester, fixture.controller);
 
       expect(fixture.itemReads.toSet(), _libraries);
       expect(find.byType(UpstreamChannelSetupView), findsOneWidget);
@@ -119,7 +121,7 @@ void main() {
       fixture.revision = 'recovered';
       fixture.itemReads.clear();
       await tester.tap(find.byKey(const ValueKey('retry-failed-libraries')));
-      await tester.pumpAndSettle();
+      await _settleScan(tester, fixture.controller);
 
       expect(fixture.itemReads.toSet(), _libraries);
       expect(find.text('Shape your lineup'), findsOneWidget);
@@ -179,7 +181,7 @@ void main() {
       await _showSetup(tester, fixture);
       fixture.failedLibraries.addAll(_libraries);
       await tester.tap(find.byKey(const ValueKey('scan-again-libraries')));
-      await tester.pumpAndSettle();
+      await _settleScan(tester, fixture.controller);
       fixture.failedLibraries.remove('first');
       fixture.itemReads.clear();
       // Exercise the row-scan command even though retained ready rows do not
@@ -188,7 +190,7 @@ void main() {
         find.byType(SetupLibraryStep),
       );
       unawaited(step.onScan(retryLibraryIds: {'first'}));
-      await tester.pumpAndSettle();
+      await _settleScan(tester, fixture.controller);
       expect(fixture.itemReads, ['first']);
       expect(fixture.controller.error, isNull);
       expect(fixture.controller.libraryScanRetryIds, {'second'});
@@ -203,7 +205,7 @@ void main() {
       );
 
       await tester.tap(find.byKey(const ValueKey('continue-ready-libraries')));
-      await tester.pumpAndSettle();
+      await _settleScan(tester, fixture.controller);
       expect(find.text('Shape your lineup'), findsOneWidget);
       expect(
         fixture.controller.isGeneratedSourceConfirmedGone(_missing),
@@ -347,6 +349,27 @@ final _missing = Channel(
   shuffleSeed: 1,
 );
 
+// Stream cancellation in MockClient can complete on the real async queue.
+// A scan now waits for that cleanup before publishing failure/readiness. Pump
+// both queues until the real controller operation has settled; retain every UI
+// and saved-inventory assertion rather than observing an in-flight scan.
+Future<void> _settleScan(
+  WidgetTester tester,
+  LineupController controller,
+) async {
+  await tester.pumpAndSettle();
+  final elapsed = Stopwatch()..start();
+  while (controller.busy) {
+    if (elapsed.elapsed > const Duration(seconds: 5)) {
+      fail('Scan did not settle after transport cleanup.');
+    }
+    await tester.runAsync(
+      () => Future<void>.delayed(const Duration(milliseconds: 1)),
+    );
+    await tester.pumpAndSettle();
+  }
+}
+
 Future<void> _showSetup(
   WidgetTester tester,
   _ScanFixture fixture, {
@@ -368,7 +391,7 @@ Future<void> _showSetup(
       ),
     ),
   );
-  await tester.pumpAndSettle();
+  await _settleScan(tester, fixture.controller);
 }
 
 // Only the external service response is controlled. The controller, Plex parser,

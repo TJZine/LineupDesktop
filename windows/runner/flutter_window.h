@@ -3,6 +3,9 @@
 
 #include <flutter/dart_project.h>
 #include <flutter/flutter_view_controller.h>
+#include <flutter/method_channel.h>
+#include <windows.h>
+#include <shellapi.h>
 
 #include <memory>
 
@@ -23,7 +26,13 @@ class FlutterWindow : public Win32Window {
  private:
   friend struct RunnerLifecycleTestAccess;
 
+  void HandlePlatformMethod(
+      const flutter::MethodCall<flutter::EncodableValue>& call,
+      std::unique_ptr<flutter::MethodResult<flutter::EncodableValue>> result,
+      decltype(&::ShellExecuteW) open = ::ShellExecuteW);
+
   flutter::DartProject project_;
+  std::unique_ptr<flutter::MethodChannel<flutter::EncodableValue>> platform_channel_;
 
   std::unique_ptr<flutter::FlutterViewController> flutter_controller_;
 

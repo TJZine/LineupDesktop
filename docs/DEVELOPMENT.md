@@ -847,11 +847,12 @@ Android uses the stock engine and supports API 28+ TV devices. Build the
 universal `armeabi-v7a` + `arm64-v8a` debug APK with:
 
 ```sh
-tool/android/with-signing.sh flutter build apk --debug --target-platform android-arm,android-arm64
+flutter build apk --debug --target-platform android-arm,android-arm64
 ```
 
-Both debug and release use the dedicated external Lineup keystore;
-`LINEUP_ANDROID_SIGNING=debug-key` is a debug-only contributor/CI override.
+Debug and profile use disposable Android development credentials. Release builds
+produce an unsigned aligned APK for independent verification and isolated
+production signing. Build contexts must have no production signing access.
 Run the portable format/analyze/test checks and, when Kotlin tests exist,
 `cd android && ./gradlew :app:testDebugUnitTest`. Use the documented emulator
 secure-storage smoke entrypoint for native write/read/restart/delete and

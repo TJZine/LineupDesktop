@@ -3,3 +3,8 @@ tool/flutter_engine/*.patch text eol=lf whitespace=-blank-at-eol
 # Keep upstream notice whitespace while standardizing line endings.
 third_party/libmpv/licenses/* text eol=lf whitespace=-blank-at-eol,-blank-at-eof
 third_party/libmpv/notice-hashes.psd1 text eol=lf
+# Preserve the exact upstream wrapper bytes checked on every checkout host.
+android/gradlew text eol=lf
+android/gradlew.bat text eol=lf
+android/gradle/wrapper/gradle-wrapper.jar binary
+android/gradle/wrapper/gradle-wrapper.properties text eol=lf

@@ -155,7 +155,7 @@ internal class Media3Engine(
             if (media.kind == LoadKind.plexSession) media.uri.toHttpUrlOrNull() else null,
         )
         this.network = network
-        val source = OkHttpDataSource.Factory(network.client)
+        val source = OkHttpDataSource.Factory(Media3CallFactory(network.client))
         if (media.kind == LoadKind.direct && media.token != null)
             source.setDefaultRequestProperties(mapOf("X-Plex-Token" to media.token))
         http = source
