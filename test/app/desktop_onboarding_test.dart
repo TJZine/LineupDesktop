@@ -140,16 +140,17 @@ void main() {
           findsWidgets,
         );
         if (action == 'logout') {
-          await tester.tap(find.widgetWithText(TextButton, 'Retry'));
+          final retry = find.widgetWithText(
+            TextButton,
+            'Retry stopping playback',
+          );
+          expect(find.text('You are still signed in.'), findsOneWidget);
+          await tester.tap(retry);
           await tester.pump();
           expect(player.stopResults, hasLength(2));
           expect(controller.selections, isEmpty);
-          expect(
-            tester
-                .widget<TextButton>(find.widgetWithText(TextButton, 'Retry'))
-                .onPressed,
-            isNull,
-          );
+          expect(find.text('You are still signed in.'), findsNothing);
+          expect(tester.widget<TextButton>(retry).onPressed, isNull);
           player.stopResults.last.complete();
           await tester.pumpAndSettle();
           expect(find.text('Could not sign out'), findsNothing);

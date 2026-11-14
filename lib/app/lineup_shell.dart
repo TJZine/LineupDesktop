@@ -855,6 +855,9 @@ class _LineupShellState extends State<LineupShell> {
                             widget.controller.error ??
                             'Sign out did not complete.',
                 ),
+                if (!_player.authorizationTransitionPending &&
+                    _player.authorizationTransitionError != null)
+                  const Text('You are still signed in.'),
                 if (widget.controller.profileCredentialRecoveryNotice
                     case final notice?) ...[
                   const SizedBox(height: 12),
@@ -876,7 +879,7 @@ class _LineupShellState extends State<LineupShell> {
                           Navigator.pop(context);
                         }
                       },
-                child: const Text('Retry'),
+                child: const Text('Retry stopping playback'),
               ),
             FilledButton(
               autofocus: true,
