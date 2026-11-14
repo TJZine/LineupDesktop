@@ -7,6 +7,7 @@ import 'package:http/testing.dart';
 import 'package:lineup_desktop/channels/channel.dart';
 import 'package:lineup_desktop/plex/plex_client.dart';
 import 'package:lineup_desktop/plex/plex_models.dart';
+import 'package:lineup_desktop/plex/plex_scan_budget.dart';
 
 final _server = Uri.parse('https://synthetic.invalid');
 http.Response _page(List<Object?> rows, {int? total, int offset = 0}) =>
@@ -27,10 +28,14 @@ Map<String, Object?> _collection(String key, String title, {int? count}) => {
   'childCount': ?count,
 };
 Map<String, Object?> _member(String id) => {'ratingKey': id};
-PlexClient _client(Future<http.Response> Function(http.Request) handler) {
+PlexClient _client(
+  Future<http.Response> Function(http.Request) handler, {
+  PlexScanLimits limits = const PlexScanLimits(),
+}) {
   final client = PlexClient(
     clientIdentifier: 'test',
     httpClient: MockClient(handler),
+    scanLimits: limits,
   );
   addTearDown(client.close);
   return client;
@@ -51,6 +56,243 @@ Matcher _error(String code) =>
     throwsA(isA<PlexException>().having((e) => e.code, 'code', code));
 
 void main() {
+  test(
+    'default limits admit 40,000 movies and 80,000 episodes across 2,000 shows',
+    () async {
+      const movieCount = 40000;
+      const episodeCount = 80000;
+      const showCount = 2000;
+      const collectionCount = 5;
+      const playlistCount = 500;
+
+      List<Map<String, String>> tags(List<String> names) => [
+        for (final name in names) {'tag': name},
+      ];
+
+      Map<String, Object?> media(String type, int index) => {
+        'ratingKey': '$type-$index',
+        'title': 'Synthetic $type $index',
+        'type': type,
+        'duration': 60000,
+        'Genre': tags(['Drama', 'Comedy', 'Adventure']),
+        'Collection': tags(['Collection 0']),
+        if (type == 'episode')
+          'grandparentRatingKey': 'show-${index % showCount}',
+        'Media': [
+          {
+            'Part': [
+              {'key': '/$type/$index'},
+            ],
+          },
+        ],
+      };
+
+      var requests = 0;
+      final client = _client((request) async {
+        requests++;
+        final start = int.parse(
+          request.url.queryParameters['X-Plex-Container-Start'] ?? '0',
+        );
+        http.Response page(int total, Object Function(int) row) => _page(
+          [for (var i = start; i < start + 100 && i < total; i++) row(i)],
+          total: total,
+          offset: start,
+        );
+        if (request.url.path == '/playlists/all') {
+          return page(1, (_) => {'ratingKey': 'p', 'title': 'Playlist'});
+        }
+        if (request.url.path.startsWith('/playlists/')) {
+          return page(playlistCount, (i) => media('movie', i));
+        }
+        if (request.url.path.contains('/collections/')) {
+          return page(showCount, (i) => _member('show-$i'));
+        }
+        return switch (request.url.queryParameters['type']) {
+          '18' => page(
+            request.url.path.contains('/tv/') ? collectionCount : 0,
+            (i) =>
+                _collection('collection-$i', 'Collection $i', count: showCount),
+          ),
+          '2' => page(
+            showCount,
+            (i) => {
+              'ratingKey': 'show-$i',
+              'Genre': tags(['Drama', 'Comedy', 'Mystery']),
+            },
+          ),
+          '4' => page(episodeCount, (i) => media('episode', i)),
+          '1' => page(movieCount, (i) => media('movie', i)),
+          _ => throw StateError('Unexpected scan request'),
+        };
+      });
+
+      await client.runScan((_) async {
+        final [movies, shows] = await Future.wait([
+          for (final (id, type) in [
+            ('movies', PlexLibraryType.movie),
+            ('tv', PlexLibraryType.show),
+          ])
+            client.scanLibrary(
+              _server,
+              'token',
+              id,
+              type,
+              isCurrent: () => true,
+              onProgress: (_) {},
+            ),
+        ]);
+        expect(movies.items, hasLength(movieCount));
+        expect(shows.items, hasLength(episodeCount));
+        expect(shows.items.last.collections, hasLength(collectionCount));
+        expect(shows.items.last.genres, [
+          'Drama',
+          'Comedy',
+          'Adventure',
+          'Mystery',
+        ]);
+        final catalog = await client.playlists(
+          _server,
+          'token',
+          isCurrent: () => true,
+        );
+        expect(catalog.playlists.single.items, hasLength(playlistCount));
+      });
+      expect(requests, 1328);
+    },
+  );
+
+  test('one request budget spans libraries and playlist discovery', () async {
+    var requests = 0;
+    final client = PlexClient(
+      clientIdentifier: 'test',
+      scanLimits: const PlexScanLimits(requests: 4),
+      httpClient: MockClient((_) async {
+        requests++;
+        return _page([], total: 0);
+      }),
+    );
+    addTearDown(client.close);
+    final attempt = client.runScan((_) async {
+      for (final id in ['a', 'b']) {
+        await client.scanLibrary(
+          _server,
+          'token',
+          id,
+          PlexLibraryType.movie,
+          isCurrent: () => true,
+          onProgress: (_) {},
+        );
+      }
+      await client.playlists(_server, 'token', isCurrent: () => true);
+    });
+    await expectLater(
+      attempt,
+      throwsA(
+        isA<PlexScanLimitException>().having(
+          (e) => e.limit,
+          'limit',
+          'requests',
+        ),
+      ),
+    );
+    expect(requests, 4);
+    // A retired attempt never poisons a fresh one.
+    expect(
+      (await client.playlists(
+        _server,
+        'token',
+        isCurrent: () => true,
+      )).playlists,
+      isEmpty,
+    );
+  });
+
+  test(
+    'collection replacement and relisting consume the same budget',
+    () async {
+      var listings = 0;
+      var requests = 0;
+      final client = PlexClient(
+        clientIdentifier: 'test',
+        scanLimits: const PlexScanLimits(requests: 3),
+        httpClient: MockClient((request) async {
+          requests++;
+          if (request.url.path.contains('/collections/')) {
+            return http.Response('{}', 404);
+          }
+          return _page([
+            _collection(listings++ == 0 ? 'old' : 'new', 'Title'),
+          ], total: 1);
+        }),
+      );
+      addTearDown(client.close);
+      await expectLater(
+        client.runScan((_) => _membership(client)),
+        throwsA(isA<PlexScanLimitException>()),
+      );
+      expect(listings, 2);
+      expect(requests, 3);
+    },
+  );
+
+  test('item and membership totals span library and playlist pagers', () async {
+    final client = PlexClient(
+      clientIdentifier: 'test',
+      scanLimits: const PlexScanLimits(retainedEntries: 3),
+      httpClient: MockClient((request) async {
+        if (request.url.path == '/playlists/all') {
+          return _page([
+            {'ratingKey': 'p', 'title': 'Playlist'},
+          ], total: 1);
+        }
+        return _page([
+          {
+            'ratingKey': 'm',
+            'title': 'Movie',
+            'type': 'movie',
+            'duration': 60000,
+            'Media': [
+              {
+                'Part': [
+                  {'key': '/movie'},
+                ],
+              },
+            ],
+          },
+        ], total: 1);
+      }),
+    );
+    addTearDown(client.close);
+    await expectLater(
+      client.runScan((_) async {
+        await client.libraryItems(
+          _server,
+          'token',
+          'a',
+          PlexLibraryType.movie,
+          isCurrent: () => true,
+          onProgress: (_) {},
+        );
+        await client.libraryItems(
+          _server,
+          'token',
+          'b',
+          PlexLibraryType.movie,
+          isCurrent: () => true,
+          onProgress: (_) {},
+        );
+        await client.playlists(_server, 'token', isCurrent: () => true);
+      }),
+      throwsA(
+        isA<PlexScanLimitException>().having(
+          (e) => e.limit,
+          'limit',
+          'retained-entries',
+        ),
+      ),
+    );
+  });
+
   test('playlist progress spans discovery and bounded content batches, including failed rows', () async {
     final catalogGate = Completer<void>();
     final contentsGate = Completer<void>();
@@ -782,7 +1024,7 @@ void main() {
                 'title': type,
                 'type': type == 'non-member' ? 'movie' : type,
                 'Collection': [
-                  {'tag': 'Stale'},
+                  {'tag': type == 'episode' ? 'Shared' : 'Stale'},
                 ],
                 if (type == 'episode') ...{
                   'parentRatingKey': 'season',
@@ -795,16 +1037,21 @@ void main() {
               },
           ], total: 5);
       }
+    }, limits: const PlexScanLimits(retainedEntries: 26));
+    final scanned = await client.runScan((budget) async {
+      final result = await client.scanLibrary(
+        _server,
+        'token',
+        'tv',
+        PlexLibraryType.show,
+        isCurrent: () => true,
+        onProgress: progress.add,
+        onPhase: phases.add,
+      );
+      // 20 page rows and raw tags, plus five new memberships and one genre.
+      expect(budget.usage.entries, 26);
+      return result;
     });
-    final scanned = await client.scanLibrary(
-      _server,
-      'token',
-      'tv',
-      PlexLibraryType.show,
-      isCurrent: () => true,
-      onProgress: progress.add,
-      onPhase: phases.add,
-    );
     expect(phases, PlexLibraryScanPhase.values);
     expect(scanned.items.map((i) => i.collections).toList(), <List<String>>[
       ['Shared'],

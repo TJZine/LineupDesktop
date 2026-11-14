@@ -1,90 +1,98 @@
 #!/usr/bin/env bash
+# Run only in a fresh full checkout of the reviewed commit, with no signing access.
 set -euo pipefail
-
 root="$(cd "$(dirname "${BASH_SOURCE[0]}")/../.." && pwd)"
-flutter_bin="$(command -v flutter || true)"
-if [[ -z "$flutter_bin" ]]; then
-  echo 'Flutter 3.47.7 is required on PATH.' >&2
+cd "$root"
+if [[ $# -ne 2 || ! "$1" =~ ^[0-9a-f]{40}$ || ! "$2" =~ ^https://github.com/[^/]+/[^/]+/actions/runs/[0-9]+$ ]]; then
+  echo 'Usage: tool/android/build-release.sh <full-reviewed-commit> <CI-run-URL>' >&2
+  exit 2
+fi
+reviewed_commit="$1"
+ci_run="$2"
+check_source() {
+  actual_commit="$(git rev-parse HEAD)"
+  source_status="$(git status --porcelain --untracked-files=all)"
+  if [[ "$actual_commit" != "$reviewed_commit" || -n "$source_status" ]]; then
+    echo 'Release requires the full reviewed commit and a completely clean checkout, including untracked inputs.' >&2
+    exit 1
+  fi
+}
+check_source
+if [[ "$(git rev-parse --is-shallow-repository)" != false ||
+      "$(git config --bool core.sparseCheckout || true)" == true ]]; then
+  echo 'Release requires a full, non-shallow, non-sparse checkout.' >&2
   exit 1
 fi
-if [[ ! -x "$root/android/gradlew" ]]; then
-  echo 'Android Gradle wrapper is missing. Run flutter build apk --config-only --debug' >&2
+if [[ -e build || -e android/.gradle || -e android/app/build ]]; then
+  echo 'Release requires a fresh checkout without prior Android build outputs or project caches.' >&2
   exit 1
 fi
-# flutter build keeps whatever lockfile it finds, so a changed one would ship.
-if ! git -C "$root" diff --quiet HEAD -- pubspec.lock; then
-  echo 'pubspec.lock differs from the committed pins. Run git restore -- pubspec.lock' >&2
-  exit 1
-fi
-
+python3 tool/android/check-wrapper.py
+dart tool/check_toolchain.dart
+# A release never reuses the developer/CI Gradle dependency or build cache.
+scratch="$(mktemp -d "${TMPDIR:-/tmp}/lineup-android-release.XXXXXX")"
+trap 'rm -rf "$scratch"' EXIT
+export GRADLE_USER_HOME="$scratch/gradle"
+export GRADLE_OPTS="-Dorg.gradle.daemon=false"
+flutter_bin="$(command -v flutter)"
 flutter_root="$(cd "$(dirname "$flutter_bin")/.." && pwd)"
-version_line="$(sed -nE 's/^version:[[:space:]]*([^+[:space:]]+)\+([0-9]+)[[:space:]]*$/\1 \2/p' "$root/pubspec.yaml")"
-if [[ -z "$version_line" ]]; then
-  echo 'Could not read versionName/versionCode from pubspec.yaml.' >&2
-  exit 1
-fi
-read -r version_name version_code <<< "$version_line"
-
-cert_report="$(mktemp "${TMPDIR:-/tmp}/lineup-android-release-certificates.XXXXXX")"
-cleanup() { rm -f "$cert_report"; }
-trap cleanup EXIT
-
-python3 "$root/tool/android/check-manifest.py" --release "$root/android/app/src/main/AndroidManifest.xml"
-python3 "$root/tool/android/check-harness-absence.py" --source "$root/lib" --source "$root/android/app/src"
-
-# The generator runs Gradle itself so the NOTICE-bearing JARs are downloaded.
-python3 "$root/tool/android/generate-licenses.py" --check \
-  --gradle-project "$root/android" \
-  --output "$root/android/app/src/main/assets" \
-  --flutter-root "$flutter_root" \
-  --flutter-version "$(flutter --version --machine | python3 -c 'import json,sys; print(json.load(sys.stdin)["frameworkVersion"])')" \
-  --license-cache "$root/build/android-license-cache"
-
-"$root/tool/android/with-signing.sh" flutter build apk \
-  --release --target-platform android-arm,android-arm64
-
+sdk="${ANDROID_SDK_ROOT:-${ANDROID_HOME:-$HOME/Library/Android/sdk}}"
+build_tools="$sdk/build-tools/36.0.0"
+analyzer="$sdk/cmdline-tools/latest/bin/apkanalyzer"
+for executable in "$build_tools/zipalign" "$build_tools/apksigner" "$build_tools/aapt2" "$analyzer"; do
+  [[ -x "$executable" ]] || { echo "Missing Android SDK tool: $executable" >&2; exit 1; }
+done
+flutter pub get --enforce-lockfile
+python3 tool/android/check-manifest.py --release android/app/src/main/AndroidManifest.xml \
+  --extraction-rules android/app/src/main/res/xml/data_extraction_rules.xml
+python3 tool/android/check-harness-absence.py --source lib --source android/app/src
+python3 tool/android/generate-licenses.py --check --gradle-project android \
+  --output android/app/src/main/assets --flutter-root "$flutter_root" \
+  --flutter-version "$(flutter --version --machine | python3 -c 'import json,sys; print(json.load(sys.stdin)["frameworkVersion"])')"
+(cd android && ./gradlew --init-script ../tool/android/build-environment.init.gradle \
+  :lineupBuildEnvironment --no-daemon --no-build-cache --no-configuration-cache) \
+  > "$scratch/build-environment.txt"
+(cd android && ./gradlew :app:dependencies --configuration releaseRuntimeClasspath \
+  --no-daemon --no-build-cache --no-configuration-cache) > "$scratch/runtime-dependencies.txt"
+python3 tool/android/check-resolved-dependencies.py "$scratch/build-environment.txt" "$scratch/runtime-dependencies.txt"
+flutter build apk --release --target-platform android-arm,android-arm64
 apk="$root/build/app/outputs/flutter-apk/app-release.apk"
-if [[ ! -f "$apk" ]]; then
-  echo "Release APK not found: $apk" >&2
+python3 tool/android/check-unsigned-apk.py "$apk"
+mkdir -p build/android-release
+aligned="$root/build/android-release/lineup-unsigned-aligned.apk"
+"$build_tools/zipalign" -P 16 -f 4 "$apk" "$aligned"
+"$build_tools/zipalign" -c -P 16 -v 4 "$aligned"
+python3 tool/android/check-unsigned-apk.py "$aligned"
+if "$build_tools/apksigner" verify "$aligned" > "$scratch/signature-check.txt" 2>&1; then
+  echo 'Unsigned candidate unexpectedly verifies as signed.' >&2
   exit 1
 fi
-
-python3 "$root/tool/android/check-harness-absence.py" --artifact "$apk"
-python3 "$root/tool/android/check-manifest.py" --reject-entry-bytes \
-  "$root/android/app/src/debug/res/raw/fixture_ca.crt" "$apk"
-
-if command -v shasum >/dev/null 2>&1; then
-  apk_sha256="$(shasum -a 256 "$apk" | awk '{print $1}')"
-else
-  apk_sha256="$(openssl dgst -sha256 "$apk" | awk '{print $NF}')"
-fi
-android_sdk="${ANDROID_SDK_ROOT:-${ANDROID_HOME:-$HOME/Library/Android/sdk}}"
-"$android_sdk/cmdline-tools/latest/bin/apkanalyzer" manifest print "$apk" | \
-  python3 "$root/tool/android/check-manifest.py" --release -
-apksigner="$(find "$android_sdk/build-tools" -maxdepth 2 -type f -name apksigner -print 2>/dev/null | sort -V | tail -n 1)"
-if [[ -z "$apksigner" || ! -x "$apksigner" ]]; then
-  echo "Android SDK apksigner is unavailable under $android_sdk/build-tools." >&2
+if ! grep -q '^DOES NOT VERIFY$' "$scratch/signature-check.txt"; then
+  cat "$scratch/signature-check.txt" >&2
+  echo 'apksigner failed without an unsigned-signature rejection.' >&2
   exit 1
 fi
-if ! "$apksigner" verify --print-certs "$apk" > "$cert_report" 2>&1; then
-  echo "apksigner rejected the release APK: $apk" >&2
-  exit 1
-fi
-cert_sha256="$(sed -nE 's/^[[:space:]]*Signer #1 certificate SHA-256 digest:[[:space:]]*([[:xdigit:]:]+)[[:space:]]*$/\1/p' "$cert_report" | head -n 1 | tr -d ':' | tr '[:lower:]' '[:upper:]')"
-expected_cert_sha256='D67697201152AB71DD9D5820D06B128520242EE171117F923A4328F52894C6B8'
-if [[ ! "$cert_sha256" =~ ^[[:xdigit:]]{64}$ || "$cert_sha256" != "$expected_cert_sha256" ]]; then
-  echo 'Release APK signing certificate did not match the expected Lineup certificate.' >&2
-  exit 1
-fi
-media3_version="$(sed -nE 's/.*media3-exoplayer:([^" ]+).*/\1/p' "$root/android/app/build.gradle.kts" | head -n 1)"
-if [[ -z "$media3_version" ]]; then
-  media3_version='not-integrated'
-fi
-
-echo "APK: $apk"
-echo "APK SHA-256: $apk_sha256"
-echo "versionName: $version_name"
-echo "versionCode: $version_code"
-echo "certificate SHA-256: $cert_sha256"
-echo "Flutter: $(flutter --version --machine | python3 -c 'import json,sys; print(json.load(sys.stdin)["frameworkVersion"])')"
-echo "Media3: $media3_version"
+python3 tool/android/check-harness-absence.py --artifact "$aligned"
+python3 tool/android/check-manifest.py --reject-entry-bytes \
+  android/app/src/debug/res/raw/fixture_ca.crt "$aligned"
+python3 tool/android/check-manifest.py --apk "$aligned" \
+  --apkanalyzer "$analyzer" --aapt2 "$build_tools/aapt2"
+check_source
+cp "$scratch/build-environment.txt" "$scratch/runtime-dependencies.txt" \
+  "$scratch/signature-check.txt" build/android-release/
+{
+  echo "Reviewed commit: $reviewed_commit"
+  echo "CI run: $ci_run"
+  git show -s --format='Source: %H %s' HEAD
+  flutter --version
+  java -version 2>&1
+  (cd android && ./gradlew --version --no-daemon)
+  "$build_tools/apksigner" version
+  "$analyzer" manifest application-id "$aligned"
+  "$analyzer" manifest version-name "$aligned"
+  "$analyzer" manifest version-code "$aligned"
+  echo 'Unsigned aligned APK SHA-256'
+  shasum -a 256 "$aligned"
+} | tee build/android-release/build-evidence.txt
+(cd build/android-release && shasum -a 256 lineup-unsigned-aligned.apk > SHA256SUMS)
+echo "Unsigned candidate: $aligned"

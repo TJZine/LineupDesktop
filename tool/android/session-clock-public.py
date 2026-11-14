@@ -24,7 +24,7 @@ ROOT = Path(__file__).resolve().parents[2]
 CASES = ("zero", "offset21", "discontinuity")
 SERIAL = "emulator-5560"
 AVD = "lineup_tv_media"
-PACKAGE = "com.tjzine.lineup"
+PACKAGE = "com.tjzine.lineup.dev"
 PORT = 18443
 STATUS = "cache/session-hls-clock-public-v1.json"
 MAX_STATUS = 64 * 1024
@@ -895,7 +895,7 @@ class Device:
             "am",
             "start",
             "-n",
-            PACKAGE + "/.MainActivity",
+            PACKAGE + "/com.tjzine.lineup.MainActivity",
             "--esal",
             "dart_entrypoint_args",
             f"'--case={case},--nonce={nonce}'",

@@ -1,0 +1,8 @@
+packages:
+  archive:
+    dependency: "direct main"
+    description:
+      name: archive
+      url: "https://pub.dev"
+    source: hosted
+    version: "3.3.0"

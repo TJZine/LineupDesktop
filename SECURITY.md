@@ -1,14 +1,16 @@
 # Security Policy
 
-Lineup Desktop is pre-release and not ready for public distribution. Security
-reports are still welcome because this app handles local Plex credentials,
-desktop storage, media playback, and diagnostics.
+Lineup Desktop is still in active development. Security reports are welcome
+because this app handles local Plex credentials, desktop storage, media
+playback, and diagnostics.
 
 ## Supported Versions
 
 | Version | Supported |
 | --- | --- |
-| `0.x` | Private pre-release only |
+| Latest public release for each supported platform | Yes |
+| Older public releases | Update to the latest release for your platform |
+| Private or pre-release builds | Best effort. Include the exact version and commit. |
 
 ## Reporting A Vulnerability
 
@@ -17,8 +19,9 @@ Do not open public issues for vulnerabilities or secret exposure.
 Preferred reporting path:
 
 1. Use the repository's private [GitHub vulnerability reporting form](https://github.com/TJZine/LineupDesktop/security/advisories/new).
-2. If that private form is unavailable, do not include secret material in a
-   public issue; report only that the private reporting channel is unavailable.
+2. If that private form is unavailable, use the contact listed on the
+   [maintainer's GitHub profile](https://github.com/TJZine) to request a private
+   reporting channel. Keep vulnerability details and secrets private.
 
 Include:
 
@@ -53,3 +56,9 @@ Include:
   unless they have been redacted.
 - Keep Plex Media Server and the host operating system updated.
 - Use trusted networks for local testing.
+- Download public builds only from the official GitHub Releases page. Follow the
+  [Windows installation instructions](docs/user-guide.md#install-a-windows-release-or-private-build)
+  for the unsigned MVP package.
+- Use checksum verification to confirm the downloaded bytes and release
+  attestation to confirm their provenance. Software safety requires separate
+  evidence.

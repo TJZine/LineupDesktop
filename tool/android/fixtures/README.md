@@ -52,10 +52,10 @@ on a signed-in device. Do not use this alternate entrypoint on a physical target
 without an explicit assignment. Rebuild normal `lib/main.dart` after testing.
 
 ```sh
-tool/android/with-signing.sh flutter build apk --debug --target-platform android-arm,android-arm64 --target tool/android/fixtures/player_contract.dart
+flutter build apk --debug --target-platform android-arm,android-arm64 --target tool/android/fixtures/player_contract.dart
 adb -s ASSIGNED_SERIAL install -r -d build/app/outputs/flutter-apk/app-debug.apk
-adb -s ASSIGNED_SERIAL shell am force-stop com.tjzine.lineup
-adb -s ASSIGNED_SERIAL shell am start -n com.tjzine.lineup/.MainActivity --esal dart_entrypoint_args "'--case=contract'"
+adb -s ASSIGNED_SERIAL shell am force-stop com.tjzine.lineup.dev
+adb -s ASSIGNED_SERIAL shell am start -n com.tjzine.lineup.dev/com.tjzine.lineup.MainActivity --esal dart_entrypoint_args "'--case=contract'"
 ```
 
 Read current-process logcat for `U3_CONTRACT` records. A run passes only on its
@@ -95,9 +95,9 @@ backward discontinuity, then at least five seconds apart) and
 `source_initialization` revisions use the same immutable correlation. They are
 passive diagnostics, not wire events, seek completion or physical-HWC evidence.
 
-JVM checks: run `:app:testDebugUnitTest` through the signing wrapper (or use the
-explicit contributor debug-key mode) with the generated Gradle wrapper/pinned
-Gradle. Tests cover bounds, correlation, property eviction, disposal generations,
+Run JVM checks with `cd android && ./gradlew :app:testDebugUnitTest` using the
+committed, verified Gradle wrapper. Development builds use disposable credentials.
+Tests cover bounds, correlation, property eviction, disposal generations,
 track encoding and omitted-track observer lifetime. The two real Media3
 encoding/failure suites use Robolectric for Android text helpers; the protocol
 controller itself uses a deterministic fake engine.
@@ -185,7 +185,7 @@ ordinary fixture server and reverse-port prerequisites still apply. Build this
 alternate entrypoint with the pinned toolchain:
 
 ```sh
-LINEUP_ANDROID_SIGNING=debug-key flutter build apk --debug --no-pub --target-platform android-arm,android-arm64 --target tool/android/fixtures/player_contract.dart
+flutter build apk --debug --no-pub --target-platform android-arm,android-arm64 --target tool/android/fixtures/player_contract.dart
 ```
 
 `session-ready` and `session-sample` contain elapsed milliseconds, observed

@@ -33,6 +33,7 @@ class SetupLibraryData {
     required this.canSwitchServer,
     required this.channelSetupCanCancel,
     required this.error,
+    required this.profileCredentialRecoveryNotice,
     required Map<String, String> collectionRecoveryByLibrary,
     required this.selectionCollectionRecovery,
     required this.progress,
@@ -62,6 +63,7 @@ class SetupLibraryData {
   final bool canSwitchServer;
   final bool channelSetupCanCancel;
   final String? error;
+  final String? profileCredentialRecoveryNotice;
   final Map<String, String> collectionRecoveryByLibrary;
   final String? selectionCollectionRecovery;
   final LibraryScanProgress progress;
@@ -357,7 +359,10 @@ class SetupLibraryStep extends StatelessWidget {
                   liveRegion: true,
                   child: Text(
                     scanError != null && (retry.isEmpty || error != null)
-                        ? scanError
+                        ? [
+                            scanError,
+                            ?data.profileCredentialRecoveryNotice,
+                          ].join('\n')
                         : ready.isEmpty
                         ? _summary()
                         : '${ready.length} of ${selectedLibraryIds.length} ${selectedLibraryIds.length == 1 ? 'library' : 'libraries'} ${ready.length == 1 ? 'is' : 'are'} ready. Continuing builds from ${data.libraries.where((library) => ready.contains(library.id)).map((library) => library.title).join(', ')}${excluded > 0 ? ' only' : ''}.',

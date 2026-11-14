@@ -36,6 +36,7 @@ class SettingsView extends StatefulWidget {
     this.subtitleAppearance,
     this.category = SettingsCategory.appearance,
     this.onCategoryChanged,
+    this.authorizationTransitionPending = false,
     this.onSwitchProfile,
     this.onSwitchServer,
     this.onSignOut,
@@ -54,6 +55,7 @@ class SettingsView extends StatefulWidget {
   final SubtitleAppearanceSource? subtitleAppearance;
   final SettingsCategory category;
   final ValueChanged<SettingsCategory>? onCategoryChanged;
+  final bool authorizationTransitionPending;
   final VoidCallback? onSwitchProfile;
   final VoidCallback? onSwitchServer;
   final Future<void> Function()? onSignOut;
@@ -602,7 +604,9 @@ class _SettingsViewState extends State<SettingsView> {
                   ],
                 ),
                 control: OutlinedButton(
-                  onPressed: widget.controller.profiles.isEmpty
+                  onPressed:
+                      widget.authorizationTransitionPending ||
+                          widget.controller.profiles.isEmpty
                       ? null
                       : widget.onSwitchProfile ??
                             widget.controller.showProfiles,
@@ -638,8 +642,9 @@ class _SettingsViewState extends State<SettingsView> {
                         ],
                       ),
                 control: OutlinedButton(
-                  onPressed:
-                      widget.onSwitchServer ?? widget.controller.showServers,
+                  onPressed: widget.authorizationTransitionPending
+                      ? null
+                      : widget.onSwitchServer ?? widget.controller.showServers,
                   child: const Text('Switch server'),
                 ),
               ),
@@ -647,9 +652,14 @@ class _SettingsViewState extends State<SettingsView> {
               _SettingsRow(
                 revealOnFocus: true,
                 label: const Text('Signed-in Plex account'),
-                helper: Text(widget.controller.account?.name ?? 'Plex account'),
+                helper: Text(
+                  '${widget.controller.account?.name ?? 'Plex account'}\n'
+                  'Sign-out keeps saved lineup and media metadata on this device.',
+                ),
                 control: OutlinedButton(
-                  onPressed: widget.onSignOut == null
+                  onPressed:
+                      widget.authorizationTransitionPending ||
+                          widget.onSignOut == null
                       ? null
                       : () => unawaited(widget.onSignOut!()),
                   child: const Text('Sign out of Plex'),

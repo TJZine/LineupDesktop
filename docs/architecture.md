@@ -504,18 +504,58 @@ have their own ordered queue. Preserve these responsibilities when adding a
 mutation; see the delayed/failing state and credential tests in
 [lineup_controller_test.dart](../test/app/lineup_controller_test.dart).
 
+`PlayerCoordinator` owns production profile, server and sign-out transitions.
+The shell injects its selection callbacks into onboarding, including the PIN
+submission path. Admission closes synchronously for one transition, retiring
+pending tunes, continuation, recovery and foreground-resume intent. The
+coordinator awaits the existing correlated native stop before invoking any
+controller selection or credential cleanup. A failed or timed-out stop retains
+the old controller scope and native cleanup responsibility, blocks playback
+admission, and reports an accessible error in the current onboarding or sign-out
+surface. Retry only retries stop cleanup. A selection, including a fresh
+PIN when required, must be submitted explicitly again. PINs remain transient.
+Fullscreen reset runs independently and cannot establish native stop success.
+
+Normal startup restoration and single-profile linking run without active
+playback. Saved-server reconnect after a profile selection runs within that
+already-quiesced transition. Cancelling a saved-lineup restore can reconnect its
+same server with no active playback. Ordinary server-list refresh preserves the
+current scope. `_lineupChanged` still cleans up other committed content changes,
+while authorization entry points establish stop success before controller
+mutation. After a controller save or credential-cleanup failure, its existing
+persistence semantics apply and playback remains stopped. Late old loads and
+recovery results cannot revive the retired coordinator intent.
+
 Profile and server selections stage their candidate from the latest committed
-state inside that queue, then persist it before publishing identity, credentials,
-connection, inventory, or lineup. The old runtime and its captured authorization
-and queued mutations remain valid while the selection's own save is pending and
-after a failed save. A successful save publishes synchronously and retires the old
-lifetime; returning to the same profile/server cannot revive captured work.
-Server publication uses any same-profile authorization refreshed during the save,
-retaining the chosen connection and validated access if discovery omits the target.
-Selection cancellation is hidden during the save and restored on failure. Once a
-save has started, a changed request epoch does not suppress its successful commit;
-logout still retires authorization immediately; successful credential cleanup then
-clears runtime after the state barrier completes.
+state inside the controller state queue. Profile token acquisition precedes that
+queue without writing secure storage. Inside the state operation, the profile
+transaction holds credential serialization across the exact prior-key read,
+candidate write, direct state save and publication or compensation. Staleness
+before save and attempted-write/save failures restore the prior exact value or
+delete the newly created profile key. Account and other-profile keys are retained.
+The credential queue remains held through compensation, so an older transaction
+cannot erase a successor's token. A failed compensation keeps a sanitized recovery
+notice visible even when its request is obsolete. A successful commit of that
+profile or successful credential cleanup resolves the notice.
+
+The old runtime and its captured authorization and queued mutations remain valid
+while a selection's own save is pending and after a failed save. A successful
+save publishes synchronously and retires the old lifetime. Returning to the same
+profile/server cannot revive captured work. Once a save durably succeeds,
+disposal, later discovery failure and credential-cleanup failure never compensate
+the committed token. Server publication uses any same-profile authorization
+refreshed during the save, retaining the chosen connection and validated access
+if discovery omits the target. Cancellation completes read-only selection
+preparation promptly. The picker hides cancellation before the first durable
+write and restores it on a current failure. Once a save has started, a changed
+request epoch does not suppress its successful commit. Logout retires authorization immediately,
+reserves the state queue, waits for prior state transactions to commit or
+compensate, then enqueues credential cleanup. It never holds the credential queue
+while waiting for a state operation behind itself. Successful cleanup clears
+runtime after the state barrier. A process crash can still leave an unused
+encrypted profile token. Startup restores only a persisted profile present in the
+fresh profile list, with its required credentials. This ordering has no cross-store
+crash-atomicity guarantee.
 
 Settings transformations derive from committed settings inside the controller's
 queue. The controller persists the proposal before publishing it; a view may

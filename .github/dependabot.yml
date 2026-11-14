@@ -1,0 +1,20 @@
+version: 2
+updates:
+  - package-ecosystem: pub
+    directory: /
+    open-pull-requests-limit: 0
+    schedule:
+      interval: weekly
+  - package-ecosystem: gradle
+    directory: /android
+    open-pull-requests-limit: 0
+    schedule:
+      interval: weekly
+  - package-ecosystem: github-actions
+    directory: /
+    schedule:
+      interval: monthly
+    groups:
+      github-actions:
+        patterns:
+          - '*'
