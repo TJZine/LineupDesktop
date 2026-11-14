@@ -8540,16 +8540,18 @@ void main() {
 
   test('saveChannel enforces create and canonical expected bases', () async {
     final store = _CountingMemoryStore();
+    final savedAt = DateTime.utc(2026, 11, 14);
     final controller = LineupController(
       store: store,
       credentials: _MemoryCredentials(),
       plex: _FakePlex(),
+      scheduleClock: () => savedAt,
     );
     addTearDown(controller.dispose);
     await controller.initialize();
-    final created = _manualChannel('channel', 'Created');
-
-    await controller.saveChannel(created, expectedBase: null);
+    final draft = _manualChannel('channel', 'Created');
+    final created = await controller.saveChannel(draft, expectedBase: null);
+    expect(created.toJson(), draft.copyWith(anchor: savedAt).toJson());
     expect(controller.channels.single.toJson(), created.toJson());
     expect(store.saveCalls, 1);
 
@@ -8574,7 +8576,10 @@ void main() {
     expect(store.saveCalls, 1);
     expect(controller.channels.single.toJson(), created.toJson());
 
-    final edited = _manualChannel('channel', 'Edited');
+    final edited = _manualChannel(
+      'channel',
+      'Edited',
+    ).copyWith(anchor: created.anchor);
     store.failNextSave = true;
     await expectLater(
       controller.saveChannel(edited, expectedBase: created),
@@ -8696,10 +8701,12 @@ void main() {
     'empty live sources fail while retained manual content may save',
     () async {
       final store = _CountingMemoryStore();
+      final savedAt = DateTime.utc(2026, 11, 14);
       final controller = LineupController(
         store: store,
         credentials: _MemoryCredentials(),
         plex: _FakePlex(),
+        scheduleClock: () => savedAt,
         scenario: LineupScenario(
           connection: _server('server').connections.single,
         ),
@@ -8730,7 +8737,10 @@ void main() {
       }
       final retained = _manualChannel('retained', 'Retained');
       await controller.saveChannel(retained, expectedBase: null);
-      expect(controller.channels.single.toJson(), retained.toJson());
+      expect(
+        controller.channels.single.toJson(),
+        retained.copyWith(anchor: savedAt).toJson(),
+      );
       expect(store.saveCalls, 1);
     },
   );
