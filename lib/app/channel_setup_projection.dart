@@ -34,6 +34,8 @@ class ChannelSetupProjection {
   List<Channel>? _existing;
   ChannelSetupAllocationOptions? _options;
   ChannelPlanAllocation? _allocation;
+  ChannelOrder? _allocationOrder;
+  bool? _reorderExisting;
   final _disabledEligibility = <BuilderStrategy, int>{};
   List<Channel>? _retainedLineup;
   final _retainedSourceCounts = <String, int>{};
@@ -83,13 +85,26 @@ class ChannelSetupProjection {
   ChannelPlanAllocation configure({
     required List<Channel> existing,
     required ChannelSetupAllocationOptions options,
+    ChannelOrder order = ChannelOrder.mixed,
+    bool reorderExisting = false,
   }) {
     if (_allocation == null ||
+        _allocationOrder != order ||
+        _reorderExisting != reorderExisting ||
         !identical(_existing, existing) ||
         _options != options) {
       _existing = existing;
       _options = options;
-      _allocation = allocate(_proposals, existing: existing, options: options);
+      _allocationOrder = order;
+      _reorderExisting = reorderExisting;
+      _allocation = allocate(
+        _proposals,
+        existing: existing,
+        options: options,
+        order: order,
+        reorderExisting: reorderExisting,
+        strategyOrder: _order,
+      );
       _disabledEligibility.clear();
     }
     return _allocation!;
@@ -131,6 +146,9 @@ class ChannelSetupProjection {
               ),
               existing: _existing!,
               options: _options!,
+              order: _allocationOrder!,
+              reorderExisting: _reorderExisting!,
+              strategyOrder: _order,
             ).eligibleOriginalsByStrategy[strategy] ??
             0,
       );

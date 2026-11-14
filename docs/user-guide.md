@@ -146,10 +146,14 @@ If the selected server has no usable movie or show libraries, setup offers
 confirmation as the server picker, stops playback, and returns to Plex linking.
 
 Under **Lineup rules**, **Channel order** defaults to **Mixed, like live TV**,
-which interleaves channel types. **Grouped by type** assigns consecutive numbers
-in the source order shown, with the largest channels first within each type.
-Custom channel numbers are reserved. The choice is saved with the lineup for
-**Update lineup…**.
+which interleaves channel types. When building or replacing a lineup,
+**Grouped by type** assigns consecutive numbers in the source order shown,
+with the largest channels first within each type. The choice is saved with the
+lineup. **Update and add** keeps existing numbers, including manual moves,
+unless you change **Channel order**. In Grouped mode, new channels use the
+first free number after the last channel of their type within its block.
+If the block has no room, new channels go after the highest number.
+Custom channel numbers are reserved.
 
 Allocation takes one eligible original from each enabled source in order,
 repeats, and skips exhausted sources. Additional versions are off by default
@@ -542,8 +546,9 @@ then lets you replace generated channels, add generated channels, or refresh
 matching generated channels after review. All three modes preserve every custom
 channel. Refresh preserves a matching generated channel's name, schedule anchor,
 shuffle identity, and favourite status while updating its programming recipe.
-Grouped ordering can update generated channel numbers. **Review channels**
-shows the proposed roster. Search by channel number or name, or filter by
+Changing **Channel order** can renumber generated channels. **Replace all**
+keeps favourites for matching generated channels and may reset their schedule
+anchors. **Review channels** shows the proposed roster. Search by channel number or name, or filter by
 change category. If the plan removes channels, its confirmation stays visible
 while you inspect the roster. Completion offers **View lineup** and
 **Add a custom channel**.

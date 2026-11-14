@@ -3204,37 +3204,29 @@ class _MiniGuideRow extends StatelessWidget {
                 ) +
                 8,
           );
-          final channelIdentity = Column(
-            mainAxisSize: MainAxisSize.min,
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              ChannelIdentity(
-                channel: channel,
-                libraryTag: libraryTag,
-                nameStyle: titleStyle,
-                numberWidth: numberWidth,
-                supportStyle: metadataStyle,
-                showSemantics: false,
-                nameBuilder: (style) => ticker(
-                  channel.name,
-                  Key('mini-guide-channel-${channel.id}'),
-                  style: style,
-                ),
-              ),
-              if (tuned)
-                Padding(
-                  padding: EdgeInsetsDirectional.only(start: numberWidth),
-                  child: Row(
+          final channelIdentity = ChannelIdentity(
+            channel: channel,
+            libraryTag: libraryTag,
+            nameStyle: titleStyle,
+            numberWidth: numberWidth,
+            supportStyle: metadataStyle,
+            showSemantics: false,
+            allowTagBelow: rowHeight != null,
+            nameBuilder: (style, _) => ticker(
+              channel.name,
+              Key('mini-guide-channel-${channel.id}'),
+              style: style,
+            ),
+            secondary: tuned
+                ? Row(
                     mainAxisSize: MainAxisSize.min,
                     children: [
-                      ExcludeSemantics(
-                        child: Icon(
-                          Icons.play_arrow_rounded,
-                          size: (large ? 14 : 12),
-                          color: roles.secondaryText,
-                        ),
+                      Icon(
+                        Icons.play_arrow_rounded,
+                        size: large ? 14 : 12,
+                        color: roles.secondaryText,
                       ),
-                      SizedBox(width: 4),
+                      const SizedBox(width: 4),
                       Flexible(
                         child: Text(
                           'Watching',
@@ -3244,9 +3236,8 @@ class _MiniGuideRow extends StatelessWidget {
                         ),
                       ),
                     ],
-                  ),
-                ),
-            ],
+                  )
+                : null,
           );
           final row = controller.guide.row(channel.id);
           final unavailable = row.state == GuideLoadState.error;
@@ -3337,7 +3328,7 @@ class _MiniGuideRow extends StatelessWidget {
                               channelIdentity,
                               Padding(
                                 padding: EdgeInsetsDirectional.only(
-                                  start: numberWidth,
+                                  start: channelIdentity.nameIndent(context),
                                 ),
                                 child: Column(
                                   crossAxisAlignment: CrossAxisAlignment.start,

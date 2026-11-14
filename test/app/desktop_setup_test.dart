@@ -120,7 +120,7 @@ void main() {
     }, skip: reviewEvidence.isEmpty);
   }
 
-  testWidgets('Grouped reorder reaches Review with every proposal suppressed', (
+  testWidgets('Only a Channel order change enables Review without proposals', (
     tester,
   ) async {
     Channel saved(String id, int number, ContentSource source) => Channel(
@@ -190,6 +190,13 @@ void main() {
       );
       await tester.pumpAndSettle();
     }
+    expect(tester.widget<FilledButton>(review).onPressed, isNull);
+    final dropdown = _setupField<ChannelOrder>('Channel order');
+    tester
+        .state<FormFieldState<ChannelOrder>>(dropdown)
+        .didChange(ChannelOrder.mixed);
+    await tester.pumpAndSettle();
+    await tester.ensureVisible(review);
     expect(tester.widget<FilledButton>(review).onPressed, isNotNull);
     await tester.tap(review);
     await tester.pumpAndSettle();
@@ -198,7 +205,7 @@ void main() {
     await tester.pumpAndSettle();
     expect(fixture.store.saveCalls, saves + 1);
     final lineup = fixture.store.state.lineupFor(scope);
-    expect(lineup.channelOrder, ChannelOrder.grouped);
+    expect(lineup.channelOrder, ChannelOrder.mixed);
     expect(lineup.channels.map((row) => (row.id, row.number)), [
       ('Drama', 1),
       ('Collection', 2),

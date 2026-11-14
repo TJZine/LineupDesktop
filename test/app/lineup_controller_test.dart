@@ -5926,7 +5926,7 @@ void main() {
   test(
     'favourites and grouped order persist with the lineup and survive update',
     () async {
-      final store = _MemoryStore();
+      final store = _CountingMemoryStore();
       final server = _server('server');
       const scope = LineupScope(profileKey: 'owner', serverId: 'server');
       const library = PlexLibrary(
@@ -5958,11 +5958,16 @@ void main() {
       );
       store.failNextSave = true;
       await expectLater(
-        controller.toggleFavorite(original.id),
+        controller.setFavorite(original.id, true),
         throwsStateError,
       );
       expect(controller.channels.single.favorite, isFalse);
-      await controller.toggleFavorite(original.id);
+      final saves = store.saveCalls;
+      await Future.wait([
+        controller.setFavorite(original.id, true),
+        controller.setFavorite(original.id, true),
+      ]);
+      expect(store.saveCalls, saves + 1);
       final favourite = controller.channels.single;
       expect(favourite.favorite, isTrue);
 
@@ -5979,6 +5984,10 @@ void main() {
       expect(disk.lineupFor(scope).channels.single.anchor, original.anchor);
 
       await controller.deleteChannels(expectedChannels: [favourite]);
+      await expectLater(
+        controller.setFavorite(original.id, true),
+        throwsA(isA<ChannelStateConflictException>()),
+      );
       expect(store.state.lineupFor(scope).channels, isEmpty);
       expect(store.state.lineupFor(scope).channelOrder, ChannelOrder.grouped);
     },

@@ -572,7 +572,7 @@ class _SetupReviewStepState extends State<SetupReviewStep> {
       Text(
         widget.notice == 'Updating review…'
             ? widget.notice!
-            : _modeDescription(widget.review.mode),
+            : _modeDescription(widget.review),
         style: TextStyle(
           color: LineupTheme.of(context).secondaryText,
           fontSize: 18,
@@ -1100,6 +1100,7 @@ class _SetupReviewStepState extends State<SetupReviewStep> {
                     60 /
                     92,
             child: ChannelIdentity(
+              maxLines: null,
               channel: entry.channel,
               libraryTag: ChannelIdentity.libraryTagFor(
                 entry.channel,
@@ -1197,10 +1198,10 @@ String _applyLabel(ChannelBuildMode mode, bool firstSetup) => switch (mode) {
   ChannelBuildMode.merge => 'Apply changes',
 };
 
-String _modeDescription(ChannelBuildMode mode) => switch (mode) {
-  ChannelBuildMode.merge =>
-    'Update matching generated channels, add new ones, and keep the rest.',
-  ChannelBuildMode.replace => 'Replace all generated channels with this selection. Custom channels will be kept.',
+String _modeDescription(SetupReview review) => switch (review.mode) {
+  ChannelBuildMode.merge when review.ordering != null => 'Update generated channels and renumber them using the new Channel order. Custom channel numbers stay the same.',
+  ChannelBuildMode.merge => 'Update matching generated channels and add new ones. Existing channel numbers stay the same.',
+  ChannelBuildMode.replace => 'Replace generated channels. Favourites carry over for matching sources. Custom channels stay the same.',
   ChannelBuildMode.append => 'Keep existing channel numbers. The chosen order applies to the new channels only.',
 };
 

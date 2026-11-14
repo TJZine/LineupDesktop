@@ -353,8 +353,7 @@ class UpstreamChannelSetupViewState extends State<UpstreamChannelSetupView> {
   }
 
   SetupReviewOrdering? _reviewOrdering(List<Channel> existing) {
-    if (_channelOrder != ChannelOrder.grouped &&
-        _channelOrder == widget.controller.channelOrder) {
+    if (_channelOrder == widget.controller.channelOrder) {
       return null;
     }
 
@@ -661,26 +660,14 @@ class UpstreamChannelSetupViewState extends State<UpstreamChannelSetupView> {
     final allocation = _projection.configure(
       existing: existing,
       options: _allocationOptions(_mode),
+      order: _channelOrder,
+      reorderExisting: _channelOrder != widget.controller.channelOrder,
     );
     final canSavePreference =
         existing.isNotEmpty &&
         (_mode != ChannelBuildMode.replace ||
             existing.any((channel) => channel.builderKey == null)) &&
         _channelOrder != widget.controller.channelOrder;
-    // Only the otherwise disabled path needs to resolve and compare retained
-    // recipes. Builds with candidates already allow Review.
-    final canReorderRetained =
-        existing.isNotEmpty &&
-        allocation.channels.isEmpty &&
-        _mode == ChannelBuildMode.merge &&
-        _channelOrder == ChannelOrder.grouped &&
-        SetupReview(
-          base: existing,
-          plan: allocation,
-          mode: _mode,
-          strategyBySource: const {},
-          ordering: _reviewOrdering(existing),
-        ).counts.hasChanges;
     return SetupConfigureStep(
       allocation: freezeSetupAllocation(allocation),
       section: _configurationSection,
@@ -688,7 +675,7 @@ class UpstreamChannelSetupViewState extends State<UpstreamChannelSetupView> {
           setState(() => _configurationSection = section),
       onBack: _backToLibraries,
       onReview: _prepareReview,
-      orderChanged: canSavePreference || canReorderRetained,
+      orderChanged: canSavePreference,
       hasConfirmedMissingSources:
           _mode == ChannelBuildMode.merge &&
           allocation.unmatchedGenerated.any(

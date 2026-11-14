@@ -583,6 +583,7 @@ class ChannelsViewState extends State<ChannelsView> {
                                           )
                                         : null,
                                     identity: ChannelIdentity(
+                                      maxLines: null,
                                       channel: channel,
                                       semanticsContainer: false,
                                       libraryTag: ChannelIdentity.libraryTagFor(
@@ -840,7 +841,7 @@ class ChannelsViewState extends State<ChannelsView> {
   Widget _directoryColumns({
     Widget? number,
     required Widget name,
-    Widget? identity,
+    ChannelIdentity? identity,
     required Widget source,
     required Widget playback,
     required Widget type,
@@ -888,7 +889,7 @@ class ChannelsViewState extends State<ChannelsView> {
                         identity,
                         Padding(
                           padding: EdgeInsetsDirectional.only(
-                            start: numberWidth + 16,
+                            start: identity.nameIndent(context),
                           ),
                           child: name,
                         ),
@@ -1658,6 +1659,7 @@ class _MoveChannelDialogState extends State<_MoveChannelDialog> {
                     minTileHeight: 56,
                     horizontalTitleGap: 16,
                     title: ChannelIdentity(
+                      maxLines: null,
                       channel: channel,
                       libraryTag: ChannelIdentity.libraryTagFor(
                         channel,

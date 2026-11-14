@@ -490,9 +490,46 @@ ChannelPlanAllocation materializeChannelPlan({
             .whereType<String>()
             .toSet()
       : const <String>{};
-  final existingByBuilderKey = mode == ChannelBuildMode.merge
-      ? {for (final channel in existing.reversed) ?channel.builderKey: channel}
-      : const <String, Channel>{};
+  final existingByBuilderKey = {
+    for (final channel in existing.reversed) ?channel.builderKey: channel,
+  };
+  final stableGrouped =
+      mode == ChannelBuildMode.merge &&
+      order == ChannelOrder.grouped &&
+      !reorderExisting;
+  final lastByType = <BuilderStrategy, int>{};
+  final existingGeneratedNumbers = <int>[];
+  var highest = 0;
+  if (stableGrouped) {
+    for (final channel in existing) {
+      if (channel.number > highest) highest = channel.number;
+      if (channel.builderKey != null) {
+        existingGeneratedNumbers.add(channel.number);
+      }
+      if (channelSourceType(channel) case final type?) {
+        if (channel.number > (lastByType[type] ?? 0)) {
+          lastByType[type] = channel.number;
+        }
+      }
+    }
+    existingGeneratedNumbers.sort();
+  }
+
+  int groupedNumber(BuilderStrategy type) {
+    final last = lastByType[type];
+    if (last != null) {
+      final end =
+          existingGeneratedNumbers
+              .where((number) => number > last)
+              .firstOrNull ??
+          (highest + 1);
+      for (var number = last + 1; number < end; number++) {
+        if (!used.contains(number)) return number;
+      }
+    }
+    return highest + 1;
+  }
+
   final selectedOriginals =
       <
         ({
@@ -543,13 +580,17 @@ ChannelPlanAllocation materializeChannelPlan({
     proposalByKey[builderKey] = proposal;
     final normalizedIncludeSpecials =
         entry.mode == PlaybackMode.block && includeSpecials;
-    final matched = existingByBuilderKey[builderKey];
-    while (matched == null && used.contains(next) && next <= 1000) {
-      next++;
+    final prior = existingByBuilderKey[builderKey];
+    final matched = mode == ChannelBuildMode.merge ? prior : null;
+    if (!stableGrouped) {
+      while (matched == null && used.contains(next) && next <= 1000) {
+        next++;
+      }
     }
-    if (matched == null && next > 1000) {
-      return null;
-    }
+    final number =
+        matched?.number ??
+        (stableGrouped ? groupedNumber(proposal.strategy) : next);
+    if (number > 1000) return null;
     final sameSource =
         matched != null &&
         canonicalSourceEquals(matched.source, proposal.source);
@@ -573,7 +614,6 @@ ChannelPlanAllocation materializeChannelPlan({
       return matched;
     }
     final id = matched?.id ?? createChannelId();
-    final number = matched?.number ?? next;
     final channel = Channel(
       id: id,
       number: number,
@@ -581,7 +621,9 @@ ChannelPlanAllocation materializeChannelPlan({
       source: entry.proposal.source,
       playbackMode: entry.mode,
       anchor: matched?.anchor ?? createdAt,
-      favorite: matched?.favorite ?? false,
+      favorite: mode == ChannelBuildMode.append
+          ? false
+          : prior?.favorite ?? false,
       kind: kind,
       sourceLibraries: sourceLibraries,
       sourceLibrariesIncomplete: sourceLibrariesIncomplete,
@@ -591,7 +633,14 @@ ChannelPlanAllocation materializeChannelPlan({
       includeSpecials: normalizedIncludeSpecials,
     );
     used.add(number);
-    if (matched == null) next++;
+    if (matched == null) {
+      if (stableGrouped) {
+        lastByType[proposal.strategy] = number;
+        if (number > highest) highest = number;
+      } else {
+        next++;
+      }
+    }
     if (matched != null || resolve == null) return channel;
     final source = channel.source;
     final content = resolvedBySource.putIfAbsent(
@@ -813,14 +862,9 @@ List<Channel> _nameNewChannels(
   ];
   final fresh = channels.where((c) => !savedIds.contains(c.id));
   final origins = <String, Set<String>>{};
-  final generatedClaims = <String, Set<String>>{};
   final claimed = <String, Set<String?>>{};
   for (final channel in fixed) {
     (claimed[channel.name] ??= {}).add(channel.libraryTitle);
-    if (channel.libraryTitle case final String title
-        when channel.builderKey != null) {
-      (generatedClaims[channel.name] ??= {}).add(title);
-    }
   }
   for (final channel in [
     ...fixed.where((c) => c.builderKey != null),
@@ -840,10 +884,7 @@ List<Channel> _nameNewChannels(
     final peers = claimed[channel.name] ??= {};
     final library = channel.libraryTitle;
     final shared = (origins[channel.name]?.length ?? 0) > 1;
-    final generatedPeers = generatedClaims[channel.name] ??= {};
-    if (shared
-        ? library != null && generatedPeers.add(library)
-        : peers.isEmpty) {
+    if (shared ? library != null && !peers.contains(library) : peers.isEmpty) {
       peers.add(library);
       result.add(channel);
       continue;

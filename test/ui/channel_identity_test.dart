@@ -59,6 +59,88 @@ void main() {
     expect(find.byIcon(Icons.tv_outlined), findsOneWidget);
     expect(tester.takeException(), isNull);
   });
+
+  testWidgets('name wraps at spaces until a word exceeds the name column', (
+    tester,
+  ) async {
+    const name = 'Documentaries Across the World';
+    final row = channel('tv', 1000, name, ChannelKind.tv, 'TV');
+    Future<void> pump(double width) => tester.pumpWidget(
+      host(
+        ChannelIdentity(
+          channel: row,
+          numberWidth: 52,
+          nameStyle: const TextStyle(fontSize: 18),
+          maxLines: 2,
+        ),
+        width: width,
+      ),
+    );
+
+    await pump(415);
+    expect(tester.widget<Text>(find.text(name)).maxLines, 2);
+    expect(
+      tester.renderObject<RenderParagraph>(find.text(name)).didExceedMaxLines,
+      isFalse,
+    );
+    await pump(250);
+    expect(tester.widget<Text>(find.text(name)).maxLines, 1);
+    expect(
+      tester.renderObject<RenderParagraph>(find.text(name)).didExceedMaxLines,
+      isTrue,
+    );
+  });
+
+  testWidgets(
+    'unlimited names wrap and supporting text starts under the name',
+    (tester) async {
+      const name = 'Documentaries Across the World';
+      await tester.pumpWidget(
+        host(
+          ChannelIdentity(
+            channel: channel('tv', 2, name, ChannelKind.tv, 'TV'),
+            nameStyle: const TextStyle(fontSize: 18),
+            maxLines: null,
+            secondary: const Text('Watching'),
+          ),
+          width: 350,
+        ),
+      );
+
+      final title = find.text(name);
+      final secondary = find.text('Watching');
+      final paragraph = tester.renderObject<RenderParagraph>(title);
+      expect(paragraph.size.height, greaterThan(36));
+      expect(paragraph.didExceedMaxLines, isFalse);
+      expect(
+        tester.getTopLeft(secondary).dx,
+        closeTo(tester.getTopLeft(title).dx, .01),
+      );
+    },
+  );
+
+  testWidgets('library tag moves below the name when it cannot fit beside it', (
+    tester,
+  ) async {
+    final row = channel('tv', 2, 'Drama', ChannelKind.tv, 'A Film Library');
+    await tester.pumpWidget(
+      host(
+        ChannelIdentity(
+          channel: row,
+          libraryTag: row.libraryTitle,
+          allowTagBelow: true,
+          nameStyle: const TextStyle(fontSize: 18),
+        ),
+        width: 250,
+      ),
+    );
+
+    final name = tester.getTopLeft(find.text('Drama'));
+    final tag = tester.getTopLeft(find.text('A Film Library'));
+    expect(tag.dx, closeTo(name.dx, .01));
+    expect(tag.dy, greaterThan(name.dy));
+    expect(tester.takeException(), isNull);
+  });
 }
 
 Widget host(Widget child, {double width = 400}) => MaterialApp(

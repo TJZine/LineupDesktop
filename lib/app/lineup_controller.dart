@@ -1780,17 +1780,18 @@ class LineupController extends ChangeNotifier {
     return result;
   }
 
-  Future<void> toggleFavorite(String channelId) async {
+  Future<void> setFavorite(String channelId, bool favorite) async {
     final operation = _mutationScope;
     await _queueScopeOperation(operation, () async {
       final channel = channels
           .where((value) => value.id == channelId)
           .firstOrNull;
       if (channel == null) throw const ChannelStateConflictException();
+      if (channel.favorite == favorite) return;
       await _commitChannelList([
         for (final current in channels)
           if (current.id == channelId)
-            current.copyWith(favorite: !current.favorite)
+            current.copyWith(favorite: favorite)
           else
             current,
       ], operation);

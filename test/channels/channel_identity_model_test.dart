@@ -162,6 +162,33 @@ void main() {
   });
 
   test(
+    'a fixed channel claims its library and name against generated twins',
+    () {
+      final custom = Channel.fromJson({
+        ...channel('custom', 8, 'Drama').toJson(),
+        'sourceLibraries': {tv.id: tv.title},
+      });
+      final source = proposals().where((row) => row.name == 'Drama').toList();
+      for (final mode in [ChannelBuildMode.merge, ChannelBuildMode.replace]) {
+        final result = plan(source, existing: [custom], mode: mode);
+        final roster = composeChannelPlan(
+          existing: [custom],
+          planned: result.channels,
+          mode: mode,
+        );
+        expect(
+          roster.map((row) => (row.libraryTitle, row.name)),
+          unorderedEquals([
+            (tv.title, 'Drama'),
+            (film.title, 'Drama'),
+            (tv.title, 'Drama 2'),
+          ]),
+        );
+      }
+    },
+  );
+
+  test(
     'grouped numbers follow source order and leave custom numbers reserved',
     () {
       final source = proposals(
@@ -196,6 +223,87 @@ void main() {
       expect(grouped.map((c) => c.number), [1, 3, 4, 5, 6, 7]);
     },
   );
+
+  test('Grouped updates keep saved and manual numbers as genres grow', () {
+    List<ChannelProposal> source(List<PlexMediaItem> inventory) =>
+        buildChannelProposals(
+          libraries: const [film],
+          items: inventory,
+          strategies: const {BuilderStrategy.genres, BuilderStrategy.studios},
+          minimumItems: 1,
+        );
+
+    final initial = source(items);
+    final grown = source([
+      ...items,
+      ...media(film, 'Comedy', 10).skip(4),
+      ...media(film, 'Mystery', 3),
+      ...media(film, 'Adventure', 2),
+    ]);
+    final first = plan(initial, order: ChannelOrder.grouped).channels;
+    final saved = [
+      first.singleWhere((row) => row.name == 'Drama').copyWith(number: 2),
+      first.singleWhere((row) => row.name == 'Comedy').copyWith(number: 5),
+    ];
+    final studio = Channel(
+      id: 'studio',
+      number: 8,
+      name: 'Studio',
+      source: const LibrarySource(
+        libraryId: 'film',
+        libraryType: PlexLibraryType.movie,
+        filters: {
+          LibraryFilter.studio: ['Studio'],
+        },
+      ),
+      builderKey: 'studio',
+      playbackMode: PlaybackMode.shuffle,
+      anchor: createdAt,
+      shuffleSeed: 1,
+    );
+    final custom = channel('custom', 6, 'Personal');
+    final existing = [...saved, studio, custom];
+    final update = plan(
+      grown,
+      existing: existing,
+      mode: ChannelBuildMode.merge,
+      order: ChannelOrder.grouped,
+    );
+    final lineup = composeChannelPlan(
+      existing: existing,
+      planned: update.channels,
+      mode: ChannelBuildMode.merge,
+    );
+    expect(lineup.map((row) => (row.name, row.number)).toSet(), {
+      ('Drama', 2),
+      ('Comedy', 5),
+      ('Personal', 6),
+      ('Mystery', 7),
+      ('Studio', 8),
+      ('Adventure', 9),
+    });
+    for (final channel in saved) {
+      expect(
+        lineup.singleWhere((row) => row.id == channel.id).number,
+        channel.number,
+      );
+    }
+  });
+
+  test('Replace carries favourites by builder key with fresh anchors', () {
+    final source = proposals();
+    final initial = plan(source).channels;
+    final favourite = initial.first.copyWith(favorite: true);
+    final result = plan(
+      source,
+      existing: [favourite, ...initial.skip(1)],
+      time: createdAt.add(const Duration(days: 1)),
+    ).channels;
+    final replacement = result.singleWhere((row) => row.favorite);
+    expect(replacement.builderKey, favourite.builderKey);
+    expect(replacement.id, isNot(favourite.id));
+    expect(replacement.anchor, isNot(favourite.anchor));
+  });
 
   test('new phases are repeatable and merge retains anchor and favourite', () {
     final source = proposals();

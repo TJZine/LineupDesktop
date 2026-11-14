@@ -2860,15 +2860,13 @@ class _GuideRow extends StatelessWidget {
                                 : roles.primaryText,
                             fontWeight: FontWeight.w500,
                           );
-                      final painter = TextPainter(
-                        text: TextSpan(text: channel.name, style: nameStyle),
-                        textDirection: Directionality.of(context),
-                        textScaler: MediaQuery.textScalerOf(context),
-                      )..layout(maxWidth: constraints.maxWidth);
-                      final lineHeight = painter
-                          .computeLineMetrics()
-                          .first
-                          .height;
+                      final scaler = MediaQuery.textScalerOf(context);
+                      final direction = Directionality.of(context);
+                      final lineHeight = _textHeight(
+                        nameStyle,
+                        scaler,
+                        direction,
+                      );
                       final supportStyle = DefaultTextStyle.of(context).style
                           .copyWith(
                             fontSize: largeRail ? 16 : 14,
@@ -2880,99 +2878,77 @@ class _GuideRow extends StatelessWidget {
                           );
                       final supportHeight = _textHeight(
                         supportStyle,
-                        MediaQuery.textScalerOf(context),
-                        Directionality.of(context),
+                        scaler,
+                        direction,
                       );
-                      final supportLabel = tunedChannel
-                          ? 'Watching'
-                          : _channelProvenance(controller, channel);
+                      final showSupport = tunedChannel || showSource;
                       final availableLines =
                           ((constraints.maxHeight -
-                                      ((tunedChannel || showSource)
-                                          ? supportHeight
-                                          : 0)) /
+                                      (showSupport ? supportHeight : 0)) /
                                   lineHeight)
                               .floor()
                               .clamp(1, 2);
-                      painter.dispose();
-                      final showSupport = tunedChannel || showSource;
-                      return Column(
-                        mainAxisAlignment: MainAxisAlignment.center,
-                        crossAxisAlignment: CrossAxisAlignment.start,
-                        children: [
-                          ChannelIdentity(
-                            channel: channel,
-                            libraryTag: libraryTag,
-                            nameStyle: nameStyle,
-                            numberStyle: numberStyle,
-                            numberWidth: numberColumnWidth,
-                            numberAlignment: TextAlign.right,
-                            supportStyle: supportStyle,
-                            showSemantics: false,
-                            maxLines: availableLines,
-                            nameBuilder: (style) => Tooltip(
-                              message: channel.name,
-                              excludeFromSemantics: true,
-                              child: Text(
-                                channel.name,
-                                maxLines: availableLines,
-                                overflow: TextOverflow.ellipsis,
-                                style: style,
-                              ),
+                      final watchingColor =
+                          focusChannelRail && DeviceProfile.of(context).isTv
+                          ? roles.focusSecondaryText
+                          : roles.secondaryText;
+                      final secondary = tunedChannel
+                          ? Row(
+                              mainAxisSize: MainAxisSize.min,
+                              children: [
+                                Icon(
+                                  Icons.play_arrow_rounded,
+                                  size: 14,
+                                  color: watchingColor,
+                                ),
+                                const SizedBox(width: 4),
+                                Flexible(
+                                  child: Text(
+                                    'Watching',
+                                    maxLines: 1,
+                                    overflow: TextOverflow.ellipsis,
+                                    style: supportStyle.copyWith(
+                                      color: watchingColor,
+                                    ),
+                                  ),
+                                ),
+                              ],
+                            )
+                          : showSource
+                          ? Text(
+                              _channelProvenance(controller, channel),
+                              maxLines: 1,
+                              overflow: TextOverflow.ellipsis,
+                              style: supportStyle,
+                            )
+                          : null;
+                      return Align(
+                        alignment: AlignmentDirectional.centerStart,
+                        child: ChannelIdentity(
+                          channel: channel,
+                          libraryTag: libraryTag,
+                          nameStyle: nameStyle,
+                          numberStyle: numberStyle,
+                          numberWidth: numberColumnWidth,
+                          numberAlignment: TextAlign.right,
+                          supportStyle: supportStyle,
+                          showSemantics: false,
+                          maxLines: availableLines,
+                          allowTagBelow:
+                              constraints.maxHeight >=
+                              lineHeight + supportHeight,
+                          secondary: secondary,
+                          nameBuilder: (style, lines) => Tooltip(
+                            message: channel.name,
+                            excludeFromSemantics: true,
+                            child: Text(
+                              channel.name,
+                              maxLines: lines,
+                              overflow: TextOverflow.ellipsis,
+                              style: style,
                             ),
                           ),
-                          if (showSupport)
-                            Padding(
-                              padding: EdgeInsetsDirectional.only(
-                                start:
-                                    numberColumnWidth +
-                                    14 *
-                                        MediaQuery.textScalerOf(context)
-                                            .scale(1),
-                              ),
-                              child: tunedChannel
-                                  ? ExcludeSemantics(
-                                      child: Row(
-                                        mainAxisSize: MainAxisSize.max,
-                                        children: [
-                                          Icon(
-                                            Icons.play_arrow_rounded,
-                                            size: 14,
-                                            color:
-                                                focusChannelRail &&
-                                                    DeviceProfile.of(context)
-                                                        .isTv
-                                                ? roles.focusSecondaryText
-                                                : roles.secondaryText,
-                                          ),
-                                          SizedBox(width: 4),
-                                          Flexible(
-                                            child: Text(
-                                              supportLabel,
-                                              maxLines: 1,
-                                              overflow: TextOverflow.ellipsis,
-                                              style: supportStyle.copyWith(
-                                                color:
-                                                    focusChannelRail &&
-                                                        DeviceProfile.of(
-                                                          context,
-                                                        ).isTv
-                                                    ? roles.focusSecondaryText
-                                                    : roles.secondaryText,
-                                              ),
-                                            ),
-                                          ),
-                                        ],
-                                      ),
-                                    )
-                                  : Text(
-                                      supportLabel,
-                                      maxLines: 1,
-                                      overflow: TextOverflow.ellipsis,
-                                      style: supportStyle,
-                                    ),
-                            ),
-                        ],
+                        ),
                       );
                     },
                   ),

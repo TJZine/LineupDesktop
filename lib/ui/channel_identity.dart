@@ -17,6 +17,8 @@ class ChannelIdentity extends StatelessWidget {
     this.numberAlignment = TextAlign.start,
     this.nameBuilder,
     this.maxLines = 1,
+    this.allowTagBelow = false,
+    this.secondary,
     this.showSemantics = true,
     this.semanticsContainer = true,
     super.key,
@@ -30,8 +32,10 @@ class ChannelIdentity extends StatelessWidget {
   final double? numberWidth;
   final String? numberText;
   final TextAlign numberAlignment;
-  final Widget Function(TextStyle style)? nameBuilder;
-  final int maxLines;
+  final Widget Function(TextStyle style, int? lines)? nameBuilder;
+  final int? maxLines;
+  final bool allowTagBelow;
+  final Widget? secondary;
 
   /// Rows which already own an interactive semantics node can include [label]
   /// on that node and exclude this widget's visuals.
@@ -64,6 +68,35 @@ class ChannelIdentity extends StatelessWidget {
     if (libraryTag != null) '$libraryTag library',
   ].nonNulls.join(', ');
 
+  static double _textWidth(
+    BuildContext context,
+    String text,
+    TextStyle style,
+  ) => TextPainter.computeWidth(
+    text: TextSpan(text: text, style: style),
+    textDirection: Directionality.of(context),
+    textScaler: MediaQuery.textScalerOf(context),
+    locale: Localizations.maybeLocaleOf(context),
+  );
+
+  double nameIndent(BuildContext context) {
+    final base = DefaultTextStyle.of(context).style;
+    final name = base.merge(nameStyle);
+    final scaledSize = MediaQuery.textScalerOf(context)
+        .scale(name.fontSize ?? 14);
+    final hasIcon = channel.kind != ChannelKind.unknown;
+    final number =
+        numberWidth ??
+        _textWidth(
+          context,
+          numberText ?? '${channel.number}',
+          name.merge(numberStyle),
+        );
+    return number +
+        _textWidth(context, '•', base.merge(supportStyle)) +
+        scaledSize * (hasIcon ? .75 + .9 : .5);
+  }
+
   @override
   Widget build(BuildContext context) {
     final base = DefaultTextStyle.of(context).style;
@@ -79,9 +112,9 @@ class ChannelIdentity extends StatelessWidget {
       ChannelKind.both => Icons.video_library_outlined,
       ChannelKind.unknown => null,
     };
-    final fontSize = name.fontSize ?? 14.0;
-    final scaler = MediaQuery.textScalerOf(context);
-    final gap = scaler.scale(fontSize) * .25;
+    final scaledSize = MediaQuery.textScalerOf(context)
+        .scale(name.fontSize ?? 14);
+    final gap = scaledSize * .25;
     final number = Text(
       numberText ?? '${channel.number}',
       textAlign: numberAlignment,
@@ -89,49 +122,50 @@ class ChannelIdentity extends StatelessWidget {
       maxLines: 1,
       softWrap: false,
     );
-    final title =
-        nameBuilder?.call(name) ??
-        Text(
-          channel.name,
-          style: name,
-          maxLines: maxLines,
-          overflow: TextOverflow.ellipsis,
-        );
-    final tag = libraryTag;
+    final tag = libraryTag == null ? null : '· $libraryTag';
     final identity = LayoutBuilder(
       builder: (context, constraints) {
+        final prefix = nameIndent(context);
         final bounded = constraints.hasBoundedWidth;
-        final supportSpan = TextSpan(
-          text: tag == null ? null : '· $tag',
-          style: support,
-        );
-        double textWidth(String value, TextStyle style) =>
-            TextPainter.computeWidth(
-              text: TextSpan(text: value, style: style),
-              textDirection: Directionality.of(context),
-              textScaler: scaler,
-            );
-        final iconWidth = icon == null ? 0.0 : scaler.scale(fontSize) * .9;
-        final availableForLabel =
-            constraints.maxWidth -
-            (numberWidth ?? textWidth(number.data!, number.style!)) -
-            textWidth('•', support) -
-            (icon == null ? 2 : 3) * gap -
-            iconWidth;
+        final labelRoom = math.max(0.0, constraints.maxWidth - prefix);
         final nameWidth = nameBuilder != null || tag != null
-            ? textWidth(channel.name, name)
+            ? _textWidth(context, channel.name, name)
             : null;
-        final tagWidth = tag == null
-            ? 0.0
-            : textWidth(supportSpan.text!, support);
-        final labelRoom = math.max(0.0, availableForLabel);
-        // Keep room for the name and put the overflow on the name alone.
-        final showTag =
+        final besideTagRoom = tag == null
+            ? labelRoom
+            : labelRoom - _textWidth(context, tag, support) - gap;
+        // Flutter breaks an overwide word between letters in multiline Text.
+        final lines =
+            bounded &&
+                maxLines != 1 &&
+                channel.name
+                    .split(RegExp(r'\s+'))
+                    .any((word) => _textWidth(context, word, name) > labelRoom)
+            ? 1
+            : maxLines;
+        final tagBelow =
             tag != null &&
-            (!bounded ||
-                labelRoom - tagWidth - gap >=
-                    math.min(nameWidth!, scaler.scale(fontSize) * 2.5));
-        return Row(
+            allowTagBelow &&
+            nameWidth! > besideTagRoom &&
+            (lines == 1 || nameWidth <= labelRoom);
+        final tagBeside =
+            tag != null &&
+            !tagBelow &&
+            (nameWidth! <= besideTagRoom ||
+                (!allowTagBelow &&
+                    maxLines == 1 &&
+                    besideTagRoom >= math.min(nameWidth, scaledSize * 2.5)));
+        final title =
+            nameBuilder?.call(name, lines) ??
+            Text(
+              channel.name,
+              style: name,
+              maxLines: lines,
+              overflow: lines == null
+                  ? TextOverflow.clip
+                  : TextOverflow.ellipsis,
+            );
+        final label = Row(
           mainAxisSize: MainAxisSize.min,
           children: [
             if (numberWidth case final width?)
@@ -142,7 +176,7 @@ class ChannelIdentity extends StatelessWidget {
             Text('•', style: support, maxLines: 1),
             if (icon != null) ...[
               SizedBox(width: gap),
-              Icon(icon, size: iconWidth, color: support.color),
+              Icon(icon, size: scaledSize * .9, color: support.color),
             ],
             SizedBox(width: gap),
             if (bounded)
@@ -156,15 +190,40 @@ class ChannelIdentity extends StatelessWidget {
               )
             else
               title,
-            if (showTag) ...[
+            if (tagBeside) ...[
               SizedBox(width: gap),
-              Text(
-                supportSpan.text!,
+              Text(tag, style: support, maxLines: 1, softWrap: false),
+            ],
+          ],
+        );
+        final secondaryLine = secondary;
+        final belowTag = tagBelow
+            ? Text(
+                secondaryLine == null ? libraryTag! : tag,
                 style: support,
                 maxLines: 1,
-                softWrap: false,
-              ),
-            ],
+                overflow: TextOverflow.ellipsis,
+              )
+            : null;
+        if (belowTag == null && secondaryLine == null) return label;
+        return Column(
+          mainAxisSize: MainAxisSize.min,
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            label,
+            Padding(
+              padding: EdgeInsetsDirectional.only(start: prefix),
+              child: secondaryLine != null && belowTag != null
+                  ? Row(
+                      mainAxisSize: MainAxisSize.min,
+                      children: [
+                        Flexible(child: secondaryLine),
+                        SizedBox(width: gap),
+                        Flexible(child: belowTag),
+                      ],
+                    )
+                  : secondaryLine ?? belowTag!,
+            ),
           ],
         );
       },
