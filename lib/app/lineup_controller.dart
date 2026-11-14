@@ -2008,9 +2008,11 @@ class LineupController extends ChangeNotifier {
   }
 
   Channel _channelForSave(Channel incoming, Channel? current) {
-    final sameProgramming =
+    final sameSource =
         current != null &&
-        scheduleProgrammingSourceEquals(current.source, incoming.source) &&
+        scheduleProgrammingSourceEquals(current.source, incoming.source);
+    final sameProgramming =
+        sameSource &&
         current.playbackMode == incoming.playbackMode &&
         (incoming.playbackMode != PlaybackMode.block ||
             (current.blockSize ?? 3) == (incoming.blockSize ?? 3)) &&
@@ -2051,14 +2053,17 @@ class LineupController extends ChangeNotifier {
     }
 
     collectLibraries(incoming.source);
-    final sourceLibraries = {
-      if (sameProgramming && (!hasPlaylist || libraryIds.isEmpty))
-        ...current.sourceLibraries,
-      if (sameProgramming && hasPlaylist)
-        for (final id in libraryIds) id: ?current.sourceLibraries[id],
+    final currentTitles = {
       for (final library in libraries)
         if (libraryIds.contains(library.id)) library.id: library.title,
     };
+    final sourceLibraries = hasPlaylist
+        ? playlistSourceLibraries(
+            currentIds: libraryIds,
+            currentTitles: currentTitles,
+            savedTitles: sameSource ? current.sourceLibraries : const {},
+          )
+        : {if (sameProgramming) ...current.sourceLibraries, ...currentTitles};
     final saved = Channel(
       id: incoming.id,
       number: incoming.number,

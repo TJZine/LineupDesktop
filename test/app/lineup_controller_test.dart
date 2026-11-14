@@ -5508,6 +5508,11 @@ void main() {
       title: 'Films',
       type: PlexLibraryType.movie,
     );
+    const tv = PlexLibrary(
+      id: 'tv',
+      title: 'TV Shows',
+      type: PlexLibraryType.show,
+    );
     final playlist = PlexPlaylist(
       id: 'mix',
       title: 'Mix',
@@ -5530,23 +5535,22 @@ void main() {
         account: const PlexAccount(id: 'owner', name: 'Owner', email: ''),
         server: server,
         connection: server.connections.single,
-        libraries: [library],
+        libraries: [library, tv],
         selectedLibraryIds: {'movies'},
         availableMedia: [_playableMovie],
         availablePlaylists: [playlist],
       ),
     );
     addTearDown(controller.dispose);
-    final inventory = controller.playableInventory;
-    final proposals = buildChannelProposals(
-      libraries: [library],
-      items: inventory.media,
-      playlists: inventory.playlists,
+    List<ChannelProposal> proposals() => buildChannelProposals(
+      libraries: [library, tv],
+      items: controller.playableInventory.media,
+      playlists: controller.playableInventory.playlists,
       minimumItems: 1,
       strategies: {BuilderStrategy.playlists},
     );
     final plan = materializeChannelPlan(
-      proposals: proposals,
+      proposals: proposals(),
       existing: [],
       mode: ChannelBuildMode.replace,
     );
@@ -5589,6 +5593,70 @@ void main() {
       }).ids,
       isEmpty,
     );
+
+    final related = controller.channels.first;
+    Future<Channel> refresh() async {
+      final existing = controller.channels;
+      final plan = materializeChannelPlan(
+        proposals: proposals(),
+        existing: existing,
+        mode: ChannelBuildMode.merge,
+      );
+      expect(
+        await controller.applyReviewedChannelPlan(
+          plan.channels,
+          mode: ChannelBuildMode.merge,
+          expectedBase: existing,
+        ),
+        ChannelPlanApplyResult.applied,
+      );
+      final disk = PersistedState.fromJson(
+        jsonDecode(jsonEncode(store.state.toJson())),
+      );
+      return disk
+          .lineupFor(const LineupScope(profileKey: 'owner', serverId: 'server'))
+          .channels
+          .singleWhere((channel) => channel.id == related.id);
+    }
+
+    controller.fixtureActor.publishInventory(media: []);
+    final unknown = await refresh();
+    expect(unknown.sourceLibraries, {'movies': 'Films'});
+    expect(unknown.sourceLibrariesIncomplete, isTrue);
+    expect(unknown.libraryTitle, isNull);
+
+    controller.fixtureActor.publishInventory(
+      media: [
+        for (final item in playlist.items)
+          PlexMediaItem(
+            id: item.id,
+            title: item.title,
+            type: 'episode',
+            libraryId: 'tv',
+            duration: item.duration,
+            parts: item.parts,
+          ),
+      ],
+    );
+    final updated = await refresh();
+    expect(updated.sourceLibraries, {'tv': 'TV Shows'});
+    expect(updated.libraryTitle, 'TV Shows');
+
+    final otherSource = materializeChannelPlan(
+      proposals: buildChannelProposals(
+        libraries: [library, tv],
+        items: [],
+        playlists: [
+          PlexPlaylist(id: 'new', title: playlist.title, items: playlist.items),
+        ],
+        minimumItems: 1,
+        strategies: {BuilderStrategy.playlists},
+      ),
+      existing: [updated],
+      mode: ChannelBuildMode.merge,
+    ).channels.single;
+    expect(otherSource.id, isNot(updated.id));
+    expect(otherSource.sourceLibraries, isEmpty);
   });
 
   test('custom playlist replaces known provenance and distinguishes partial membership', () async {
@@ -5639,13 +5707,29 @@ void main() {
       'number': 3,
       'sourceLibraries': {'films': 'Films'},
     });
-    Future<Channel> save(List<PlexMediaItem> items, Channel? previous) async {
+    Future<Channel> save(
+      List<PlexMediaItem> items,
+      Channel? previous, {
+      PlaybackMode mode = PlaybackMode.sequential,
+      PlaylistSource playlistSource = source,
+    }) async {
       controller.fixtureActor.publishInventory(
         playlists: [
-          PlexPlaylist(id: source.playlistId, title: 'Drama', items: items),
+          PlexPlaylist(
+            id: playlistSource.playlistId,
+            title: 'Drama',
+            items: items,
+          ),
         ],
       );
-      await controller.saveChannel(draft, expectedBase: previous);
+      await controller.saveChannel(
+        Channel.fromJson({
+          ...draft.toJson(),
+          'playbackMode': mode.name,
+          'source': playlistSource.toJson(),
+        }),
+        expectedBase: previous,
+      );
       return PersistedState.fromJson(
         jsonDecode(jsonEncode(store.state.toJson())),
       ).lineupFor(scope).channels.single;
@@ -5661,7 +5745,12 @@ void main() {
     final partial = await save([item('episode'), item('unscanned')], tv);
     expect(partial.sourceLibraries, {'tv': 'TV Shows'});
     expect(ChannelIdentity.libraryTagFor(partial, [partial, filmPeer]), isNull);
-    final unknown = await save([item('unscanned')], partial);
+    final unknown = await save(
+      [item('unscanned')],
+      partial,
+      mode: PlaybackMode.shuffle,
+    );
+    expect(unknown.playbackMode, PlaybackMode.shuffle);
     expect(unknown.sourceLibraries, {'tv': 'TV Shows'});
     expect(unknown.libraryTitle, isNull);
     for (final channel in [tv, partial, unknown]) {
@@ -5672,6 +5761,13 @@ void main() {
       );
       expect(filter.entries.any((entry) => entry.label == 'Films'), isFalse);
     }
+    final changed = await save(
+      [item('unscanned')],
+      unknown,
+      mode: PlaybackMode.shuffle,
+      playlistSource: const PlaylistSource('other'),
+    );
+    expect(changed.sourceLibraries, isEmpty);
   });
 
   test(

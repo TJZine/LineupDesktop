@@ -198,6 +198,55 @@ void main() {
     }
   });
 
+  test('retained review counts follow media and playlist snapshots', () {
+    strategies.clear();
+    final librarySource = LibrarySource(
+      libraryId: '0',
+      libraryType: PlexLibraryType.show,
+    );
+    const playlistSource = PlaylistSource('playlist');
+    final existing = [
+      for (final (index, source) in [librarySource, playlistSource].indexed)
+        Channel(
+          id: 'saved-$index',
+          number: index + 1,
+          name: 'Saved $index',
+          builderKey: 'saved-$index',
+          source: source,
+          playbackMode: PlaybackMode.shuffle,
+          anchor: DateTime.utc(2026),
+          shuffleSeed: index,
+        ),
+    ];
+    final libraryKey = canonicalSourceIdentity(librarySource);
+    final playlistKey = canonicalSourceIdentity(playlistSource);
+    expect(project(), isEmpty);
+    expect(projection.reviewSourceCounts(existing), {
+      libraryKey: 15,
+      playlistKey: 30,
+    });
+    order = order.reversed.toList();
+    expect(project(), isEmpty);
+    expect(projection.reviewSourceCounts(existing), {
+      libraryKey: 15,
+      playlistKey: 30,
+    });
+
+    items = items.take(8).toList();
+    expect(project(), isEmpty);
+    expect(projection.reviewSourceCounts(existing), {
+      libraryKey: 4,
+      playlistKey: 30,
+    });
+    playlists = [PlexPlaylist(id: 'playlist', title: 'Playlist', items: items)];
+    expect(project(), isEmpty);
+    expect(projection.reviewSourceCounts(existing), {
+      libraryKey: 4,
+      playlistKey: 8,
+    });
+    expect(projection.reviewSourceCounts([existing.last]), {playlistKey: 8});
+  });
+
   test('every allocation input and lineup replacement refreshes preview', () {
     final proposals = project();
     final existing = <Channel>[];

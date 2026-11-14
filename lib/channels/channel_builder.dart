@@ -76,6 +76,7 @@ class ChannelProposal {
     this.sourceLibraries = const {},
     this.sourceLibrariesIncomplete = false,
     this.playlistKind = ChannelKind.unknown,
+    this.playlistLibraryIds = const {},
     required this.playableItemCount,
     required this.blockItemCountWithoutSpecials,
   });
@@ -89,6 +90,7 @@ class ChannelProposal {
   final Map<String, String> sourceLibraries;
   final bool sourceLibrariesIncomplete;
   final ChannelKind playlistKind;
+  final Set<String> playlistLibraryIds;
 
   /// Resolved inventory counts used to allocate each playback version.
   /// Apply validates the current inventory independently of these proposal facts.
@@ -292,9 +294,8 @@ List<ChannelProposal> buildChannelProposals({
           sourceLibraries: Map.unmodifiable({
             for (final id in membership.ids) id: ?titleById[id],
           }),
-          sourceLibrariesIncomplete:
-              membership.incomplete ||
-              !membership.ids.every(titleById.containsKey),
+          sourceLibrariesIncomplete: membership.incomplete,
+          playlistLibraryIds: Set.unmodifiable(membership.ids),
           playlistKind: channelKindFor(
             PlaylistSource(playlist.id),
             playlists: {playlist.id: playlist.items.map(channelItemFor)},
@@ -549,18 +550,26 @@ ChannelPlanAllocation materializeChannelPlan({
     if (matched == null && next > 1000) {
       return null;
     }
-    if (matched != null &&
-        canonicalSourceEquals(matched.source, entry.proposal.source) &&
+    final sameSource =
+        matched != null &&
+        canonicalSourceEquals(matched.source, proposal.source);
+    final sourceLibraries = sameSource && proposal.source is PlaylistSource
+        ? playlistSourceLibraries(
+            currentIds: proposal.playlistLibraryIds,
+            currentTitles: proposal.sourceLibraries,
+            savedTitles: matched.sourceLibraries,
+          )
+        : proposal.sourceLibraries;
+    final sourceLibrariesIncomplete =
+        proposal.sourceLibrariesIncomplete ||
+        !proposal.playlistLibraryIds.every(sourceLibraries.containsKey);
+    if (sameSource &&
         matched.playbackMode == entry.mode &&
         matched.blockSize == entry.blockSize &&
         matched.includeSpecials == normalizedIncludeSpecials &&
         matched.kind == kind &&
-        matched.sourceLibrariesIncomplete ==
-            proposal.sourceLibrariesIncomplete &&
-        canonicalChannelValueEquals(
-          matched.sourceLibraries,
-          proposal.sourceLibraries,
-        )) {
+        matched.sourceLibrariesIncomplete == sourceLibrariesIncomplete &&
+        canonicalChannelValueEquals(matched.sourceLibraries, sourceLibraries)) {
       return matched;
     }
     final id = matched?.id ?? createChannelId();
@@ -574,8 +583,8 @@ ChannelPlanAllocation materializeChannelPlan({
       anchor: matched?.anchor ?? createdAt,
       favorite: matched?.favorite ?? false,
       kind: kind,
-      sourceLibraries: proposal.sourceLibraries,
-      sourceLibrariesIncomplete: proposal.sourceLibrariesIncomplete,
+      sourceLibraries: sourceLibraries,
+      sourceLibrariesIncomplete: sourceLibrariesIncomplete,
       shuffleSeed: matched?.shuffleSeed ?? stableChannelSeed(id),
       blockSize: entry.blockSize,
       builderKey: builderKey,

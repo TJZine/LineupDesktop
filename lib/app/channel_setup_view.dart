@@ -4,7 +4,6 @@ import 'package:lineup_desktop/platform/device_profile.dart';
 
 import '../channels/channel.dart';
 import '../channels/channel_builder.dart';
-import '../channels/content_resolver.dart';
 import '../ui/app_theme.dart';
 import '../ui/app_ui.dart';
 import 'channel_setup_projection.dart';
@@ -330,7 +329,7 @@ class UpstreamChannelSetupViewState extends State<UpstreamChannelSetupView> {
       ),
       mode: mode,
       strategyBySource: strategyBySource,
-      ordering: _reviewOrdering(existing, proposals),
+      ordering: _reviewOrdering(existing),
       planFactory: (nextMode, nextAnchor) {
         final nextProposals = _buildProposals();
         final nextStrategies = <String, BuilderStrategy>{};
@@ -353,34 +352,16 @@ class UpstreamChannelSetupViewState extends State<UpstreamChannelSetupView> {
     );
   }
 
-  SetupReviewOrdering? _reviewOrdering(
-    List<Channel> existing,
-    List<ChannelProposal> proposals,
-  ) {
+  SetupReviewOrdering? _reviewOrdering(List<Channel> existing) {
     if (_channelOrder != ChannelOrder.grouped &&
         _channelOrder == widget.controller.channelOrder) {
       return null;
     }
 
-    final inventory = widget.controller.playableInventory;
-    final counts = {
-      for (final proposal in proposals)
-        canonicalSourceIdentity(proposal.source): proposal.itemCount,
-    };
-    for (final channel in existing.where((c) => c.builderKey != null)) {
-      counts.putIfAbsent(
-        canonicalSourceIdentity(channel.source),
-        () => resolveContent(
-          channel.source,
-          inventory.media,
-          inventory.playlists,
-        ).length,
-      );
-    }
     return (
       order: _channelOrder,
       strategyOrder: _sourceOrder,
-      sourceCounts: counts,
+      sourceCounts: _projection.reviewSourceCounts(existing),
     );
   }
 
@@ -675,7 +656,7 @@ class UpstreamChannelSetupViewState extends State<UpstreamChannelSetupView> {
   }
 
   Widget _configureStep() {
-    final proposals = _buildProposals();
+    _buildProposals();
     final existing = widget.controller.channels;
     final allocation = _projection.configure(
       existing: existing,
@@ -698,7 +679,7 @@ class UpstreamChannelSetupViewState extends State<UpstreamChannelSetupView> {
           plan: allocation,
           mode: _mode,
           strategyBySource: const {},
-          ordering: _reviewOrdering(existing, proposals),
+          ordering: _reviewOrdering(existing),
         ).counts.hasChanges;
     return SetupConfigureStep(
       allocation: freezeSetupAllocation(allocation),
@@ -883,7 +864,7 @@ class UpstreamChannelSetupViewState extends State<UpstreamChannelSetupView> {
   }
 
   void _prepareReview() {
-    final base = List<Channel>.of(widget.controller.channels);
+    final base = widget.controller.channels;
     final review = _allocateReview(
       base,
       mode: _mode,
@@ -986,7 +967,7 @@ class UpstreamChannelSetupViewState extends State<UpstreamChannelSetupView> {
       );
       if (!mounted) return;
       if (result == ChannelPlanApplyResult.stale) {
-        final base = List<Channel>.of(widget.controller.channels);
+        final base = widget.controller.channels;
         setState(() {
           _phase = Reviewing(
             _allocateReview(

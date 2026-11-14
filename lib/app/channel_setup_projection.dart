@@ -35,6 +35,8 @@ class ChannelSetupProjection {
   ChannelSetupAllocationOptions? _options;
   ChannelPlanAllocation? _allocation;
   final _disabledEligibility = <BuilderStrategy, int>{};
+  List<Channel>? _retainedLineup;
+  final _retainedSourceCounts = <String, int>{};
 
   List<ChannelProposal> proposals({
     required List<PlexLibrary> libraries,
@@ -46,6 +48,9 @@ class ChannelSetupProjection {
     required Set<BuilderStrategy> crossLibraryStrategies,
     required int minimumItems,
   }) {
+    if (!identical(_items, items) || !identical(_playlists, playlists)) {
+      _retainedSourceCounts.clear();
+    }
     if (!identical(_libraries, libraries) ||
         !identical(_items, items) ||
         !identical(_playlists, playlists) ||
@@ -88,6 +93,31 @@ class ChannelSetupProjection {
       _disabledEligibility.clear();
     }
     return _allocation!;
+  }
+
+  Map<String, int> reviewSourceCounts(List<Channel> existing) {
+    if (!identical(_retainedLineup, existing)) {
+      _retainedLineup = existing;
+      _retainedSourceCounts.clear();
+    }
+    final counts = {
+      for (final proposal in _proposals)
+        canonicalSourceIdentity(proposal.source): proposal.itemCount,
+    };
+    for (final channel in existing.where(
+      (channel) => channel.builderKey != null,
+    )) {
+      final source = channel.source;
+      final key = canonicalSourceIdentity(source);
+      counts.putIfAbsent(
+        key,
+        () => _retainedSourceCounts.putIfAbsent(
+          key,
+          () => resolveContent(source, _items!, _playlists!).length,
+        ),
+      );
+    }
+    return counts;
   }
 
   int disabledEligibility(BuilderStrategy strategy) =>

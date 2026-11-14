@@ -23,6 +23,19 @@ export 'library_facets.dart' show channelDecadeForYear, matchesLibraryFacets;
   return (ids: ids, incomplete: incomplete);
 }
 
+/// Current IDs replace saved memberships. Saved titles can still identify
+/// those IDs when the library catalogue lacks their display names.
+Map<String, String> playlistSourceLibraries({
+  required Set<String> currentIds,
+  required Map<String, String> currentTitles,
+  required Map<String, String> savedTitles,
+}) => currentIds.isEmpty
+    ? savedTitles
+    : {
+        for (final id in currentIds)
+          id: ?(currentTitles[id] ?? savedTitles[id]),
+      };
+
 List<ChannelItem> resolveContent(
   ContentSource source,
   List<PlexMediaItem> media, [
