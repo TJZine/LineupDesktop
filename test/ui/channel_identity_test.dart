@@ -141,6 +141,43 @@ void main() {
     expect(tag.dy, greaterThan(name.dy));
     expect(tester.takeException(), isNull);
   });
+
+  testWidgets(
+    'the supporting line gives a fitting library tag more than half',
+    (tester) async {
+      final row = channel('tv', 2, 'Drama', ChannelKind.tv, 'Film Library');
+      await tester.pumpWidget(
+        host(
+          ChannelIdentity(
+            channel: row,
+            libraryTag: row.libraryTitle,
+            allowTagBelow: true,
+            nameStyle: const TextStyle(fontSize: 18),
+            supportStyle: const TextStyle(fontSize: 10),
+            secondary: const Text(
+              'Watching',
+              maxLines: 1,
+              overflow: TextOverflow.ellipsis,
+            ),
+          ),
+          width: 239,
+        ),
+      );
+
+      final tag = tester.renderObject<RenderParagraph>(
+        find.text('· Film Library'),
+      );
+      expect(tag.didExceedMaxLines, isFalse);
+      expect(
+        tester.getTopLeft(find.text('Watching')).dx,
+        closeTo(tester.getTopLeft(find.text('Drama')).dx, .01),
+      );
+      expect(
+        tester.getTopLeft(find.text('· Film Library')).dy,
+        greaterThan(tester.getTopLeft(find.text('Drama')).dy),
+      );
+    },
+  );
 }
 
 Widget host(Widget child, {double width = 400}) => MaterialApp(

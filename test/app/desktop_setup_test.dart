@@ -20,6 +20,7 @@ import 'package:flutter/services.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:lineup_desktop/ui/lineup_canvas.dart';
 import 'package:lineup_desktop/app/channel_setup_view.dart';
+import 'package:lineup_desktop/app/channel_setup/review_step.dart';
 import 'package:lineup_desktop/app/lineup_controller.dart';
 import 'package:lineup_desktop/channels/channel.dart';
 import 'package:lineup_desktop/channels/channel_builder.dart';
@@ -211,6 +212,127 @@ void main() {
       ('Collection', 2),
     ]);
   });
+
+  testWidgets(
+    'Grouped Review recovers a new number when a missing #1000 is removed',
+    (tester) async {
+      Channel saved(
+        String id,
+        int number,
+        LibraryFilter filter,
+        String value,
+      ) => Channel(
+        id: id,
+        number: number,
+        name: value,
+        source: LibrarySource(
+          libraryId: 'movies',
+          libraryType: PlexLibraryType.movie,
+          filters: {
+            filter: [value],
+          },
+        ),
+        playbackMode: PlaybackMode.shuffle,
+        anchor: DateTime.utc(2026),
+        shuffleSeed: number,
+        builderKey: id,
+      );
+      const scope = LineupScope(profileKey: 'owner', serverId: 'server');
+      final genre = saved('genre', 1, LibraryFilter.genre, 'Drama');
+      final retired = saved(
+        'studio',
+        1000,
+        LibraryFilter.studio,
+        'Missing studio',
+      );
+      final fixture = await _createBoundarySetup(
+        initial: const PersistedState(profileId: 'owner').withLineup(
+          scope,
+          ScopedLineup(
+            libraryIds: const {'movies'},
+            channels: [genre, retired],
+            currentChannelId: genre.id,
+            channelOrder: ChannelOrder.grouped,
+          ),
+        ),
+      );
+      addTearDown(fixture.controller.dispose);
+      await _pump(tester, fixture.controller);
+      await tester.pumpAndSettle();
+      await tester.tap(find.byKey(const ValueKey('continue-ready-libraries')));
+      await tester.pumpAndSettle();
+      expect(
+        fixture.controller.isGeneratedSourceConfirmedGone(retired),
+        isTrue,
+      );
+      for (final type in ['Recently Added', 'Genres']) {
+        final toggle = find.widgetWithText(CheckboxListTile, type);
+        await tester.ensureVisible(toggle);
+        await tester.tap(toggle);
+        await tester.pumpAndSettle();
+      }
+      final reviewButton = find.byKey(const ValueKey('review-channels'));
+      await tester.ensureVisible(reviewButton);
+      await tester.tap(reviewButton);
+      await tester.pumpAndSettle();
+
+      final step = find.byType(SetupReviewStep);
+      final choice = find.byKey(const ValueKey('missing-source-choice-studio'));
+      final initial = tester.widget<SetupReviewStep>(step).review;
+      expect(initial.plan.channels, isEmpty);
+      expect(initial.plan.numberLimitExcluded, 1);
+
+      Future<void> choose(bool remove) async {
+        await tester.ensureVisible(choice);
+        await tester.pumpAndSettle();
+        await tester.tap(
+          find.descendant(
+            of: choice,
+            matching: find.text(remove ? 'Remove' : 'Keep'),
+          ),
+        );
+        await tester.pumpAndSettle();
+      }
+
+      await choose(true);
+      expect(
+        tester
+            .widget<SetupReviewStep>(step)
+            .review
+            .finalChannels
+            .map((row) => (row.name, row.number)),
+        [('Drama', 1), ('Archive', 2)],
+      );
+      await choose(false);
+      expect(
+        tester.widget<SetupReviewStep>(step).review.plan.channels,
+        isEmpty,
+      );
+      await choose(true);
+      final reviewed = tester.widget<SetupReviewStep>(step).review;
+      final addition = reviewed.plan.channels.single;
+      expect(reviewed.base.map((row) => row.id), [genre.id, retired.id]);
+      expect(reviewed.removeSourceIds, {retired.id});
+      expect(addition.number, 2);
+
+      final confirmation = find.byKey(
+        const ValueKey('channel-setup-replace-confirmation'),
+      );
+      await tester.ensureVisible(confirmation);
+      await tester.tap(confirmation);
+      await tester.pumpAndSettle();
+      final saves = fixture.store.saveCalls;
+      await tester.tap(find.byKey(const ValueKey('apply-reviewed-lineup')));
+      await tester.pumpAndSettle();
+      final persisted = fixture.store.state.lineupFor(scope);
+      expect(fixture.store.saveCalls, saves + 1);
+      expect(persisted.channels.map((row) => (row.id, row.number)), [
+        (genre.id, 1),
+        (addition.id, 2),
+      ]);
+      expect(persisted.currentChannelId, genre.id);
+    },
+  );
 
   testWidgets('Grouped cannot advance an empty first lineup', (tester) async {
     final fixture = await _createBoundarySetup();

@@ -5,6 +5,7 @@ import 'package:lineup_desktop/channels/channel_filter.dart';
 import 'package:lineup_desktop/channels/content_resolver.dart';
 import 'package:lineup_desktop/channels/scheduler.dart';
 import 'package:lineup_desktop/plex/plex_models.dart';
+import 'package:lineup_desktop/ui/channel_identity.dart';
 
 const tv = PlexLibrary(id: 'tv', title: 'TV Shows', type: PlexLibraryType.show);
 const film = PlexLibrary(
@@ -185,6 +186,21 @@ void main() {
           ]),
         );
       }
+      final filmOnly = plan(
+        source
+            .where((row) => row.sourceLibraries.containsKey(film.id))
+            .toList(),
+        existing: [custom],
+        mode: ChannelBuildMode.merge,
+      ).channels.single;
+      final libraryPair = [custom, filmOnly];
+      expect(libraryPair.map((row) => row.name), ['Drama', 'Drama']);
+      expect(
+        libraryPair.map(
+          (row) => ChannelIdentity.libraryTagFor(row, libraryPair),
+        ),
+        [tv.title, film.title],
+      );
     },
   );
 

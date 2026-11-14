@@ -2778,6 +2778,9 @@ class _GuideRow extends StatelessWidget {
     final tunedChannel = watchingChannelId == channel.id;
     final showSource =
         showProvenance && controller.lineup.settings.guideShowChannelSources;
+    final provenance = showSource && !tunedChannel
+        ? _channelProvenance(controller, channel)
+        : null;
     final focusFill = roles.focusedText == roles.onFocus
         ? roles.focusedSurface
         : Color.alphaBlend(
@@ -2806,6 +2809,7 @@ class _GuideRow extends StatelessWidget {
       channel,
       libraryTag: libraryTag,
     );
+    final supportLabel = tunedChannel ? 'now watching' : provenance;
     return Padding(
       padding: EdgeInsets.symmetric(vertical: 2),
       child: Row(
@@ -2813,7 +2817,7 @@ class _GuideRow extends StatelessWidget {
           Semantics(
             container: true,
             button: true,
-            label: '$identityLabel${tunedChannel ? ', now watching' : ''}',
+            label: [identityLabel, ?supportLabel].join(', '),
             selected: selectedChannel,
             focused: focusedChannel,
             onTap: focusCurrentProgram,
@@ -2914,9 +2918,9 @@ class _GuideRow extends StatelessWidget {
                                 ),
                               ],
                             )
-                          : showSource
+                          : provenance != null
                           ? Text(
-                              _channelProvenance(controller, channel),
+                              provenance,
                               maxLines: 1,
                               overflow: TextOverflow.ellipsis,
                               style: supportStyle,
@@ -2938,16 +2942,7 @@ class _GuideRow extends StatelessWidget {
                               constraints.maxHeight >=
                               lineHeight + supportHeight,
                           secondary: secondary,
-                          nameBuilder: (style, lines) => Tooltip(
-                            message: channel.name,
-                            excludeFromSemantics: true,
-                            child: Text(
-                              channel.name,
-                              maxLines: lines,
-                              overflow: TextOverflow.ellipsis,
-                              style: style,
-                            ),
-                          ),
+                          showNameTooltip: true,
                         ),
                       );
                     },

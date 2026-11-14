@@ -7670,6 +7670,60 @@ void main() {
     fixture.dispose();
   });
 
+  testWidgets(
+    'focused horizontal Mini Guide scrolls only titles with fitting words',
+    (tester) async {
+      const oneWord = 'ExtraordinarilyLongUnbrokenChannelName';
+      const manyWords =
+          'Independent Productions From Across the World and Beyond';
+      final fixture = _Fixture(PlayerState.playing, channelCount: 2);
+      addTearDown(fixture.dispose);
+      fixture.lineup.fixtureActor.replaceChannels([
+        fixture.lineup.channels.first.copyWith(name: oneWord),
+        fixture.lineup.channels.last.copyWith(name: manyWords),
+      ]);
+      tester.view
+        ..physicalSize = const Size(1280, 720)
+        ..devicePixelRatio = 1;
+      addTearDown(tester.view.reset);
+      fixture.player.showMiniGuide();
+      await tester.pumpWidget(
+        MaterialApp(
+          builder: _playerDesktopCanvasBuilder,
+          home: PlayerView(controller: fixture.player, openGuide: () {}),
+        ),
+      );
+      await tester.pump();
+
+      Future<void> waitForTicker() async {
+        await tester.pump(const Duration(milliseconds: 1000));
+        await tester.pump(const Duration(milliseconds: 150));
+      }
+
+      final overwide = find.text(oneWord);
+      expect(fixture.player.miniGuideChannelId, 'channel');
+      await waitForTicker();
+      expect(tester.widget<Text>(overwide).overflow, TextOverflow.ellipsis);
+      expect(tester.widget<Text>(overwide).maxLines, 1);
+      expect(
+        tester.renderObject<RenderParagraph>(overwide).didExceedMaxLines,
+        isTrue,
+      );
+
+      fixture.player.focusMiniGuideChannel('channel-1');
+      await tester.pump();
+      expect(
+        tester.widget<Text>(find.text(manyWords)).overflow,
+        TextOverflow.ellipsis,
+      );
+      await waitForTicker();
+      expect(
+        tester.widget<Text>(find.text(manyWords)).overflow,
+        TextOverflow.clip,
+      );
+    },
+  );
+
   testWidgets('Mini Guide selection keeps its primary foreground', (
     tester,
   ) async {

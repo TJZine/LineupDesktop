@@ -15,7 +15,8 @@ class ChannelIdentity extends StatelessWidget {
     this.numberWidth,
     this.numberText,
     this.numberAlignment = TextAlign.start,
-    this.nameBuilder,
+    this.tickerBuilder,
+    this.showNameTooltip = false,
     this.maxLines = 1,
     this.allowTagBelow = false,
     this.secondary,
@@ -32,7 +33,8 @@ class ChannelIdentity extends StatelessWidget {
   final double? numberWidth;
   final String? numberText;
   final TextAlign numberAlignment;
-  final Widget Function(TextStyle style, int? lines)? nameBuilder;
+  final Widget Function(TextStyle style)? tickerBuilder;
+  final bool showNameTooltip;
   final int? maxLines;
   final bool allowTagBelow;
   final Widget? secondary;
@@ -128,26 +130,25 @@ class ChannelIdentity extends StatelessWidget {
         final prefix = nameIndent(context);
         final bounded = constraints.hasBoundedWidth;
         final labelRoom = math.max(0.0, constraints.maxWidth - prefix);
-        final nameWidth = nameBuilder != null || tag != null
+        final nameWidth = tickerBuilder != null || tag != null
             ? _textWidth(context, channel.name, name)
             : null;
-        final besideTagRoom = tag == null
-            ? labelRoom
-            : labelRoom - _textWidth(context, tag, support) - gap;
-        // Flutter breaks an overwide word between letters in multiline Text.
-        final lines =
-            bounded &&
-                maxLines != 1 &&
-                channel.name
-                    .split(RegExp(r'\s+'))
-                    .any((word) => _textWidth(context, word, name) > labelRoom)
-            ? 1
-            : maxLines;
+        final tagWidth = tag == null ? 0.0 : _textWidth(context, tag, support);
+        final besideTagRoom = labelRoom - tagWidth - gap;
+        // Flutter can wrap an overwide word between letters, and a ticker can
+        // scroll it offscreen. Keep the same static ellipsis in either case.
+        final longestWord = bounded && (maxLines != 1 || tickerBuilder != null)
+            ? channel.name.split(RegExp(r'\s+')).fold(0.0, (width, word) {
+                return math.max(width, _textWidth(context, word, name));
+              })
+            : 0.0;
         final tagBelow =
             tag != null &&
             allowTagBelow &&
             nameWidth! > besideTagRoom &&
-            (lines == 1 || nameWidth <= labelRoom);
+            (maxLines == 1 ||
+                longestWord > labelRoom ||
+                nameWidth <= labelRoom);
         final tagBeside =
             tag != null &&
             !tagBelow &&
@@ -155,8 +156,11 @@ class ChannelIdentity extends StatelessWidget {
                 (!allowTagBelow &&
                     maxLines == 1 &&
                     besideTagRoom >= math.min(nameWidth, scaledSize * 2.5)));
-        final title =
-            nameBuilder?.call(name, lines) ??
+        final overwide = longestWord > (tagBeside ? besideTagRoom : labelRoom);
+        final lines = overwide ? 1 : maxLines;
+        final ticker = overwide ? null : tickerBuilder;
+        Widget title =
+            ticker?.call(name) ??
             Text(
               channel.name,
               style: name,
@@ -165,6 +169,13 @@ class ChannelIdentity extends StatelessWidget {
                   ? TextOverflow.clip
                   : TextOverflow.ellipsis,
             );
+        if (showNameTooltip) {
+          title = Tooltip(
+            message: channel.name,
+            excludeFromSemantics: true,
+            child: title,
+          );
+        }
         final label = Row(
           mainAxisSize: MainAxisSize.min,
           children: [
@@ -181,7 +192,7 @@ class ChannelIdentity extends StatelessWidget {
             SizedBox(width: gap),
             if (bounded)
               Flexible(
-                child: nameBuilder != null && nameWidth != null
+                child: ticker != null && nameWidth != null
                     ? ConstrainedBox(
                         constraints: BoxConstraints(maxWidth: nameWidth),
                         child: title,
@@ -206,6 +217,20 @@ class ChannelIdentity extends StatelessWidget {
               )
             : null;
         if (belowTag == null && secondaryLine == null) return label;
+        // Let the library use the space beyond half the line when possible.
+        // Leave room for a supporting icon and truncation mark.
+        final sharedTagWidth = secondaryLine != null && belowTag != null
+            ? math.min(
+                tagWidth,
+                math.max(
+                  math.max(0.0, labelRoom - gap) / 2,
+                  labelRoom -
+                      2 * gap -
+                      scaledSize -
+                      _textWidth(context, '…', support),
+                ),
+              )
+            : 0.0;
         return Column(
           mainAxisSize: MainAxisSize.min,
           crossAxisAlignment: CrossAxisAlignment.start,
@@ -219,7 +244,10 @@ class ChannelIdentity extends StatelessWidget {
                       children: [
                         Flexible(child: secondaryLine),
                         SizedBox(width: gap),
-                        Flexible(child: belowTag),
+                        ConstrainedBox(
+                          constraints: BoxConstraints(maxWidth: sharedTagWidth),
+                          child: belowTag,
+                        ),
                       ],
                     )
                   : secondaryLine ?? belowTag!,

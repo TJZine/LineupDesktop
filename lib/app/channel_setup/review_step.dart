@@ -404,7 +404,7 @@ class _SetupReviewStepState extends State<SetupReviewStep> {
 
   List<Channel> get _missingSources =>
       widget.review.mode == ChannelBuildMode.merge
-      ? widget.review.plan.unmatchedGenerated
+      ? widget.review.unmatchedGenerated
             .where(widget.isGeneratedSourceConfirmedGone)
             .toList()
       : const [];

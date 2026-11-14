@@ -287,6 +287,29 @@ void main() {
               expect(lines(n), lessThanOrEqualTo(2));
             }
             expect(find.text('Watching'), findsOneWidget);
+            final semantics = tester.ensureSemantics();
+            await tester.pump();
+            final provenanceVisible = find
+                .text('Manual lineup')
+                .evaluate()
+                .isNotEmpty;
+            final provenanceRow = find.bySemanticsLabel(
+              'Channel 1, ${names.first}${provenanceVisible ? ', Manual lineup' : ''}',
+            );
+            expect(provenanceRow, findsOneWidget);
+            expect(
+              tester
+                  .getSemantics(provenanceRow)
+                  .getSemanticsData()
+                  .hasAction(ui.SemanticsAction.tap),
+              isTrue,
+            );
+            expect(find.bySemanticsLabel('Manual lineup'), findsNothing);
+            expect(
+              find.bySemanticsLabel('Channel 999, ${names[3]}, now watching'),
+              findsOneWidget,
+            );
+            semantics.dispose();
             expect(
               tester.getSize(list).height /
                   tester.widget<ListView>(list).itemExtent!,

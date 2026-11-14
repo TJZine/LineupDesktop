@@ -866,10 +866,7 @@ List<Channel> _nameNewChannels(
   for (final channel in fixed) {
     (claimed[channel.name] ??= {}).add(channel.libraryTitle);
   }
-  for (final channel in [
-    ...fixed.where((c) => c.builderKey != null),
-    ...fresh,
-  ]) {
+  for (final channel in [...fixed, ...fresh]) {
     if (channel.libraryTitle case final library?) {
       (origins[channel.name] ??= {}).add(library);
     }

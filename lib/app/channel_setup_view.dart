@@ -286,32 +286,16 @@ class UpstreamChannelSetupViewState extends State<UpstreamChannelSetupView> {
     maximumChannels: _maximum,
   );
 
-  ChannelPlanAllocation _allocate(
-    List<Channel> existing, {
-    List<ChannelProposal>? proposals,
-    required ChannelBuildMode mode,
-    required DateTime anchor,
-  }) {
-    final inventory = widget.controller.playableInventory;
-    return ChannelSetupProjection.allocate(
-      proposals ?? _buildProposals(),
-      existing: existing,
-      options: _allocationOptions(mode),
-      anchor: anchor,
-      order: _channelOrder,
-      strategyOrder: _sourceOrder,
-      items: inventory.media,
-      playlists: inventory.playlists,
-      reorderExisting: _channelOrder != widget.controller.channelOrder,
-    );
-  }
-
   SetupReview _allocateReview(
     List<Channel> existing, {
     required ChannelBuildMode mode,
     required DateTime anchor,
   }) {
     final proposals = _buildProposals();
+    final inventory = widget.controller.playableInventory;
+    final order = _channelOrder;
+    final strategyOrder = List<BuilderStrategy>.of(_sourceOrder);
+    final reorderExisting = order != widget.controller.channelOrder;
     final strategyBySource = <String, BuilderStrategy>{};
     for (final proposal in proposals) {
       strategyBySource.putIfAbsent(
@@ -319,36 +303,32 @@ class UpstreamChannelSetupViewState extends State<UpstreamChannelSetupView> {
         () => proposal.strategy,
       );
     }
+    ChannelPlanAllocation planFactory(
+      ChannelBuildMode nextMode,
+      DateTime nextAnchor,
+      List<Channel> roster,
+    ) => ChannelSetupProjection.allocate(
+      proposals,
+      existing: roster,
+      options: _allocationOptions(nextMode),
+      anchor: nextAnchor,
+      order: order,
+      strategyOrder: strategyOrder,
+      items: inventory.media,
+      playlists: inventory.playlists,
+      reorderExisting: reorderExisting,
+    );
+
     return SetupReview(
       base: existing,
-      plan: _allocate(
-        existing,
-        proposals: proposals,
-        mode: mode,
-        anchor: anchor,
-      ),
+      plan: planFactory(mode, anchor, existing),
       mode: mode,
       strategyBySource: strategyBySource,
       ordering: _reviewOrdering(existing),
-      planFactory: (nextMode, nextAnchor) {
-        final nextProposals = _buildProposals();
-        final nextStrategies = <String, BuilderStrategy>{};
-        for (final proposal in nextProposals) {
-          nextStrategies.putIfAbsent(
-            canonicalSourceIdentity(proposal.source),
-            () => proposal.strategy,
-          );
-        }
-        return (
-          plan: _allocate(
-            existing,
-            proposals: nextProposals,
-            mode: nextMode,
-            anchor: nextAnchor,
-          ),
-          strategyBySource: nextStrategies,
-        );
-      },
+      planFactory: planFactory,
+      allocationAnchor: anchor,
+      recoverNumberLimitedAdditions:
+          order == ChannelOrder.grouped && !reorderExisting,
     );
   }
 

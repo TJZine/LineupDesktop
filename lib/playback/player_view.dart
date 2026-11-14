@@ -3212,7 +3212,7 @@ class _MiniGuideRow extends StatelessWidget {
             supportStyle: metadataStyle,
             showSemantics: false,
             allowTagBelow: rowHeight != null,
-            nameBuilder: (style, _) => ticker(
+            tickerBuilder: (style) => ticker(
               channel.name,
               Key('mini-guide-channel-${channel.id}'),
               style: style,
