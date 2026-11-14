@@ -23,6 +23,9 @@ function Assert-WindowsCrtInputs {
     Assert-CrtRejected { Assert-LineupCrtIdentity (Signature $status) $runtime $toolset $directoryVersion } 'valid Microsoft'
   }
   Assert-CrtRejected { Assert-LineupCrtIdentity (Signature 'Valid' 'Other Publisher') $runtime $toolset $directoryVersion } 'valid Microsoft'
+  # Rejections name the failed condition so hosted trust failures are diagnosable.
+  Assert-CrtRejected { Assert-LineupCrtIdentity (Signature 'NotTrusted') $runtime $toolset $directoryVersion 'fixture.dll' } 'file: fixture.dll; status: NotTrusted'
+  Assert-CrtRejected { Assert-LineupCrtIdentity (Signature 'Valid' 'Other Publisher') $runtime $toolset $directoryVersion } 'signer: Other Publisher'
   $unsigned = [pscustomobject]@{ Status = 'Valid'; SignerCertificate = $null }
   Assert-CrtRejected { Assert-LineupCrtIdentity $unsigned $runtime $toolset $directoryVersion } 'valid Microsoft'
   Assert-CrtRejected { Assert-LineupCrtIdentity (Signature) ([version] '14.38.33135') $toolset $directoryVersion } 'unsupported or older'

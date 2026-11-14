@@ -29,18 +29,49 @@ function Get-LineupCrtSelection {
   }
 }
 
+# Describe a rejected signature without trusting it, so hosted failures show
+# which trust or identity condition failed. Public certificate fields only.
+function Get-LineupCrtSignatureDetail {
+  param($Signature, [string] $Path)
+  function Read-Field($Object, [string] $Name) {
+    if ($null -ne $Object -and $Object.PSObject.Properties[$Name] -and $null -ne $Object.$Name) {
+      return "$($Object.$Name)"
+    }
+    '<none>'
+  }
+  $certificate = if ($null -ne $Signature) { $Signature.SignerCertificate } else { $null }
+  $signer = '<none>'
+  $issuer = '<none>'
+  if ($null -ne $certificate) {
+    $nameType = [Security.Cryptography.X509Certificates.X509NameType]::SimpleName
+    $signer = "$($certificate.GetNameInfo($nameType, $false))"
+    $issuer = "$($certificate.GetNameInfo($nameType, $true))"
+  }
+  @(
+    "file: $Path",
+    "status: $(Read-Field $Signature 'Status')",
+    "status message: $(Read-Field $Signature 'StatusMessage')",
+    "signer: $signer",
+    "issuer: $issuer",
+    "subject: $(Read-Field $certificate 'Subject')",
+    "thumbprint: $(Read-Field $certificate 'Thumbprint')",
+    "not after: $(Read-Field $certificate 'NotAfter')"
+  ) -join '; '
+}
+
 function Assert-LineupCrtIdentity {
   param(
     [Parameter(Mandatory)] $Signature,
     [Parameter(Mandatory)] [version] $Version,
     [Parameter(Mandatory)] [version] $Toolset,
-    [Parameter(Mandatory)] [string] $DirectoryVersion
+    [Parameter(Mandatory)] [string] $DirectoryVersion,
+    [string] $Path = '<unspecified>'
   )
   # Windows trust validation must succeed, including digest/chain validation.
   # A Microsoft-looking filename or version resource is not signature proof.
   if ($Signature.Status.ToString() -cne 'Valid' -or -not $Signature.SignerCertificate -or
     $Signature.SignerCertificate.GetNameInfo([Security.Cryptography.X509Certificates.X509NameType]::SimpleName, $false) -cne 'Microsoft Corporation') {
-    throw 'CRT requires a valid Microsoft Corporation Authenticode signature.'
+    throw "CRT requires a valid Microsoft Corporation Authenticode signature ($(Get-LineupCrtSignatureDetail -Signature $Signature -Path $Path))."
   }
   if ($Version.Major -ne 14 -or $Version.Minor -ne 44 -or
     $Version -lt $Toolset) {
@@ -76,7 +107,7 @@ function Copy-LineupVerifiedCrt {
       $file.VersionInfo.FileBuildPart, $file.VersionInfo.FilePrivatePart)
     $signature = Microsoft.PowerShell.Security\Get-AuthenticodeSignature -LiteralPath $source -ErrorAction Stop
     Assert-LineupCrtIdentity -Signature $signature -Version $version `
-      -Toolset $Selection.Toolset -DirectoryVersion $Selection.Version
+      -Toolset $Selection.Toolset -DirectoryVersion $Selection.Version -Path $source
     $target = Join-Path $Destination $name
     Copy-Item -LiteralPath $source -Destination $target
     # Bind the checked input to the actual copied bytes, failing on substitution.
@@ -85,7 +116,7 @@ function Copy-LineupVerifiedCrt {
     }
     $copiedSignature = Microsoft.PowerShell.Security\Get-AuthenticodeSignature -LiteralPath $target -ErrorAction Stop
     Assert-LineupCrtIdentity -Signature $copiedSignature -Version $version `
-      -Toolset $Selection.Toolset -DirectoryVersion $Selection.Version
+      -Toolset $Selection.Toolset -DirectoryVersion $Selection.Version -Path $target
     "$name=$version sha256=$hash signer=Microsoft Corporation"
   }
 }
