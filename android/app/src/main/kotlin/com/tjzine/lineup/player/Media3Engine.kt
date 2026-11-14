@@ -12,6 +12,7 @@ import androidx.media3.common.util.UnstableApi
 import androidx.media3.datasource.DataSource
 import androidx.media3.datasource.okhttp.OkHttpDataSource
 import androidx.media3.exoplayer.ExoPlayer
+import androidx.media3.exoplayer.ExoTimeoutException
 import androidx.media3.exoplayer.SeekParameters
 import androidx.media3.exoplayer.analytics.AnalyticsListener
 import androidx.media3.exoplayer.hls.HlsMediaSource
@@ -20,6 +21,7 @@ import androidx.media3.exoplayer.source.MediaSource
 import androidx.media3.exoplayer.source.ProgressiveMediaSource
 import androidx.media3.extractor.ExtractorsFactory
 import androidx.media3.ui.SubtitleView
+import com.tjzine.lineup.DeviceForm
 import okhttp3.HttpUrl.Companion.toHttpUrlOrNull
 
 /** Media/OS mechanism only. Each instance has one immutable load and is never reused. */
@@ -34,6 +36,7 @@ internal class Media3Engine(
     createPlayer: ((Context) -> ExoPlayer)? = null,
     private val subtitlePresentation: () -> SubtitlePresentation = { SubtitlePresentation() },
     observeSessionLanding: Boolean = false,
+    deviceForm: DeviceForm = DeviceForm.detect(context),
 ) : PlayerEngine {
     private val debug =
         context.applicationInfo.flags and android.content.pm.ApplicationInfo.FLAG_DEBUGGABLE != 0
@@ -57,6 +60,7 @@ internal class Media3Engine(
                 .build(),
             /* handleAudioFocus = */ true,
         )
+        if (deviceForm == DeviceForm.HANDHELD) it.setHandleAudioBecomingNoisy(true)
         it.setVideoSurfaceView(video)
     }
     private val playbackHandler = Handler(player.playbackLooper)
@@ -73,10 +77,40 @@ internal class Media3Engine(
     private fun observedPaused() = !player.playWhenReady ||
         player.playbackSuppressionReason == Player.PLAYBACK_SUPPRESSION_REASON_TRANSIENT_AUDIO_FOCUS_LOSS
     private val playbackThread = player.playbackLooper.thread
+    private var releasingPlayer = false
+    private var releaseTimedOut = false
     private var releaseReturned = false
+
+    init {
+        if (debug) player.addListener(
+            object : Player.Listener {
+                override fun onPlayerError(error: PlaybackException) {
+                    val timeout = error.cause as? ExoTimeoutException
+                    if (
+                        releasingPlayer &&
+                            error.errorCode == PlaybackException.ERROR_CODE_TIMEOUT &&
+                            timeout?.timeoutOperation ==
+                                ExoTimeoutException.TIMEOUT_OPERATION_RELEASE
+                    ) {
+                        releaseTimedOut = true
+                    }
+                }
+            }
+        )
+    }
 
     private var initialJoinSource: InitialJoinMediaSource? = null
     private val tracks = Media3Tracks()
+    private val diagnosticId = System.identityHashCode(this)
+    private var diagnosticCount = 0
+    private var lastProgressDiagnosticMs = Long.MIN_VALUE
+
+    private fun diagnose(fact: String) {
+        if (debug && diagnosticCount++ < 2000) {
+            android.util.Log.i("LineupSurface", "uptimeMs=${android.os.SystemClock.uptimeMillis()} engine=$diagnosticId $fact")
+        }
+    }
+
     private var network: MediaHttp.Load? = null
     private var http: OkHttpDataSource.Factory? = null
     private var closed = false
@@ -135,6 +169,13 @@ internal class Media3Engine(
                 if (closed) return
                 publishSessionClock()
                 val p = player.currentPosition
+                if (debug) {
+                    val now = android.os.SystemClock.uptimeMillis()
+                    if (lastProgressDiagnosticMs == Long.MIN_VALUE || now - lastProgressDiagnosticMs >= 5000) {
+                        lastProgressDiagnosticMs = now
+                        diagnose("progress positionMs=$p playing=${player.isPlaying}")
+                    }
+                }
                 observer?.property("time-pos", p.coerceAtLeast(0) / 1000.0)
                 val d = player.duration
                 observer?.property("duration", if (d == C.TIME_UNSET || d < 0) null else d / 1000.0)
@@ -159,6 +200,7 @@ internal class Media3Engine(
         check(observer == null && !closed)
         observer = listener
         sessionClock = if (media.kind == LoadKind.plexSession) SessionHlsClock() else null
+        diagnose("engine_load")
         if (media.uri.toHttpUrlOrNull()?.isHttps != true) {
             listener.failure("source_open_error")
             return
@@ -188,6 +230,7 @@ internal class Media3Engine(
             object : Player.Listener {
                 override fun onPlaybackStateChanged(state: Int) {
                     if (closed) return
+                    diagnose("playback_state state=$state positionMs=${player.currentPosition}")
                     when (state) {
                         Player.STATE_READY -> {
                             publishSessionClock()
@@ -265,6 +308,7 @@ internal class Media3Engine(
                     output: Any,
                     renderTimeMs: Long,
                 ) {
+                    if (!closed) diagnose("rendered_first_frame renderTimeMs=$renderTimeMs positionMs=${player.currentPosition}")
                     if (!closed && !firstFrame) {
                         firstFrame = true
                         listener.firstFrame(player.currentPosition)
@@ -277,7 +321,10 @@ internal class Media3Engine(
                     timestamp: Long,
                     duration: Long,
                 ) {
-                    if (!closed) listener.property("hwdec-current", Media3Tracks.bounded(name))
+                    if (!closed) {
+                        diagnose("decoder_initialized")
+                        listener.property("hwdec-current", Media3Tracks.bounded(name))
+                    }
                 }
 
                 override fun onVideoInputFormatChanged(
@@ -388,6 +435,7 @@ internal class Media3Engine(
             return
         }
         val firstAttempt = !closed
+        diagnose("engine_release firstAttempt=$firstAttempt")
         closed = true
         sessionClock?.retire()
         sessionClock = null
@@ -401,11 +449,14 @@ internal class Media3Engine(
         val closingNetwork = network
         closingNetwork?.retire()
         if (firstAttempt) {
+            releasingPlayer = debug
             try {
                 player.release()
                 releaseReturned = true
             } catch (_: Exception) {
                 // Retain cleanup ownership. A failed release call is not proof of teardown.
+            } finally {
+                releasingPlayer = false
             }
         }
         try {
@@ -421,6 +472,7 @@ internal class Media3Engine(
         // release can finish just afterward. Wait for the actual playback thread
         // even after that deadline, and acknowledge only once it has terminated.
         // A later retry observes the same thread; it never calls release() again.
+        val timedOutThisAttempt = firstAttempt && releaseTimedOut
         val returned = releaseReturned
         cleanupExecutor.execute {
             val networkSuccess = closingNetwork?.cancelAndAwait() ?: true
@@ -437,6 +489,8 @@ internal class Media3Engine(
             handler.post {
                 if (networkSuccess) network = null
                 released = decoderSuccess && networkSuccess
+                if (debug) diagnose("release_fence returned=$returned internalTimeout=$timedOutThisAttempt threadAlive=${playbackThread.isAlive} decoderSuccess=$decoderSuccess networkSuccess=$networkSuccess")
+                diagnose("engine_released success=$released")
                 complete(released)
             }
         }

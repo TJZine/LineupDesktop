@@ -32,7 +32,7 @@ for _ in range(100):
 if not process:
     raise RuntimeError('fixture_process_missing')
 start = time.monotonic()
-backgrounded = False
+backgrounded_at = None
 resumed = False
 facts = []
 later = ''
@@ -62,13 +62,32 @@ while time.monotonic() - start < 150:
                 subprocess.run([*adb, 'exec-out', 'screencap', '-p'], check=True, stdout=output)
     if any(f.get('phase') == 'FAIL' for f in facts):
         break
-    if args.case == 'background' and any(f.get('phase') == 'background-ready' for f in facts) and not backgrounded:
+    if args.case == 'background' and any(f.get('phase') == 'background-ready' for f in facts) and backgrounded_at is None:
         run('shell', 'input', 'keyevent', 'KEYCODE_HOME')
-        backgrounded = True
-    if backgrounded and not resumed and time.monotonic() - start > 6:
-        (args.evidence / 'background-window.txt').write_text(run('shell', 'dumpsys', 'window', 'windows'))
-        run('shell', 'am', 'start', '-n', 'com.tjzine.lineup/.MainActivity')
-        resumed = True
+        backgrounded_at = time.monotonic()
+        (args.evidence / 'background-timing.json').write_text(json.dumps({
+            'homeAfterLaunchSeconds': backgrounded_at - start,
+        }, indent=2))
+    if (backgrounded_at is not None and not resumed
+            and time.monotonic() - backgrounded_at >= 6
+            and any(f.get('phase') == 'background-stopped' for f in facts)):
+        window = run('shell', 'dumpsys', 'window', 'windows')
+        activity = run('shell', 'dumpsys', 'activity', 'activities')
+        (args.evidence / 'background-window.txt').write_text(window)
+        (args.evidence / 'background-activity.txt').write_text(activity)
+        # The fixture's stopped event proves teardown; also require that the
+        # app actually lost its resumed activity before sending the successor.
+        resumed_lines = [line for line in activity.splitlines()
+                         if 'ResumedActivity' in line or 'topResumedActivity' in line]
+        if resumed_lines and not any('com.tjzine.lineup' in line for line in resumed_lines):
+            (args.evidence / 'background-timing.json').write_text(json.dumps({
+                'homeAfterLaunchSeconds': backgrounded_at - start,
+                'resumeAfterHomeSeconds': time.monotonic() - backgrounded_at,
+                'stoppedObserved': True,
+                'activityBackgroundObserved': True,
+            }, indent=2))
+            run('shell', 'am', 'start', '-n', 'com.tjzine.lineup/.MainActivity')
+            resumed = True
     if any(f.get('phase') == 'PASS' for f in facts):
         # Retain a later observation: a success followed by rejection is not a pass.
         time.sleep(2)

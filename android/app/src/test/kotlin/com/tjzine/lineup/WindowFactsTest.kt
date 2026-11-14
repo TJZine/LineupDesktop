@@ -72,10 +72,29 @@ class WindowFactsTest {
         }
     }
 
+    @Test
+    fun removedDeviceProfileMethodIsNotImplemented() {
+        val controller = Robolectric.buildActivity(Activity::class.java).setup()
+        val activity = controller.get()
+        val observer = KeyboardVisibilityObserver(activity) {}
+        val dispatcher = PlatformChannel(activity, observer)
+        try {
+            val reply = Result()
+            dispatcher.onMethodCall(MethodCall("deviceProfile", null), reply)
+            assertTrue(reply.unimplemented)
+            assertNull(reply.errorCode)
+        } finally {
+            dispatcher.close()
+            observer.close()
+            controller.pause().stop().destroy()
+        }
+    }
+
     private class Result : MethodChannel.Result {
         var errorCode: String? = null
+        var unimplemented = false
         override fun success(result: Any?) { assertEquals(true, result) }
         override fun error(code: String, message: String?, details: Any?) { errorCode = code }
-        override fun notImplemented() { fail("Unexpected method") }
+        override fun notImplemented() { unimplemented = true }
     }
 }

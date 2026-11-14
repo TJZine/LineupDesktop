@@ -29,14 +29,9 @@ form-factor flags. Kotlin `DeviceForm.detect` is the single detection authority:
 television UI mode, the leanback system feature, or `amazon.hardware.fire_tv`
 means TV; all other cases mean handheld.
 
-The activity computes one immutable result, shared by entrypoint arguments and
-the diagnostic no-argument `lineup/platform.deviceProfile` method. The latter
-returns `{formFactor: "tv" | "handheld"}` and rejects non-null arguments with
-`invalid_arguments`. Its committed test consumer is
-[DeviceFormTest](../android/app/src/test/kotlin/com/tjzine/lineup/DeviceFormTest.kt),
-which exercises phone/TV replies, argument rejection and the supplied immutable
-snapshot. Startup itself does not call this method. Docking or uiMode changes handled by the existing
-`configChanges` do not reclassify the running composition.
+The activity shares one immutable result with the entrypoint and native player.
+Docking or uiMode changes handled by the existing `configChanges` do not
+reclassify the running composition.
 
 Dart reads the argument synchronously before `runApp`, with no startup channel
 request or timeout. Only a missing or malformed Android form-factor argument
@@ -50,12 +45,24 @@ This contract requires the activity-created engine used by the current plain
 starting that engine; cached or already-running engines skip that execution.
 Any future cached/prewarmed engine path must revise this contract first.
 
-The manifest no longer locks landscape. TV hardware retains its landscape
-orientation. Handheld orientation is temporarily unrestricted until the
-destination-specific Dart policy and approved handheld layouts are implemented.
-This detection baseline does not establish handheld UI acceptance. Fire OS
-detection is covered with a stubbed system feature in JVM tests; physical Fire
-TV and Android 9 TV detection remain acceptance checklist items.
+Dart sets handheld orientation by destination and display class. Android
+reports whether the activity is in multi-window mode, where Dart leaves
+orientation unrestricted. TV hardware retains its landscape orientation.
+Physical Fire TV and Android 9 TV detection remain acceptance checklist items.
+
+### Handheld system bars
+
+Dart requests immersive bars in the Player while the OSD is hidden or the
+window is in landscape, and requests visible bars on Player exit. The phone
+fullscreen action requests landscape orientation independently of the observed
+bar state. Kotlin uses the window insets controller on API 30+ and
+immersive-sticky decor flags on API 28–29. Explicit show clears the legacy
+hide flags while retaining edge-to-edge layout. TV keeps its fixed capability.
+
+The handheld fullscreen event reports public application visibility. Android
+can draw transient bars over the Player during a swipe while the application
+still observes hidden bars. The overlay dismisses itself, and a swipe that
+does change the application visibility produces an event.
 
 ## Playback adapter
 
@@ -66,6 +73,12 @@ validation, bounded queues, correlation and lifecycle fencing. A fresh
 `Media3Engine` belongs to each load. See the [Android protocol details](native-player-protocol.md#android-backend)
 for failure mapping, telemetry, bounded initial joins (up to 5 seconds early,
 otherwise exact) and display limitations.
+
+Media3 handles audio becoming noisy on handheld, so disconnecting headphones
+pauses through the existing observed pause path. Dart retains the live-schedule
+resume policy. The activity stops playback when Android stops it in the
+background, including when a Recents transition backgrounds the task before
+split entry.
 
 Every load has its own HTTP dispatcher and live-call tracker. Retirement fences
 new calls and cancels queued requests and delivered response bodies on the

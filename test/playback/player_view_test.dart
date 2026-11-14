@@ -455,6 +455,10 @@ void main() {
           ..devicePixelRatio = 1
           ..physicalSize = const Size(412, 915);
         addTearDown(tester.view.reset);
+        tester.view.display
+          ..devicePixelRatio = 1
+          ..size = const Size(412, 915);
+        addTearDown(tester.view.display.reset);
         await tester.pumpWidget(
           MaterialApp(
             theme: LineupTheme.forName(
@@ -478,14 +482,18 @@ void main() {
         await tester.pumpAndSettle();
         final view = find.byType(PlayerView);
         final coordinator = tester.widget<PlayerView>(view).controller;
-        player.emitFullscreen(true);
+        final canToggle = mode != PlayerFullscreenMode.fixed;
+        if (canToggle) await coordinator.toggleFullscreen();
         coordinator.showSleepTimer();
         await tester.pumpAndSettle();
         final policy = tester.widget<HandheldSystemUi>(
           find.byType(HandheldSystemUi),
         );
-        final canToggle = mode != PlayerFullscreenMode.fixed;
         expect(policy.fullscreen, canToggle);
+        expect(coordinator.fullscreen, isFalse);
+        player.emitFullscreen(true);
+        await tester.pumpAndSettle();
+        expect(coordinator.fullscreenControlActive, isTrue);
         Future<void> back() async {
           await tester.binding.handlePopRoute();
           await tester.pumpAndSettle();
@@ -512,16 +520,16 @@ void main() {
           await back();
           expect(coordinator.overlay, PlayerOverlay.osd);
 
-          final releaseExit = player.fullscreenCommandGate = Completer<void>();
-          await back();
-          expect(player.fullscreenValues, [false]);
-          expect(coordinator.fullscreen, isTrue);
-          await back();
-          releaseExit.complete();
+          final requests = List<bool>.of(player.fullscreenValues);
+          player.emitFullscreen(false);
           await tester.pumpAndSettle();
-          expect(coordinator.fullscreen, isFalse);
+          expect(coordinator.fullscreenControlActive, isTrue);
+          expect(player.fullscreenValues, requests);
+          await back();
+          expect(coordinator.fullscreenControlActive, isFalse);
           expect(view, findsOneWidget);
-          expect(player.fullscreenValues, [false]);
+          // Landscape remains immersive until the phone rotates or leaves Player.
+          expect(player.fullscreenValues, requests);
         }
         await back();
         expect(view, findsNothing);

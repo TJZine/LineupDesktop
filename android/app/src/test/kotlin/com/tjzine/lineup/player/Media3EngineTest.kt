@@ -11,6 +11,7 @@ import androidx.media3.exoplayer.ExoTimeoutException
 import androidx.media3.exoplayer.SeekParameters
 import androidx.media3.exoplayer.source.MediaSource
 import androidx.media3.ui.SubtitleView
+import com.tjzine.lineup.DeviceForm
 import java.util.concurrent.CountDownLatch
 import java.util.concurrent.TimeUnit
 import org.junit.Assert.*
@@ -29,7 +30,10 @@ class Media3EngineTest {
     private val context = RuntimeEnvironment.getApplication()
     private val handler = Handler(Looper.getMainLooper())
 
-    private fun engine(createPlayer: (android.content.Context) -> ExoPlayer) =
+    private fun engine(
+        form: DeviceForm = DeviceForm.HANDHELD,
+        createPlayer: (android.content.Context) -> ExoPlayer,
+    ) =
         Media3Engine(
             context,
             handler,
@@ -38,6 +42,7 @@ class Media3EngineTest {
             {},
             {},
             createPlayer,
+            deviceForm = form,
         )
 
     private fun release(engine: Media3Engine): Boolean {
@@ -57,6 +62,29 @@ class Media3EngineTest {
         override fun ended() {}
         override fun failure(code: String, httpStatus: Int?) {}
         override fun property(name: String, value: Any?) {}
+    }
+
+    @Test
+    fun configuresBecomingNoisyOnlyOnHandheld() {
+        for (form in DeviceForm.entries) {
+            val calls = mutableListOf<Boolean>()
+            lateinit var player: ExoPlayer
+            val engine = engine(form) {
+                player = ExoPlayer.Builder(it).build()
+                object : ExoPlayer by player {
+                    override fun setHandleAudioBecomingNoisy(handle: Boolean) {
+                        calls.add(handle)
+                        player.setHandleAudioBecomingNoisy(handle)
+                    }
+                }
+            }
+            shadowOf(player.playbackLooper).unPause()
+            try {
+                assertEquals(if (form == DeviceForm.HANDHELD) listOf(true) else emptyList<Boolean>(), calls)
+            } finally {
+                release(engine)
+            }
+        }
     }
 
     @Test

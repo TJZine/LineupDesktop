@@ -5,6 +5,7 @@ import android.graphics.Color
 import android.os.Handler
 import android.os.Looper
 import android.view.Gravity
+import android.view.SurfaceHolder
 import android.view.SurfaceView
 import android.view.View
 import android.view.ViewGroup
@@ -14,13 +15,18 @@ import androidx.media3.common.VideoSize
 import androidx.media3.common.util.UnstableApi
 import androidx.media3.ui.CaptionStyleCompat
 import androidx.media3.ui.SubtitleView
+import com.tjzine.lineup.DeviceForm
 import io.flutter.plugin.common.BinaryMessenger
 import io.flutter.plugin.common.MethodChannel
 import kotlin.math.roundToInt
 
 /** Activity composition root installs [view] below Flutter, keeping video default-z-order. */
 @UnstableApi
-class NativePlayerAdapter(private val activity: Activity, messenger: BinaryMessenger) {
+class NativePlayerAdapter(
+    private val activity: Activity,
+    messenger: BinaryMessenger,
+    deviceForm: DeviceForm = DeviceForm.detect(activity),
+) {
     val view = FrameLayout(activity)
     private val video = SurfaceView(activity)
     // White text with a black outline and no box, like libmpv's default; Media3's
@@ -44,11 +50,31 @@ class NativePlayerAdapter(private val activity: Activity, messenger: BinaryMesse
     private var engine: Media3Engine? = null
     private val handler = Handler(Looper.getMainLooper())
     private val channel = MethodChannel(messenger, "lineup/native_player")
+    private val debug =
+        activity.applicationInfo.flags and android.content.pm.ApplicationInfo.FLAG_DEBUGGABLE != 0
+    private var diagnosticCount = 0
+
+    // Lifecycle-only facts: never include media URLs, headers or exception text.
+    private fun diagnose(fact: String) {
+        if (debug && diagnosticCount++ < 2000) {
+            android.util.Log.i("LineupSurface", "uptimeMs=${android.os.SystemClock.uptimeMillis()} $fact")
+        }
+    }
+
+    private val systemBars =
+        if (deviceForm == DeviceForm.HANDHELD) HandheldSystemBars(activity.window) else null
+
     private var rectangle = VideoRect(0.0, 0.0, 0.0, 0.0, 1.0)
     private var videoSize = VideoSize.UNKNOWN
     private val controller =
         NativePlayerController(
             object : PlayerHost {
+                override fun observedFullscreen(): Boolean? = systemBars?.observedFullscreen()
+
+                override fun setFullscreen(fullscreen: Boolean) {
+                    systemBars?.setFullscreen(fullscreen)
+                }
+
                 override fun firstFrame(generation: Long, loadId: Long, positionMs: Long) {
                     if (
                         activity.applicationInfo.flags and
@@ -112,7 +138,7 @@ class NativePlayerAdapter(private val activity: Activity, messenger: BinaryMesse
 
                 override fun rect(rect: VideoRect) {
                     rectangle = rect
-                    layoutVideo()
+                    layoutVideo("setVideoRect")
                 }
 
                 override fun keepScreenOn(keep: Boolean) {
@@ -133,7 +159,7 @@ class NativePlayerAdapter(private val activity: Activity, messenger: BinaryMesse
                             subtitles.setFractionalTextSize(SubtitleView.DEFAULT_TEXT_SIZE_FRACTION)
                         }
                     } else {
-                        layoutVideo()
+                        layoutVideo("subtitlePresentation")
                         engine?.refreshSubtitles()
                     }
                 }
@@ -149,7 +175,7 @@ class NativePlayerAdapter(private val activity: Activity, messenger: BinaryMesse
                             CaptionStyleCompat.EDGE_TYPE_OUTLINE, Color.BLACK, null,
                         ))
                     }
-                    layoutVideo()
+                    layoutVideo("createEngine")
                     return Media3Engine(
                         activity,
                         handler,
@@ -157,11 +183,12 @@ class NativePlayerAdapter(private val activity: Activity, messenger: BinaryMesse
                         subtitles,
                         { size ->
                             videoSize = size
-                            layoutVideo()
+                            layoutVideo("videoSize")
                         },
                         ::keepScreenOn,
                         subtitlePresentation = { presentation },
                         observeSessionLanding = session,
+                        deviceForm = deviceForm,
                     ).also { engine = it }
                 }
 
@@ -169,10 +196,24 @@ class NativePlayerAdapter(private val activity: Activity, messenger: BinaryMesse
                     channel.invokeMethod("event", value)
                 }
             },
+            deviceForm,
             MediaCapabilitiesProbe(activity)::read,
         )
 
     init {
+        if (debug) video.holder.addCallback(object : SurfaceHolder.Callback {
+            override fun surfaceCreated(holder: SurfaceHolder) {
+                diagnose("surface_created valid=${holder.surface.isValid} visibility=${video.visibility}")
+            }
+
+            override fun surfaceChanged(holder: SurfaceHolder, format: Int, width: Int, height: Int) {
+                diagnose("surface_changed width=$width height=$height visibility=${video.visibility}")
+            }
+
+            override fun surfaceDestroyed(holder: SurfaceHolder) {
+                diagnose("surface_destroyed visibility=${video.visibility}")
+            }
+        })
         listOf(view, video, subtitles).forEach {
             it.isFocusable = false
             it.isFocusableInTouchMode = false
@@ -201,10 +242,10 @@ class NativePlayerAdapter(private val activity: Activity, messenger: BinaryMesse
                 },
             )
         }
-        layoutVideo()
+        layoutVideo("init")
     }
 
-    private fun layoutVideo() {
+    private fun layoutVideo(trigger: String) {
         val r = rectangle
         val width = pixels(r.width * r.scale)
         val height = pixels(r.height * r.scale)
@@ -237,6 +278,7 @@ class NativePlayerAdapter(private val activity: Activity, messenger: BinaryMesse
         subtitles.visibility = if (shown && r.showSubtitles) View.VISIBLE else View.INVISIBLE
         video.layoutParams = FrameLayout.LayoutParams(fitWidth, fitHeight, Gravity.CENTER)
         subtitles.layoutParams = FrameLayout.LayoutParams(fitWidth, fitHeight, Gravity.CENTER)
+        diagnose("rect trigger=$trigger left=${pixels(r.left * r.scale)} top=${pixels(r.top * r.scale)} width=$width height=$height fitWidth=$fitWidth fitHeight=$fitHeight container=${view.visibility} video=${video.visibility}")
         updateSubtitles {
             subtitles.setFractionalTextSize(
                 0.0533f * presentation.scale * if (fitHeight > 0) height.toFloat() / fitHeight else 1f
@@ -256,12 +298,17 @@ class NativePlayerAdapter(private val activity: Activity, messenger: BinaryMesse
     private fun pixels(value: Double) =
         value.coerceIn(Int.MIN_VALUE.toDouble(), Int.MAX_VALUE.toDouble()).roundToInt()
 
+    fun observeSystemBars() {
+        systemBars?.observe(controller::publishFullscreen)
+    }
+
     fun releaseForBackground() {
         controller.releaseForBackground()
     }
 
     fun close() {
         channel.setMethodCallHandler(null)
+        systemBars?.close()
         controller.close()
         (view.parent as? ViewGroup)?.removeView(view)
     }
