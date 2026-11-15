@@ -351,6 +351,12 @@ class LineupController extends ChangeNotifier {
           _ => null,
         };
 
+  String? _firstLibrariesBackError;
+  String? get firstLibrariesBackError =>
+      firstLibrariesOrigin == FirstLibrariesOrigin.profiles
+      ? _firstLibrariesBackError
+      : null;
+
   _ServerProbeFailure? _serverProbeFailure;
   String? get unreachableServerId => _serverProbeFailure?.serverId;
 
@@ -1655,7 +1661,15 @@ class LineupController extends ChangeNotifier {
         final next = _persisted
             .withProfile(null)
             .withoutSelectedServer(profileId);
-        await _persistState(next);
+        try {
+          await _persistState(next);
+        } catch (_) {
+          if (_isCurrent(operation)) {
+            _firstLibrariesBackError =
+                'Could not return to profiles. Try Back again.';
+          }
+          return;
+        }
         if (_disposed) return;
         // Once the save commits, publish its matching scope even if another
         // operation arrived during the write. Later writes use this snapshot.
@@ -1665,10 +1679,12 @@ class LineupController extends ChangeNotifier {
         _serverAccess = const {};
         _profile = null;
         _profileToken = null;
+        _error = null;
         _stage = SetupStage.profiles;
       }),
       operation: operation,
       fallbackStage: SetupStage.channelSetup,
+      clearError: false,
     );
   }
 
@@ -1760,6 +1776,7 @@ class LineupController extends ChangeNotifier {
     }
     _serverSelectionCanCancel = false;
     _error = null;
+    _serverProbeFailure = null;
     final origin = _serverPickerOrigin;
     _serverPickerOrigin = null;
     _channelSetupCanCancel = origin?.canCancelSetup ?? false;
@@ -1785,6 +1802,7 @@ class LineupController extends ChangeNotifier {
     _channelSetupCanCancel = false;
     _clearServerTarget();
     _error = null;
+    _serverProbeFailure = null;
     _stage = SetupStage.channelSetup;
     notifyListeners();
     return true;
@@ -2926,6 +2944,7 @@ class LineupController extends ChangeNotifier {
     _profilePickerOrigin = null;
     _serverPickerOrigin = null;
     _firstLibrariesEntry = null;
+    _firstLibrariesBackError = null;
     _scan.reset();
   }
 
@@ -3100,11 +3119,12 @@ class LineupController extends ChangeNotifier {
     required int operation,
     required SetupStage fallbackStage,
     SetupStage? scanLimitFallbackStage,
+    bool clearError = true,
   }) async {
     if (!_isCurrent(operation)) return false;
     _busyOperation = operation;
     _busy = true;
-    _error = null;
+    if (clearError) _error = null;
     notifyListeners();
     try {
       await body();
@@ -3174,6 +3194,7 @@ class LineupController extends ChangeNotifier {
   int _invalidateOperation() {
     final operation = ++_epoch;
     _serverProbeFailure = null;
+    _firstLibrariesBackError = null;
     _selectionPreparation?.complete();
     _selectionPreparation = null;
     _scenarioOpen = false;

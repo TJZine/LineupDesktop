@@ -373,6 +373,7 @@ class UpstreamChannelSetupViewState extends State<UpstreamChannelSetupView> {
   @override
   Widget build(BuildContext context) {
     final firstLibrariesOrigin = widget.controller.firstLibrariesOrigin;
+    final backError = widget.controller.firstLibrariesBackError;
     final entryEnabled = _libraryEntryTargetIsEnabled;
     if (entryEnabled && !_libraryEntryWasEnabled) {
       _scheduleLibraryEntryFocus();
@@ -417,6 +418,10 @@ class UpstreamChannelSetupViewState extends State<UpstreamChannelSetupView> {
                           }),
                         ),
                       ),
+                    if (_step == _SetupStep.libraries && backError != null) ...[
+                      LineupNotice(message: backError),
+                      const SizedBox(height: 12),
+                    ],
                     if (_step != _SetupStep.libraries && !resultState) ...[
                       _header(),
                       const SizedBox(height: 32),

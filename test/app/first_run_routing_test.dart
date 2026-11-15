@@ -413,7 +413,8 @@ void main() {
       expect(controller.contentGeneration, generation);
       expect(controller.firstLibrariesOrigin, FirstLibrariesOrigin.profiles);
       expect(controller.server?.id, 'media');
-      expect(controller.error, isNotNull);
+      expect(controller.error, isNull);
+      expect(controller.firstLibrariesBackError, isNotNull);
       expect(controller.busy, isFalse);
       expect(controller.canSwitchServer, isTrue);
       expect(credentials.profileTokens, {'viewer': _profileToken});
@@ -738,6 +739,85 @@ void main() {
     semantics.dispose();
   });
 
+  for (final exit in ['Back', 'Continue', 'direct Continue']) {
+    testWidgets(
+      'leaving a failed alternate with $exit restores normal Libraries',
+      (tester) async {
+        final fixture = _RoutingFixture(servers: ['media', 'archive'])
+          ..plex.probeResponses['archive'] = Future.value(503);
+        final controller = fixture.controller;
+        await controller.initialize();
+        await controller.selectServer(controller.servers.first);
+        if (exit == 'direct Continue') await controller.refreshServers();
+        await _show(tester, fixture, tv: false);
+        if (exit != 'direct Continue') {
+          await tester.tap(find.text('Switch server'));
+          await tester.pumpAndSettle();
+        }
+        expect(controller.serverSelectionCanCancel, exit != 'direct Continue');
+        await tester.tap(find.text('Archive'));
+        await tester.pumpAndSettle();
+        expect(controller.unreachableServerId, 'archive');
+        expect(find.text('Unreachable'), findsOneWidget);
+        expect(find.text('Retry'), findsOneWidget);
+        final probeMessage = controller.error!;
+
+        await tester.tap(find.text(exit == 'Back' ? 'Back' : 'Continue'));
+        await tester.pumpAndSettle();
+        expect(controller.server?.id, 'media');
+        expect(controller.stage, SetupStage.channelSetup);
+        expect(controller.unreachableServerId, isNull);
+        expect(controller.error, isNull);
+        expect(find.text(probeMessage), findsNothing);
+        expect(find.text('Unreachable'), findsNothing);
+        expect(find.text('Choose libraries'), findsOneWidget);
+        expect(find.text('Retry scan'), findsNothing);
+        expect(find.text('Scan selected libraries'), findsOneWidget);
+        expect(fixture.plex.probes.map((probe) => probe.$1), [
+          'media',
+          'archive',
+        ]);
+      },
+    );
+  }
+
+  testWidgets(
+    'a failed Back save shows feedback and keeps normal Scan and Back',
+    (tester) async {
+      final store = _BackSaveStore();
+      final fixture = _RoutingFixture(
+        profiles: [_owner, _viewer],
+        store: store,
+      );
+      final controller = fixture.controller;
+      await controller.initialize();
+      await controller.selectProfile(_viewer, pin: '1234');
+      await _show(tester, fixture, tv: false);
+
+      final gate = store.gate = Completer<void>();
+      final back = find.widgetWithText(TextButton, 'Back to profiles');
+      await tester.tap(back);
+      await tester.pump();
+      expect(store.started.isCompleted, isTrue);
+      gate.completeError(StateError('Synthetic Back save failure'));
+      await tester.pumpAndSettle();
+
+      final notice = controller.firstLibrariesBackError!;
+      expect(find.text(notice), findsOneWidget);
+      expect(find.text('Scan selected libraries'), findsOneWidget);
+      expect(find.text('Retry scan'), findsNothing);
+      expect(tester.widget<TextButton>(back).onPressed, isNotNull);
+      expect(controller.server?.id, 'media');
+
+      await tester.tap(back);
+      await tester.pumpAndSettle();
+      expect(controller.stage, SetupStage.profiles);
+      expect(controller.firstLibrariesBackError, isNull);
+      expect(find.text(notice), findsNothing);
+      expect(store.state.profileId, isNull);
+    },
+  );
+
   testWidgets('TV setup advances when its scan settles under Support', (
     tester,
   ) async {
@@ -870,14 +950,15 @@ class _RoutingFixture {
     List<PlexHomeUser> profiles = const [_owner],
     List<String> servers = const ['media'],
     PersistedState? state,
+    MemoryAppStore? store,
     bool signedIn = true,
-  }) : store = MemoryAppStore(initial: state),
+  }) : store = store ?? MemoryAppStore(initial: state),
        credentials = MemoryCredentialStore(
          accountToken: signedIn ? _accountToken : null,
        ),
        plex = _RoutingPlex(profiles, servers) {
     controller = LineupController(
-      store: store,
+      store: this.store,
       credentials: credentials,
       plex: plex,
     );
