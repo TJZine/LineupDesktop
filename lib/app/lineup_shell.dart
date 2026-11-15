@@ -91,7 +91,7 @@ class _LineupShellState extends State<LineupShell> {
   bool _onboardingSupport = false;
   bool _selectionPending = false;
   bool _keyboardInput = false;
-  ({Rect anchor, FocusNode invokerFocus})? _appMenu;
+  ({Object id, Rect anchor, FocusNode invokerFocus})? _appMenu;
   static const _appMenuChannel = MethodChannel('lineup/app_menu');
   bool _onboardingFromAccount = false;
   SettingsCategory _settingsCategory = SettingsCategory.appearance;
@@ -369,8 +369,15 @@ class _LineupShellState extends State<LineupShell> {
   Future<void> _select(
     ShellDestination destination, {
     _TvLocation? tvLocation,
+    ({Object menuId, String channelId})? tunedRow,
   }) async {
-    if (_selectionPending) return;
+    bool tunedRowIsCurrent() =>
+        tunedRow == null ||
+        (_appMenu?.id == tunedRow.menuId &&
+            _canShowNowPlaying &&
+            _player.currentChannel?.id == tunedRow.channelId);
+
+    if (_selectionPending || !tunedRowIsCurrent()) return;
     final proposed = widget.profile.isTv
         ? tvLocation ?? _tvOpen(destination)
         : null;
@@ -385,7 +392,8 @@ class _LineupShellState extends State<LineupShell> {
     if (destination == ShellDestination.settings && _licensesOpen) {
       _closeLicenses();
     }
-    if (destination == _destination &&
+    if (tunedRow == null &&
+        destination == _destination &&
         (proposed == null || proposed == _tvLocation) &&
         !(destination == ShellDestination.channels &&
             (_channelsKey.currentState?.studioOpen ?? false))) {
@@ -403,7 +411,8 @@ class _LineupShellState extends State<LineupShell> {
         return;
       }
       if (!mounted ||
-          (widget.profile.isTv &&
+          !tunedRowIsCurrent() ||
+          ((widget.profile.isTv || tunedRow != null) &&
               (intent != _routeIntent ||
                   stage != widget.controller.stage ||
                   scope != _scopeStamp))) {
@@ -429,7 +438,9 @@ class _LineupShellState extends State<LineupShell> {
       }
       final committed = proposed == null ? null : _validTvLocation(proposed);
       final routeDestination = committed?.destination ?? destination;
-      if (routeDestination == ShellDestination.guide) {
+      if (tunedRow != null && routeDestination == ShellDestination.player) {
+        _returnToNormalPlayer();
+      } else if (routeDestination == ShellDestination.guide) {
         _player.showFullGuide();
       } else if (_player.overlay == PlayerOverlay.fullGuide) {
         _player.closeOverlay();
@@ -447,6 +458,21 @@ class _LineupShellState extends State<LineupShell> {
     } finally {
       _selectionPending = false;
     }
+  }
+
+  void _returnToNormalPlayer() {
+    _player.closeSleepPicker();
+    // Back from a reader returns to its parent overlay. This explicit menu
+    // destination goes all the way back to the picture.
+    switch (_player.overlay) {
+      case PlayerOverlay.programInfo ||
+          PlayerOverlay.audioTracks ||
+          PlayerOverlay.subtitleTracks:
+        _player.closeOverlay();
+      default:
+        break;
+    }
+    if (_player.overlay != PlayerOverlay.none) _player.closeOverlay();
   }
 
   bool get _hasPlaybackSurface =>
@@ -523,7 +549,9 @@ class _LineupShellState extends State<LineupShell> {
   }
 
   void _showAppMenu(Rect anchor, FocusNode invoker) {
-    setState(() => _appMenu = (anchor: anchor, invokerFocus: invoker));
+    setState(
+      () => _appMenu = (id: Object(), anchor: anchor, invokerFocus: invoker),
+    );
   }
 
   KeyEventResult _handleTvMenuKey(KeyEvent event) {
@@ -950,8 +978,9 @@ class _LineupShellState extends State<LineupShell> {
   }
 
   Widget _immersiveAppMenu() {
-    final anchor = _appMenu?.anchor;
-    if (anchor == null) return const SizedBox.shrink();
+    final menu = _appMenu;
+    if (menu == null) return const SizedBox.shrink();
+    final anchor = menu.anchor;
     final roles = LineupTheme.of(context);
     final textTheme = Theme.of(context).textTheme;
     final detailStyle = textTheme.bodyMedium?.copyWith(
@@ -1007,7 +1036,8 @@ class _LineupShellState extends State<LineupShell> {
                     mainAxisSize: MainAxisSize.min,
                     crossAxisAlignment: CrossAxisAlignment.stretch,
                     children: [
-                      if (_canShowNowPlaying) _nowPlayingMenuRow(detailStyle),
+                      if (_canShowNowPlaying)
+                        _nowPlayingMenuRow(menu.id, detailStyle),
                       _menuDestination(
                         destination: ShellDestination.guide,
                         label: 'Guide',
@@ -1067,7 +1097,7 @@ class _LineupShellState extends State<LineupShell> {
     );
   }
 
-  Widget _nowPlayingMenuRow(TextStyle? detailStyle) {
+  Widget _nowPlayingMenuRow(Object menuId, TextStyle? detailStyle) {
     final program = _player.currentProgram!.scheduled.item.title;
     final channel = _player.currentChannel!;
     final tag = ChannelIdentity.libraryTagFor(
@@ -1077,7 +1107,12 @@ class _LineupShellState extends State<LineupShell> {
     return LineupNavigationRow(
       key: const Key('app-menu-now-playing'),
       selected: _destination == ShellDestination.player,
-      onPressed: () => unawaited(_select(ShellDestination.player)),
+      onPressed: () => unawaited(
+        _select(
+          ShellDestination.player,
+          tunedRow: (menuId: menuId, channelId: channel.id),
+        ),
+      ),
       child: Semantics(
         label:
             'Now Playing, ${ChannelIdentity.label(channel, libraryTag: tag)}, $program',
