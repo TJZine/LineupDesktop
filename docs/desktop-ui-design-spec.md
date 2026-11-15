@@ -1388,7 +1388,7 @@ The earlier A/B comparison is superseded by this refined A composition.
 
 ## Settings — organization, layout and account actions locked
 
-The category order is: Appearance, Guide, Playback,
+The category order is: Appearance, Guide, Playback, Subtitles,
 Accessibility, Account, Support. Retain category navigation beside a spacious
 detail pane using the locked A layout.
 Appearance groups theme and artwork treatment; Guide owns presentation and visible
@@ -1406,14 +1406,19 @@ User selected A as the stronger layout: spacious consistent rows with explanatio
 left and controls right, within the shared category shell. B's persistent preview
 pane and a separate pop-out/hover theme preview are excluded. Immediate theme
 changes update the actual Settings surface; the Guide is the place to judge its
-artwork treatment. Do not introduce a duplicate preview renderer.
+artwork treatment. Do not introduce a duplicate theme preview renderer.
+
+UX assessment decision, 2026-11-13/14: “Settings” is a 16px supporting label
+and the selected section supplies the only headline. Information and control
+rows share one leading text edge. Desktop category activation still uses a
+click or Enter.
 
 ### Account actions and sign-out — locked
 
 User accepted this order within Settings > Account:
 1. Plex Home profile: full name and Switch profile, followed by the startup
    profile-picker preference.
-2. Plex Media Server: full name and Switch server.
+2. Plex Media Server: full name, route and measured latency, and Switch server.
 3. Signed-in Plex account: account identity and a visually separated Sign out
    of Plex action. Distinguish the authenticated account from the selected Home
    profile; this replaces the old global-rail sign-out entry.
@@ -1512,14 +1517,15 @@ and save guards. Existing route shortcut numbers are retained.
 
 ### Lineup menu — A and Account shortcut locked
 
-User selected the compact anchored menu A, including the Account shortcut below
-Guide, Player, Channels and Settings. B's full-height panel is rejected. Keep
-full wrapping profile/server names, quiet separation and comfortable targets.
+Keep the compact anchored menu A with wrapping profile/server names,
+quiet separation and comfortable targets. UX assessment decision, 2026-11-13/14:
+put the tuned channel identity and program on separate lines in the optional
+first row, which returns to the Player. Guide, Manage channels, Settings and
+the profile/server shortcut follow. The shortcut opens Settings → Account.
 
 Final refinements accepted: remove the redundant visible
 Current caption while retaining selected-destination styling and accessible
-current-page semantics; keep focus indication distinct. For unavailable Player,
-use the actionable helper Choose a channel in Guide. Anchor to the actual invoking
+current-page semantics; keep focus indication distinct. Anchor to the invoking
 control, align within safe window bounds and reposition inward when needed rather
 than clipping the menu. Support constrained height/enlarged text without truncating
 names or losing navigation actions. Keep focus within the open menu and restore

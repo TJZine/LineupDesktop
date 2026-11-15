@@ -306,6 +306,10 @@ class _DiagnosticsViewState extends State<DiagnosticsView> {
     PlayerTelemetry? telemetry,
   ) {
     final roles = LineupTheme.of(context);
+    final idle = switch (snapshot.playback.state) {
+      PlayerState.idle || PlayerState.stopped || PlayerState.ended => true,
+      _ => false,
+    };
     final facts = [
       (
         'Playback',
@@ -336,32 +340,41 @@ class _DiagnosticsViewState extends State<DiagnosticsView> {
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.stretch,
         children: [
-          Padding(
-            padding: EdgeInsets.fromLTRB(28, 24, 28, 0),
-            child: LayoutBuilder(
-              builder: (context, constraints) {
-                final double gap = 28;
-                final effectiveTextScale = _effectiveTextScale(context);
-                final columns =
-                    constraints.maxWidth >= 1100 * effectiveTextScale
-                    ? 4
-                    : constraints.maxWidth >= 600 * effectiveTextScale
-                    ? 2
-                    : 1;
-                final width = columns == 1
-                    ? constraints.maxWidth
-                    : (constraints.maxWidth - gap * (columns - 1)) / columns;
-                return Wrap(
-                  spacing: gap,
-                  runSpacing: 20,
-                  children: [
-                    for (final fact in facts)
-                      _fact(context, fact.$1, fact.$2, width),
-                  ],
-                );
-              },
+          if (idle)
+            Padding(
+              padding: const EdgeInsets.fromLTRB(28, 24, 28, 0),
+              child: Text(
+                'Nothing is playing. Start a channel to see playback details.',
+                style: TextStyle(color: roles.secondaryText, fontSize: 18),
+              ),
+            )
+          else
+            Padding(
+              padding: EdgeInsets.fromLTRB(28, 24, 28, 0),
+              child: LayoutBuilder(
+                builder: (context, constraints) {
+                  final double gap = 28;
+                  final effectiveTextScale = _effectiveTextScale(context);
+                  final columns =
+                      constraints.maxWidth >= 1100 * effectiveTextScale
+                      ? 4
+                      : constraints.maxWidth >= 600 * effectiveTextScale
+                      ? 2
+                      : 1;
+                  final width = columns == 1
+                      ? constraints.maxWidth
+                      : (constraints.maxWidth - gap * (columns - 1)) / columns;
+                  return Wrap(
+                    spacing: gap,
+                    runSpacing: 20,
+                    children: [
+                      for (final fact in facts)
+                        _fact(context, fact.$1, fact.$2, width),
+                    ],
+                  );
+                },
+              ),
             ),
-          ),
           Padding(
             padding: EdgeInsets.fromLTRB(28, 16, 28, 0),
             child: Divider(height: 1, color: roles.subtleBorder),
@@ -430,6 +443,9 @@ class _DiagnosticsViewState extends State<DiagnosticsView> {
     PlayerTelemetry? telemetry,
   ) {
     final isMacOS = Diagnostics.isMacOSPlatform(snapshot.platform);
+    final isWindows = snapshot.platform == TargetPlatform.windows.name;
+    final isAndroid = snapshot.platform == TargetPlatform.android.name;
+    final hasDesktopOutput = isMacOS || isWindows;
     return LayoutBuilder(
       builder: (context, constraints) {
         final roles = LineupTheme.of(context);
@@ -471,13 +487,14 @@ class _DiagnosticsViewState extends State<DiagnosticsView> {
                   width: columnWidth,
                   child: _technicalGroup(context, 'Video output', [
                     _technicalFact(
-                      'Hardware decoder',
+                      isAndroid ? 'Video decoder' : 'Hardware decoder',
                       telemetry?.hardwareDecoder ?? 'Unavailable',
                     ),
-                    _technicalFact(
-                      'Video output',
-                      telemetry?.videoOutput ?? 'Unavailable',
-                    ),
+                    if (!isAndroid)
+                      _technicalFact(
+                        'Video output',
+                        telemetry?.videoOutput ?? 'Unavailable',
+                      ),
                   ]),
                 ),
                 SizedBox(
@@ -488,22 +505,25 @@ class _DiagnosticsViewState extends State<DiagnosticsView> {
                       'Transfer',
                       telemetry?.gamma ?? 'Unavailable',
                     ),
-                    _technicalFact(
-                      'Pixel format',
-                      telemetry?.pixelFormat ?? 'Unavailable',
-                    ),
+                    if (!isAndroid)
+                      _technicalFact(
+                        'Pixel format',
+                        telemetry?.pixelFormat ?? 'Unavailable',
+                      ),
                     _technicalFact(
                       'Primaries',
                       telemetry?.primaries ?? 'Unavailable',
                     ),
-                    _technicalFact(
-                      'Color matrix',
-                      telemetry?.colorMatrix ?? 'Unavailable',
-                    ),
-                    _technicalFact(
-                      'Reported signal peak',
-                      telemetry?.signalPeak?.toString() ?? 'Unavailable',
-                    ),
+                    if (!isAndroid)
+                      _technicalFact(
+                        'Color matrix',
+                        telemetry?.colorMatrix ?? 'Unavailable',
+                      ),
+                    if (!isAndroid)
+                      _technicalFact(
+                        'Reported signal peak',
+                        telemetry?.signalPeak?.toString() ?? 'Unavailable',
+                      ),
                   ], twoColumns: true),
                 ),
               ],
@@ -511,7 +531,7 @@ class _DiagnosticsViewState extends State<DiagnosticsView> {
             SizedBox(height: 20),
             if (isMacOS)
               _technicalFact('HDR output', Diagnostics.macOSHdrOutputFact)
-            else ...[
+            else if (isWindows) ...[
               _technicalFact(
                 'Windows display',
                 Diagnostics.windowsDisplayFact(snapshot.playback.displayReport),
@@ -521,35 +541,42 @@ class _DiagnosticsViewState extends State<DiagnosticsView> {
                 Diagnostics.hdrMatchingFact(snapshot.playback.displayReport),
               ),
             ],
+            if (hasDesktopOutput) ...[
+              _technicalFact(
+                'Renderer output',
+                Diagnostics.rendererOutputFact(telemetry),
+              ),
+              SizedBox(height: 20),
+              Text.rich(
+                TextSpan(
+                  children: [
+                    TextSpan(
+                      text: 'Per-stream handling · ',
+                      style: TextStyle(color: roles.secondaryText),
+                    ),
+                    TextSpan(
+                      text: 'Unavailable',
+                      style: TextStyle(color: roles.primaryText),
+                    ),
+                  ],
+                ),
+                style: TextStyle(fontSize: 18),
+              ),
+              SizedBox(height: 16),
+              Text(
+                isMacOS
+                    ? Diagnostics.macOSDisplayStateNote
+                    : Diagnostics.windowsDisplayStateNote,
+                style: TextStyle(
+                  color: LineupTheme.of(context).secondaryText,
+                  fontSize: 14,
+                ),
+              ),
+              const SizedBox(height: 20),
+            ],
             _technicalFact(
-              'Renderer output',
-              Diagnostics.rendererOutputFact(telemetry),
-            ),
-            SizedBox(height: 20),
-            Text.rich(
-              TextSpan(
-                children: [
-                  TextSpan(
-                    text: 'Per-stream handling · ',
-                    style: TextStyle(color: roles.secondaryText),
-                  ),
-                  TextSpan(
-                    text: 'Unavailable',
-                    style: TextStyle(color: roles.primaryText),
-                  ),
-                ],
-              ),
-              style: TextStyle(fontSize: 18),
-            ),
-            SizedBox(height: 16),
-            Text(
-              isMacOS
-                  ? Diagnostics.macOSDisplayStateNote
-                  : Diagnostics.windowsDisplayStateNote,
-              style: TextStyle(
-                color: LineupTheme.of(context).secondaryText,
-                fontSize: 14,
-              ),
+              'Plex connection',
+              LineupConnectionStatus.description(widget.controller.connection),
             ),
           ],
         );

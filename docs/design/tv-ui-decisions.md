@@ -10,11 +10,12 @@ The maintainer adopted the October 26 reconciliation (local evidence, not tracke
 
 - **2. Composition: option A (desktop parity) is approved.** A bigger picture is only possible by making the info band taller, and that shortens every Guide row (option B). We stay with desktop.
 - **4. Menu/details: M1 is approved, with no chevron.**
-  - Menu always opens the Lineup menu.
+  - Menu opens or closes the Lineup menu on every ready screen, including Studio, Settings, Diagnostics and Licenses (UX assessment decision, 2026-11-13/14).
   - Select or Down from hidden opens the compact OSD. Down again expands.
-  - Info, the menu's Now Playing row, and return from More info still expand directly.
+  - Info and return from More info still expand directly. The menu's tuned channel/program row returns to the standard Player (UX assessment decision, 2026-11-13/14).
   - A track drawer returns to where it was opened: the compact OSD or expanded details, with its invoking action focused (clarified November 5, 2026).
   - The chevron can be revisited after the couch check.
+- **Settings (UX assessment decision, 2026-11-13/14):** Seven sections with a small Settings label and a single section headline. Rows align on the same text edge and leave 16px within the focus fill. After 150ms, focused rail items show their sections; Right enters the section and Select opens it immediately.
 - **5. Review footer: R1 is approved.**
   - Right from a read row or disclosure header goes to the footer. Up returns to the remembered row.
   - Hint copy: **"Press right on any channel to jump here"** (maintainer, October 26; replaces "Press ▶ …", because ▶ is the Fire remote's Play/Pause symbol).
@@ -283,12 +284,11 @@ the approved desktop treatment.
 | Back | unchanged leaf-first policy | hide OSD | collapse to compact | — |
 
 - Every ordinary reveal (Select or Down) is compact, so an explicit minimize is respected automatically, with no hidden state and no new setting. Details are always one more Down away.
-- The intentional expanded entries stay as they are:
-  - the Lineup menu's **Now Playing** row;
-  - Info;
-  - return from More info.
+- Info and return from More info expand directly. The tuned channel/program
+  row in the Lineup menu returns to the Player (UX assessment decision,
+  2026-11-13/14).
 - **Track-drawer return** (clarified November 5, 2026, maintainer decision, replacing "track-drawer return" in the list above): closing a drawer returns to the presentation it was opened from, with its invoking action focused. A drawer opened from the compact OSD returns compact, which keeps an explicit minimize; one opened from expanded details returns expanded.
-- **Discoverability:** the Lineup menu already lists Now Playing. Optionally, a quiet "▾ Details" chevron on the compact OSD's bottom edge.
+- **Discoverability:** an optional quiet "▾ Details" chevron on the compact OSD's bottom edge remains unapproved.
   - The chevron is a **change to the protected OSD layout**, so it would need its own render and approval. It is not in M1 by default.
 - Menu → Lineup menu is consistent with Guide (UX-B) and replaces UX-A's Player Menu → Now Playing.
 

@@ -197,7 +197,7 @@ Success offers **View lineup** and **Add a custom channel**.
 | --- | --- |
 | Guide | Browse the schedule, inspect focused programs, filter by library, jump to now, tune current programs, and open the Player |
 | Channels | Generate a lineup or create, inspect, duplicate, edit, and delete individual channels |
-| Settings | Configure appearance, Guide, playback, accessibility, account, and support preferences |
+| Settings | Configure appearance, Guide, playback, subtitles, accessibility, account, and support preferences |
 | Diagnostics | Review bounded, redacted support events from the current session |
 | Player | Watch the tuned channel and use playback, track, channel, sleep, and fullscreen controls |
 
@@ -209,11 +209,11 @@ package wording remains provisional rather than unsupported-by-design.
 
 Guide, Player, Settings, and Diagnostics use immersive surfaces. Activate the
 visible **Open Lineup menu** control on one of those surfaces to open the
-anchored **Lineup** menu. It offers Guide, Player when playback exists, Channels,
-Settings, and **Account**; Account opens Settings with its Account category
-selected. Channels uses the persistent management rail. Settings uses one
-immersive category rail and, when playback is active, keeps the same Player
-surface behind it.
+anchored **Lineup** menu. When a channel is tuned, the first row shows the
+channel and program and returns to the Player. Guide, **Manage channels**, and
+Settings follow. The profile card shows the profile and server and opens
+Settings → Account, where the connection route and latency are listed.
+When playback is active, Settings keeps the same Player surface behind it.
 
 ## Subtitle appearance
 
@@ -322,7 +322,7 @@ line with middle-dot separators when space is compact.
 ## Player
 
 On Windows, **Settings > Playback > Match display HDR in fullscreen** is on
-by default, after **DVR playback controls**. Its subtitle is: "Switch Windows
+by default, after **Pause and seek controls**. Its subtitle is: "Switch Windows
 HDR on for HDR programs and off for SDR programs while fullscreen, then restore
 your display setting."
 
@@ -368,17 +368,17 @@ timeline tier immediately above the edge-to-edge progress line shows
 `current / total • time left` on the left when duration is known and
 `Up next • scheduled start • title` on the right. Metadata and actions are
 restrained, and the progress line is anchored to the absolute bottom. By
-default, the **DVR playback controls** setting is off: transport buttons are
+default, the **Pause and seek controls** setting is off: transport buttons are
 hidden and Player-local pause/play, seek, stop, rewind, and fast-forward
 keyboard/media shortcuts are blocked. Page Up/Page Down channel surfing,
 number entry, Guide/Mini Guide tuning, tracks, sleep, menu, and fullscreen
-remain available. Enabling **DVR playback controls** restores the transport UI
+remain available. Enabling **Pause and seek controls** restores the transport UI
 and those shortcuts; it changes Flutter presentation/input policy only, not
 native or libmpv behavior. It provides:
 
 - current channel and program information;
-- playback position; seeking when DVR playback controls are enabled;
-- previous channel, play/pause, and next channel when DVR playback controls are enabled;
+- playback position; seeking when Pause and seek controls are enabled;
+- previous channel, play/pause, and next channel when Pause and seek controls are enabled;
 - available audio and subtitle tracks;
 - sleep timer state;
 - fullscreen entry and exit.
@@ -427,7 +427,7 @@ playback. Selecting a row replaces the current tune through the same Player
 owner.
 
 When one Plex item contains sequential media parts, Lineup continues through
-them under the same tune. When DVR playback controls are enabled, progress and
+them under the same tune. When Pause and seek controls are enabled, progress and
 cross-part seeking use aggregate timing only when the required part durations
 are known; otherwise the Player shows the current part's timing rather than
 estimating missing boundaries.
@@ -485,8 +485,8 @@ report to Flutter.
 | Player | Open full Guide | `G` or `F2` |
 | Player | Show mini Guide | `Up` |
 | Player | Show OSD / expand Now Playing | `Enter` shows OSD; `I` or `Down` expands Now Playing; `I` or `Enter` collapses it |
-| Player | Seek backward/forward | `Left` or `J` = 10 seconds back; `Right` or `L` = 30 seconds forward (DVR playback controls on) |
-| Player | Play or pause | `Space`, `K`, or Media Play/Pause (DVR playback controls on) |
+| Player | Seek backward/forward | `Left` or `J` = 10 seconds back; `Right` or `L` = 30 seconds forward (Pause and seek controls on) |
+| Player | Play or pause | `Space`, `K`, or Media Play/Pause (Pause and seek controls on) |
 | Player | Previous/next channel | `Page Up` / `Page Down` |
 | Player | Enter a channel number | Number keys; confirm with `Enter`, numpad `Enter`, or Select while the entry overlay is open |
 | Player | Audio / subtitle tracks | `A` / `C` |
@@ -501,7 +501,7 @@ report to Flutter.
 
 Dedicated media transport keys are context-sensitive. In the Player, Media
 Play, Pause, Stop, Rewind, and Fast Forward are handled when available only with
-**DVR playback controls** enabled. In the Guide, Media Play jumps to the current
+**Pause and seek controls** enabled. In the Guide, Media Play jumps to the current
 time regardless of that setting. Page Up/Page Down, number entry, Guide/Mini
 Guide tuning, tracks, sleep, menu, and fullscreen also do not depend on the
 setting. The timed OSD follows the configured 2–15 second auto-hide duration.
@@ -531,8 +531,8 @@ navigation, so the D-pad can reach the next control.
 | Channel Up / Channel Down | Player: previous/next channel; Mini Guide: move seven channels; Guide: move a visible page, like Page Up / Page Down |
 | Guide | Open the full Guide from Player; in Guide, follow its Close Guide action |
 | Info | Player: expand details from hidden or compact OSD; collapse expanded details to compact OSD; with no current program, show the compact OSD |
-| Menu | Open the Lineup menu from Player or Guide |
-| Play/Pause, Rewind, Fast Forward | Existing Player transport actions when DVR playback controls are enabled |
+| Menu | Open or close the Lineup menu from any in-app destination |
+| Play/Pause, Rewind, Fast Forward | Existing Player transport actions when Pause and seek controls are enabled |
 | Number buttons | Enter a channel number in Player, then Select to confirm |
 
 Guide and Info depend on the remote; Fire TV remotes provide Menu but may not
@@ -626,10 +626,15 @@ Deletion requires confirmation and cannot be undone.
 | --- | --- |
 | Appearance | A labeled palette chooser for Ember & Steel, Slate & Pine, Mint Noir, and Satellite Blue; three Player overlay-transparency choices; Guide information background (artwork colors, theme, or backdrop); and title artwork preference |
 | Guide | Visible hours of 2, 3, or 4; whether to show channel sources; and whether to show the now-playing channel and program in Guide |
-| Playback | Player controls auto-hide after 2, 4, 6, 8, 10, or 15 seconds; optional DVR playback controls; Match display HDR in fullscreen (default on) |
+| Playback | Player controls auto-hide after 2, 4, 6, 8, 10, or 15 seconds; optional Pause and seek controls; Match display HDR in fullscreen (default on) |
+| Subtitles | Change text subtitle appearance and preview it against the Player frame |
 | Accessibility | Reduce motion across management, Guide, and Player transitions; larger keyboard/controller focus indicators |
 | Account | Switch Plex Home profile, show the profile picker on startup, switch the Plex Media Server, and sign out of Plex |
 | Support | Enable or disable bounded redacted diagnostic recording and open Diagnostics |
+
+On TV, pausing on a section in the Settings rail opens that section. Press Right
+to move into its controls, or Select to open the section immediately. On desktop,
+click a section or focus it and press Enter.
 
 Settings save immediately. The edited control is temporarily disabled while its
 save is pending. When persistence fails, the previous value remains active and
@@ -644,10 +649,11 @@ system is destructive and removes saved local setup and preferences as well.
 Diagnostics are disabled by default. Enable **Record redacted diagnostics** in
 **Settings > Support** before reproducing a problem that needs support context.
 
-Technical details and the support report include **Windows display**, **HDR
-matching**, and **Renderer output**, with normalized values. Display state is
-reported by Windows; it does not verify the TV's picture. Source HDR metadata,
-renderer output, and Windows display state are separate observations.
+When playback is idle, the summary explains how to see playback details.
+**Technical details** includes the Plex connection route and latency when
+measured and shows display and media facts supported by the platform. Windows
+display state does not verify the TV's picture. Source HDR metadata, renderer
+output, and Windows display state are separate observations.
 
 When diagnostics are enabled, a completed or failed library scan can add the
 numeric **Library scan budget usage** entry with `bytes`, `entries`, `requests`,

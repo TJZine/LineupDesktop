@@ -629,7 +629,7 @@ void main() {
       await showSettings(
         tester,
         controller,
-        size: const Size(412, 915),
+        size: const Size(412, 877),
         text: 2,
       );
       await reveal(tester, field('Styled'));
@@ -778,7 +778,7 @@ void main() {
       await showSettings(
         tester,
         controller,
-        size: const Size(412, 915),
+        size: const Size(412, 877),
         text: 2,
       );
       await reveal(tester, field('Styled'));
@@ -819,7 +819,7 @@ void main() {
         expect(row.bottom + 6, lessThanOrEqualTo(viewport.bottom + .1));
         expect(tester.getSize(find.byType(SubtitleLayer)).height, 1080);
       }
-      tester.view.physicalSize = const Size(412, 915);
+      tester.view.physicalSize = const Size(412, 877);
       await tester.pumpAndSettle();
       tester.widget<Switch>(field('Styled')).onChanged!(false);
       await tester.pump(const Duration(milliseconds: 350));
@@ -856,7 +856,7 @@ void main() {
       ),
     );
     addTearDown(controller.dispose);
-    await showSettings(tester, controller, size: const Size(412, 915), text: 2);
+    await showSettings(tester, controller, size: const Size(412, 877), text: 2);
     await reveal(tester, field('Styled'));
     final styled = tester.widget<Switch>(field('Styled'));
     styled.focusNode!.requestFocus();

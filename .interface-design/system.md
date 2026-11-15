@@ -157,17 +157,31 @@ decision log is silent. The protected Player baseline above reflects the
 separately approved expanded OSD; earlier shelf-specific rules are superseded.
 
 
+## Settings and Lineup menu
+
+UX assessment decision, 2026-11-13/14: Settings has a 16px supporting label
+above its seven-section rail and one section headline. Detail labels share a
+leading edge with 16px clearance within the TV focus fill. TV opens a category
+after a 150ms dwell; Right enters the page, and Select opens it immediately.
+Desktop categories still open on click or Enter.
+
+The menu starts with the tuned channel identity and program title on separate
+lines when available. Guide, Manage channels, Settings, and the profile/server
+card follow. The tuned row opens the Player, and connection measurements belong
+in Account and Diagnostics. TV Menu opens or closes this menu on ready screens.
+
 ## September 12 collaborative Diagnostics refinement
 
 Diagnostics42–45 use a local96px header and48px horizontal margins at1080p,
 32px heading and16px supporting/action text. Keep one filled accent action for
 Copy redacted report, with stable feedback space. Present the four summary groups
 Playback, Video, Media signal and Plex before optional grouped technical details
-and recent events. Reported media facts do not establish physical HDR output;
+and recent events. UX assessment decision, 2026-11-13/14: collapse the summary
+when idle. Show platform-supported facts in technical details and include the
+Plex route and latency when measured. Reported media facts do not establish physical HDR output;
 unavailable method/stream decisions must remain explicit.
 
-Use one quiet inline “Per-stream handling · Unavailable” while those facts are
-not supplied. Expanded events align beneath the message and lay out labeled facts
+On Windows and macOS, keep one quiet inline “Per-stream handling · Unavailable” while those facts are not supplied. Expanded events align beneath the message and lay out labeled facts
 horizontally with24px gaps/8px wrap spacing, muted labels and brighter16px values.
 Keep event times local with seconds and accessible dates; arriving events must
 not displace the user's current reading before explicit refresh.

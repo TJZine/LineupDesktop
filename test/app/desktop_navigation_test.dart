@@ -352,13 +352,9 @@ void main() {
     expect(rect.top, greaterThanOrEqualTo(16 * .8));
     expect(rect.right, lessThanOrEqualTo(800 - 16 * .8));
     expect(rect.bottom, lessThanOrEqualTo(420 - 16 * .8 + .001));
-    expect(find.text('Choose a channel in Guide'), findsOneWidget);
-    expect(
-      tester
-          .widget<TextButton>(find.widgetWithText(TextButton, 'Player'))
-          .onPressed,
-      isNull,
-    );
+    expect(find.text('Choose a channel in Guide'), findsNothing);
+    expect(find.widgetWithText(TextButton, 'Player'), findsNothing);
+    expect(find.byKey(const Key('app-menu-now-playing')), findsNothing);
 
     for (var index = 0; index < 8; index++) {
       await tester.sendKeyEvent(LogicalKeyboardKey.tab);
@@ -389,7 +385,7 @@ void main() {
       await tester.pumpAndSettle();
 
       final tops = [
-        for (final label in ['Guide', 'Player', 'Channels', 'Settings'])
+        for (final label in ['Guide', 'Manage channels', 'Settings'])
           tester.getTopLeft(find.text(label).last).dy,
         tester.getTopLeft(find.byKey(const Key('app-menu-account'))).dy,
       ];
@@ -538,12 +534,8 @@ void main() {
         _expectDestination('Guide');
         expect(find.byType(PlayerView), findsNothing);
         expect(nativePlayer.loads, orderedEquals(loads));
-        expect(
-          tester
-              .widget<TextButton>(find.widgetWithText(TextButton, 'Player'))
-              .onPressed,
-          isNull,
-        );
+        expect(find.widgetWithText(TextButton, 'Player'), findsNothing);
+        expect(find.byKey(const Key('app-menu-now-playing')), findsNothing);
         await tester.sendKeyEvent(LogicalKeyboardKey.tab);
         await tester.pump();
         expect(
@@ -603,12 +595,8 @@ void main() {
         await tester.pumpAndSettle();
         expect(find.byKey(const Key('immersive-app-menu')), findsOneWidget);
         _expectDestination('Guide');
-        expect(
-          tester
-              .widget<TextButton>(find.widgetWithText(TextButton, 'Player'))
-              .onPressed,
-          isNull,
-        );
+        expect(find.widgetWithText(TextButton, 'Player'), findsNothing);
+        expect(find.byKey(const Key('app-menu-now-playing')), findsNothing);
         expect(nativePlayer.loads, orderedEquals(loads));
         await tester.pumpWidget(const SizedBox.shrink());
       },
@@ -797,11 +785,12 @@ void main() {
       expect(find.text('Account'), findsNothing);
       expect(find.byTooltip('Close Lineup menu'), findsNothing);
       expect(find.byType(LineupProfileAvatar), findsOneWidget);
-      expect(find.text('Direct local · 126 ms'), findsOneWidget);
+      expect(find.text('Direct local · 126 ms'), findsNothing);
       expect(find.text('A long synthetic profile name'), findsOneWidget);
       await tester.tap(find.byKey(const Key('app-menu-account')));
       await tester.pumpAndSettle();
       expect(find.text('Plex Home profile'), findsOneWidget);
+      expect(find.text('Direct local · 126 ms'), findsOneWidget);
     },
   );
 

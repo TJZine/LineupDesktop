@@ -1,4 +1,6 @@
+import 'package:flutter/foundation.dart' show defaultTargetPlatform;
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:lineup_desktop/app/lineup_app.dart';
 import 'package:lineup_desktop/app/lineup_controller.dart';
@@ -96,9 +98,24 @@ class _FixturePlex extends PlexClient {
 }
 
 Future<void> openDestination(WidgetTester tester, String destination) async {
-  await tester.tap(find.byTooltip('Open Lineup menu'));
-  await tester.pump(const Duration(milliseconds: 250));
-  await tester.tap(find.text(destination).last);
+  if (destination == 'Player') {
+    // Some playback fixtures intentionally have no scheduled channel. The
+    // shortcut works for those; the menu only lists a tuned channel.
+    final modifier = defaultTargetPlatform == TargetPlatform.macOS
+        ? LogicalKeyboardKey.metaLeft
+        : LogicalKeyboardKey.controlLeft;
+    await tester.sendKeyDownEvent(modifier);
+    await tester.sendKeyEvent(LogicalKeyboardKey.digit5);
+    await tester.sendKeyUpEvent(modifier);
+  } else {
+    await tester.tap(find.byTooltip('Open Lineup menu'));
+    await tester.pump(const Duration(milliseconds: 250));
+    await tester.tap(
+      find
+          .text(destination == 'Channels' ? 'Manage channels' : destination)
+          .last,
+    );
+  }
   await tester.pumpAndSettle();
 }
 

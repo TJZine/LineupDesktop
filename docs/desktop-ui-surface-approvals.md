@@ -1729,6 +1729,12 @@ Settings Appearance; do not reopen30–32.
 
 ## September 12 — Settings surfaces33–39 locked
 
+**UX assessment decision, 2026-11-13/14:** Settings has seven sections. “Settings” is a 16px supporting label and the
+section title is the only headline. Row labels share one left edge; TV row
+focus fill extends 16px beyond the text. TV opens a focused category after
+150ms, Right enters its controls, and Select still works. Desktop retains
+activation by click or Enter.
+
 User requested one representative Account review for the shared Settings family,
 with structural/dead-space correction, removal of decorative rail/action icons,
 restrained accent text, and refinement of the Lineup menu. Root personally
@@ -1771,6 +1777,10 @@ Next surface:40. Do not reopen33–39 without a new user request.
 
 ## September 12 — Lineup menu41 locked
 
+**UX assessment decision, 2026-11-13/14:** The tuned channel and program occupy the first two-line row when available.
+That row returns to the Player. Guide, Manage channels, Settings and the
+profile/server card follow. Route and latency belong in Account and Diagnostics.
+
 User corrected the next surface to41 and explicitly skipped40. Root inspected
 compact anchored A and real production-shell captures, traced all five invokers,
 and verified menu navigation, dismissal, focus return and long-name wrapping.
@@ -1793,6 +1803,10 @@ input/native-video checks remain pending. Independent review not specifically
 recommended. Surface40 stays skipped/unreviewed. Next: Diagnostics42–45.
 
 ## September 12 — Diagnostics42–45 locked; Lineup indicator amendment
+
+**UX assessment decision, 2026-11-13/14:** The idle summary is one sentence pair. Technical details preserve the
+Windows and macOS display rows and show only supported playback facts on
+Android. Plex connection details include measured route and latency.
 
 User approved the Diagnostics direction after root inspected the refined four-group
 A mock, all four frozen states, source owners, event retention/copy behavior and

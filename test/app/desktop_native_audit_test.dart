@@ -10,6 +10,7 @@ import 'package:lineup_desktop/playback/native_player.dart';
 import 'package:lineup_desktop/playback/player_coordinator.dart';
 import 'package:lineup_desktop/playback/player_view.dart';
 import 'package:lineup_desktop/plex/plex_models.dart';
+import 'package:lineup_desktop/ui/channel_identity.dart';
 
 import '../support/ui_fixture.dart';
 
@@ -32,7 +33,7 @@ final _channel = Channel(
 
 void main() {
   for (final route in ['Guide', 'Player', 'Settings']) {
-    testWidgets('Now Playing opens from $route without a playback command', (
+    testWidgets('Tuned menu row from $route returns to Player without retuning', (
       tester,
     ) async {
       _setViewport(tester, const Size(1280, 720));
@@ -90,19 +91,40 @@ void main() {
         find.descendant(of: action, matching: find.text(_program.title)),
         findsOneWidget,
       );
+      final identity = find.descendant(
+        of: action,
+        matching: find.byType(ChannelIdentity),
+      );
+      expect(
+        tester.getBottomLeft(identity).dy,
+        lessThanOrEqualTo(
+          tester
+              .getTopLeft(
+                find.descendant(
+                  of: action,
+                  matching: find.text(_program.title),
+                ),
+              )
+              .dy,
+        ),
+      );
+      expect(
+        tester.getTopLeft(action).dy,
+        lessThan(tester.getTopLeft(find.text('Guide').last).dy),
+      );
       await tester.tap(action);
       await tester.pumpAndSettle();
 
       expect(find.byKey(const Key('immersive-app-menu')), findsNothing);
       final view = tester.widget<PlayerView>(find.byType(PlayerView));
-      expect(view.controller.overlay, PlayerOverlay.nowPlaying);
+      expect(view.controller.overlay, isNot(PlayerOverlay.nowPlaying));
       expect(view.focusNode!.hasFocus, isTrue);
       expect(controller.currentChannelId, _channel.id);
       expect(player.commands, before);
 
-      await tester.sendKeyEvent(LogicalKeyboardKey.escape);
+      await tester.sendKeyEvent(LogicalKeyboardKey.keyI);
       await tester.pumpAndSettle();
-      expect(view.controller.overlay, PlayerOverlay.osd);
+      expect(view.controller.overlay, PlayerOverlay.nowPlaying);
       expect(find.byType(PlayerView), findsOneWidget);
       expect(player.commands, before);
       await tester.pumpWidget(const SizedBox.shrink());

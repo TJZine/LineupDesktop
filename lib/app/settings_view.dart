@@ -79,7 +79,13 @@ class _SettingsViewState extends State<SettingsView> {
   late LineupSettings _lastControllerSettings;
   bool _categoryFocusPlaced = false;
   final List<_PendingSave> _pendingSaves = [];
-  final _subtitleRailFocus = FocusNode(debugLabel: 'Subtitles category');
+  final _tvRailFocus = {
+    for (final category in SettingsCategory.values)
+      category: FocusNode(debugLabel: 'Settings ${category.name}'),
+  };
+  final _detailFocus = FocusNode(debugLabel: 'Settings detail');
+  final _desktopSubtitleRailFocus = FocusNode(debugLabel: 'Subtitles category');
+  Timer? _railDwell;
   final _subtitleFocus = <_SettingKey, FocusNode>{};
   final _subtitleHeights = <_SettingKey, double>{};
   _SettingKey? _focusedSubtitle;
@@ -152,7 +158,12 @@ class _SettingsViewState extends State<SettingsView> {
   void dispose() {
     widget.controller.removeListener(_controllerChanged);
     widget.subtitleAppearance?.removeListener(_appearanceChanged);
-    _subtitleRailFocus.dispose();
+    _railDwell?.cancel();
+    for (final node in _tvRailFocus.values) {
+      node.dispose();
+    }
+    _detailFocus.dispose();
+    _desktopSubtitleRailFocus.dispose();
     for (final node in _subtitleFocus.values) {
       node.dispose();
     }
@@ -264,8 +275,9 @@ class _SettingsViewState extends State<SettingsView> {
         ),
       Text(
         'Settings',
-        style: LineupTypography.pageTitle.copyWith(
-          color: LineupTheme.of(context).primaryText,
+        style: TextStyle(
+          color: LineupTheme.of(context).secondaryText,
+          fontSize: 16,
         ),
       ),
     ],
@@ -284,37 +296,117 @@ class _SettingsViewState extends State<SettingsView> {
           ? _categorySelector(context, true)
           : _categorySelector(context, false),
     );
-    return DecoratedBox(
-      key: const Key('settings-category-rail'),
-      decoration: BoxDecoration(
-        border: Border(
-          right: compact
-              ? BorderSide.none
-              : BorderSide(color: roles.subtleBorder),
-          bottom: compact
-              ? BorderSide(color: roles.subtleBorder)
-              : BorderSide.none,
+    return Focus(
+      focusNode: DeviceProfile.of(context).isTv ? widget.focusNode : null,
+      canRequestFocus:
+          DeviceProfile.of(context).isTv && widget.focusNode != null,
+      skipTraversal: true,
+      onFocusChange: (_) {
+        // Shell returns focus here after a route or overlay closes. The rail
+        // rows keep their own nodes so a dwell never moves the focused row.
+        if (DeviceProfile.of(context).isTv &&
+            widget.focusNode?.hasPrimaryFocus == true) {
+          _tvRailFocus[_category]!.requestFocus();
+        }
+      },
+      child: DecoratedBox(
+        key: const Key('settings-category-rail'),
+        decoration: BoxDecoration(
+          border: Border(
+            right: compact
+                ? BorderSide.none
+                : BorderSide(color: roles.subtleBorder),
+            bottom: compact
+                ? BorderSide(color: roles.subtleBorder)
+                : BorderSide.none,
+          ),
         ),
+        child: compact ? content : SizedBox(width: 312, child: content),
       ),
-      child: compact ? content : SizedBox(width: 312, child: content),
     );
   }
+
+  static const _rowInset = 16.0;
 
   Widget _detailPane(BuildContext context, bool compact) => Padding(
     key: const Key('settings-detail-pane'),
     padding: EdgeInsets.fromLTRB(
-      (compact ? 20 : 48),
+      (compact ? 20 : 48) - (DeviceProfile.of(context).isTv ? _rowInset : 0),
       (compact ? 20 : 8),
       (compact ? 20 : 24),
       (compact ? 20 : 24),
     ),
-    child: Column(
-      crossAxisAlignment: CrossAxisAlignment.stretch,
-      children: [Expanded(child: _categoryDetail(context))],
+    child: Focus(
+      focusNode: _detailFocus,
+      canRequestFocus: false,
+      skipTraversal: true,
+      onKeyEvent: (_, event) {
+        if (DeviceProfile.of(context).isTv &&
+            event is KeyDownEvent &&
+            event.logicalKey == LogicalKeyboardKey.arrowLeft) {
+          _tvRailFocus[_category]!.requestFocus();
+          return KeyEventResult.handled;
+        }
+        return KeyEventResult.ignored;
+      },
+      child: _categoryDetail(context),
     ),
   );
 
+  void _selectCategory(SettingsCategory category) {
+    _railDwell?.cancel();
+    if (_category == category) return;
+    setState(() {
+      _localCategory = category;
+      if (category != SettingsCategory.subtitles) {
+        _focusedSubtitle = null;
+        _subtitleHeadingScrollRow = null;
+        _subtitleHeadingExitToken = null;
+        _subtitleRepinningSpace = 0;
+      }
+    });
+    widget.onCategoryChanged?.call(category);
+  }
+
+  void _followRailFocus(SettingsCategory category, bool focused) {
+    if (!focused) return;
+    _railDwell?.cancel();
+    if (category == _category) return;
+    _railDwell = Timer(const Duration(milliseconds: 150), () {
+      if (mounted && _tvRailFocus[category]!.hasPrimaryFocus) {
+        _selectCategory(category);
+      }
+    });
+  }
+
+  void _enterDetail(SettingsCategory category) {
+    if (category == _category) {
+      _focusFirstSetting();
+      return;
+    }
+    _selectCategory(category);
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (mounted &&
+          category == _category &&
+          _tvRailFocus[category]!.hasPrimaryFocus) {
+        _focusFirstSetting();
+      }
+    });
+  }
+
+  void _focusFirstSetting() {
+    if (_category == SettingsCategory.subtitles) {
+      _subtitleFocus[defaultTargetPlatform == TargetPlatform.android
+              ? _SettingKey.subtitleDevice
+              : _SettingKey.subtitlePreset]
+          ?.requestFocus();
+    } else {
+      _detailFocus.traversalDescendants.firstOrNull?.requestFocus();
+    }
+  }
+
   Widget _categorySelector(BuildContext context, bool compact) {
+    final tv = DeviceProfile.of(context).isTv;
     final controls = [
       for (final category
           in widget.supportOnly
@@ -324,45 +416,36 @@ class _SettingsViewState extends State<SettingsView> {
           padding: EdgeInsets.only(right: 10, bottom: 10),
           child: Focus(
             canRequestFocus: false,
+            onFocusChange: tv
+                ? (focused) => _followRailFocus(category, focused)
+                : null,
             onKeyEvent: (_, event) {
-              if (DeviceProfile.of(context).isTv &&
-                  category == SettingsCategory.subtitles &&
-                  _category == category &&
+              if (tv &&
                   event is KeyDownEvent &&
                   event.logicalKey == LogicalKeyboardKey.arrowRight) {
-                _subtitleFocus[defaultTargetPlatform == TargetPlatform.android
-                        ? _SettingKey.subtitleDevice
-                        : _SettingKey.subtitlePreset]
-                    ?.requestFocus();
+                _enterDetail(category);
                 return KeyEventResult.handled;
               }
               return KeyEventResult.ignored;
             },
             child: LineupNavigationRow(
               selected: category == _category,
-              focusNode: category == SettingsCategory.subtitles
-                  ? (category == _category ? widget.focusNode : null) ??
-                        _subtitleRailFocus
-                  : category == _category
-                  ? widget.focusNode
-                  : null,
+              focusNode: tv
+                  ? _tvRailFocus[category]
+                  : (category == _category ? widget.focusNode : null) ??
+                        (category == SettingsCategory.subtitles
+                            ? _desktopSubtitleRailFocus
+                            : null),
               autofocus: category == _category && !_categoryFocusPlaced,
               onPressed: () {
-                setState(() {
-                  _localCategory = category;
-                  if (category != SettingsCategory.subtitles) {
-                    _focusedSubtitle = null;
-                    _subtitleHeadingScrollRow = null;
-                    _subtitleHeadingExitToken = null;
-                    _subtitleRepinningSpace = 0;
-                  }
-                });
-                widget.onCategoryChanged?.call(category);
-                WidgetsBinding.instance.addPostFrameCallback((_) {
-                  if (mounted && category == _category) {
-                    widget.focusNode?.requestFocus();
-                  }
-                });
+                _selectCategory(category);
+                if (!tv) {
+                  WidgetsBinding.instance.addPostFrameCallback((_) {
+                    if (mounted && category == _category) {
+                      widget.focusNode?.requestFocus();
+                    }
+                  });
+                }
               },
               child: Text(_categoryLabel(category)),
             ),
@@ -385,6 +468,7 @@ class _SettingsViewState extends State<SettingsView> {
     final isTv = DeviceProfile.of(context).isTv;
 
     return ListView(
+      key: ValueKey(_category),
       children: [
         _SettingsSection(
           title: _categoryLabel(_category),
@@ -519,9 +603,9 @@ class _SettingsViewState extends State<SettingsView> {
                 _SettingKey.dvrControlsEnabled,
                 (current, item) => current.copyWith(dvrControlsEnabled: item),
                 (onChanged) => _SettingsSwitchTile(
-                  title: const Text('DVR playback controls'),
+                  title: const Text('Pause and seek controls'),
                   subtitle: const Text(
-                    'Show transport controls and enable pause, seek, stop, and media-key shortcuts in Player.',
+                    'Show transport controls in the Player and enable pause, seek, stop, and media-key shortcuts.',
                   ),
                   value: value.dvrControlsEnabled,
                   onChanged: onChanged,
@@ -863,7 +947,7 @@ class _SettingsViewState extends State<SettingsView> {
     final error = _errors[key];
     if (error != null) {
       return Padding(
-        padding: EdgeInsets.fromLTRB(16, 0, 16, 8),
+        padding: const EdgeInsets.fromLTRB(16, 0, 16, 8),
         child: Text(
           error,
           key: ValueKey('setting-error-${key.name}'),
@@ -873,7 +957,7 @@ class _SettingsViewState extends State<SettingsView> {
     }
     if (_pendingSaves.any((p) => p.key == key && p.showSaving)) {
       return Padding(
-        padding: EdgeInsets.fromLTRB(16, 0, 16, 8),
+        padding: const EdgeInsets.fromLTRB(16, 0, 16, 8),
         child: Text('Saving…'),
       );
     }
@@ -967,25 +1051,37 @@ class _SettingsSection extends StatelessWidget {
     return Column(
       crossAxisAlignment: CrossAxisAlignment.stretch,
       children: [
-        Semantics(
-          header: true,
-          child: Text(
-            title,
-            style: theme.textTheme.headlineMedium?.copyWith(
-              color: roles.primaryText,
-              fontSize: 44,
-              fontWeight: FontWeight.w600,
-              height: 1.08,
-            ),
+        Padding(
+          padding: EdgeInsets.symmetric(
+            horizontal: DeviceProfile.of(context).isTv
+                ? _SettingsViewState._rowInset
+                : 0,
           ),
-        ),
-        SizedBox(height: 6),
-        Text(
-          description,
-          style: theme.textTheme.bodyLarge?.copyWith(
-            color: roles.secondaryText,
-            fontSize: 18,
-            height: 1.5,
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Semantics(
+                header: true,
+                child: Text(
+                  title,
+                  style: theme.textTheme.headlineMedium?.copyWith(
+                    color: roles.primaryText,
+                    fontSize: 44,
+                    fontWeight: FontWeight.w600,
+                    height: 1.08,
+                  ),
+                ),
+              ),
+              SizedBox(height: 6),
+              Text(
+                description,
+                style: theme.textTheme.bodyLarge?.copyWith(
+                  color: roles.secondaryText,
+                  fontSize: 18,
+                  height: 1.5,
+                ),
+              ),
+            ],
           ),
         ),
         SizedBox(height: trailingGap),
@@ -1002,7 +1098,7 @@ class _SettingsRow extends StatelessWidget {
     required this.control,
     this.first = false,
     this.revealOnFocus = false,
-    this.horizontalPadding = 0,
+    this.filledOnFocus = false,
   });
 
   final Widget label;
@@ -1010,7 +1106,7 @@ class _SettingsRow extends StatelessWidget {
   final Widget control;
   final bool first;
   final bool revealOnFocus;
-  final double horizontalPadding;
+  final bool filledOnFocus;
 
   @override
   Widget build(BuildContext context) {
@@ -1045,12 +1141,16 @@ class _SettingsRow extends StatelessWidget {
             ),
           ],
         );
+        final inset = DeviceProfile.of(context).isTv
+            ? _SettingsViewState._rowInset
+            : 0.0;
         return Container(
           constraints: BoxConstraints(minHeight: 132),
           padding: EdgeInsets.fromLTRB(
-            horizontalPadding,
+            // LineupToggleSurface already reserves 3px for its leading edge.
+            inset - (inset > 0 && filledOnFocus ? 3 : 0),
             (first ? 16 : 28),
-            horizontalPadding,
+            inset,
             28,
           ),
           decoration: BoxDecoration(
@@ -1105,7 +1205,7 @@ class _SettingsSwitchTile extends StatelessWidget {
     return LineupToggleSurface(
       child: MergeSemantics(
         child: _SettingsRow(
-          horizontalPadding: DeviceProfile.of(context).isTv ? 16 : 0,
+          filledOnFocus: true,
           label: title,
           helper: subtitle,
           control: Builder(
@@ -1189,7 +1289,7 @@ class _Dropdown<T> extends StatelessWidget {
     return LineupToggleSurface(
       child: MergeSemantics(
         child: _SettingsRow(
-          horizontalPadding: DeviceProfile.of(context).isTv ? 16 : 0,
+          filledOnFocus: true,
           label: Text(label),
           helper: Text(description),
           control: SizedBox(
