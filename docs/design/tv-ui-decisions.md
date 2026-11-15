@@ -206,6 +206,17 @@ Resulting rail widths at 1920:
   - track and Sleep readers.
   - The acceptance matrix below lists them.
 
+### Profile tile exception (Q6)
+
+UX assessment decision, 2026-11-13/14. The maintainer approved the TV profile
+ring with one change in the Wave 1 review on November 14. The 3 px avatar
+ring uses the active theme's TV focus fill color from §3b, with a 4 px canvas
+gap. Large focus indicators use a 5 px ring. The avatar grows 8% over 100 ms, with no growth under Reduce Motion.
+The focused name uses primary text. Other avatars and names dim to 80% while
+a profile has visible focus. The avatar slot reserves the maximum ring size
+and gives the name at least 16 px of clearance. Desktop profile focus retains
+the approved desktop treatment.
+
 ### 3b. Maintainer feedback: cream looks off on some themes
 
 **Approved focused support ink.** On the TV rail, Watching text and its icon use `focusSecondaryText`; provenance uses `focusMutedText`. This preserves the unfocused secondary/muted hierarchy. The approved per-theme tints and Large borders below carry forward unchanged.

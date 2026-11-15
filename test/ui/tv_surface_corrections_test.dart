@@ -335,33 +335,37 @@ void main() {
     );
   });
 
-  testWidgets('C2 cold profile focus paints scoped badge ink and scale', (
-    tester,
-  ) async {
-    const user = PlexHomeUser(id: 'owner', name: 'Owner', protected: false);
-    final fixture = UiFixture(
-      profile: profileFor(true),
-      scenario: const LineupScenario(
-        stage: SetupStage.profiles,
-        profile: user,
-        profiles: [user],
-      ),
-    );
-    await tester.pumpWidget(fixture.build());
-    await tester.pumpAndSettle();
-    expect(ink(tester, find.text('Current')), const Color(0xFF090806));
-    final card = find.byKey(const ValueKey('profile-card-owner'));
-    expect(
-      tester
-          .widget<AnimatedScale>(
-            find.descendant(of: card, matching: find.byType(AnimatedScale)),
-          )
-          .scale,
-      1.06,
-    );
-    await tester.pumpWidget(const SizedBox.shrink());
-    fixture.controller.dispose();
-  });
+  testWidgets(
+    'Q6 cold profile focus paints the avatar ring and preserves badge ink',
+    (tester) async {
+      const user = PlexHomeUser(id: 'owner', name: 'Owner', protected: false);
+      final fixture = UiFixture(
+        profile: profileFor(true),
+        scenario: const LineupScenario(
+          stage: SetupStage.profiles,
+          profile: user,
+          profiles: [user],
+        ),
+      );
+      await tester.pumpWidget(fixture.build());
+      await tester.pumpAndSettle();
+      final name = find.text('Owner');
+      final roles = LineupTheme.of(tester.element(name));
+      final tile = find.widgetWithText(TextButton, 'Owner');
+      expect(
+        tester.widget<TextButton>(tile).focusNode!.hasPrimaryFocus,
+        isTrue,
+      );
+      expect(ink(tester, find.text('Current')), roles.progressFill);
+      expect(ink(tester, name), roles.primaryText);
+      expect(
+        find.byKey(const ValueKey('tv-profile-focus-ring')),
+        findsOneWidget,
+      );
+      await tester.pumpWidget(const SizedBox.shrink());
+      fixture.controller.dispose();
+    },
+  );
 
   for (final reduceMotion in [false, true]) {
     testWidgets(

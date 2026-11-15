@@ -44,6 +44,12 @@ and semantic states stay predictable.
 Projector amber replaces the earlier brass `#C8A363`. Do not use amber as
 blanket decoration. Focus light and on-air coral retain separate meanings.
 
+UX assessment decision, 2026-11-13/14 (Q6), updated in the Wave 1 review.
+The TV profile picker uses the active theme's TV focus fill color for the
+avatar ring and the canvas color for the gap. The
+[TV profile tile exception](../docs/design/tv-ui-decisions.md#profile-tile-exception-q6)
+records the dimensions and motion.
+
 ## Construction
 
 - Depth comes from warm near-black surface shifts and quiet borders, not drop

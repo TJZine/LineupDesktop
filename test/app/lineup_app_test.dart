@@ -1654,8 +1654,8 @@ void main() {
     );
     await tester.pumpAndSettle();
 
-    expect(find.text('Owned server'), findsOneWidget);
-    expect(find.text('Shared server'), findsOneWidget);
+    expect(find.text('Yours'), findsOneWidget);
+    expect(find.text('Shared with you'), findsOneWidget);
     expect(find.text('Direct local available'), findsNothing);
     expect(find.text('Direct remote available'), findsNothing);
     expect(find.text('Relay available'), findsNothing);
