@@ -939,7 +939,7 @@ void main() {
       fixture.player.showOsd();
       fixture.player.showTracks(PlayerTrackType.audio);
       await tester.pumpAndSettle();
-      expect(find.byKey(const Key('playback-options-rail')), findsOneWidget);
+      expect(find.byKey(const Key('player-track-popover')), findsOneWidget);
       await _r2Capture(
         tester,
         captureKey,
@@ -5076,7 +5076,7 @@ void main() {
         ),
         (
           () => fixture.player.showTracks(PlayerTrackType.audio),
-          find.byKey(const Key('playback-options-fade')),
+          find.byKey(const Key('player-track-popover')),
         ),
         (
           fixture.player.showSleepTimer,
@@ -7352,7 +7352,7 @@ void main() {
   });
 
   testWidgets(
-    '1280 track drawers keep wrapped rows clear of the fixed footer',
+    '1280 track pickers keep wrapped rows clear of the fixed footer',
     (tester) async {
       const audioTracks = [
         PlayerTrack(
@@ -7483,7 +7483,13 @@ void main() {
 
         final rail = _drawnRect(
           tester,
-          find.byKey(const Key('playback-options-rail')),
+          find.byKey(
+            Key(
+              scenario.type == PlayerTrackType.audio
+                  ? 'player-track-popover'
+                  : 'playback-options-rail',
+            ),
+          ),
         );
         final list = _drawnRect(
           tester,
@@ -7491,7 +7497,10 @@ void main() {
         );
         final footer = _drawnRect(
           tester,
-          find.byKey(const Key('playback-options-footer')),
+          find.descendant(
+            of: find.byKey(const Key('playback-options-footer')),
+            matching: find.byType(Text),
+          ),
         );
         expect(rail.contains(footer.topLeft), isTrue);
         expect(
@@ -7584,8 +7593,8 @@ void main() {
     final semantics = tester.ensureSemantics();
     final fixture = _Fixture(
       PlayerState.playing,
-      tracks: const [
-        PlayerTrack(
+      tracks: [
+        const PlayerTrack(
           id: 1,
           type: PlayerTrackType.audio,
           selected: true,
@@ -7593,6 +7602,8 @@ void main() {
           language: 'English',
           codec: 'eac3',
         ),
+        for (var id = 2; id <= 7; id++)
+          PlayerTrack(id: id, type: PlayerTrackType.audio, selected: false),
       ],
     );
     addTearDown(() async {
@@ -7771,8 +7782,10 @@ void main() {
   ) async {
     final fixture = _Fixture(
       PlayerState.playing,
-      tracks: const [
-        PlayerTrack(id: 1, type: PlayerTrackType.audio, selected: true),
+      tracks: [
+        const PlayerTrack(id: 1, type: PlayerTrackType.audio, selected: true),
+        for (var id = 2; id <= 7; id++)
+          PlayerTrack(id: id, type: PlayerTrackType.audio, selected: false),
       ],
     );
     await tester.pumpWidget(
@@ -7825,8 +7838,10 @@ void main() {
   testWidgets('Reduce Motion settles track rails in one pump', (tester) async {
     final fixture = _Fixture(
       PlayerState.playing,
-      tracks: const [
-        PlayerTrack(id: 1, type: PlayerTrackType.audio, selected: true),
+      tracks: [
+        const PlayerTrack(id: 1, type: PlayerTrackType.audio, selected: true),
+        for (var id = 2; id <= 7; id++)
+          PlayerTrack(id: id, type: PlayerTrackType.audio, selected: false),
       ],
     );
     await tester.pumpWidget(
@@ -7867,6 +7882,91 @@ void main() {
     fixture.dispose();
   });
 
+  for (final (type, choices, isTv) in [
+    (PlayerTrackType.audio, 6, false),
+    (PlayerTrackType.audio, 7, false),
+    (PlayerTrackType.subtitle, 6, true),
+    (PlayerTrackType.subtitle, 7, true),
+  ]) {
+    testWidgets(
+      '${type.name} uses the right picker for $choices choices on ${isTv ? 'TV' : 'desktop'}',
+      (tester) async {
+        final count = choices - (type == PlayerTrackType.subtitle ? 1 : 0);
+        final fixture = _Fixture(
+          PlayerState.playing,
+          tracks: [
+            for (var id = 1; id <= count; id++)
+              PlayerTrack(id: id, type: type, selected: id == 2),
+          ],
+        );
+        final size = isTv ? const Size(1920, 1080) : const Size(1280, 720);
+        tester.view.physicalSize = size;
+        tester.view.devicePixelRatio = 1;
+        addTearDown(tester.view.resetPhysicalSize);
+        addTearDown(tester.view.resetDevicePixelRatio);
+        fixture.player.showOsd();
+        final material = MaterialApp(
+          theme: LineupTheme.forName(
+            LineupThemeName.emberSteel,
+            formFactor: profileFor(isTv).formFactor,
+          ),
+          builder: _playerCanvasBuilderFor(isTv),
+          home: PlayerView(controller: fixture.player, openGuide: () {}),
+        );
+        await tester.pumpWidget(material);
+        await tester.pumpAndSettle();
+        final control = find.byKey(
+          Key(
+            type == PlayerTrackType.subtitle
+                ? 'player-osd-subtitles'
+                : 'player-osd-audio',
+          ),
+        );
+        final controlRect = _drawnRect(tester, control);
+        if (isTv) {
+          tester.widget<TextButton>(control).focusNode!.requestFocus();
+          await tester.pump();
+          await tester.sendKeyEvent(LogicalKeyboardKey.select);
+        } else {
+          await tester.tap(control);
+        }
+        await tester.pumpAndSettle();
+        final short = choices <= 6;
+        final popup = find.byKey(const Key('player-track-popover'));
+        final rail = find.byKey(const Key('playback-options-rail'));
+        expect(popup, short ? findsOneWidget : findsNothing);
+        expect(rail, short ? findsNothing : findsOneWidget);
+        if (short) {
+          final rect = _drawnRect(tester, popup);
+          expect(rect.right, closeTo(controlRect.right, 1));
+          expect(rect.bottom, lessThan(controlRect.top));
+        }
+        final selected = find.byKey(Key('playback-track-${type.name}-2'));
+        expect(
+          Focus.of(
+            tester.element(
+              find
+                  .descendant(of: selected, matching: find.byType(InkWell))
+                  .first,
+            ),
+          ).hasFocus,
+          isTrue,
+        );
+        await tester.sendKeyEvent(LogicalKeyboardKey.escape);
+        await tester.pumpAndSettle();
+        expect(fixture.player.overlay, PlayerOverlay.osd);
+        if (isTv) {
+          expect(
+            tester.widget<TextButton>(control).focusNode!.hasPrimaryFocus,
+            isTrue,
+          );
+        }
+        await tester.pumpWidget(const SizedBox.shrink());
+        fixture.dispose();
+      },
+    );
+  }
+
   testWidgets('audio requires a track and empty subtitles explains Off', (
     tester,
   ) async {
@@ -7885,7 +7985,7 @@ void main() {
     await tester.sendKeyEvent(LogicalKeyboardKey.keyC);
     await tester.pump();
     expect(fixture.player.overlay, PlayerOverlay.subtitleTracks);
-    expect(find.byKey(const Key('playback-options-rail')), findsOneWidget);
+    expect(find.byKey(const Key('player-track-popover')), findsOneWidget);
     expect(find.text('No subtitle tracks available'), findsOneWidget);
     expect(find.text('Off'), findsOneWidget);
 

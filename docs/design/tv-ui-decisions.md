@@ -276,6 +276,11 @@ an episode and time support line; movie rows keep their existing layout. The
 TV focus fill is unchanged. On a failed tune, **Choose another channel** opens
 Mini Guide on plain canvas; Back restores the failure slate.
 
+UX assessment decision, 2026-11-13/14: track lists with at most six choices
+(including subtitle Off) use the same anchored popover as Sleep. Longer track
+lists retain the side panel. The selected choice takes focus in either form,
+and closing returns focus to the invoking OSD action.
+
 ### Option M1 (recommended): one meaning per key
 
 | Key | Hidden Player | Compact OSD visible | Expanded details | No current program |

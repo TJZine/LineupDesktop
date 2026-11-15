@@ -421,6 +421,8 @@ never fabricated initials, and no cast space is reserved when cast facts are
 absent. Pointer movement leaves the expanded reading surface open. Press `I`,
 `Enter`, `Esc`, or Back, or choose **Close**, to collapse it to the OSD. `A` or
 `C` opens the requested track list directly when that track type is available.
+Subtitles, Audio and Sleep use a popover for six or fewer choices. Longer lists
+use the side panel; Subtitle Off counts as a choice.
 
 The Mini Guide displays nearby channels without leaving Player. Episodes show
 the series name first, followed by episode and time. Select a channel to tune
@@ -453,7 +455,7 @@ The timed OSD remains open while keyboard focus is inside its controls. Leaving
 the active OSD restarts its full timeout. The Mini Guide has no inactivity
 timeout: it stays open while browsing or reading until you tune a row, open the
 full Guide, or close it explicitly. Reduce Motion removes Player overlay
-transition time, and audio/subtitle panels initially focus the selected track
+transition time, and audio/subtitle pickers initially focus the selected track
 (or **Off** when no subtitle is selected). These behaviors are deterministically
 tested in Flutter; physical Windows screen-reader and assistive-technology
 validation remains pending.

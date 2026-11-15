@@ -135,6 +135,10 @@ Preserve:
   artwork, single metadata line, format chips, three-line synopsis, and at most
   four cast members with roles in one row. Runtime decoder/dimension facts
   belong in Diagnostics.
+- UX assessment decision, 2026-11-13/14: Subtitles, Audio, and Sleep use an
+  anchored popover for up to six choices (including Subtitle Off). Track lists
+  with seven or more choices use the side panel. TV keeps selected-choice
+  focus and returns to the invoking action.
 - UX assessment decision, 2026-11-13/14: channel entry uses the overlay
   material at the top center, with 48 px digits above a matched 20 px channel
   identity. The Mini Guide paints a standard desktop focus border separately
