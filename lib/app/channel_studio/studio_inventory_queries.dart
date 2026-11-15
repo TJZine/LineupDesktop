@@ -76,3 +76,48 @@ List<PlexMediaItem> _studioFilteredInventory({
   items = items.where((item) => matchesLibraryFacets(item, filters));
   return items.toList(growable: false);
 }
+
+/// Reattaches inventory display labels to case-insensitive person identities.
+class StudioPersonLabels {
+  List<PlexMediaItem>? _inventory;
+  final _labels = <(String?, LibraryFilter, String), String>{};
+
+  String label(
+    LineupController controller,
+    String libraryId,
+    LibraryFilter filter,
+    String value,
+  ) {
+    if (filter != LibraryFilter.actor && filter != LibraryFilter.director) {
+      return value;
+    }
+    final inventory = controller.playableInventory.media;
+    if (!identical(inventory, _inventory)) {
+      _inventory = inventory;
+      _labels.clear();
+      for (final item in inventory) {
+        for (final (key, people) in [
+          (LibraryFilter.actor, item.actors),
+          (LibraryFilter.director, item.directors),
+        ]) {
+          for (final name in people) {
+            final identity = canonicalFilterIdentity(key, name);
+            if (identity.isEmpty) continue;
+            final display = name.trim();
+            _labels.update(
+              (item.libraryId, key, identity),
+              (current) => _preferredFacetLabel(key, current, display),
+              ifAbsent: () => display,
+            );
+          }
+        }
+      }
+    }
+    return _labels[(
+          libraryId,
+          filter,
+          canonicalFilterIdentity(filter, value),
+        )] ??
+        value;
+  }
+}

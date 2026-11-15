@@ -556,9 +556,19 @@ and QR shown on the TV; open plex.tv/link on another device when the TV has no
 browser. The Studio manual editor and air check remain reachable but are not
 accepted for remote-only operation in this beta.
 
-## Channels
+## Manage channels
 
-**Generate lineup** is the bulk workflow. It proposes generator-owned channels,
+Select a channel to open it in Studio. Search by name or number, or filter by
+favourites, source type or library. The Source column identifies the programming
+type and library. Studio shows whether watched items are included.
+
+Open **⋮** for **Watch**, **Favourite** or **Remove from favourites**, **Edit**
+for a custom channel or **Duplicate as custom** for a generated channel, and
+**Delete…**. On desktop you can also right-click the row or use Shift+F10 or
+the keyboard Menu key. On TV, press Right from the row and then Select, or hold
+Select on the row. Back closes the row menu and returns focus to the channel.
+
+**Update lineup…** opens the bulk workflow. It proposes generator-owned channels,
 then lets you replace generated channels, add generated channels, or refresh
 matching generated channels after review. All three modes preserve every custom
 channel. Refresh preserves a matching generated channel's name, schedule anchor,
@@ -577,7 +587,9 @@ as **Drama In Order**. TV, film, and mixed channels have distinct icons.
 Custom names stay as entered.
 
 **Add a custom channel** opens the full-page Channel Studio for one custom channel.
-Studio also opens when you edit a custom channel, inspect a generated channel,
+On TV, a new draft starts with focus on its programming source and suggests a
+name based on that source. Once you edit the name it stays as you entered it
+when you switch sources. Studio also opens when you edit a custom channel, inspect a generated channel,
 or choose **Duplicate as custom** from generated inspection. Generated
 programming remains read-only, but its name and number can be saved with **Save
 identity**. Duplication creates a separate custom draft with a new identity and
@@ -599,8 +611,8 @@ Mini-marathons uses blocks of 2 through 5 episodes and requires usable show
 grouping. **Air Check** uses the same content resolver and deterministic
 scheduler as Guide and Player to show what is on now, what follows, cycle and
 timing facts, why content was included, and actionable unavailable or invalid
-states. A new channel saves the same schedule anchor and shuffle identity that
-Air Check previewed. Shuffled schedules canonicalize each media occurrence by
+states. Each new channel gets a staggered start when saved. Shuffled schedules
+canonicalize each media occurrence by
 its media identity and duration before applying the seed, so a PMS response
 that merely changes input order does not reshuffle the schedule. An existing
 shuffled schedule can make one accepted transition at a schedule-version

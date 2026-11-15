@@ -3,6 +3,7 @@ import 'dart:async';
 import 'package:flutter/foundation.dart'
     show TargetPlatform, debugDefaultTargetPlatformOverride;
 
+import 'package:flutter/gestures.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/rendering.dart';
 import 'package:flutter/services.dart';
@@ -11,6 +12,10 @@ import 'package:lineup_desktop/app/channels_view.dart';
 import 'package:lineup_desktop/app/lineup_controller.dart';
 import 'package:lineup_desktop/app/lineup_app.dart';
 import 'package:lineup_desktop/channels/channel.dart';
+import 'package:lineup_desktop/channels/channel_filter.dart';
+import 'package:lineup_desktop/channels/scheduler.dart';
+import 'package:lineup_desktop/playback/player_view.dart';
+import 'package:lineup_desktop/plex/plex_models.dart';
 import 'package:lineup_desktop/ui/lineup_controls.dart';
 import 'package:lineup_desktop/ui/channel_identity.dart';
 import 'package:lineup_desktop/ui/app_theme.dart';
@@ -560,7 +565,7 @@ void main() {
     expect(search.label, contains('Search channels'));
     expect(search.getSemanticsData().flagsCollection.isTextField, isTrue);
     for (final label in [
-      'Generate lineup',
+      'Update lineup…',
       'Add a custom channel',
       'Select',
       'Reorder channels',
@@ -571,11 +576,20 @@ void main() {
       expect(node.getSemanticsData().flagsCollection.isButton, isTrue);
       expect(node.getSemanticsData().hasAction(SemanticsAction.tap), isTrue);
     }
-    for (final label in ['All', 'Custom', 'Generated']) {
-      final node = tester.getSemantics(find.text(label).first);
-      expect(node.getSemanticsData().label, label);
-      outsideTextField(node);
-    }
+    expect(find.text('Manage channels'), findsOneWidget);
+    expect(find.text('Type'), findsNothing);
+    expect(find.text('Custom'), findsOneWidget);
+    expect(
+      find.widgetWithText(FilledButton, 'Add a custom channel'),
+      findsOneWidget,
+    );
+    expect(
+      find.widgetWithText(OutlinedButton, 'Update lineup…'),
+      findsOneWidget,
+    );
+    outsideTextField(
+      tester.getSemantics(find.byKey(const Key('channels-filter'))),
+    );
     final row = tester.getSemantics(find.text('First'));
     expect(row.label, contains('First'));
     outsideTextField(row);
@@ -997,6 +1011,206 @@ void main() {
     );
   }
 
+  testWidgets(
+    'directory filters the shared lineup and shows one-line sources',
+    (tester) async {
+      const library = PlexLibrary(
+        id: 'movies',
+        title: 'Movies',
+        type: PlexLibraryType.movie,
+      );
+      final controller = FixtureController(
+        scenario: LineupScenario(
+          stage: SetupStage.ready,
+          libraries: const [library],
+          selectedLibraryIds: const {'movies'},
+          availableMedia: [
+            PlexMediaItem(
+              id: 'film',
+              title: 'Synthetic film',
+              type: 'movie',
+              duration: const Duration(hours: 1),
+              libraryId: 'movies',
+              actors: const ['Marisol de la Cruz'],
+              parts: [PlexMediaPart(path: '/synthetic-film')],
+            ),
+          ],
+          channels: [
+            _channel(
+              'actor',
+              1,
+              'Marisol de la Cruz',
+              generated: true,
+              source: const LibrarySource(
+                libraryId: 'movies',
+                libraryType: PlexLibraryType.movie,
+                filters: {
+                  LibraryFilter.actor: ['marisol de la cruz'],
+                },
+              ),
+              sourceLibraries: const {'movies': 'Movies'},
+            ).copyWith(favorite: true),
+            _channel('custom', 2, 'Custom station'),
+          ],
+        ),
+      );
+      await tester.pumpWidget(UiFixture(controller: controller).build());
+      await tester.pumpAndSettle();
+      await openDestination(tester, 'Channels');
+
+      final source = find.text('Actor · Movies');
+      final text = tester.widget<Text>(source);
+      expect(text.maxLines, 1);
+      expect(text.overflow, TextOverflow.ellipsis);
+      expect(find.byTooltip('Marisol de la Cruz'), findsOneWidget);
+      expect(find.textContaining('includes watched'), findsNothing);
+      final filter = find.byKey(const Key('channels-filter'));
+      final choices = tester.widget<DropdownButton<ChannelFilterKey>>(filter);
+      expect(choices.items!.map((item) => item.value), [
+        ChannelFilter.all,
+        ChannelFilter.favourites,
+        (group: ChannelFilterGroup.sourceType, value: 'actors'),
+        (group: ChannelFilterGroup.sourceType, value: 'custom'),
+        (group: ChannelFilterGroup.library, value: 'movies'),
+      ]);
+      await tester.tap(filter);
+      await tester.pumpAndSettle();
+      await tester.tap(find.text('Favourites').last);
+      await tester.pumpAndSettle();
+      expect(find.text('Custom station'), findsNothing);
+      await tester.tap(find.byTooltip('Actions for Marisol de la Cruz'));
+      await tester.pumpAndSettle();
+      await tester.tap(find.text('Remove from favourites'));
+      await tester.pumpAndSettle();
+      expect(controller.channels.first.favorite, isFalse);
+      expect(find.text('Custom station'), findsOneWidget);
+    },
+  );
+
+  for (final tv in [false, true]) {
+    testWidgets(
+      'row actions use platform input and restore row focus (TV: $tv)',
+      (tester) async {
+        await tester.pumpWidget(
+          UiFixture(
+            profile: profileFor(tv),
+            scenario: LineupScenario(
+              stage: SetupStage.ready,
+              channels: [_channel('custom', 1, 'Custom station')],
+            ),
+          ).build(),
+        );
+        await tester.pumpAndSettle();
+        await openDestination(tester, 'Channels');
+
+        final row = find.byKey(const ValueKey('channel-row-custom'));
+        final rowFocus = tester
+            .widget<InkWell>(
+              find.descendant(of: row, matching: find.byType(InkWell)).first,
+            )
+            .focusNode!;
+        rowFocus.requestFocus();
+        await tester.pump();
+        Future<void> checkMenuAndBack() async {
+          await tester.pumpAndSettle();
+          final watchInk = find
+              .ancestor(of: find.text('Watch'), matching: find.byType(InkWell))
+              .first;
+          expect(
+            FocusManager.instance.primaryFocus!.context!
+                .findAncestorWidgetOfExactType<InkWell>(),
+            same(tester.widget<InkWell>(watchInk)),
+          );
+          expect(find.text('Favourite'), findsOneWidget);
+          expect(find.text('Edit'), findsOneWidget);
+          expect(find.text('Duplicate as custom'), findsNothing);
+          expect(find.text('Delete…'), findsOneWidget);
+          await tester.sendKeyEvent(
+            tv ? LogicalKeyboardKey.goBack : LogicalKeyboardKey.escape,
+            physicalKey: PhysicalKeyboardKey.escape,
+          );
+          await tester.pumpAndSettle();
+          expect(find.text('Watch'), findsNothing);
+          expect(rowFocus.hasPrimaryFocus, isTrue);
+        }
+
+        if (tv) {
+          await tester.sendKeyEvent(LogicalKeyboardKey.contextMenu);
+          await tester.pumpAndSettle();
+          expect(find.text('Watch'), findsNothing);
+          await tester.sendKeyEvent(LogicalKeyboardKey.arrowRight);
+          await tester.pump();
+          expect(
+            FocusManager.instance.primaryFocus?.debugLabel,
+            'Channel actions',
+          );
+          await tester.sendKeyEvent(LogicalKeyboardKey.select);
+          await checkMenuAndBack();
+          await tester.sendKeyDownEvent(LogicalKeyboardKey.select);
+          await tester.pump(const Duration(milliseconds: 600));
+          await tester.sendKeyRepeatEvent(LogicalKeyboardKey.select);
+          await tester.sendKeyUpEvent(LogicalKeyboardKey.select);
+          await checkMenuAndBack();
+          await tester.sendKeyEvent(LogicalKeyboardKey.select);
+        } else {
+          await tester.tap(row, buttons: kSecondaryMouseButton);
+          await checkMenuAndBack();
+          await tester.sendKeyDownEvent(LogicalKeyboardKey.shiftLeft);
+          await tester.sendKeyEvent(LogicalKeyboardKey.f10);
+          await tester.sendKeyUpEvent(LogicalKeyboardKey.shiftLeft);
+          await checkMenuAndBack();
+          await tester.sendKeyEvent(LogicalKeyboardKey.contextMenu);
+          await checkMenuAndBack();
+          await tester.sendKeyEvent(LogicalKeyboardKey.enter);
+        }
+        await tester.pumpAndSettle();
+        expect(find.text('Edit custom channel'), findsOneWidget);
+      },
+    );
+  }
+
+  testWidgets('Watch opens Player and tunes the row channel', (tester) async {
+    final controller = _DirectoryWatchController(
+      scenario: LineupScenario(
+        stage: SetupStage.ready,
+        channels: [
+          _channel('custom', 1, 'Custom station'),
+          _channel('other', 2, 'Other station'),
+        ],
+        availableMedia: [
+          PlexMediaItem(
+            id: 'custom-program',
+            title: 'Synthetic programme',
+            type: 'movie',
+            duration: const Duration(minutes: 30),
+            parts: [PlexMediaPart(path: '/synthetic-programme')],
+          ),
+        ],
+      ),
+    );
+    final player = FixturePlayer();
+    await tester.pumpWidget(
+      UiFixture(
+        controller: controller,
+        player: player,
+        profile: tvProfile,
+      ).build(),
+    );
+    await tester.pumpAndSettle();
+    await openDestination(tester, 'Channels');
+    await tester.tap(find.byTooltip('Actions for Custom station'));
+    await tester.pumpAndSettle();
+    await tester.sendKeyEvent(LogicalKeyboardKey.select);
+    for (var frame = 0; frame < 10; frame++) {
+      await tester.pump(const Duration(milliseconds: 50));
+    }
+    expect(find.text('Manage channels'), findsNothing);
+    expect(find.byType(PlayerView), findsOneWidget);
+    expect(controller.currentChannelId, 'custom');
+    expect(controller.requestedItem, 'custom-program');
+    expect(player.generation, 1);
+  });
+
   testWidgets('row actions use themed menu rows and baseline delete rows', (
     tester,
   ) async {
@@ -1018,19 +1232,13 @@ void main() {
     await tester.pumpAndSettle();
     await openDestination(tester, 'Channels');
 
-    final actionButton = find.byWidgetPredicate(
-      (widget) => widget.runtimeType.toString().startsWith('PopupMenuButton'),
-    );
+    final actionButton = find.byTooltip('Actions for $longName');
     await tester.ensureVisible(actionButton);
     await tester.tap(actionButton);
     await tester.pumpAndSettle();
     expect(find.text('Duplicate as custom'), findsOneWidget);
     expect(find.text('Delete…'), findsOneWidget);
-    expect(find.byType(LineupDropdownMenuRow), findsNWidgets(2));
-    final menu = tester.widget<Widget>(actionButton) as dynamic;
-    // PopupMenuButton's private state is intentionally inspected for layout.
-    // ignore: avoid_dynamic_calls
-    expect(menu.menuPadding, EdgeInsets.zero);
+    expect(find.byType(LineupDropdownMenuRow), findsNWidgets(4));
 
     await tester.tap(find.text('Delete…'));
     await tester.pumpAndSettle();
@@ -1379,7 +1587,7 @@ void main() {
                     'Deleting…',
                   ]
                 : [
-                    'Generate lineup',
+                    'Update lineup…',
                     'Add a custom channel',
                     'Select',
                     'Reorder channels',
@@ -1442,10 +1650,10 @@ void main() {
           await tester.tap(find.text('‹ Channels'));
           await tester.pumpAndSettle();
         } else {
-          expect(find.text('Generate lineup'), findsOneWidget);
-          expect(find.text('Add a custom channel'), findsNothing);
+          expect(find.text('Update lineup…'), findsOneWidget);
+          expect(find.text('Add a custom channel'), findsOneWidget);
           expect(
-            Focus.of(tester.element(find.text('Generate lineup'))).hasFocus,
+            Focus.of(tester.element(find.text('Update lineup…'))).hasFocus,
             isTrue,
           );
         }
@@ -1460,6 +1668,7 @@ Channel _channel(
   String name, {
   bool generated = false,
   ContentSource? source,
+  Map<String, String> sourceLibraries = const {},
 }) => Channel(
   id: id,
   number: number,
@@ -1477,7 +1686,29 @@ Channel _channel(
   anchor: DateTime.utc(2026),
   shuffleSeed: number,
   builderKey: generated ? 'generated:$id' : null,
+  sourceLibraries: sourceLibraries,
 );
+
+class _DirectoryWatchController extends FixtureController {
+  _DirectoryWatchController({super.scenario});
+
+  String? requestedItem;
+
+  @override
+  Future<ScheduleIndex> loadScheduleFor(Channel channel) async =>
+      buildChannelSchedule(channel, (channel.source as ManualSource).items);
+
+  @override
+  LineupPlaybackRequest playbackFor(String itemId) {
+    requestedItem = itemId;
+    return LineupPlaybackRequest.parts([
+      LineupPlaybackPart(
+        uri: Uri.parse('https://synthetic.invalid/fixture'),
+        duration: const Duration(minutes: 30),
+      ),
+    ]);
+  }
+}
 
 class _RecordingDirectoryController extends FixtureController {
   _RecordingDirectoryController({super.scenario});

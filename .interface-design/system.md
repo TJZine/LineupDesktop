@@ -92,6 +92,14 @@ Setup names its steps Libraries, Channels and Review. Choose channels adds
 the saved Channel order choice and retains two-column source rows with at
 least 16 px of TV focus padding.
 
+## Manage channels and Studio
+
+UX assessment decision, 2026-11-13/14 (Q5, N17, N18). Use a quiet Custom tag
+beside the name and a single Source line for the type and library. At TV 1080p
+and 1.3 text scale, the directory aims for about nine visible rows. Add a custom
+channel is the filled action. In Studio on TV, focus the programming source
+choice at entry for a new custom draft.
+
 ## Guide
 
 - Preserve the existing dynamic information-background behavior.

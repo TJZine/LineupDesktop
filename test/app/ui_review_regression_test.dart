@@ -277,7 +277,7 @@ void main() {
     await tester.pumpWidget(fixture.build());
     await tester.pumpAndSettle();
     await openDestination(tester, 'Channels');
-    await tester.tap(find.text('Create a custom channel'));
+    await tester.tap(find.text('Add a custom channel'));
     await tester.pumpAndSettle();
 
     expect(find.text('Include watched items'), findsOneWidget);
@@ -322,7 +322,7 @@ void main() {
     await tester.pumpWidget(fixture.build());
     await tester.pumpAndSettle();
     await openDestination(tester, 'Channels');
-    await tester.tap(find.text('Create a custom channel'));
+    await tester.tap(find.text('Add a custom channel'));
     await tester.pumpAndSettle();
     await tester.enterText(find.byType(TextFormField).first, 'Movies');
 
@@ -346,7 +346,7 @@ void main() {
     await tester.pump();
     await tester.pump();
     await openDestination(tester, 'Channels');
-    await tester.tap(find.text('Create a custom channel'));
+    await tester.tap(find.text('Add a custom channel'));
     await tester.pumpAndSettle();
     await tester.enterText(find.byKey(const Key('studio-name')), 'Unsaved');
     await tester.pump();

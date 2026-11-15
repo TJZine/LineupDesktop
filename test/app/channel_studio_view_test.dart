@@ -307,7 +307,7 @@ void main() {
           ),
           controller,
         ),
-        'Library: TV Shows • Collection: Prestige • Genre: Drama • Studio: Lineup • Actor: Ada Actor • Director: Dee Director • Decade: 2020s • Newest first • unwatched only',
+        'Library: TV Shows · Collection: Prestige · Genre: Drama · Studio: Lineup · Actor: Ada Actor · Director: Dee Director · Decade: 2020s · Newest first · unwatched only',
       );
       expect(
         channelSourceLabel(const ManualSource([]), controller),
@@ -321,7 +321,7 @@ void main() {
           ),
           controller,
         ),
-        '2-source mix • interleaved',
+        '2-source mix · interleaved',
       );
     },
   );
@@ -1993,7 +1993,9 @@ void main() {
       isFalse,
     );
     expect(
-      find.textContaining('available when this source includes episodes'),
+      find.textContaining(
+        'Mini-marathons are available when this source includes episodes',
+      ),
       findsOneWidget,
     );
 
@@ -2483,7 +2485,12 @@ void main() {
 
       expect(find.text('1 matching programs'), findsOneWidget);
       expect(find.textContaining('unavailable'), findsNothing);
-      expect(find.textContaining('Example Person'), findsOneWidget);
+      expect(find.text('Actor: Example Person'), findsOneWidget);
+      expect(
+        find.textContaining('Actor: Example Person · Director: Director Name'),
+        findsWidgets,
+      );
+      expect(find.textContaining('Actor: example person'), findsNothing);
 
       await tester.enterText(find.byKey(const Key('studio-name')), 'Renamed');
       await _settleAirCheck(tester);
@@ -5979,6 +5986,70 @@ void main() {
       await _studioKey(tester, LogicalKeyboardKey.escape);
       expect(picker, findsNothing);
     });
+  });
+
+  _studioTvTest('new Studio focuses the source and respects edited names', (
+    tester,
+  ) async {
+    tester.view
+      ..physicalSize = const Size(1920, 1080)
+      ..devicePixelRatio = 1;
+    addTearDown(tester.view.resetPhysicalSize);
+    addTearDown(tester.view.resetDevicePixelRatio);
+    final controller = _RecordingSaveController(
+      scenario: LineupScenario(
+        libraries: const [
+          PlexLibrary(
+            id: 'movies',
+            title: 'Movies',
+            type: PlexLibraryType.movie,
+          ),
+        ],
+        selectedLibraryIds: const {'movies'},
+        libraryScanStatus: LibraryScanStatus.complete,
+        availableMedia: [_media('film', libraryId: 'movies')],
+        availablePlaylists: [
+          PlexPlaylist(
+            id: 'playlist',
+            title: 'Weekend Cinema',
+            items: [_media('film')],
+          ),
+        ],
+      ),
+    );
+    addTearDown(controller.dispose);
+    await tester.pumpWidget(
+      _studio(controller, ChannelStudioMode.createCustom, profile: tvProfile),
+    );
+    await _settleAirCheck(tester);
+
+    final choices = find.byKey(const Key('studio-source-choices'));
+    final library = find.descendant(
+      of: choices,
+      matching: find.text('Library'),
+    );
+    final name = find.byKey(const Key('studio-name'));
+    String nameValue() => _studioEditable(tester, name).widget.controller.text;
+    expect(Focus.of(tester.element(library)).hasPrimaryFocus, isTrue);
+    expect(tester.testTextInput.isVisible, isFalse);
+    expect(nameValue(), 'Movies');
+    await _studioKey(tester, LogicalKeyboardKey.arrowRight);
+    await _studioKey(tester, LogicalKeyboardKey.select);
+    expect(nameValue(), 'Weekend Cinema');
+    await tester.tap(library);
+    await tester.pumpAndSettle();
+    expect(nameValue(), 'Movies');
+
+    _studioFieldNavigation(tester, name).requestFocus();
+    await tester.pump();
+    await _studioKey(tester, LogicalKeyboardKey.select);
+    await tester.enterText(name, 'My weekend channel');
+    await _studioKey(tester, LogicalKeyboardKey.escape);
+    await tester.tap(
+      find.descendant(of: choices, matching: find.text('Plex playlist')),
+    );
+    await tester.pumpAndSettle();
+    expect(nameValue(), 'My weekend channel');
   });
 
   testWidgets('desktop Studio fields still edit directly on focus', (
