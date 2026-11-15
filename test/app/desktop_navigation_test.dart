@@ -136,9 +136,7 @@ void main() {
     await tester.pumpAndSettle();
     await _routeShortcut(tester, 1);
     _expectDestination('Channels');
-    final actions = find.byWidgetPredicate(
-      (widget) => widget.runtimeType.toString().startsWith('PopupMenuButton'),
-    );
+    final actions = find.byTooltip('Actions for One');
     await tester.ensureVisible(actions);
     await tester.tap(actions);
     await tester.pumpAndSettle();

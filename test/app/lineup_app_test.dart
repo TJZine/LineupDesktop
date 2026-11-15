@@ -329,7 +329,7 @@ void main() {
     await tester.pumpAndSettle();
 
     expect(controller.stage, SetupStage.ready);
-    expect(find.text('Channels'), findsWidgets);
+    expect(find.text('Manage channels'), findsOneWidget);
   });
 
   testWidgets('Channel Setup Add custom opens a fresh exhausted draft', (
