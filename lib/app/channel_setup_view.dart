@@ -25,6 +25,7 @@ class UpstreamChannelSetupView extends StatefulWidget {
     this.onRequestLogout,
     this.onFirstLibrariesBack,
     this.setupActionsBlocked,
+    this.authorizationTransitionPending,
     this.onViewLineup,
     this.onAddCustomChannel,
     super.key,
@@ -35,6 +36,7 @@ class UpstreamChannelSetupView extends StatefulWidget {
   final VoidCallback? onFirstLibrariesBack;
   // Also checked by callbacks that can outlive the frame that enabled them.
   final bool Function()? setupActionsBlocked;
+  final bool Function()? authorizationTransitionPending;
   final VoidCallback? onViewLineup;
   final VoidCallback? onAddCustomChannel;
 
@@ -80,8 +82,12 @@ class UpstreamChannelSetupViewState extends State<UpstreamChannelSetupView> {
 
   bool get _firstSetup => _review?.base.isEmpty ?? true;
 
+  bool get _setupContinuationBlocked =>
+      !mounted || (widget.authorizationTransitionPending?.call() ?? false);
+
   bool get _setupActionsBlocked =>
-      !mounted || (widget.setupActionsBlocked?.call() ?? false);
+      _setupContinuationBlocked ||
+      (widget.setupActionsBlocked?.call() ?? false);
 
   bool get _librariesBusy => widget.controller.busy || _setupActionsBlocked;
 
@@ -574,7 +580,9 @@ class UpstreamChannelSetupViewState extends State<UpstreamChannelSetupView> {
     selectedLibraryIds: Set.unmodifiable(_selectedLibraries),
     error: _error ?? widget.controller.libraryScanLimitError,
     onScan: _scan,
-    onCommit: _commitLibraries,
+    onCommit: (ready) async {
+      if (!_setupActionsBlocked) await _commitLibraries(ready);
+    },
     onToggleLibrary: (id) {
       if (_setupActionsBlocked) return;
       setState(() {
@@ -619,7 +627,7 @@ class UpstreamChannelSetupViewState extends State<UpstreamChannelSetupView> {
               retryFailedOnly: retryFailedOnly,
             )
           : await widget.controller.retryLibraryScan(ids, retryLibraryIds);
-      if (_setupActionsBlocked) return;
+      if (_setupContinuationBlocked) return;
       if (!settled) {
         setState(() {});
         return;
@@ -636,7 +644,7 @@ class UpstreamChannelSetupViewState extends State<UpstreamChannelSetupView> {
         setState(() {});
       }
     } catch (error) {
-      if (!_setupActionsBlocked) {
+      if (!_setupContinuationBlocked) {
         setState(
           () => _error = safeFormError(error, 'The library scan failed.'),
         );
@@ -645,12 +653,12 @@ class UpstreamChannelSetupViewState extends State<UpstreamChannelSetupView> {
   }
 
   Future<void> _commitLibraries(Set<String> ready) async {
-    if (_committingLibraries || _setupActionsBlocked) return;
+    if (_committingLibraries || _setupContinuationBlocked) return;
     final revision = ++_libraryCommitRevision;
     _committingLibraries = true;
     try {
       final saved = await widget.controller.commitLibraryScan(ready);
-      if (_setupActionsBlocked) return;
+      if (_setupContinuationBlocked) return;
       if (!saved) {
         setState(() => _error = 'The ready libraries could not be saved.');
         return;
@@ -663,7 +671,7 @@ class UpstreamChannelSetupViewState extends State<UpstreamChannelSetupView> {
         _error = null;
       });
     } catch (error) {
-      if (!_setupActionsBlocked) {
+      if (!_setupContinuationBlocked) {
         setState(
           () => _error = safeFormError(
             error,

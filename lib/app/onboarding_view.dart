@@ -99,6 +99,7 @@ class UpstreamOnboardingViewState extends State<UpstreamOnboardingView>
   Timer? _clock;
   final _navigationFocus = FocusNode(debugLabel: 'Onboarding navigation');
   final _linkActionFocus = FocusNode(debugLabel: 'Retry secure cancellation');
+  final _settingsFocus = FocusNode(debugLabel: 'Onboarding Settings');
   final _profileCancelFocus = FocusNode(debugLabel: 'Cancel profile selection');
   final _serverCancelFocus = FocusNode(debugLabel: 'Cancel server selection');
   final _firstServerFocus = FocusNode(debugLabel: 'First server action');
@@ -211,6 +212,11 @@ class UpstreamOnboardingViewState extends State<UpstreamOnboardingView>
         controller.stage == SetupStage.linking &&
         controller.pinUsable;
     final becameBusy = !_busy && nextBusy;
+    final acceptedPinOnProfiles =
+        _isTv &&
+        _pinUser != null &&
+        controller.stage == SetupStage.profiles &&
+        _pinContentGeneration != controller.contentGeneration;
     setState(() {
       _linkingStopped = nextLinkingStopped;
       _wasLinking = controller.stage == SetupStage.linking;
@@ -221,7 +227,10 @@ class UpstreamOnboardingViewState extends State<UpstreamOnboardingView>
       }
       if (controller.stage != SetupStage.servers) _serverEntryFocused = false;
     });
-    if (retryNeedsFocus || linkNeedsFocus || becameBusy) {
+    if (retryNeedsFocus ||
+        linkNeedsFocus ||
+        becameBusy ||
+        acceptedPinOnProfiles) {
       WidgetsBinding.instance.addPostFrameCallback((_) {
         if (!mounted || widget.controller != controller) return;
         if (linkNeedsFocus &&
@@ -230,6 +239,10 @@ class UpstreamOnboardingViewState extends State<UpstreamOnboardingView>
         }
         final target = retryNeedsFocus || linkNeedsFocus
             ? _linkActionFocus
+            : acceptedPinOnProfiles &&
+                  controller.stage == SetupStage.profiles &&
+                  _actionsBusy
+            ? _settingsFocus
             : _busyCancelFocus;
         if (target != null &&
             target.context?.mounted == true &&
@@ -269,6 +282,7 @@ class UpstreamOnboardingViewState extends State<UpstreamOnboardingView>
     _clock?.cancel();
     _navigationFocus.dispose();
     _linkActionFocus.dispose();
+    _settingsFocus.dispose();
     _profileCancelFocus.dispose();
     _serverCancelFocus.dispose();
     _firstServerFocus.dispose();
@@ -468,6 +482,7 @@ class UpstreamOnboardingViewState extends State<UpstreamOnboardingView>
                             : Align(
                                 alignment: Alignment.centerRight,
                                 child: TextButton(
+                                  focusNode: _settingsFocus,
                                   onPressed: widget.onOpenSettings,
                                   child: const Text('Settings'),
                                 ),
@@ -1251,7 +1266,7 @@ class UpstreamOnboardingViewState extends State<UpstreamOnboardingView>
   String? get _unreachableServerId =>
       widget.authorizationTransitionError?.call() == null &&
           !_serverAttempt.pending
-      ? widget.controller.serverProbeFailure?.serverId
+      ? widget.controller.unreachableServerId
       : null;
 
   /// Probe feedback lives with its row. Other errors keep their recovery copy.
@@ -1313,7 +1328,7 @@ class UpstreamOnboardingViewState extends State<UpstreamOnboardingView>
     setState(() {
       if (widget.controller.stage == SetupStage.servers &&
           (widget.authorizationTransitionError?.call() != null ||
-              widget.controller.serverProbeFailure?.serverId != server.id) &&
+              widget.controller.unreachableServerId != server.id) &&
           _selectionError != null) {
         _serverAttempt = _FailedServerAttempt(server.id, _selectionError!);
       } else {
@@ -1885,9 +1900,11 @@ class _ServerCard extends StatelessWidget {
         : error != null
         ? 'Retry'
         : 'Connect';
-    final actionLabel = buttonLabel == 'Connect'
-        ? 'Connect to ${server.name}'
-        : buttonLabel;
+    final actionLabel = switch (buttonLabel) {
+      'Connect' => 'Connect to ${server.name}',
+      'Retry' when unreachable => 'Retry ${server.name}',
+      _ => buttonLabel,
+    };
     final trailing = MergeSemantics(
       child: Semantics(
         label: actionLabel,

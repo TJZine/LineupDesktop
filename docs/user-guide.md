@@ -132,11 +132,11 @@ Channel Setup has three stages:
 1. **Choose libraries** to build channels from, then scan their media. On TV,
    focus starts on the first library when the list is available. You can cancel
    a running scan, retry only failed libraries, or continue with the ready subset.
-   Before you advance, **Back to profiles** returns to the profile picker and
-   **Back to sign-in** returns to Plex sign-in. The available action depends on
-   where you entered setup. On TV, use the remote’s Back button. Back cancels a
-   running scan first. Returning to sign-in ends the linked session, and a
-   protected profile requires its PIN when selected again.
+   Before you advance, **Back to profiles** returns to the profile picker,
+   where selecting a protected profile again requires its PIN.
+   **Back to sign-in** ends the linked session and returns to Plex sign-in.
+   The available action depends on where you entered setup. On TV, use the
+   remote’s Back button. Back cancels a running scan first.
 2. **Choose channels** from playlists, collections, recently added content,
    genres, studios, actors, decades, and directors. Choose source grouping,
    playback order, minimum programs, and the generated-channel limit.

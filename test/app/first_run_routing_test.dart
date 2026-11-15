@@ -1,4 +1,5 @@
 import 'dart:async';
+import 'dart:io';
 
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
@@ -77,11 +78,11 @@ void main() {
         await fixture.controller.initialize();
 
         expect(fixture.controller.stage, SetupStage.servers);
-        expect(fixture.controller.serverProbeFailure?.serverId, 'media');
+        expect(fixture.controller.unreachableServerId, 'media');
         expect(fixture.controller.server, isNull);
         expect(fixture.plex.probes, [('media', 'synthetic-owner-pms')]);
         await fixture.controller.refreshServers();
-        expect(fixture.controller.serverProbeFailure, isNull);
+        expect(fixture.controller.unreachableServerId, isNull);
         expect(fixture.plex.probes, hasLength(1));
       },
     );
@@ -106,14 +107,14 @@ void main() {
         isTrue,
       );
       expect(fixture.controller.stage, SetupStage.servers);
-      expect(fixture.controller.serverProbeFailure?.serverId, 'archive');
+      expect(fixture.controller.unreachableServerId, 'archive');
       expect(fixture.plex.probes, [('archive', 'synthetic-viewer-pms')]);
 
       fixture.plex.probeResponses['archive'] = Future.value(200);
       await fixture.controller.selectServer(fixture.controller.servers.last);
       expect(fixture.controller.server?.id, 'archive');
       expect(fixture.controller.stage, SetupStage.channelSetup);
-      expect(fixture.controller.serverProbeFailure, isNull);
+      expect(fixture.controller.unreachableServerId, isNull);
     },
   );
 
@@ -131,9 +132,9 @@ void main() {
       expect(fixture.plex.probes, isEmpty);
 
       await controller.selectServer(controller.servers.first);
-      expect(controller.serverProbeFailure?.serverId, 'media');
+      expect(controller.unreachableServerId, 'media');
       await controller.selectServer(controller.servers.last);
-      expect(controller.serverProbeFailure, isNull);
+      expect(controller.unreachableServerId, isNull);
       expect(controller.error, 'This Plex profile cannot access that server.');
       expect(fixture.plex.probes.map((entry) => entry.$1), [
         'media',
@@ -153,7 +154,7 @@ void main() {
     expect(fixture.plex.probes.map((entry) => entry.$1), ['media', 'media']);
     expect(controller.stage, SetupStage.servers);
     expect(controller.error, isNotNull);
-    expect(controller.serverProbeFailure, isNull);
+    expect(controller.unreachableServerId, isNull);
   });
 
   test(
@@ -175,7 +176,7 @@ void main() {
 
       expect(controller.stage, SetupStage.channelSetup);
       expect(controller.server?.id, 'archive');
-      expect(controller.serverProbeFailure, isNull);
+      expect(controller.unreachableServerId, isNull);
       expect(controller.error, isNull);
       expect(fixture.store.state.selectedServerByProfile, {'owner': 'archive'});
     },
@@ -188,9 +189,9 @@ void main() {
         ..plex.probeResponses['media'] = Future.value(503);
       final controller = fixture.controller;
       await controller.initialize();
-      expect(controller.serverProbeFailure?.serverId, 'media');
+      expect(controller.unreachableServerId, 'media');
       controller.cancelPlaybackAuthorization();
-      expect(controller.serverProbeFailure, isNull);
+      expect(controller.unreachableServerId, isNull);
       expect(controller.error, isNull);
     },
   );
@@ -290,14 +291,151 @@ void main() {
     expect(fixture.credentials.accountToken, _accountToken);
   }, variant: const TargetPlatformVariant({TargetPlatform.android}));
 
+  for (final (selected, homeUsers) in [
+    (_owner, [_owner, _viewer]),
+    (_viewer, [_owner, _viewer]),
+    (_viewer, [_viewer]),
+  ]) {
+    test(
+      'Back to Profiles survives a disk restart (protected=${selected.protected}, profiles=${homeUsers.length})',
+      () async {
+        final directory = await Directory.systemTemp.createTemp(
+          'lineup-first-libraries-',
+        );
+        addTearDown(() => directory.delete(recursive: true));
+        final store = FileAppStore(directory);
+        await store.save(
+          const PersistedState(
+            selectedServerByProfile: {'other': 'archive'},
+            selectedLibraryIdsByProfileServer: {
+              'other': {
+                'archive': ['archive-movies'],
+              },
+            },
+          ),
+        );
+        final credentials = MemoryCredentialStore(
+          accountToken: _accountToken,
+          profileTokens: {'other': 'synthetic-other'},
+        );
+        final controller = LineupController(
+          store: store,
+          credentials: credentials,
+          plex: _RoutingPlex(homeUsers, ['media']),
+        );
+        addTearDown(controller.dispose);
+        await controller.initialize();
+        expect(controller.settings.profilePickerOnStartup, isFalse);
+        await controller.selectProfile(
+          selected,
+          pin: selected.protected ? '1234' : null,
+        );
+        expect(controller.firstLibrariesOrigin, FirstLibrariesOrigin.profiles);
+        final before = (await store.load()).state;
+        expect(before.profileId, selected.id);
+        expect(before.selectedServerByProfile[selected.id], 'media');
+        final profileTokens = Map.of(credentials.profileTokens);
+
+        await controller.backToFirstRunProfiles();
+        expect(controller.stage, SetupStage.profiles);
+        expect(controller.server, isNull);
+        expect(credentials.profileTokens, profileTokens);
+        controller.dispose();
+
+        final reopenedStore = FileAppStore(directory);
+        final after = (await reopenedStore.load()).state;
+        expect(
+          after.toJson(),
+          before.withProfile(null).withoutSelectedServer(selected.id).toJson(),
+        );
+        final plex = _RoutingPlex(homeUsers, ['media']);
+        final reopened = LineupController(
+          store: reopenedStore,
+          credentials: credentials,
+          plex: plex,
+        );
+        addTearDown(reopened.dispose);
+        await reopened.initialize();
+        expect(reopened.settings.profilePickerOnStartup, isFalse);
+        expect(reopened.stage, SetupStage.profiles);
+        expect(reopened.profile, isNull);
+        expect(plex.probes, isEmpty);
+        expect(plex.profileSwitches, isEmpty);
+
+        final stages = <SetupStage>[];
+        reopened.addListener(() => stages.add(reopened.stage));
+        final probe = Completer<int>();
+        plex.probeResponses['media'] = probe.future;
+        final pin = selected.protected ? '5678' : null;
+        final selection = reopened.selectProfile(selected, pin: pin);
+        await plex.firstProbe.future;
+        expect(plex.profileSwitches, [pin]);
+        expect(reopened.stage, SetupStage.profiles);
+        expect(reopened.busy, isTrue);
+        probe.complete(200);
+        expect(await selection, isTrue);
+        expect(stages, isNot(contains(SetupStage.servers)));
+        expect(reopened.stage, SetupStage.channelSetup);
+        expect(reopened.firstLibrariesOrigin, FirstLibrariesOrigin.profiles);
+        expect((await reopenedStore.load()).state.profileId, selected.id);
+      },
+    );
+  }
+
+  test(
+    'Back to Profiles keeps the live and saved scope until a successful save',
+    () async {
+      final store = _BackSaveStore();
+      final credentials = MemoryCredentialStore(accountToken: _accountToken);
+      final controller = LineupController(
+        store: store,
+        credentials: credentials,
+        plex: _RoutingPlex([_owner, _viewer], ['media']),
+      );
+      addTearDown(controller.dispose);
+      await controller.initialize();
+      await controller.selectProfile(_viewer, pin: '1234');
+      final original = store.state;
+      final generation = controller.contentGeneration;
+      final firstSave = store.gate = Completer<void>();
+      final attempt = controller.backToFirstRunProfiles();
+      await store.started.future;
+      expect(controller.canSwitchServer, isFalse);
+      expect(controller.stage, SetupStage.channelSetup);
+      expect(controller.profile?.id, 'viewer');
+      expect(controller.server?.id, 'media');
+      expect(controller.contentGeneration, generation);
+      expect(store.state, same(original));
+
+      firstSave.completeError(StateError('Synthetic atomic save failure'));
+      await attempt;
+      expect(store.state, same(original));
+      expect(controller.contentGeneration, generation);
+      expect(controller.firstLibrariesOrigin, FirstLibrariesOrigin.profiles);
+      expect(controller.server?.id, 'media');
+      expect(controller.error, isNotNull);
+      expect(controller.busy, isFalse);
+      expect(controller.canSwitchServer, isTrue);
+      expect(credentials.profileTokens, {'viewer': _profileToken});
+
+      await controller.backToFirstRunProfiles();
+      expect(controller.stage, SetupStage.profiles);
+      expect(controller.profile, isNull);
+      expect(controller.server, isNull);
+      expect(store.state.profileId, isNull);
+      expect(store.state.selectedServerByProfile, isEmpty);
+      expect(credentials.profileTokens, {'viewer': _profileToken});
+    },
+  );
+
   for (final tv in [false, true]) {
     testWidgets(
       'first Libraries Back returns to the protected profile grid (TV=$tv)',
       (tester) async {
-        final gate = Completer<int>();
-        final fixture = _RoutingFixture(profiles: [_owner, _viewer])
-          ..plex.probeResponses['media'] = gate.future;
+        final gate = Completer<void>();
+        final fixture = _RoutingFixture(profiles: [_owner, _viewer]);
         await fixture.controller.initialize();
+        fixture.plex.discoveryGate = gate.future;
         await _show(tester, fixture, tv: tv);
         await tester.tap(find.byKey(const ValueKey('profile-card-viewer')));
         await tester.pumpAndSettle();
@@ -305,12 +443,24 @@ void main() {
         await tester.pump();
         await tester.pump(const Duration(milliseconds: 250));
         expect(fixture.controller.busy, isTrue);
-        expect(fixture.plex.probes, [('media', 'synthetic-viewer-pms')]);
+        expect(fixture.controller.profile?.id, 'viewer');
+        expect(fixture.plex.probes, isEmpty);
+        expect(find.byKey(const Key('profile-pin-sheet')), findsNothing);
         expect(find.text('Choose a server'), findsNothing);
         expect(find.text('Choose libraries'), findsNothing);
+        if (tv) {
+          expect(
+            tester
+                .widget<TextButton>(find.widgetWithText(TextButton, 'Settings'))
+                .focusNode
+                ?.hasPrimaryFocus,
+            isTrue,
+          );
+        }
 
-        gate.complete(200);
+        gate.complete();
         await tester.pumpAndSettle();
+        expect(fixture.plex.probes, [('media', 'synthetic-viewer-pms')]);
         expect(find.text('Choose libraries'), findsOneWidget);
         expect(find.byKey(const Key('profile-pin-sheet')), findsNothing);
 
@@ -322,11 +472,18 @@ void main() {
         expect(fixture.controller.libraries, isEmpty);
         expect(fixture.credentials.accountToken, _accountToken);
         expect(fixture.credentials.profileTokens, {'viewer': _profileToken});
-        expect(fixture.store.state.selectedServerByProfile, {
-          'viewer': 'media',
-        });
+        expect(fixture.store.state.profileId, isNull);
+        expect(fixture.store.state.selectedServerByProfile, isEmpty);
 
-        await tester.tap(find.byKey(const ValueKey('profile-card-viewer')));
+        if (tv) {
+          expect(_profileHasPrimaryFocus(tester, 'owner'), isTrue);
+          await tester.sendKeyEvent(LogicalKeyboardKey.arrowRight);
+          await tester.pumpAndSettle();
+          expect(_profileHasPrimaryFocus(tester, 'viewer'), isTrue);
+          await tester.sendKeyEvent(LogicalKeyboardKey.select);
+        } else {
+          await tester.tap(find.byKey(const ValueKey('profile-card-viewer')));
+        }
         await tester.pumpAndSettle();
         expect(find.byKey(const Key('profile-pin-sheet')), findsOneWidget);
         expect(fixture.plex.profileSwitches, ['1234']);
@@ -542,10 +699,77 @@ void main() {
           expect(fixture.store.savedStates, hasLength(saves));
           await tester.pump(const Duration(seconds: 2));
           expect(fixture.plex.pinPolls, 1);
+          if (!tv && !failStop) {
+            await tester.tap(find.text('Sign in to Plex'));
+            await tester.pump();
+            expect(controller.stage, SetupStage.linking);
+            expect(controller.activePin?.id, 2);
+            await tester.pump(const Duration(seconds: 1));
+            await tester.pumpAndSettle();
+            expect(find.text('Choose libraries'), findsOneWidget);
+            expect(fixture.plex.pinPolls, 2);
+            expect(fixture.credentials.accountToken, _accountToken);
+          }
         },
       );
     }
   }
+
+  testWidgets('desktop pointer reveals a single scoped probe failure', (
+    tester,
+  ) async {
+    final fixture = _RoutingFixture(servers: ['media', 'archive'])
+      ..plex.probeResponses['media'] = Future.value(503);
+    await fixture.controller.initialize();
+    await _show(tester, fixture, tv: false);
+    expect(find.text('Unreachable'), findsNothing);
+
+    final semantics = tester.ensureSemantics();
+    await tester.tap(find.text('Media room'));
+    await tester.pumpAndSettle();
+
+    expect(fixture.plex.probes, [('media', 'synthetic-owner-pms')]);
+    expect(fixture.controller.unreachableServerId, 'media');
+    expect(find.text('Unreachable'), findsOneWidget);
+    expect(find.text('Retry'), findsOneWidget);
+    expect(find.bySemanticsLabel('Retry Media room'), findsOneWidget);
+    expect(find.text(fixture.controller.error!), findsNothing);
+    expect(find.text('Connect'), findsOneWidget);
+    semantics.dispose();
+  });
+
+  testWidgets('TV setup advances when its scan settles under Support', (
+    tester,
+  ) async {
+    final fixture = _RoutingFixture();
+    final controller = fixture.controller;
+    await controller.initialize();
+    await _show(tester, fixture, tv: true);
+    final scan = fixture.plex.scanGate = Completer<PlexLibraryScan>();
+    await tester.tap(find.byKey(const ValueKey('scan-selected-libraries')));
+    await tester.pump();
+    expect(controller.libraryScanStatus, LibraryScanStatus.scanning);
+    await tester.binding.defaultBinaryMessenger.handlePlatformMessage(
+      'lineup/app_menu',
+      const StandardMethodCodec().encodeMethodCall(
+        const MethodCall('openSettings'),
+      ),
+      (_) {},
+    );
+    await tester.pumpAndSettle();
+    expect(find.text('Choose libraries'), findsNothing);
+
+    scan.complete(_playableScan());
+    await tester.pumpAndSettle();
+    expect(find.text('Choose channels'), findsNothing);
+    expect(
+      fixture.store.state.selectedLibraryIdsByProfileServer['owner']?['media'],
+      ['movies'],
+    );
+
+    await _back(tester, tv: true, label: 'Back');
+    expect(find.text('Choose channels'), findsOneWidget);
+  }, variant: const TargetPlatformVariant({TargetPlatform.macOS}));
 
   testWidgets(
     'automatic failure is a single live row status with a Retry action',
@@ -561,7 +785,10 @@ void main() {
       expect(find.bySemanticsLabel('Unreachable'), findsOneWidget);
       expect(find.text(fixture.controller.error!), findsNothing);
       final retry = find.widgetWithText(OutlinedButton, 'Retry');
-      expect(tester.getSemantics(retry).getSemanticsData().label, 'Retry');
+      expect(
+        tester.getSemantics(retry).getSemanticsData().label,
+        'Retry Media room',
+      );
       expect(
         Focus.of(tester.element(find.text('Retry'))).hasPrimaryFocus,
         isTrue,
@@ -575,6 +802,16 @@ void main() {
     },
   );
 }
+
+bool _profileHasPrimaryFocus(WidgetTester tester, String id) => tester
+    .widget<TextButton>(
+      find.descendant(
+        of: find.byKey(ValueKey('profile-card-$id')),
+        matching: find.byType(TextButton),
+      ),
+    )
+    .focusNode!
+    .hasPrimaryFocus;
 
 Future<void> _show(
   WidgetTester tester,
@@ -694,8 +931,10 @@ class _RoutingPlex extends PlexClient {
   final Completer<void> firstProbe;
   final profileSwitches = <String?>[];
   int pinPolls = 0;
+  int _pinCount = 0;
   int libraryScans = 0;
   bool libraryAuthorizationDenied = false;
+  Future<void>? discoveryGate;
   PlexLibraryScan scanResult = const PlexLibraryScan(items: []);
   Completer<PlexLibraryScan>? scanGate;
 
@@ -715,7 +954,7 @@ class _RoutingPlex extends PlexClient {
 
   @override
   Future<PlexPin> createPin() async => PlexPin(
-    id: 1,
+    id: ++_pinCount,
     code: 'TEST',
     expiresAt: DateTime.now().add(const Duration(minutes: 4)),
   );
@@ -730,25 +969,28 @@ class _RoutingPlex extends PlexClient {
   Future<void> cancelPin(PlexPin pin) async {}
 
   @override
-  Future<List<PlexServerAccess>> discoverServers(String token) async => [
-    for (final id in serverIds)
-      PlexServerAccess(
-        token: token == _profileToken
-            ? 'synthetic-viewer-pms'
-            : 'synthetic-owner-pms',
-        server: PlexServer(
-          id: id,
-          name: id == 'media' ? 'Media room' : 'Archive',
-          connections: [
-            PlexConnection(
-              uri: Uri.parse('https://$id.invalid'),
-              local: true,
-              relay: false,
-            ),
-          ],
+  Future<List<PlexServerAccess>> discoverServers(String token) async {
+    await discoveryGate;
+    return [
+      for (final id in serverIds)
+        PlexServerAccess(
+          token: token == _profileToken
+              ? 'synthetic-viewer-pms'
+              : 'synthetic-owner-pms',
+          server: PlexServer(
+            id: id,
+            name: id == 'media' ? 'Media room' : 'Archive',
+            connections: [
+              PlexConnection(
+                uri: Uri.parse('https://$id.invalid'),
+                local: true,
+                relay: false,
+              ),
+            ],
+          ),
         ),
-      ),
-  ];
+    ];
+  }
 
   @override
   Future<List<PlexLibrary>> libraries(Uri server, String token) async {
@@ -796,5 +1038,21 @@ class _GatedStopPlayer extends FixturePlayer {
   Future<void> stop() async {
     await super.stop();
     await stopGate?.future;
+  }
+}
+
+class _BackSaveStore extends MemoryAppStore {
+  Completer<void>? gate;
+  final started = Completer<void>();
+
+  @override
+  Future<void> save(PersistedState value) async {
+    final pending = gate;
+    if (pending != null) {
+      gate = null;
+      started.complete();
+      await pending.future;
+    }
+    await super.save(value);
   }
 }

@@ -26,8 +26,8 @@ enum _FirstLibrariesEntry { startup, profiles, signIn }
 
 /// The current server selection exhausted the available connection routes.
 @immutable
-final class ServerProbeFailure extends PlexException {
-  ServerProbeFailure._(
+final class _ServerProbeFailure extends PlexException {
+  _ServerProbeFailure(
     this.serverId,
     this._operation,
     this._scope,
@@ -351,8 +351,8 @@ class LineupController extends ChangeNotifier {
           _ => null,
         };
 
-  ServerProbeFailure? _serverProbeFailure;
-  ServerProbeFailure? get serverProbeFailure => _serverProbeFailure;
+  _ServerProbeFailure? _serverProbeFailure;
+  String? get unreachableServerId => _serverProbeFailure?.serverId;
 
   bool _secureCancellationRequired = false;
   bool get secureCancellationRequired => _secureCancellationRequired;
@@ -366,7 +366,7 @@ class LineupController extends ChangeNotifier {
   static const _profileCredentialRecoveryMessage =
       'Lineup could not restore a profile credential. Retry the profile selection or sign out to clear stored credentials.';
   final _unrestoredProfileCredentials = <String>{};
-  String? get error => _error;
+  String? get error => _error ?? _serverProbeFailure?.message;
   String? get profileCredentialRecoveryNotice =>
       _unrestoredProfileCredentials.isEmpty
       ? null
@@ -608,7 +608,9 @@ class LineupController extends ChangeNotifier {
             _profileToken = profileToken;
           }
         }
-        if (profile == null && profiles.length > 1) {
+        if (profile == null &&
+            (profiles.length > 1 ||
+                profiles.any((user) => user.id != restoredAccount.id))) {
           _stage = SetupStage.profiles;
           return;
         }
@@ -1041,7 +1043,7 @@ class LineupController extends ChangeNotifier {
         return await plex.selectConnection(server, token);
       } on PlexException catch (exception) {
         if (exception.code == 'server-unreachable') {
-          throw ServerProbeFailure._(
+          throw _ServerProbeFailure(
             server.id,
             operation,
             authorizationScope,
@@ -1638,21 +1640,36 @@ class LineupController extends ChangeNotifier {
 
   /// The account remains linked. A profile must be selected again through
   /// its normal authorization flow, including a fresh PIN when required.
-  void backToFirstRunProfiles() {
+  Future<void> backToFirstRunProfiles() async {
+    final profileId = profile?.id;
     if (firstLibrariesOrigin != FirstLibrariesOrigin.profiles ||
+        profileId == null ||
         busy ||
         !canSwitchServer) {
       return;
     }
-    _invalidateOperation();
-    _clearServerRuntime();
-    _publishServers = const [];
-    _serverAccess = const {};
-    _profile = null;
-    _profileToken = null;
-    _error = null;
-    _stage = SetupStage.profiles;
-    notifyListeners();
+    final operation = _invalidateOperation();
+    await _run(
+      () => _queueStateOperation(operation, () async {
+        if (!_isCurrent(operation)) return;
+        final next = _persisted
+            .withProfile(null)
+            .withoutSelectedServer(profileId);
+        await _persistState(next);
+        if (_disposed) return;
+        // Once the save commits, publish its matching scope even if another
+        // operation arrived during the write. Later writes use this snapshot.
+        _persisted = next;
+        _clearServerRuntime();
+        _publishServers = const [];
+        _serverAccess = const {};
+        _profile = null;
+        _profileToken = null;
+        _stage = SetupStage.profiles;
+      }),
+      operation: operation,
+      fallbackStage: SetupStage.channelSetup,
+    );
   }
 
   Future<void> enterChannelSetup() async {
@@ -1683,6 +1700,7 @@ class LineupController extends ChangeNotifier {
     _profileSelectionCanCancel = _profilePickerOrigin != null;
     _stage = SetupStage.profiles;
     _error = null;
+    _serverProbeFailure = null;
     notifyListeners();
   }
 
@@ -2831,14 +2849,15 @@ class LineupController extends ChangeNotifier {
 
   /// Retires playback-only refresh work without signing out or changing the
   /// selected session. Existing requests cannot recover over a background stop.
-  void cancelPlaybackAuthorization() => _retireAuthorizationScope();
+  void cancelPlaybackAuthorization() {
+    _retireAuthorizationScope();
+    if (_serverProbeFailure == null) return;
+    _serverProbeFailure = null;
+    notifyListeners();
+  }
 
   void _retireAuthorizationScope() {
     _authorizationScope++;
-    if (_serverProbeFailure != null) {
-      _serverProbeFailure = null;
-      _error = null;
-    }
     _playbackRefresh = null;
     _playbackRefreshScope = null;
   }
@@ -3097,11 +3116,10 @@ class LineupController extends ChangeNotifier {
         }
         return false;
       }
-      if (exception is ServerProbeFailure) {
+      if (exception is _ServerProbeFailure) {
         if (_isCurrentPmsTarget(exception._operation, exception.serverId) &&
             _isCurrentAuthorizationScope(exception._scope)) {
           _serverProbeFailure = exception;
-          _error = exception.message;
         } else {
           _error = 'Lineup could not complete that request.';
         }
