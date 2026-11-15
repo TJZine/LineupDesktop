@@ -3907,6 +3907,98 @@ void main() {
     },
   );
 
+  for (final (code, httpStatus, cause) in [
+    (
+      'audio_decode_error',
+      null,
+      "This video's audio can't play on this device.",
+    ),
+    ('network_error', null, "Lineup can't reach your Plex server."),
+    ('http_error', 403, 'Plex needs you to sign in again.'),
+  ]) {
+    test(
+      'pending native load preserves the terminal $code cause after stop',
+      () async {
+        const channel = MethodChannel('lineup/native_player');
+        final messenger =
+            TestDefaultBinaryMessengerBinding.instance.defaultBinaryMessenger;
+        final initialLoad = Completer<int>();
+        final replacementLoad = Completer<int>();
+        final stop = Completer<int>();
+        var stopCalls = 0;
+        messenger.setMockMethodCallHandler(channel, (call) async {
+          if (call.method == 'load') {
+            final load = initialLoad.isCompleted
+                ? replacementLoad
+                : initialLoad;
+            load.complete(call.arguments['loadId'] as int);
+          } else if (call.method == 'stop') {
+            stopCalls++;
+            if (!stop.isCompleted) {
+              stop.complete(call.arguments['stopId'] as int);
+            }
+          }
+          return null;
+        });
+        addTearDown(() => messenger.setMockMethodCallHandler(channel, null));
+        final lineup = _TestLineup(recoverAuthorization: httpStatus != null)
+          ..diagnostics.enabled = true;
+        final guide = GuideController(
+          lineup: lineup,
+          loadSchedule: (channel) async => _schedule(channel),
+        );
+        final player = MethodChannelNativePlayer();
+        await player.initialize();
+        final coordinator = PlayerCoordinator(
+          player: player,
+          lineup: lineup,
+          guide: guide,
+        );
+        addTearDown(lineup.dispose);
+        addTearDown(guide.dispose);
+        addTearDown(player.dispose);
+        addTearDown(coordinator.dispose);
+
+        final tune = coordinator.tune('channel-b');
+        var loadId = await initialLoad.future;
+        if (httpStatus != null) {
+          await _nativeEvent({
+            'type': 'state',
+            'loadId': loadId,
+            'state': 'error',
+            'failureCode': 'http_error',
+            'httpStatus': 401,
+          });
+          loadId = await replacementLoad.future;
+          expect(lineup.recoveryCalls, 1);
+          expect(coordinator.error, isNull);
+        }
+        await _nativeEvent({
+          'type': 'state',
+          'loadId': loadId,
+          'state': 'error',
+          'failureCode': code,
+          'httpStatus': ?httpStatus,
+        });
+        expect(coordinator.error, cause);
+        await _nativeEvent({
+          'type': 'stopResult',
+          'stopId': await stop.future,
+          'success': true,
+        });
+
+        expect(await tune, isFalse);
+        expect(coordinator.error, cause);
+        expect(coordinator.overlay, PlayerOverlay.error);
+        expect(coordinator.canRetry, isTrue);
+        expect(coordinator.hasPlaybackIntent, isFalse);
+        expect(lineup.currentChannelId, 'channel-0');
+        expect(stopCalls, 1);
+        expect(lineup.recoveryCalls, httpStatus == null ? 0 : 1);
+      },
+    );
+  }
+
   for (final failure in ['timeout', 'command_error', 'private-native-code']) {
     test(
       'native $failure retains cleanup through failed stop and logout',
@@ -4272,6 +4364,7 @@ void main() {
   for (final (category, cause) in [
     ('offline', "Lineup can't reach your Plex server."),
     ('network-unavailable', "Lineup can't reach your Plex server."),
+    ('server-unreachable', "Lineup can't reach your Plex server."),
     ('network-timeout', 'Your Plex server took too long to respond.'),
     ('auth-invalid', 'Plex needs you to sign in again.'),
     ('unsupported', "This video can't play on this device."),
@@ -7471,19 +7564,20 @@ void main() {
     expect(coordinator.error, 'Playback could not start.');
   });
 
-  for (final domainFailure in [false, true]) {
+  for (final (category, cause) in [
+    (null, 'Playback could not start.'),
+    ('authorization-unavailable', 'Plex needs you to sign in again.'),
+    ('server-unreachable', "Lineup can't reach your Plex server."),
+  ]) {
     test(
-      'failed authorization recovery is terminal (domain=$domainFailure)',
+      'failed authorization recovery is terminal (category=$category)',
       () async {
         final lineup = _TestLineup(
           recoverAuthorization: true,
           failAuthorizationRecovery: true,
-          authorizationRecoveryFailure: domainFailure
-              ? const PlexException(
-                  'authorization-unavailable',
-                  'Plex server authorization is unavailable.',
-                )
-              : null,
+          authorizationRecoveryFailure: category == null
+              ? null
+              : PlexException(category, 'Synthetic recovery failure.'),
         )..diagnostics.enabled = true;
         final guide = GuideController(
           lineup: lineup,
@@ -7515,16 +7609,11 @@ void main() {
         expect(player.stops, 1);
         expect(coordinator.canRetry, isTrue);
         expect(coordinator.overlay, PlayerOverlay.error);
-        expect(
-          coordinator.error,
-          domainFailure
-              ? 'Plex needs you to sign in again.'
-              : 'Playback could not start.',
-        );
-        if (domainFailure) {
+        expect(coordinator.error, cause);
+        if (category != null) {
           expect(
             _supportReport(lineup, coordinator),
-            contains('code=authorization-unavailable'),
+            contains('code=$category'),
           );
         }
       },

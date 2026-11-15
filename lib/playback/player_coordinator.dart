@@ -246,6 +246,7 @@ class PlayerCoordinator extends ChangeNotifier with WidgetsBindingObserver {
   bool _sleepPickerOpen = false;
   _TrackConfirmation _trackConfirmation = _TrackConfirmation();
   int _tuneGeneration = 0;
+  int? _terminalNativeFailureTune;
   int? _continuationGeneration;
   bool get _preservePresentation => _continuationGeneration == _tuneGeneration;
   int _controlGeneration = 0;
@@ -760,6 +761,9 @@ class PlayerCoordinator extends ChangeNotifier with WidgetsBindingObserver {
         'videoOutput': event.telemetry.videoOutput,
         'hardwareDecoder': event.telemetry.hardwareDecoder,
       });
+      // The terminal event owns the outcome even if stop rejects the pending
+      // load and its tune continuation runs after the native load is retired.
+      if (load != null) _terminalNativeFailureTune = load.tuneGeneration;
       unawaited(_stopQuietly());
       _invalidateAuthorizationRecovery();
       _error = _causeForFailureCategory(
@@ -1074,7 +1078,11 @@ class PlayerCoordinator extends ChangeNotifier with WidgetsBindingObserver {
     } catch (error) {
       if (_disposed || generation != _tuneGeneration) return;
       await _stopQuietly();
-      if (_disposed || generation != _tuneGeneration) return;
+      if (_disposed ||
+          generation != _tuneGeneration ||
+          generation == _terminalNativeFailureTune) {
+        return;
+      }
       _reportUnexpectedPlaybackFailure(error, 'while loading initial media');
       _recordPlaybackFailure(error);
       _error = _safePlaybackError(error);
@@ -1156,7 +1164,9 @@ class PlayerCoordinator extends ChangeNotifier with WidgetsBindingObserver {
       if (request != null) _releaseActive(ifRequest: request);
       if (replaced != null) _releaseActive(ifRequest: replaced);
       if (request != null) await _stopQuietly();
-      if (!ownsTune()) return false;
+      if (!ownsTune() || generation == _terminalNativeFailureTune) {
+        return false;
+      }
       _tuning = false;
       _canRetry = true;
       _recordPlaybackFailure(error);
@@ -1221,7 +1231,7 @@ class PlayerCoordinator extends ChangeNotifier with WidgetsBindingObserver {
     } on _PlaybackSuperseded catch (error) {
       return await fail(error);
     } catch (error) {
-      if (ownsTune()) {
+      if (ownsTune() && generation != _terminalNativeFailureTune) {
         _reportUnexpectedPlaybackFailure(error, 'while tuning a channel');
       }
       return await fail(error);
@@ -2706,6 +2716,7 @@ class PlayerCoordinator extends ChangeNotifier with WidgetsBindingObserver {
       : switch (category) {
           'offline' ||
           'network-unavailable' ||
+          'server-unreachable' ||
           'network_error' => "Lineup can't reach your Plex server.",
           'network-timeout' => 'Your Plex server took too long to respond.',
           'auth-denied' ||
