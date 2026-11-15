@@ -49,6 +49,7 @@ class PlayerView extends StatefulWidget {
 }
 
 enum _PlayerControl {
+  guide,
   previous,
   playback,
   next,
@@ -770,6 +771,7 @@ class PlayerViewState extends State<PlayerView> with WidgetsBindingObserver {
       bottomPanel ? PlayerOverlay.osd : overlay,
       bottomPanel ? _bottomPanelGeneration : presentationGeneration,
     ));
+    final desktop = DeviceProfile.of(context).formFactor == FormFactor.desktop;
     final insets = _PlayerInsets.of(context);
     final channel = controller.currentChannel;
     final channelTagSuppressed =
@@ -922,6 +924,7 @@ class PlayerViewState extends State<PlayerView> with WidgetsBindingObserver {
                             subtitleAvoidance: _subtitleAvoidance,
                             subtitleLayerKey: _subtitleLayerKey,
                             openMenu: widget.openMenu,
+                            openGuide: widget.openGuide,
                             menuFocus: _menuFocus,
                             sleepFocus: _sleepFocus,
                             sleepAnchor: _sleepAnchor,
@@ -966,6 +969,7 @@ class PlayerViewState extends State<PlayerView> with WidgetsBindingObserver {
                     child: _AnimatedChannelBug(
                       visible: showChannelTag,
                       suppressed: channelTagSuppressed,
+                      interactive: desktop && bottomPanel,
                       duration: _overlayTransitionDuration,
                       child: channel == null
                           ? const SizedBox.shrink()
@@ -974,7 +978,15 @@ class PlayerViewState extends State<PlayerView> with WidgetsBindingObserver {
                                 key: const Key('player-osd-channel-bug'),
                                 channel: channel,
                                 controller: controller,
-                                osdPresentation: true,
+                                interactive:
+                                    desktop && bottomPanel && showChannelTag,
+                                onFocusChange: (focused) {
+                                  controller.overlayFocusChanged(
+                                    overlay,
+                                    presentationGeneration,
+                                    focused && _keyboardInput,
+                                  );
+                                },
                               ),
                             ),
                     ),
@@ -1168,12 +1180,14 @@ class _AnimatedChannelBug extends StatelessWidget {
   const _AnimatedChannelBug({
     required this.visible,
     required this.suppressed,
+    required this.interactive,
     required this.duration,
     required this.child,
   });
 
   final bool visible;
   final bool suppressed;
+  final bool interactive;
   final Duration duration;
   final Widget child;
 
@@ -1181,6 +1195,7 @@ class _AnimatedChannelBug extends StatelessWidget {
   Widget build(BuildContext context) {
     final reduceMotion = MediaQuery.disableAnimationsOf(context);
     return IgnorePointer(
+      ignoring: !interactive || !visible,
       child: ExcludeSemantics(
         excluding: !visible,
         child: TweenAnimationBuilder<double>(
@@ -1214,6 +1229,7 @@ class _Osd extends StatelessWidget {
     required this.controls,
     required this.subtitleAvoidance,
     required this.subtitleLayerKey,
+    required this.openGuide,
     this.openMenu,
     this.detailsExpanded = false,
   });
@@ -1221,6 +1237,7 @@ class _Osd extends StatelessWidget {
   final PlayerTrackDisplayCache trackDisplays;
   final PlayerCoordinator controller;
   final LineupMenuCallback? openMenu;
+  final VoidCallback openGuide;
   final FocusNode menuFocus;
   final FocusNode sleepFocus;
   final LayerLink sleepAnchor;
@@ -1253,6 +1270,22 @@ class _Osd extends StatelessWidget {
     final expanded = !LineupLayout.isCompactWidth(size.width);
     final horizontal = size.width >= 1200 && size.height >= 640;
 
+    final desktop = DeviceProfile.of(context).formFactor == FormFactor.desktop;
+    final guideAction = desktop
+        ? _osdAction(
+            context,
+            key: const Key('player-osd-guide'),
+            focusNode: controls[_PlayerControl.guide],
+            label: 'Guide',
+            tooltip: 'Open Guide',
+            icon: Icons.grid_view_outlined,
+            onPressed: () {
+              controller.closeSleepPicker();
+              controller.showFullGuide();
+              openGuide();
+            },
+          )
+        : null;
     final actionStyle = _playerActionStyle(context);
     final transportActions = <Widget>[
       IconButton(
@@ -1513,7 +1546,12 @@ class _Osd extends StatelessWidget {
         .max(minimumWidth, 20 + padding.horizontal)
         .ceilToDouble();
     final standardWidth =
-        [subtitlesLabel, audioLabel, sleepLabel].fold<double>(
+        [
+          if (desktop) 'Guide',
+          subtitlesLabel,
+          audioLabel,
+          sleepLabel,
+        ].fold<double>(
           0,
           (sum, label) =>
               sum +
@@ -1553,6 +1591,7 @@ class _Osd extends StatelessWidget {
                     alignment: WrapAlignment.end,
                     crossAxisAlignment: WrapCrossAlignment.center,
                     children: [
+                      ?guideAction,
                       ...optionActions,
                       const SizedBox(width: 16),
                       ...windowActions,
@@ -1905,56 +1944,165 @@ class _OsdProgress extends StatelessWidget {
   }
 }
 
-class _ChannelBug extends StatelessWidget {
+class _ChannelBug extends StatefulWidget {
   const _ChannelBug({
     required this.channel,
     required this.controller,
-    this.osdPresentation = false,
+    required this.interactive,
+    required this.onFocusChange,
     super.key,
   });
 
   final Channel channel;
   final PlayerCoordinator controller;
-  final bool osdPresentation;
+  final bool interactive;
+  final ValueChanged<bool> onFocusChange;
+
+  @override
+  State<_ChannelBug> createState() => _ChannelBugState();
+}
+
+class _ChannelBugState extends State<_ChannelBug> {
+  bool _hovering = false;
+  bool _focused = false;
+
+  void _openMiniGuide() {
+    widget.controller.closeSleepPicker();
+    widget.controller.showMiniGuide();
+  }
+
+  void _step({required bool up}) {
+    widget.controller.closeSleepPicker();
+    unawaited(
+      up
+          ? widget.controller.previousChannel()
+          : widget.controller.nextChannel(),
+    );
+  }
 
   @override
   Widget build(BuildContext context) {
     final roles = LineupTheme.of(context);
     final size = MediaQuery.sizeOf(context);
-    final inheritedLabelSize =
-        Theme.of(context).textTheme.labelLarge?.fontSize ?? 14;
+    final channel = widget.channel;
     final libraryTag = ChannelIdentity.libraryTagFor(
       channel,
-      controller.lineup.channels,
+      widget.controller.lineup.channels,
     );
-    return Semantics(
+    final label = ChannelIdentity.label(channel, libraryTag: libraryTag);
+    final interactive = widget.interactive;
+    final border = interactive && LineupFocusScope.visible(context, _focused);
+    final shape = StadiumBorder(
+      side: BorderSide(
+        color: border ? roles.focusBorder : roles.subtleBorder,
+        width: border ? roles.focusBorderWidth : 1,
+      ),
+    );
+    final identity = Container(
+      constraints: BoxConstraints(maxWidth: size.width * .65),
+      padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 7),
+      child: ChannelIdentity(
+        channel: channel,
+        libraryTag: libraryTag,
+        showSemantics: false,
+        nameStyle: Theme.of(context).textTheme.labelLarge?.copyWith(
+          color: roles.primaryText,
+          fontSize: size.width >= 1920 && size.height >= 900 ? 16 : 14,
+          fontWeight: FontWeight.w500,
+        ),
+      ),
+    );
+    final badge = Semantics(
       container: true,
-      label: ChannelIdentity.label(channel, libraryTag: libraryTag),
+      button: interactive ? true : null,
+      focusable: interactive ? true : null,
+      focused: interactive ? _focused : null,
+      label: interactive ? '$label. Open Mini Guide' : label,
+      onTap: interactive ? _openMiniGuide : null,
       excludeSemantics: true,
       child: DecoratedBox(
         decoration: BoxDecoration(
-          color: _overlayColor(context, controller),
+          color: _overlayColor(context, widget.controller),
           borderRadius: BorderRadius.circular(999),
-          border: Border.all(color: roles.subtleBorder),
+          border: Border.fromBorderSide(shape.side),
         ),
-        child: Container(
-          constraints: BoxConstraints(maxWidth: size.width * .65),
-          padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 7),
-          child: ChannelIdentity(
-            channel: channel,
-            libraryTag: libraryTag,
-            showSemantics: false,
-            nameStyle: Theme.of(context).textTheme.labelLarge?.copyWith(
-              color: roles.primaryText,
-              fontSize: osdPresentation
-                  ? size.width >= 1920 && size.height >= 900
-                        ? 16
-                        : 14
-                  : inheritedLabelSize,
-              fontWeight: osdPresentation ? FontWeight.w500 : FontWeight.w600,
+        child: interactive
+            ? Material(
+                type: MaterialType.transparency,
+                child: CallbackShortcuts(
+                  bindings: {
+                    const SingleActivator(LogicalKeyboardKey.enter):
+                        _openMiniGuide,
+                    const SingleActivator(LogicalKeyboardKey.numpadEnter):
+                        _openMiniGuide,
+                  },
+                  child: InkWell(
+                    customBorder: shape,
+                    onTap: _openMiniGuide,
+                    onFocusChange: (focused) {
+                      setState(() => _focused = focused);
+                      widget.onFocusChange(focused);
+                    },
+                    hoverColor: Colors.transparent,
+                    focusColor: Colors.transparent,
+                    child: identity,
+                  ),
+                ),
+              )
+            : identity,
+      ),
+    );
+    if (!interactive) return badge;
+    final canStep = widget.controller.status.state != PlayerState.unsupported;
+    return MouseRegion(
+      // Enter can fire when the badge appears beneath a stationary pointer.
+      // Wait for actual pointer movement before showing the steppers.
+      onHover: (_) {
+        if (!_hovering) setState(() => _hovering = true);
+      },
+      onExit: (_) {
+        if (_hovering) setState(() => _hovering = false);
+      },
+      child: Row(
+        mainAxisSize: MainAxisSize.min,
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          if (_hovering && canStep) ...[
+            ExcludeFocus(
+              child: Material(
+                color: _overlayColor(context, widget.controller),
+                shape: const StadiumBorder(),
+                child: Row(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    IconButton(
+                      tooltip: 'Channel up',
+                      onPressed: () => _step(up: true),
+                      icon: const Icon(Icons.keyboard_arrow_up),
+                      iconSize: 20,
+                      constraints: const BoxConstraints.tightFor(
+                        width: 36,
+                        height: 36,
+                      ),
+                    ),
+                    IconButton(
+                      tooltip: 'Channel down',
+                      onPressed: () => _step(up: false),
+                      icon: const Icon(Icons.keyboard_arrow_down),
+                      iconSize: 20,
+                      constraints: const BoxConstraints.tightFor(
+                        width: 36,
+                        height: 36,
+                      ),
+                    ),
+                  ],
+                ),
+              ),
             ),
-          ),
-        ),
+            const SizedBox(width: 8),
+          ],
+          badge,
+        ],
       ),
     );
   }

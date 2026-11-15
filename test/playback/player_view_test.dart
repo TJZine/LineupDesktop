@@ -581,7 +581,12 @@ void main() {
             expect(top, lessThan(restingTop));
           }
         }
-        expect(tester.getSemantics(tag).label, 'Channel 7, Channel');
+        expect(
+          find.bySemanticsLabel(
+            tv ? 'Channel 7, Channel' : 'Channel 7, Channel. Open Mini Guide',
+          ),
+          findsOneWidget,
+        );
         fixture.player.closeOverlay();
         await tester.pump();
         for (var frame = 0; frame <= 4; frame++) {
@@ -4857,6 +4862,108 @@ void main() {
     }
   }, semanticsEnabled: true);
 
+  testWidgets(
+    'desktop OSD Guide and live channel badge open their destinations',
+    (tester) async {
+      final fixture = _Fixture(PlayerState.playing, channelCount: 3);
+      tester.view.physicalSize = const Size(1280, 720);
+      tester.view.devicePixelRatio = 1;
+      addTearDown(tester.view.resetPhysicalSize);
+      addTearDown(tester.view.resetDevicePixelRatio);
+      var guideOpened = false;
+      await tester.pumpWidget(
+        MaterialApp(
+          builder: _playerDesktopCanvasBuilder,
+          home: PlayerView(
+            controller: fixture.player,
+            openGuide: () => guideOpened = true,
+          ),
+        ),
+      );
+      fixture.player.showOsd();
+      await tester.pumpAndSettle();
+
+      final guide = find.byKey(const Key('player-osd-guide'));
+      final subtitles = find.byKey(const Key('player-osd-subtitles'));
+      expect(
+        tester.getCenter(guide).dx,
+        lessThan(tester.getCenter(subtitles).dx),
+      );
+      final badge = find.byKey(const Key('player-osd-channel-bug'));
+      final identity = find.descendant(
+        of: badge,
+        matching: find.byType(ChannelIdentity),
+      );
+      final semantics = tester.getSemantics(
+        find.bySemanticsLabel('Channel 7, Channel. Open Mini Guide'),
+      );
+      expect(semantics.getSemanticsData().flagsCollection.isButton, isTrue);
+      expect(
+        semantics.getSemanticsData().hasAction(SemanticsAction.tap),
+        isTrue,
+      );
+      final down = find.byTooltip('Channel down');
+      final up = find.byTooltip('Channel up');
+      expect(down, findsNothing);
+      final pointer = await tester.createGesture(kind: PointerDeviceKind.mouse);
+      await pointer.addPointer();
+      await pointer.moveTo(tester.getCenter(identity));
+      await tester.pumpAndSettle();
+      expect(up, findsOneWidget);
+      expect(down, findsOneWidget);
+      expect(
+        Focus.of(
+          tester.element(
+            find.descendant(
+              of: down,
+              matching: find.byIcon(Icons.keyboard_arrow_down),
+            ),
+          ),
+        ).canRequestFocus,
+        isFalse,
+      );
+      await tester.tap(down);
+      await tester.pumpAndSettle();
+      expect(fixture.player.currentChannel?.number, 8);
+      await pointer.moveTo(const Offset(15, 15));
+      await tester.pumpAndSettle();
+      expect(down, findsNothing);
+
+      fixture.player.showOsd();
+      await tester.pumpAndSettle();
+      await tester.tap(identity);
+      await tester.pumpAndSettle();
+      expect(fixture.player.overlay, PlayerOverlay.miniGuide);
+
+      fixture.player.showOsd();
+      await tester.pumpAndSettle();
+      // Tab navigation reaches the real badge, without its pointer-only steppers.
+      for (
+        var i = 0;
+        i < 20 && !Focus.of(tester.element(identity)).hasFocus;
+        i++
+      ) {
+        await tester.sendKeyEvent(LogicalKeyboardKey.tab);
+        await tester.pump();
+      }
+      expect(Focus.of(tester.element(identity)).hasFocus, isTrue);
+      await tester.sendKeyEvent(LogicalKeyboardKey.enter);
+      await tester.pumpAndSettle();
+      expect(fixture.player.overlay, PlayerOverlay.miniGuide);
+
+      fixture.player.showOsd();
+      await tester.pumpAndSettle();
+      await tester.tap(guide);
+      await tester.pumpAndSettle();
+      expect(guideOpened, isTrue);
+      expect(fixture.player.overlay, PlayerOverlay.fullGuide);
+      await pointer.removePointer();
+      await tester.pumpWidget(const SizedBox.shrink());
+      fixture.dispose();
+    },
+    semanticsEnabled: true,
+  );
+
   testWidgets('OSD uses stateful labeled track and sleep actions', (
     tester,
   ) async {
@@ -8012,7 +8119,10 @@ void main() {
     );
     expect(find.text('TV-14'), findsOneWidget);
     expect(find.byKey(const Key('player-osd-channel-bug')), findsOneWidget);
-    expect(find.bySemanticsLabel('Channel 7, Channel'), findsOneWidget);
+    expect(
+      find.bySemanticsLabel('Channel 7, Channel. Open Mini Guide'),
+      findsOneWidget,
+    );
     expect(find.bySemanticsLabel('7 • Channel'), findsNothing);
     expect(find.text('H.264'), findsOneWidget);
     expect(

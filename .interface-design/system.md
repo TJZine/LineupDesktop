@@ -124,7 +124,10 @@ Preserve:
 
 - The bottom OSD's safe-area insets, title/status hierarchy, five standard
   actions and optional DVR controls, timing row, full-width progress lane,
-  channel bug, keyboard focus, and auto-hide behavior. The channel bug enters
+  channel badge, keyboard focus, and auto-hide behavior. UX assessment decision,
+  2026-11-13/14: on desktop, a labelled Guide control precedes the five standard
+  actions. The channel badge opens the Mini Guide and reveals channel step
+  controls only on pointer hover. TV keeps its existing actions and badge. The channel bug enters
   on its own with a fade and small drop (fade only with Reduce Motion), and
   shows with the OSD and for about 4 s after a channel change.
 - Now Playing expands the same bottom panel upward and shares its actions,

@@ -490,6 +490,7 @@ report to Flutter.
 | Player | Seek backward/forward | `Left` or `J` = 10 seconds back; `Right` or `L` = 30 seconds forward (DVR playback controls on) |
 | Player | Play or pause | `Space`, `K`, or Media Play/Pause (DVR playback controls on) |
 | Player | Previous/next channel | `Page Up` / `Page Down` |
+| Player (desktop) | Open Guide / Mini Guide from the OSD | Choose **Guide** for the full Guide, or activate the channel badge for the Mini Guide. Hover over the badge to step channels. |
 | Player | Enter a channel number | Number keys; confirm with `Enter`, numpad `Enter`, or Select while the entry overlay is open |
 | Player | Audio / subtitle tracks | `A` / `C` |
 | Player | Sleep timer | `S` |
