@@ -271,6 +271,11 @@ the approved desktop treatment.
 
 **Key fact:** the Fire TV Stick 4K Max remote has **no Info key**. Its keys are D-pad, Select, Back, Home, Menu ≡, ⏪ ⏯ ⏩ and voice. On Fire, therefore, Menu is the only spare key, and Down is the only details gesture.
 
+UX assessment decision, 2026-11-13/14: Mini Guide uses a show title with
+an episode and time support line; movie rows keep their existing layout. The
+TV focus fill is unchanged. On a failed tune, **Choose another channel** opens
+Mini Guide on plain canvas; Back restores the failure slate.
+
 ### Option M1 (recommended): one meaning per key
 
 | Key | Hidden Player | Compact OSD visible | Expanded details | No current program |

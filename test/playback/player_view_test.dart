@@ -20,6 +20,8 @@ import 'package:lineup_desktop/app/lineup_shell.dart';
 import 'package:lineup_desktop/channels/channel.dart';
 import 'package:lineup_desktop/channels/scheduler.dart';
 import 'package:lineup_desktop/guide/guide_controller.dart';
+import 'package:lineup_desktop/guide/guide_playback_placeholder.dart';
+import 'package:lineup_desktop/ui/channel_identity.dart';
 import 'package:lineup_desktop/playback/native_player.dart';
 import 'package:lineup_desktop/playback/native_video_surface.dart';
 import 'package:lineup_desktop/playback/player_coordinator.dart';
@@ -1444,7 +1446,7 @@ void main() {
       expect(
         Focus.of(
           tester.element(
-            find.text(failure == 'error' ? 'Retry' : 'Browse channels'),
+            find.text(failure == 'error' ? 'Try again' : 'Browse channels'),
           ),
         ).hasFocus,
         isTrue,
@@ -1613,6 +1615,10 @@ void main() {
 
         bool focused(String label) =>
             Focus.of(tester.element(find.text(label))).hasFocus;
+        final failed = state == PlayerState.error;
+        final browse = failed ? 'Choose another channel' : 'Browse channels';
+        const details = 'Details';
+        var openedDiagnostics = false;
         try {
           if (state == PlayerState.error) {
             await fixture.player.tune('channel');
@@ -1629,46 +1635,52 @@ void main() {
                 controller: fixture.player,
                 focusNode: root,
                 openGuide: () => closed = true,
+                onOpenDiagnostics: () => openedDiagnostics = true,
               ),
             ),
           );
           await tester.pumpAndSettle();
-          expect(
-            focused(state == PlayerState.error ? 'Retry' : 'Browse channels'),
-            isTrue,
-          );
+          expect(focused(failed ? 'Try again' : browse), isTrue);
           if (state == PlayerState.error) {
             await key(LogicalKeyboardKey.arrowRight);
           }
-          expect(focused('Browse channels'), isTrue);
+          expect(focused(browse), isTrue);
           for (var i = 0; i < 3; i++) {
             fixture.lineup.notifyListeners();
             await tester.pumpAndSettle();
             expect(
-              focused('Browse channels'),
+              focused(browse),
               isTrue,
               reason: 'Rebuilds must not restart autofocus',
             );
           }
           await key(LogicalKeyboardKey.arrowRight);
-          expect(focused('Close'), isTrue);
+          expect(focused(failed ? details : 'Close'), isTrue);
+          if (failed) {
+            expect(find.text('Close'), findsNothing);
+            await key(LogicalKeyboardKey.select);
+            expect(openedDiagnostics, isTrue);
+          }
           await key(LogicalKeyboardKey.arrowLeft);
-          expect(focused('Browse channels'), isTrue);
+          expect(focused(browse), isTrue);
           await key(LogicalKeyboardKey.select);
           expect(fixture.player.overlay, PlayerOverlay.miniGuide);
           expect(
             tester.semantics.simulatedAccessibilityTraversal().any(
               (node) =>
-                  node.getSemanticsData().label == 'Browse channels' &&
+                  node.getSemanticsData().label == browse &&
                   node.getSemanticsData().hasAction(SemanticsAction.tap),
             ),
             isFalse,
           );
+          if (failed) {
+            expect(find.text("Couldn't start playback"), findsNothing);
+          }
           await key(LogicalKeyboardKey.goBack);
-          expect(
-            focused(state == PlayerState.error ? 'Retry' : 'Browse channels'),
-            isTrue,
-          );
+          if (failed) {
+            expect(find.text("Couldn't start playback"), findsOneWidget);
+          }
+          expect(focused(failed ? 'Try again' : browse), isTrue);
           if (state == PlayerState.error) {
             final loads = fixture.native.loadCalls;
             fixture.native.failLoad = false;
@@ -4199,6 +4211,113 @@ void main() {
     },
   );
 
+  testWidgets('Back clears the error overlay before leaving Player', (
+    tester,
+  ) async {
+    final fixture = _Fixture(PlayerState.playing, failLoad: true);
+    addTearDown(fixture.dispose);
+    await fixture.player.loadInitialMedia(Uri.parse('lineup-test://failure'));
+    var guideOpened = false;
+    await tester.pumpWidget(
+      MaterialApp(
+        builder: _playerDesktopCanvasBuilder,
+        home: PlayerView(
+          controller: fixture.player,
+          openGuide: () => guideOpened = true,
+        ),
+      ),
+    );
+    await tester.pumpAndSettle();
+
+    await tester.sendKeyEvent(LogicalKeyboardKey.escape);
+    await tester.pumpAndSettle();
+    expect(guideOpened, isFalse);
+    expect(fixture.player.overlay, PlayerOverlay.none);
+    expect(find.text("Couldn't start playback"), findsOneWidget);
+
+    await tester.sendKeyEvent(LogicalKeyboardKey.escape);
+    await tester.pumpAndSettle();
+    expect(guideOpened, isTrue);
+    expect(fixture.player.overlay, PlayerOverlay.fullGuide);
+    await tester.pumpWidget(const SizedBox.shrink());
+  });
+
+  testWidgets(
+    'Guide failure slot offers Retry and Next channel independently',
+    (tester) async {
+      var retried = false;
+      var advanced = false;
+      await tester.pumpWidget(
+        MaterialApp(
+          theme: LineupTheme.forName(LineupThemeName.emberSteel),
+          home: GuidePlaybackPlaceholder(
+            unavailable: true,
+            reduceMotion: true,
+            message: "This video's audio can't play on this device.",
+            onRetry: () => retried = true,
+            onNextChannel: () => advanced = true,
+          ),
+        ),
+      );
+      expect(
+        find.text("This video's audio can't play on this device."),
+        findsOneWidget,
+      );
+      final retry = find.text('Retry');
+      final next = find.text('Next channel');
+      expect(tester.getCenter(next).dy, tester.getCenter(retry).dy);
+      await tester.tap(next);
+      expect(advanced, isTrue);
+      expect(retried, isFalse);
+      await tester.tap(retry);
+      expect(retried, isTrue);
+    },
+  );
+
+  testWidgets('channel entry places the digits over the matched identity', (
+    tester,
+  ) async {
+    final fixture = _Fixture(PlayerState.playing);
+    addTearDown(fixture.dispose);
+    await tester.pumpWidget(
+      MaterialApp(
+        builder: _playerDesktopCanvasBuilder,
+        home: PlayerView(controller: fixture.player, openGuide: () {}),
+      ),
+    );
+    fixture.player.appendChannelDigit(
+      '${fixture.lineup.channels.first.number}',
+    );
+    await tester.pumpAndSettle();
+    final chip = find.byKey(const Key('channel-number-buffer'));
+    final digits = find.descendant(
+      of: chip,
+      matching: find.byWidgetPredicate(
+        (widget) => widget is Text && widget.style?.fontSize == 48,
+      ),
+    );
+    final identity = find.descendant(
+      of: chip,
+      matching: find.byType(ChannelIdentity),
+    );
+    expect(digits, findsOneWidget);
+    expect(tester.widget<ChannelIdentity>(identity).nameStyle?.fontSize, 20);
+    expect(
+      tester.getCenter(digits).dx,
+      tester.getCenter(find.byType(PlayerView)).dx,
+    );
+    expect(
+      tester.getBottomLeft(digits).dy,
+      lessThanOrEqualTo(tester.getTopLeft(identity).dy),
+    );
+    expect(
+      find.descendant(of: identity, matching: find.text('•')),
+      findsOneWidget,
+    );
+    fixture.player.closeOverlay();
+    await tester.pumpWidget(const SizedBox.shrink());
+  });
+
   testWidgets('Guide-sized player surface keeps load failures reachable', (
     tester,
   ) async {
@@ -4216,10 +4335,7 @@ void main() {
       ),
     );
 
-    expect(
-      find.text('Playback could not start. Retry or choose another channel.'),
-      findsOneWidget,
-    );
+    expect(find.text('Playback could not start.'), findsOneWidget);
     expect(find.textContaining('synthetic load failure'), findsNothing);
 
     await tester.pumpWidget(const SizedBox.shrink());
@@ -7724,6 +7840,83 @@ void main() {
     },
   );
 
+  testWidgets(
+    'Mini Guide separates episode titles and keyboard focus from Watching',
+    (tester) async {
+      DateTime clock() => DateTime(2026, 1, 15, 3, 45);
+      final fixture = _Fixture(
+        PlayerState.playing,
+        channelCount: 2,
+        shortPrograms: true,
+        guideClock: clock,
+        playerClock: clock,
+        richItemOverride: const ChannelItem(
+          id: 'episode',
+          title: 'The Lost Frequency',
+          showTitle: 'Signal Station',
+          duration: Duration(hours: 1),
+        ),
+      );
+      tester.view.physicalSize = const Size(1280, 720);
+      tester.view.devicePixelRatio = 1;
+      addTearDown(tester.view.resetPhysicalSize);
+      addTearDown(tester.view.resetDevicePixelRatio);
+      addTearDown(fixture.dispose);
+      expect(await fixture.player.tune('channel'), isTrue);
+      await tester.pumpWidget(
+        MaterialApp(
+          theme: LineupTheme.forName(LineupThemeName.emberSteel),
+          builder: _playerDesktopCanvasBuilder,
+          home: PlayerView(controller: fixture.player, openGuide: () {}),
+        ),
+      );
+      fixture.player.showMiniGuide();
+      await tester.pumpAndSettle();
+      await tester.sendKeyEvent(LogicalKeyboardKey.arrowDown);
+      await tester.pumpAndSettle();
+
+      Finder row(String id) => find.byKey(Key('mini-guide-row-$id'));
+      Finder inRow(String id, Finder child) =>
+          find.descendant(of: row(id), matching: child);
+      expect(inRow('channel', find.text('Signal Station')), findsOneWidget);
+      expect(
+        inRow('channel', find.text('The Lost Frequency · 3:15–4:15 AM')),
+        findsOneWidget,
+      );
+      expect(inRow('channel-1', find.text('Program 1')), findsOneWidget);
+      expect(inRow('channel-1', find.text('3:15 AM–4:15 AM')), findsOneWidget);
+      expect(inRow('channel', find.text('Watching')), findsOneWidget);
+      expect(inRow('channel-1', find.text('Watching')), findsNothing);
+
+      LineupRowSurface surface(String id) => tester.widget(
+        find
+            .ancestor(of: row(id), matching: find.byType(LineupRowSurface))
+            .first,
+      );
+      expect(surface('channel').selected, isTrue);
+      expect(surface('channel').focused, isFalse);
+      expect(surface('channel-1').selected, isFalse);
+      expect(surface('channel-1').focused, isTrue);
+      final roles = LineupTheme.of(tester.element(row('channel-1')));
+      expect(
+        find.ancestor(
+          of: row('channel-1'),
+          matching: find.byWidgetPredicate(
+            (widget) =>
+                widget is Container &&
+                (widget.foregroundDecoration as BoxDecoration?)?.border ==
+                    Border.all(
+                      color: roles.focusBorder,
+                      width: roles.focusBorderWidth,
+                    ),
+          ),
+        ),
+        findsOneWidget,
+      );
+      await tester.pumpWidget(const SizedBox.shrink());
+    },
+  );
+
   testWidgets('Mini Guide selection keeps its primary foreground', (
     tester,
   ) async {
@@ -8224,6 +8417,66 @@ void main() {
 
     await tester.pumpWidget(const SizedBox.shrink());
     fixture.dispose();
+  });
+
+  testWidgets('film Now Playing replaces duplicate text only with usable art', (
+    tester,
+  ) async {
+    tester.view.physicalSize = const Size(1920, 1080);
+    tester.view.devicePixelRatio = 1;
+    addTearDown(tester.view.resetPhysicalSize);
+    addTearDown(tester.view.resetDevicePixelRatio);
+    Rect? fallbackWithoutBytes;
+    for (final (bytes, hasLogo) in [
+      (null, false),
+      (_fixtureLogoArtwork, true),
+      (Uint8List.fromList([1, 2, 3]), false),
+    ]) {
+      final fixture = _Fixture(
+        PlayerState.playing,
+        artworkBytes: bytes,
+        failArtwork: bytes == null,
+        richItemOverride: ChannelItem(
+          id: 'synthetic-film',
+          title: 'A Synthetic Film with a Deliberately Long Title for Testing',
+          duration: const Duration(hours: 1),
+          mediaKind: ChannelMediaKind.movie,
+          clearLogo: Uri.parse('/library/metadata/film/clearLogo'),
+        ),
+      );
+      await tester.pumpWidget(
+        MaterialApp(
+          builder: _playerDesktopCanvasBuilder,
+          home: PlayerView(controller: fixture.player, openGuide: () {}),
+        ),
+      );
+      fixture.player.showNowPlaying();
+      await tester.pumpAndSettle();
+      await tester.runAsync(clearLogoDecodesSettled);
+      await tester.pumpAndSettle();
+
+      expect(
+        find.byKey(const Key('player-now-playing-logo')),
+        hasLogo ? findsOneWidget : findsNothing,
+      );
+      expect(
+        find.byKey(const Key('player-now-playing-title')),
+        hasLogo ? findsNothing : findsOneWidget,
+      );
+      if (!hasLogo) {
+        final rect = _drawnRect(
+          tester,
+          find.byKey(const Key('player-now-playing-title')),
+        );
+        if (bytes == null) {
+          fallbackWithoutBytes = rect;
+        } else {
+          expect(rect, fallbackWithoutBytes);
+        }
+      }
+      await tester.pumpWidget(const SizedBox.shrink());
+      fixture.dispose();
+    }
   });
 
   testWidgets('Now Playing keeps series identity when logo is unusable', (

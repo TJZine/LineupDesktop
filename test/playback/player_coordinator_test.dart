@@ -2716,10 +2716,7 @@ void main() {
         } else {
           expect(fixture.player.loads, hasLength(1));
           expect(fixture.coordinator.hasPlaybackIntent, isFalse);
-          expect(
-            fixture.coordinator.error,
-            'Playback ended before the program finished.',
-          );
+          expect(fixture.coordinator.error, 'Playback could not start.');
           expect(fixture.coordinator.overlay, PlayerOverlay.error);
           expect(fixture.coordinator.canRetry, isTrue);
           expect(fixture.coordinator.status.failureCode, 'premature_end');
@@ -2749,10 +2746,7 @@ void main() {
       );
       await pumpEventQueue(times: 8);
       expect(fixture.player.loads, hasLength(1));
-      expect(
-        fixture.coordinator.error,
-        'Playback ended before the program finished.',
-      );
+      expect(fixture.coordinator.error, 'Playback could not start.');
       expect(fixture.coordinator.overlay, PlayerOverlay.error);
       expect(fixture.coordinator.canRetry, isTrue);
     },
@@ -3043,10 +3037,7 @@ void main() {
           await pumpEventQueue(times: 8);
           expect(fixture.player.loads, hasLength(1));
           expect(fixture.coordinator.hasPlaybackIntent, isFalse);
-          expect(
-            fixture.coordinator.error,
-            'Playback ended before the program finished.',
-          );
+          expect(fixture.coordinator.error, 'Playback could not start.');
           expect(fixture.coordinator.overlay, PlayerOverlay.error);
           expect(fixture.coordinator.canRetry, isTrue);
           expect(fixture.coordinator.status.failureCode, 'premature_end');
@@ -3160,10 +3151,7 @@ void main() {
       );
       await pumpEventQueue(times: 8);
       expect(fixture.player.loads, hasLength(2));
-      expect(
-        fixture.coordinator.error,
-        'Playback ended before the program finished.',
-      );
+      expect(fixture.coordinator.error, 'Playback could not start.');
       expect(fixture.coordinator.canRetry, isTrue);
     },
   );
@@ -4235,7 +4223,7 @@ void main() {
     addTearDown(coordinator.dispose);
 
     expect(await coordinator.tune('channel-b'), isFalse);
-    expect(coordinator.error, 'The current program could not be loaded.');
+    expect(coordinator.error, 'Playback could not start.');
   });
 
   test('native stop failure reports replacement tune failure', () async {
@@ -4281,6 +4269,58 @@ void main() {
     expect(coordinator.overlay, PlayerOverlay.error);
   });
 
+  for (final (category, cause) in [
+    ('offline', "Lineup can't reach your Plex server."),
+    ('network-unavailable', "Lineup can't reach your Plex server."),
+    ('network-timeout', 'Your Plex server took too long to respond.'),
+    ('auth-invalid', 'Plex needs you to sign in again.'),
+    ('unsupported', "This video can't play on this device."),
+    ('audio_decode_error', "This video's audio can't play on this device."),
+    ('synthetic-private-code', 'Playback could not start.'),
+  ]) {
+    test(
+      'safe playback cause for $category from request and native event',
+      () async {
+        final lineup = _FailingPersistenceLineup(
+          failure: PlexException(category, 'Synthetic upstream error details'),
+        );
+        lineup.diagnostics.enabled = true;
+        final guide = GuideController(
+          lineup: lineup,
+          loadSchedule: (channel) async => _schedule(channel),
+        );
+        final player = _Player();
+        final coordinator = PlayerCoordinator(
+          player: player,
+          lineup: lineup,
+          guide: guide,
+        );
+        addTearDown(player.dispose);
+        addTearDown(lineup.dispose);
+        addTearDown(guide.dispose);
+        addTearDown(coordinator.dispose);
+
+        expect(await coordinator.tune('channel-b'), isFalse);
+        expect(coordinator.error, cause);
+        expect(
+          lineup.diagnostics.entries.last.context['code'],
+          category == 'synthetic-private-code' ? 'unexpected' : category,
+        );
+
+        await coordinator.loadInitialMedia(Uri.parse('lineup-test://media'));
+        player.emit(
+          PlayerStatus(
+            state: PlayerState.error,
+            message: 'Synthetic raw native message',
+            failureCode: category,
+          ),
+        );
+        await pumpEventQueue();
+        expect(coordinator.error, cause);
+      },
+    );
+  }
+
   for (final failure in <Object>[
     const FileSystemException('Synthetic save IO failure.'),
     const LineupScopeSuperseded(),
@@ -4322,8 +4362,8 @@ void main() {
         expect(
           coordinator.error,
           failure is PlexException
-              ? failure.message
-              : 'Playback could not start. Retry or choose another channel.',
+              ? 'Plex needs you to sign in again.'
+              : 'Playback could not start.',
         );
         expect(lineup.currentChannelId, 'channel-0');
         expect(player.stops, 1);
@@ -4487,10 +4527,7 @@ void main() {
           }
           expect(f.coordinator.tuning, isFalse);
           expect(f.coordinator.overlay, PlayerOverlay.error);
-          expect(
-            f.coordinator.error,
-            'Playback could not start. Retry or choose another channel.',
-          );
+          expect(f.coordinator.error, 'Playback could not start.');
           expect(player.stops, 1);
           expect(
             f.lineup.diagnostics.entries.last.context['code'],
@@ -7431,10 +7468,7 @@ void main() {
     expect(player.stops, 1);
     expect(coordinator.canRetry, isTrue);
     expect(coordinator.overlay, PlayerOverlay.error);
-    expect(
-      coordinator.error,
-      'Playback could not start. Retry or choose another channel.',
-    );
+    expect(coordinator.error, 'Playback could not start.');
   });
 
   for (final domainFailure in [false, true]) {
@@ -7484,8 +7518,8 @@ void main() {
         expect(
           coordinator.error,
           domainFailure
-              ? 'Plex server authorization is unavailable.'
-              : 'Playback could not start. Retry or choose another channel.',
+              ? 'Plex needs you to sign in again.'
+              : 'Playback could not start.',
         );
         if (domainFailure) {
           expect(
@@ -7846,10 +7880,7 @@ void main() {
     await coordinator.loadInitialMedia(media);
 
     expect(player.loads, [media]);
-    expect(
-      coordinator.error,
-      'Playback could not start. Retry or choose another channel.',
-    );
+    expect(coordinator.error, 'Playback could not start.');
     expect(coordinator.error, isNot(contains('load failed after dispatch')));
     expect(coordinator.overlay, PlayerOverlay.error);
   });
@@ -9401,10 +9432,7 @@ void main() {
     expect(player.stops, 1);
     expect(coordinator.canRetry, isTrue);
     expect(coordinator.overlay, PlayerOverlay.error);
-    expect(
-      coordinator.error,
-      'Playback could not start. Retry or choose another channel.',
-    );
+    expect(coordinator.error, 'Playback could not start.');
   });
 
   test('part transition failure stops and settles playback', () async {

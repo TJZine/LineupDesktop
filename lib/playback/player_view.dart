@@ -32,6 +32,7 @@ class PlayerView extends StatefulWidget {
     required this.openGuide,
     this.openMenu,
     this.onBackToGuide,
+    this.onOpenDiagnostics,
     this.focusNode,
     super.key,
   });
@@ -39,6 +40,7 @@ class PlayerView extends StatefulWidget {
   final PlayerCoordinator controller;
   final VoidCallback openGuide;
   final VoidCallback? onBackToGuide;
+  final VoidCallback? onOpenDiagnostics;
   final LineupMenuCallback? openMenu;
   final FocusNode? focusNode;
 
@@ -814,6 +816,7 @@ class PlayerViewState extends State<PlayerView> with WidgetsBindingObserver {
                   PlayerSurface(
                     controller: controller,
                     fullPlayer: true,
+                    onOpenDiagnostics: widget.onOpenDiagnostics,
                     subtitleAvoidance: _subtitleAvoidance,
                     subtitleLayerKey: _subtitleLayerKey,
                     onClose: () {
@@ -995,6 +998,7 @@ class PlayerSurface extends StatelessWidget {
     this.subtitleAvoidance,
     this.subtitleLayerKey,
     this.onClose,
+    this.onOpenDiagnostics,
     super.key,
   });
 
@@ -1005,6 +1009,7 @@ class PlayerSurface extends StatelessWidget {
   final SubtitlePanelAvoidance? subtitleAvoidance;
   final GlobalKey? subtitleLayerKey;
   final VoidCallback? onClose;
+  final VoidCallback? onOpenDiagnostics;
 
   @override
   Widget build(BuildContext context) {
@@ -1029,7 +1034,14 @@ class PlayerSurface extends StatelessWidget {
           PlayerState.ended,
         }.contains(state);
     if (fullPlayer && !preparing && (unavailable || stopped)) {
-      return _StoppedSlate(controller: controller, onClose: onClose);
+      if (unavailable && controller.overlay == PlayerOverlay.miniGuide) {
+        return ColoredBox(color: roles.deepBackground);
+      }
+      return _StoppedSlate(
+        controller: controller,
+        onClose: onClose,
+        onOpenDiagnostics: onOpenDiagnostics,
+      );
     }
     return Stack(
       fit: StackFit.expand,
@@ -1415,8 +1427,7 @@ class _Osd extends StatelessWidget {
         ? null
         : _artworkPath(program.scheduled.item, GuideArtworkKind.clearLogo);
     final item = program?.scheduled.item;
-    final showTitle = item?.showTitle?.trim();
-    final primaryTitle = showTitle?.isNotEmpty == true ? showTitle! : title;
+    final primaryTitle = item == null ? title : _programTitle(item);
     final episodeFacts = item == null ? null : _osdEpisodeFacts(item);
     final statusFacts = [
       episodeFacts,
@@ -2308,10 +2319,40 @@ class _NowPlayingIdentityState extends State<_NowPlayingIdentity> {
       final bytes = snapshot.data;
       final item = widget.program.scheduled.item;
       final showTitle = item.showTitle?.trim();
+      final useFilmLogoAsTitle =
+          item.mediaKind == ChannelMediaKind.movie &&
+          _programTitle(item) == item.title;
+      final title = Text(
+        item.title,
+        key: const Key('player-now-playing-title'),
+        maxLines: widget.compact ? 1 : 2,
+        overflow: TextOverflow.ellipsis,
+        style: _nowPlayingTitleStyle(context, dense: widget.compact),
+      );
       const logoMaxHeight = 72.0;
       const logoMaxWidth = logoMaxHeight * 6;
       return LayoutBuilder(
         builder: (context, available) {
+          Widget clearLogo(Uint8List bytes, Widget fallback) => ClearLogoImage(
+            bytes,
+            imageKey: const Key('player-now-playing-logo'),
+            maximumVisibleHeight: 56,
+            excludeFromSemantics: true,
+            maximumSize: const Size(logoMaxWidth, logoMaxHeight),
+            minimumVisibleSize: Size(96, widget.compact ? 20 : 28),
+            fallback: fallback,
+          );
+          final titleGap = widget.compact ? 8.0 : 12.0;
+          if (bytes != null && useFilmLogoAsTitle) {
+            // Cap the art, while giving an artwork fallback the full text slot.
+            return clearLogo(
+              bytes,
+              Padding(
+                padding: EdgeInsets.only(top: titleGap),
+                child: title,
+              ),
+            );
+          }
           final logoFallback = OverflowBox(
             alignment: Alignment.centerLeft,
             minWidth: 0,
@@ -2341,24 +2382,10 @@ class _NowPlayingIdentityState extends State<_NowPlayingIdentity> {
                     maxWidth: math.min(available.maxWidth, logoMaxWidth),
                     maxHeight: logoMaxHeight,
                   ),
-                  child: ClearLogoImage(
-                    bytes,
-                    imageKey: const Key('player-now-playing-logo'),
-                    maximumVisibleHeight: 56,
-                    excludeFromSemantics: true,
-                    maximumSize: Size(logoMaxWidth, logoMaxHeight),
-                    minimumVisibleSize: Size(96, (widget.compact ? 20 : 28)),
-                    fallback: logoFallback,
-                  ),
+                  child: clearLogo(bytes, logoFallback),
                 ),
-              SizedBox(height: (widget.compact ? 8 : 12)),
-              Text(
-                widget.program.scheduled.item.title,
-                key: const Key('player-now-playing-title'),
-                maxLines: widget.compact ? 1 : 2,
-                overflow: TextOverflow.ellipsis,
-                style: _nowPlayingTitleStyle(context, dense: widget.compact),
-              ),
+              SizedBox(height: titleGap),
+              title,
             ],
           );
         },
@@ -3133,10 +3160,8 @@ class _MiniGuideRow extends StatelessWidget {
   Widget build(BuildContext context) {
     final focused = channel.id == controller.miniGuideChannelId;
     return LineupRowSurface(
-      selected: DeviceProfile.of(context).isTv
-          ? channel.id == controller.watchingChannelId
-          : focused,
-      focused: DeviceProfile.of(context).isTv && focused,
+      selected: channel.id == controller.watchingChannelId,
+      focused: focused,
       child: Builder(
         builder: (context) {
           final roles = LineupTheme.of(context);
@@ -3212,11 +3237,22 @@ class _MiniGuideRow extends StatelessWidget {
             supportStyle: metadataStyle,
             showSemantics: false,
             allowTagBelow: rowHeight != null,
-            tickerBuilder: (style) => ticker(
-              channel.name,
-              Key('mini-guide-channel-${channel.id}'),
-              style: style,
-            ),
+            tickerBuilder: (style) {
+              final key = Key('mini-guide-channel-${channel.id}');
+              if (focused &&
+                  active &&
+                  !MediaQuery.disableAnimationsOf(context)) {
+                return ticker(channel.name, key, style: style);
+              }
+              return Text(
+                channel.name,
+                key: key,
+                maxLines: 1,
+                softWrap: false,
+                overflow: TextOverflow.fade,
+                style: style,
+              );
+            },
             secondary: tuned
                 ? Row(
                     mainAxisSize: MainAxisSize.min,
@@ -3243,7 +3279,18 @@ class _MiniGuideRow extends StatelessWidget {
           final unavailable = row.state == GuideLoadState.error;
           final currentText = unavailable
               ? 'Schedule unavailable'
-              : current?.scheduled.item.title ?? 'Loading schedule…';
+              : current == null
+              ? 'Loading schedule…'
+              : _programTitle(current.scheduled.item);
+          final currentSupport = current == null
+              ? null
+              : _miniGuideProgramSupport(context, current);
+          final nextText = next == null
+              ? null
+              : _programTitle(next.scheduled.item);
+          final nextSupport = next == null
+              ? null
+              : _miniGuideProgramSupport(context, next, upcoming: true);
           final currentTitle = ticker(
             currentText,
             Key('mini-guide-current-${channel.id}'),
@@ -3254,10 +3301,11 @@ class _MiniGuideRow extends StatelessWidget {
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
               currentTitle,
-              if (current != null)
+              if (currentSupport != null)
                 Text(
-                  '${_time(context, current.scheduled.start)}–${_time(context, current.scheduled.end)}',
+                  currentSupport,
                   maxLines: 1,
+                  overflow: TextOverflow.ellipsis,
                   style: metadataStyle,
                 ),
               if (current != null) ...[
@@ -3279,13 +3327,14 @@ class _MiniGuideRow extends StatelessWidget {
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
                     ticker(
-                      next.scheduled.item.title,
+                      nextText!,
                       Key('mini-guide-next-${channel.id}'),
                       style: nextTitleStyle,
                     ),
                     Text(
-                      _time(context, next.scheduled.start),
+                      nextSupport!,
                       maxLines: 1,
+                      overflow: TextOverflow.ellipsis,
                       style: metadataStyle,
                     ),
                   ],
@@ -3294,7 +3343,7 @@ class _MiniGuideRow extends StatelessWidget {
             key: Key('mini-guide-row-${channel.id}'),
             selected: focused,
             label:
-                '$identityLabel. Now $currentText.${next == null ? '' : ' Next ${next.scheduled.item.title}.'}${tuned ? ' Now watching.' : ''}',
+                '$identityLabel. Now $currentText.${next == null ? '' : ' Next $nextText.'}${tuned ? ' Now watching.' : ''}',
             child: DecoratedBox(
               decoration: BoxDecoration(
                 border: Border(
@@ -4355,7 +4404,7 @@ class _ChannelNumber extends StatelessWidget {
   Widget build(BuildContext context) => _StatusBug(
     controller: controller,
     text: controller.enteredChannelNumber,
-    number: true,
+    numberEntry: true,
   );
 }
 
@@ -4363,22 +4412,22 @@ class _StatusBug extends StatelessWidget {
   const _StatusBug({
     required this.controller,
     required this.text,
-    this.number = false,
+    this.numberEntry = false,
   });
   final PlayerCoordinator controller;
   final String text;
-  final bool number;
+  final bool numberEntry;
   @override
   Widget build(BuildContext context) {
     final roles = LineupTheme.of(context);
-    final channel = number ? controller.enteredChannel : null;
+    final channel = numberEntry ? controller.enteredChannel : null;
     final libraryTag = channel == null
         ? null
         : ChannelIdentity.libraryTagFor(channel, controller.lineup.channels);
     final style = Theme.of(context).textTheme.bodyLarge
         ?.copyWith(color: roles.primaryText, shadows: _overlayTextShadow);
     return Align(
-      alignment: Alignment.topRight,
+      alignment: numberEntry ? Alignment.topCenter : Alignment.topRight,
       child: SafeArea(
         left: !DeviceProfile.of(context).isTv,
         top: !DeviceProfile.of(context).isTv,
@@ -4401,7 +4450,7 @@ class _StatusBug extends StatelessWidget {
                   : ChannelIdentity.label(channel, libraryTag: libraryTag),
               excludeSemantics: true,
               child: Container(
-                key: number
+                key: numberEntry
                     ? const Key('channel-number-buffer')
                     : const Key('player-status-bug'),
                 constraints: BoxConstraints(
@@ -4415,15 +4464,21 @@ class _StatusBug extends StatelessWidget {
                   color: _overlayColor(context, controller),
                   borderRadius: BorderRadius.circular(8),
                 ),
-                child: channel == null
-                    ? Text(text, style: style)
-                    : ChannelIdentity(
-                        channel: channel,
-                        libraryTag: libraryTag,
-                        numberText: text,
-                        nameStyle: style,
-                        showSemantics: false,
-                      ),
+                child: numberEntry
+                    ? Column(
+                        mainAxisSize: MainAxisSize.min,
+                        children: [
+                          Text(text, style: style?.copyWith(fontSize: 48)),
+                          if (channel != null)
+                            ChannelIdentity(
+                              channel: channel,
+                              libraryTag: libraryTag,
+                              nameStyle: style?.copyWith(fontSize: 20),
+                              showSemantics: false,
+                            ),
+                        ],
+                      )
+                    : Text(text, style: style),
               ),
             ),
           ),
@@ -4434,18 +4489,24 @@ class _StatusBug extends StatelessWidget {
 }
 
 class _StoppedSlate extends StatelessWidget {
-  const _StoppedSlate({required this.controller, this.onClose});
+  const _StoppedSlate({
+    required this.controller,
+    this.onClose,
+    this.onOpenDiagnostics,
+  });
   final PlayerCoordinator controller;
   final VoidCallback? onClose;
+  final VoidCallback? onOpenDiagnostics;
   @override
   Widget build(BuildContext context) {
     final roles = LineupTheme.of(context);
     final failed =
         controller.error != null ||
         controller.status.state == PlayerState.error;
-    final title = controller.status.state == PlayerState.unsupported
+    final unsupported = controller.status.state == PlayerState.unsupported;
+    final title = unsupported
         ? 'Playback unavailable'
-        : failed && controller.position == Duration.zero
+        : failed
         ? "Couldn't start playback"
         : 'Playback stopped';
     final channel = controller.currentChannel;
@@ -4485,7 +4546,10 @@ class _StoppedSlate extends StatelessWidget {
                     ),
                     const SizedBox(height: 12),
                     Text(
-                      controller.error ?? controller.status.message,
+                      controller.error ??
+                          (failed
+                              ? PlayerCoordinator.unknownPlaybackFailureCause
+                              : controller.status.message),
                       textAlign: TextAlign.center,
                     ),
                     const SizedBox(height: 20),
@@ -4496,19 +4560,29 @@ class _StoppedSlate extends StatelessWidget {
                           FilledButton(
                             autofocus: DeviceProfile.of(context).isTv,
                             onPressed: controller.retry,
-                            child: const Text('Retry'),
+                            child: Text(failed ? 'Try again' : 'Retry'),
                           ),
                         OutlinedButton(
                           autofocus:
                               DeviceProfile.of(context).isTv &&
                               !controller.canRetry,
                           onPressed: controller.showMiniGuide,
-                          child: const Text('Browse channels'),
+                          child: Text(
+                            failed
+                                ? 'Choose another channel'
+                                : 'Browse channels',
+                          ),
                         ),
-                        TextButton(
-                          onPressed: onClose ?? controller.closeOverlay,
-                          child: const Text('Close'),
-                        ),
+                        if (failed && onOpenDiagnostics != null)
+                          TextButton(
+                            onPressed: onOpenDiagnostics,
+                            child: const Text('Details'),
+                          ),
+                        if (!failed)
+                          TextButton(
+                            onPressed: onClose ?? controller.closeOverlay,
+                            child: const Text('Close'),
+                          ),
                       ],
                     ),
                   ],
@@ -4664,6 +4738,30 @@ String? _episodeLabel(ChannelItem item) {
     if (season != null) 'Season $season',
     if (episode != null) 'Episode $episode',
   ].join(' • ');
+}
+
+String _programTitle(ChannelItem item) {
+  final showTitle = item.showTitle?.trim();
+  return showTitle?.isNotEmpty == true ? showTitle! : item.title;
+}
+
+String _miniGuideProgramSupport(
+  BuildContext context,
+  GuideProgram program, {
+  bool upcoming = false,
+}) {
+  final scheduled = program.scheduled;
+  final start = _time(context, scheduled.start);
+  final end = _time(context, scheduled.end);
+  final episode = scheduled.item.showTitle?.trim().isNotEmpty == true;
+  if (!episode) return upcoming ? start : '$start–$end';
+
+  // In 12-hour locales, say the period once when both times share it.
+  final period = RegExp(r' (AM|PM)$').firstMatch(end)?.group(0);
+  final rangeStart = period != null && start.endsWith(period)
+      ? start.substring(0, start.length - period.length)
+      : start;
+  return '${scheduled.item.title} · $rangeStart–$end';
 }
 
 String? _osdEpisodeFacts(ChannelItem item) {

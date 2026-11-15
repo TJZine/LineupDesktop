@@ -2,6 +2,7 @@ import 'dart:math' as math;
 
 import 'package:flutter/material.dart';
 
+import '../playback/player_coordinator.dart';
 import '../ui/app_theme.dart';
 
 /// Keeps the Guide's video region stable when there is no usable picture.
@@ -11,6 +12,7 @@ class GuidePlaybackPlaceholder extends StatefulWidget {
     required this.reduceMotion,
     this.message,
     this.onRetry,
+    this.onNextChannel,
     super.key,
   });
 
@@ -18,6 +20,7 @@ class GuidePlaybackPlaceholder extends StatefulWidget {
   final bool reduceMotion;
   final String? message;
   final VoidCallback? onRetry;
+  final VoidCallback? onNextChannel;
 
   static const _contentPadding = 16.0;
   static const _gap = 8.0;
@@ -30,7 +33,7 @@ class GuidePlaybackPlaceholder extends StatefulWidget {
           ?.copyWith(color: LineupTheme.of(context).secondaryText);
 
   /// A state-independent 16:9 aperture for the complete existing placeholder
-  /// contract: either title, three message lines, Retry, and its normal padding.
+  /// contract: either title, three message lines, recovery actions and padding.
   /// The 16cu inset also contains the existing 6cu Large Focus clearance.
   static Size minimumSize(BuildContext context) {
     final theme = Theme.of(context);
@@ -56,7 +59,9 @@ class GuidePlaybackPlaceholder extends StatefulWidget {
       _messageStyle(context),
     ).height.ceilToDouble();
     final button = theme.textButtonTheme.style!;
-    final retry = text('Retry', button.textStyle!.resolve({}));
+    final buttonStyle = button.textStyle!.resolve({});
+    final retry = text('Retry', buttonStyle);
+    final next = text('Next channel', buttonStyle);
     final minimum = button.minimumSize!.resolve({})!;
     final padding = button.padding!.resolve({})!.resolve(direction);
     final retryHeight = math.max(
@@ -78,7 +83,9 @@ class GuidePlaybackPlaceholder extends StatefulWidget {
           2 * _contentPadding +
               math.max(
                 math.max(idle.width, unavailable.width),
-                math.max(minimum.width, retry.width + padding.horizontal),
+                math.max(minimum.width, retry.width + padding.horizontal) +
+                    _gap +
+                    math.max(minimum.width, next.width + padding.horizontal),
               ),
         )
         .ceilToDouble();
@@ -128,6 +135,10 @@ class _GuidePlaybackPlaceholderState extends State<GuidePlaybackPlaceholder>
   Widget build(BuildContext context) {
     final roles = LineupTheme.of(context);
 
+    final message =
+        widget.message == PlayerCoordinator.unknownPlaybackFailureCause
+        ? null
+        : widget.message;
     return ColoredBox(
       color: roles.deepBackground,
       child: Stack(
@@ -162,21 +173,35 @@ class _GuidePlaybackPlaceholderState extends State<GuidePlaybackPlaceholder>
                     textAlign: TextAlign.center,
                     style: GuidePlaybackPlaceholder._titleStyle(context),
                   ),
-                  if (widget.unavailable && widget.message != null) ...[
+                  if (widget.unavailable && message != null) ...[
                     const SizedBox(height: GuidePlaybackPlaceholder._gap),
                     Text(
-                      widget.message!,
+                      message,
                       maxLines: GuidePlaybackPlaceholder._messageLines,
                       overflow: TextOverflow.ellipsis,
                       textAlign: TextAlign.center,
                       style: GuidePlaybackPlaceholder._messageStyle(context),
                     ),
                   ],
-                  if (widget.onRetry != null) ...[
+                  if (widget.unavailable &&
+                      (widget.onRetry != null ||
+                          widget.onNextChannel != null)) ...[
                     const SizedBox(height: GuidePlaybackPlaceholder._gap),
-                    TextButton(
-                      onPressed: widget.onRetry,
-                      child: const Text('Retry'),
+                    Wrap(
+                      alignment: WrapAlignment.center,
+                      spacing: GuidePlaybackPlaceholder._gap,
+                      children: [
+                        if (widget.onRetry != null)
+                          TextButton(
+                            onPressed: widget.onRetry,
+                            child: const Text('Retry'),
+                          ),
+                        if (widget.onNextChannel != null)
+                          TextButton(
+                            onPressed: widget.onNextChannel,
+                            child: const Text('Next channel'),
+                          ),
+                      ],
                     ),
                   ],
                 ],

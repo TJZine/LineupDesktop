@@ -132,6 +132,10 @@ Preserve:
   artwork, single metadata line, format chips, three-line synopsis, and at most
   four cast members with roles in one row. Runtime decoder/dimension facts
   belong in Diagnostics.
+- UX assessment decision, 2026-11-13/14: channel entry uses the overlay
+  material at the top center, with 48 px digits above a matched 20 px channel
+  identity. The Mini Guide paints a standard desktop focus border separately
+  from Watching and keeps the existing TV fill.
 - The shared themed overlay material, per-level transparency and feather only
   beyond text; preserve spacing, scalable controls and Reduce Motion behavior.
 - `I` or `Down` expands Now Playing; `I`, `Enter`, Close or Back/Esc collapses it

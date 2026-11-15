@@ -422,9 +422,11 @@ absent. Pointer movement leaves the expanded reading surface open. Press `I`,
 `Enter`, `Esc`, or Back, or choose **Close**, to collapse it to the OSD. `A` or
 `C` opens the requested track list directly when that track type is available.
 
-The mini Guide displays a bounded group of nearby channels without leaving
-playback. Selecting a row replaces the current tune through the same Player
-owner.
+The Mini Guide displays nearby channels without leaving Player. Episodes show
+the series name first, followed by episode and time. Select a channel to tune
+it. When you enter a channel number, the digits appear at the top center with
+any matching channel below. In Now Playing, visible film title art takes the
+place of duplicate title text.
 
 When one Plex item contains sequential media parts, Lineup continues through
 them under the same tune. When DVR playback controls are enabled, progress and
@@ -441,7 +443,7 @@ whatever is airing now at its live position. A manual tune or **Retry** also
 joins live.
 
 If a stream ends more than 30 seconds before its known duration, Lineup shows
-the existing playback error with **Retry** instead of advancing. Failed
+the playback error with **Try again** when available, instead of advancing. Failed
 continuations do not retry automatically. Player title, progress context, and
 **Up Next** follow the loaded program; the Guide and mini Guide remain on the
 wall-clock schedule. User tune, Stop, sleep-timer expiry, sign-out, and lineup
@@ -547,9 +549,11 @@ custom channel** goes to Studio; desktop keeps its existing View lineup action.
 
 Up from the Guide's first channel row enters the nearest toolbar control; Down
 returns to the selected grid cell. Player action keys reset the OSD timeout;
-auto-hide returns focus to video. Closing a track drawer or sleep picker returns
-to its invoking action. If playback fails, use the focused Retry action when
-available, or Browse channels.
+auto-hide returns focus to video. Closing a track picker or sleep picker returns
+to its invoking action. A playback failure shows a short cause and offers
+**Try again** when retry is available, or **Choose another channel**. Back
+closes the Mini Guide and returns to the slate. From a newly opened failure,
+Back dismisses the error overlay; the next Back opens Guide.
 
 Use the Player's OSD controls for tracks and sleep. Plex linking uses the code
 and QR shown on the TV; open plex.tv/link on another device when the TV has no

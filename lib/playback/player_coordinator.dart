@@ -358,6 +358,8 @@ class PlayerCoordinator extends ChangeNotifier with WidgetsBindingObserver {
 
   Channel? get enteredChannel => _channelByNumber[int.tryParse(_channelNumber)];
 
+  static const unknownPlaybackFailureCause = 'Playback could not start.';
+
   String? get error => _error;
   bool get fullscreen => _fullscreen;
   bool get cursorVisible => _cursorVisible;
@@ -760,7 +762,10 @@ class PlayerCoordinator extends ChangeNotifier with WidgetsBindingObserver {
       });
       unawaited(_stopQuietly());
       _invalidateAuthorizationRecovery();
-      _error = 'Playback failed. Retry or choose another channel.';
+      _error = _causeForFailureCategory(
+        Diagnostics.failureCategory(event.status.failureCode ?? ''),
+        authorizationRejected: _isAuthorizationFailure(event.status),
+      );
       _tuning = false;
       _canRetry = event.status.recoverable && _retryChannelId != null;
       _releaseActive();
@@ -1113,7 +1118,7 @@ class PlayerCoordinator extends ChangeNotifier with WidgetsBindingObserver {
       }
       _tuning = false;
       _canRetry = true;
-      _error = 'The current program could not be loaded.';
+      _error = unknownPlaybackFailureCause;
       _setOverlay(PlayerOverlay.error, timed: false);
       return false;
     }
@@ -2676,26 +2681,44 @@ class PlayerCoordinator extends ChangeNotifier with WidgetsBindingObserver {
   }
 
   void _recordPlaybackFailure(Object error, {String operation = 'request'}) {
-    final rawCode = switch (error) {
-      PlexException(:final code) => code,
-      PlayerUnavailable(:final failureCode) => failureCode,
-      _ => 'unexpected',
-    };
-    final code = Diagnostics.failureCategory(rawCode) ?? 'unexpected';
+    final code = _playbackFailureCategory(error) ?? 'unexpected';
     lineup.diagnostics.add(DiagnosticEvent.playbackRequestFailed, {
       if (operation != 'request') 'operation': operation,
       'code': code,
     });
   }
 
-  static String _safePlaybackError(Object error) => switch (error) {
-    PlexException(:final message) => message,
-    PlayerUnavailable(failureCode: 'premature_end') =>
-      'Playback ended before the program finished.',
-    PlayerUnavailable() =>
-      'Playback could not start. Retry or choose another channel.',
-    _ => 'Playback could not start. Retry or choose another channel.',
-  };
+  static String? _playbackFailureCategory(Object error) =>
+      Diagnostics.failureCategory(switch (error) {
+        PlexException(:final code) => code,
+        PlayerUnavailable(:final failureCode) => failureCode,
+        _ => 'unexpected',
+      });
+
+  static String _safePlaybackError(Object error) =>
+      _causeForFailureCategory(_playbackFailureCategory(error));
+
+  static String _causeForFailureCategory(
+    String? category, {
+    bool authorizationRejected = false,
+  }) => authorizationRejected
+      ? 'Plex needs you to sign in again.'
+      : switch (category) {
+          'offline' ||
+          'network-unavailable' ||
+          'network_error' => "Lineup can't reach your Plex server.",
+          'network-timeout' => 'Your Plex server took too long to respond.',
+          'auth-denied' ||
+          'auth-required' ||
+          'auth-invalid' ||
+          'access-denied' ||
+          'authorization-unavailable' => 'Plex needs you to sign in again.',
+          'unsupported' ||
+          'video_decode_error' => "This video can't play on this device.",
+          'audio_decode_error' =>
+            "This video's audio can't play on this device.",
+          _ => unknownPlaybackFailureCause,
+        };
 
   void _indexChannels() {
     _indexedChannels = lineup.channels;

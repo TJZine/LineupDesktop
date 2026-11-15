@@ -1513,6 +1513,12 @@ captures, targeted analysis and whitespace checks. No new layout tests. Grouped
 adaptive/accessibility and moving footage/physical Windows acceptance remain
 pending. Independent review is not specifically recommended. No push or publish.
 
+UX assessment decision, 2026-11-13/14: episode rows show the series first,
+with episode title and schedule on the support line for both columns. The
+desktop focused row uses the standard focus border; Watching keeps its tint.
+Clipped resting names fade, with static ellipsis retained for overwide words.
+The failure slate is hidden while the Mini Guide is open.
+
 ## September 12 — Player OSD surface28 critique
 
 User requested personal critique of the established production direction without
@@ -1664,6 +1670,10 @@ passed, analyzer clean. Implementation `dc9de607`. Approved evidence:
 Grouped adaptive/accessibility and physical Windows moving-video checks pending.
 Independent review not specifically recommended.
 
+
+UX assessment decision, 2026-11-13/14: Now Playing uses visible film title
+art instead of repeating the identical title underneath. The text title
+remains when the artwork cannot display.
 
 ## September 12 — surfaces30/31/32 candidate03 awaiting visual approval
 
