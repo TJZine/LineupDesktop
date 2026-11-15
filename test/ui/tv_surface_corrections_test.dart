@@ -487,8 +487,8 @@ void main() {
           );
           expect(
             tester.getTopLeft(title).dx - tester.getTopLeft(surface).dx,
-            closeTo(19 * scale, .1),
-          ); // 3cu selection rail + 16cu padding
+            closeTo(16 * scale, .1),
+          ); // Measured from the edge of the focus fill.
         }
       }
       await tester.pumpWidget(const SizedBox.shrink());
