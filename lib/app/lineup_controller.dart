@@ -19,6 +19,23 @@ part 'lineup_scenario.dart';
 
 enum SetupStage { welcome, linking, profiles, servers, channelSetup, ready }
 
+enum FirstLibrariesOrigin { profiles, signIn }
+
+/// The current server selection exhausted the available connection routes.
+@immutable
+final class ServerProbeFailure extends PlexException {
+  ServerProbeFailure._(
+    this.serverId,
+    this._operation,
+    this._scope,
+    PlexException cause,
+  ) : super(cause.code, cause.message);
+
+  final String serverId;
+  final int _operation;
+  final int _scope;
+}
+
 enum ChannelPlanApplyResult { applied, stale }
 
 @immutable
@@ -315,6 +332,15 @@ class LineupController extends ChangeNotifier {
   bool get restoringSavedLineup => _restoringSavedLineup;
   _PickerOrigin? _profilePickerOrigin;
   _PickerOrigin? _serverPickerOrigin;
+  FirstLibrariesOrigin? _firstLibrariesOrigin;
+  FirstLibrariesOrigin? get firstLibrariesOrigin =>
+      stage == SetupStage.channelSetup && !restoringSavedLineup
+      ? _firstLibrariesOrigin
+      : null;
+
+  ServerProbeFailure? _serverProbeFailure;
+  ServerProbeFailure? get serverProbeFailure => _serverProbeFailure;
+
   bool _secureCancellationRequired = false;
   bool get secureCancellationRequired => _secureCancellationRequired;
   final _LibraryScanState _scan = _LibraryScanState();
@@ -573,7 +599,7 @@ class LineupController extends ChangeNotifier {
           _stage = SetupStage.profiles;
           return;
         }
-        await _discover(operation);
+        await _discover(operation, firstRun: true);
       },
       operation: operation,
       fallbackStage: SetupStage.welcome,
@@ -719,7 +745,11 @@ class LineupController extends ChangeNotifier {
       } else {
         _profileToken = token;
         await _run(
-          () => _discover(operation),
+          () => _discover(
+            operation,
+            firstRun: true,
+            origin: FirstLibrariesOrigin.signIn,
+          ),
           operation: operation,
           fallbackStage: SetupStage.servers,
         );
@@ -777,6 +807,17 @@ class LineupController extends ChangeNotifier {
   /// Returns whether the profile was durably accepted, independently of any
   /// subsequent server discovery or saved-server reconnect outcome.
   Future<bool> selectProfile(PlexHomeUser selected, {String? pin}) async {
+    final entryStage = stage;
+    final origin = switch (entryStage) {
+      SetupStage.linking => FirstLibrariesOrigin.signIn,
+      SetupStage.profiles
+          when _profilePickerOrigin?.stage != SetupStage.ready &&
+              server == null =>
+        FirstLibrariesOrigin.profiles,
+      _ => null,
+    };
+    final savedId = _persisted.selectedServerByProfile[selected.id];
+    final firstRun = origin != null && savedId == null;
     final operation = _invalidateOperation();
     _invalidatePmsRefresh();
     _clearServerTarget();
@@ -795,7 +836,12 @@ class LineupController extends ChangeNotifier {
         if (!_isCurrent(operation)) return;
         await _queueStateOperation(operation, () async {
           restoreCancellation = profileSelectionCanCancel;
-          accepted = await _commitProfileSelection(operation, selected, token);
+          accepted = await _commitProfileSelection(
+            operation,
+            selected,
+            token,
+            nextStage: firstRun ? entryStage : SetupStage.servers,
+          );
         });
       },
       operation: operation,
@@ -811,7 +857,7 @@ class LineupController extends ChangeNotifier {
     }
     if (accepted && _isCurrent(operation)) {
       await _run(
-        () => _discover(operation),
+        () => _discover(operation, firstRun: firstRun, origin: origin),
         operation: operation,
         fallbackStage: SetupStage.servers,
       );
@@ -824,8 +870,9 @@ class LineupController extends ChangeNotifier {
   Future<bool> _commitProfileSelection(
     int operation,
     PlexHomeUser selected,
-    String token,
-  ) {
+    String token, {
+    required SetupStage nextStage,
+  }) {
     final transaction = _credentialOperations.then((_) async {
       if (!_isCurrent(operation)) return false;
       final previous = await credentials.readProfileToken(selected.id);
@@ -851,7 +898,7 @@ class LineupController extends ChangeNotifier {
         _unrestoredProfileCredentials.remove(selected.id);
         if (_disposed) return false;
         _publishProfileSelection(selection);
-        _stage = SetupStage.servers;
+        _stage = nextStage;
         notifyListeners();
         return true;
       } catch (_) {
@@ -903,9 +950,26 @@ class LineupController extends ChangeNotifier {
     _contentGeneration++;
   }
 
-  Future<void> _discover(int operation, {bool reconnectSaved = true}) async {
+  Future<void> _discover(
+    int operation, {
+    bool reconnectSaved = true,
+    bool firstRun = false,
+    FirstLibrariesOrigin? origin,
+  }) async {
     final token = _profileToken ?? _accountToken;
     if (token == null) return;
+    final profileId = profile?.id ?? account?.id;
+    final savedId = savedServerId;
+    if (origin != null) {
+      final savedLineup = profileId == null || savedId == null
+          ? ScopedLineup.empty
+          : _persisted.lineupFor(
+              LineupScope(profileKey: profileId, serverId: savedId),
+            );
+      if (savedLineup.libraryIds.isEmpty && savedLineup.channels.isEmpty) {
+        _firstLibrariesOrigin = origin;
+      }
+    }
     final discovered = await plex.discoverServers(token);
     if (!_isCurrent(operation)) return;
     final activeAccess = reconnectSaved ? null : _serverAccess[server?.id];
@@ -916,12 +980,12 @@ class LineupController extends ChangeNotifier {
     _publishServers = List.unmodifiable(
       discovered.map((access) => access.server),
     );
+    if (firstRun && savedId == null && server == null && servers.length == 1) {
+      await selectServer(servers.single);
+      return;
+    }
     _stage = SetupStage.servers;
     if (!reconnectSaved) return;
-    final profileId = profile?.id ?? account?.id;
-    final savedId = profileId == null
-        ? null
-        : _persisted.selectedServerByProfile[profileId];
     final saved = servers
         .where((candidate) => candidate.id == savedId)
         .firstOrNull;
@@ -957,6 +1021,24 @@ class LineupController extends ChangeNotifier {
     _invalidatePmsRefresh();
     _serverTargetId = selected.id;
     _serverTargetOperation = operation;
+    final authorizationScope = _authorizationScope;
+
+    Future<PlexConnection> probe(PlexServer server, String token) async {
+      try {
+        return await plex.selectConnection(server, token);
+      } on PlexException catch (exception) {
+        if (exception.code == 'server-unreachable') {
+          throw ServerProbeFailure._(
+            server.id,
+            operation,
+            authorizationScope,
+            exception,
+          );
+        }
+        rethrow;
+      }
+    }
+
     await _runSelection(
       () async {
         final selectedConnection = await _withPmsAuthorization(
@@ -964,10 +1046,8 @@ class LineupController extends ChangeNotifier {
           selected.id,
           (token, refreshedConnection) => refreshedConnection != null
               ? Future.value(refreshedConnection)
-              : plex.selectConnection(
-                  _serverAccess[selected.id]!.server,
-                  token,
-                ),
+              : probe(_serverAccess[selected.id]!.server, token),
+          recoveryProbe: probe,
         );
         if (!_isCurrent(operation)) return;
         var workingConnection = selectedConnection;
@@ -1067,7 +1147,13 @@ class LineupController extends ChangeNotifier {
     _publishLineup(selection.lineup);
     _stage = SetupStage.channelSetup;
     _channelSetupCanCancel = false;
+    final origin = _firstLibrariesOrigin;
     _resetSetupDiscovery();
+    if (_isCurrent(operation) &&
+        selection.lineup.libraryIds.isEmpty &&
+        selection.lineup.channels.isEmpty) {
+      _firstLibrariesOrigin = origin;
+    }
     // A started successful save still publishes, but obsolete requests cannot
     // create restore work they will never execute.
     _restoringSavedLineup =
@@ -1193,6 +1279,7 @@ class LineupController extends ChangeNotifier {
         );
         _recordChannelChanges(previous);
         _scan.didCommit(candidate);
+        _firstLibrariesOrigin = null;
         committed = true;
         _contentGeneration++;
         notifyListeners();
@@ -1536,8 +1623,28 @@ class LineupController extends ChangeNotifier {
   Set<String> _requiredPlaylistIds() =>
       channels.expand((channel) => _playlistIds(channel.source)).toSet();
 
+  /// The account remains linked. A profile must be selected again through
+  /// its normal authorization flow, including a fresh PIN when required.
+  void backToFirstRunProfiles() {
+    if (firstLibrariesOrigin != FirstLibrariesOrigin.profiles ||
+        busy ||
+        !canSwitchServer) {
+      return;
+    }
+    _invalidateOperation();
+    _clearServerRuntime();
+    _publishServers = const [];
+    _serverAccess = const {};
+    _profile = null;
+    _profileToken = null;
+    _error = null;
+    _stage = SetupStage.profiles;
+    notifyListeners();
+  }
+
   Future<void> enterChannelSetup() async {
     _scenarioOpen = false;
+    _firstLibrariesOrigin = null;
     _channelSetupCanCancel = stage == SetupStage.ready;
     _stage = SetupStage.channelSetup;
     notifyListeners();
@@ -2713,6 +2820,10 @@ class LineupController extends ChangeNotifier {
 
   void _retireAuthorizationScope() {
     _authorizationScope++;
+    if (_serverProbeFailure != null) {
+      _serverProbeFailure = null;
+      _error = null;
+    }
     _playbackRefresh = null;
     _playbackRefreshScope = null;
   }
@@ -2780,6 +2891,7 @@ class LineupController extends ChangeNotifier {
     _restoringSavedLineup = false;
     _profilePickerOrigin = null;
     _serverPickerOrigin = null;
+    _firstLibrariesOrigin = null;
     _scan.reset();
   }
 
@@ -2788,6 +2900,7 @@ class LineupController extends ChangeNotifier {
     String serverId,
     Future<T> Function(String token, PlexConnection? connection) request, {
     PlexConnection? connectionOverride,
+    Future<PlexConnection> Function(PlexServer, String)? recoveryProbe,
   }) async {
     PlexScanBudget.current?.check();
     final access = _serverAccess[serverId];
@@ -2812,7 +2925,13 @@ class LineupController extends ChangeNotifier {
         retryAccess = currentAccess;
         retryConnection = currentConnection;
       } else {
-        retryConnection = await _refreshPmsAccess(operation, serverId);
+        retryConnection = recoveryProbe == null
+            ? await _refreshPmsAccess(operation, serverId)
+            : await _performPmsRefresh(
+                operation,
+                serverId,
+                probe: recoveryProbe,
+              );
         final refreshed = _serverAccess[serverId];
         if (refreshed == null) {
           throw const PlexException(
@@ -2896,6 +3015,7 @@ class LineupController extends ChangeNotifier {
     String serverId, {
     bool Function()? isCurrent,
     bool forPlayback = false,
+    Future<PlexConnection> Function(PlexServer, String)? probe,
   }) async {
     final profileToken = _profileToken ?? _accountToken;
     if (profileToken == null) {
@@ -2918,7 +3038,7 @@ class LineupController extends ChangeNotifier {
         'Plex server authorization is unavailable.',
       );
     }
-    final selectedConnection = await plex.selectConnection(
+    final selectedConnection = await (probe ?? plex.selectConnection)(
       refreshed.server,
       refreshed.token,
     );
@@ -2962,9 +3082,19 @@ class LineupController extends ChangeNotifier {
         }
         return false;
       }
-      _error = exception is PlexException
-          ? exception.message
-          : 'Lineup could not complete that request.';
+      if (exception is ServerProbeFailure) {
+        if (_isCurrentPmsTarget(exception._operation, exception.serverId) &&
+            _isCurrentAuthorizationScope(exception._scope)) {
+          _serverProbeFailure = exception;
+          _error = exception.message;
+        } else {
+          _error = 'Lineup could not complete that request.';
+        }
+      } else {
+        _error = exception is PlexException
+            ? exception.message
+            : 'Lineup could not complete that request.';
+      }
       _restoringSavedLineup = false;
       _stage = exception is PlexScanLimitException
           ? scanLimitFallbackStage ?? fallbackStage
@@ -3010,6 +3140,7 @@ class LineupController extends ChangeNotifier {
 
   int _invalidateOperation() {
     final operation = ++_epoch;
+    _serverProbeFailure = null;
     _selectionPreparation?.complete();
     _selectionPreparation = null;
     _scenarioOpen = false;

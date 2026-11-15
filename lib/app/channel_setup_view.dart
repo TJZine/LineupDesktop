@@ -23,6 +23,7 @@ class UpstreamChannelSetupView extends StatefulWidget {
   const UpstreamChannelSetupView({
     required this.controller,
     this.onRequestLogout,
+    this.onFirstLibrariesBack,
     this.onViewLineup,
     this.onAddCustomChannel,
     super.key,
@@ -30,6 +31,7 @@ class UpstreamChannelSetupView extends StatefulWidget {
 
   final LineupController controller;
   final Future<void> Function()? onRequestLogout;
+  final VoidCallback? onFirstLibrariesBack;
   final VoidCallback? onViewLineup;
   final VoidCallback? onAddCustomChannel;
 
@@ -188,7 +190,13 @@ class UpstreamChannelSetupViewState extends State<UpstreamChannelSetupView> {
         widget.controller.cancelChannelSetup();
         return true;
       }
-      return widget.controller.busy;
+      if (widget.controller.busy) return true;
+      final back = widget.onFirstLibrariesBack;
+      if (widget.controller.firstLibrariesOrigin != null && back != null) {
+        back();
+        return true;
+      }
+      return false;
     }
 
     if (_step == _SetupStep.configure) {
@@ -348,6 +356,7 @@ class UpstreamChannelSetupViewState extends State<UpstreamChannelSetupView> {
 
   @override
   Widget build(BuildContext context) {
+    final firstLibrariesOrigin = widget.controller.firstLibrariesOrigin;
     final entryEnabled = _libraryEntryTargetIsEnabled;
     if (entryEnabled && !_libraryEntryWasEnabled) {
       _scheduleLibraryEntryFocus();
@@ -377,6 +386,23 @@ class UpstreamChannelSetupViewState extends State<UpstreamChannelSetupView> {
                 child: Column(
                   crossAxisAlignment: CrossAxisAlignment.stretch,
                   children: [
+                    if (!_isTv &&
+                        _step == _SetupStep.libraries &&
+                        widget.onFirstLibrariesBack != null &&
+                        firstLibrariesOrigin != null)
+                      Align(
+                        alignment: Alignment.centerLeft,
+                        child: TextButton.icon(
+                          onPressed: widget.controller.busy
+                              ? null
+                              : widget.onFirstLibrariesBack,
+                          icon: const Icon(Icons.chevron_left),
+                          label: Text(switch (firstLibrariesOrigin) {
+                            FirstLibrariesOrigin.profiles => 'Back to profiles',
+                            FirstLibrariesOrigin.signIn => 'Back to sign-in',
+                          }),
+                        ),
+                      ),
                     if (_step != _SetupStep.libraries && !resultState) ...[
                       _header(),
                       const SizedBox(height: 32),

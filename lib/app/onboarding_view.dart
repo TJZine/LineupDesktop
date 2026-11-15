@@ -115,6 +115,7 @@ class UpstreamOnboardingViewState extends State<UpstreamOnboardingView>
   Object? _serverRefresh;
   int _serverAttemptRevision = 0;
   PlexHomeUser? _pinUser;
+  int? _pinContentGeneration;
   String? _invokedProfileId;
   bool _profileGridHasFocus = false;
   bool _pulse = true;
@@ -214,7 +215,10 @@ class UpstreamOnboardingViewState extends State<UpstreamOnboardingView>
       _linkingStopped = nextLinkingStopped;
       _wasLinking = controller.stage == SetupStage.linking;
       _busy = nextBusy;
-      if (controller.stage != SetupStage.profiles) _pinUser = null;
+      if (controller.stage != SetupStage.profiles ||
+          _pinContentGeneration != controller.contentGeneration) {
+        _pinUser = null;
+      }
       if (controller.stage != SetupStage.servers) _serverEntryFocused = false;
     });
     if (retryNeedsFocus || linkNeedsFocus || becameBusy) {
@@ -516,6 +520,14 @@ class UpstreamOnboardingViewState extends State<UpstreamOnboardingView>
         ? _profilePin(key: key)
         : switch (controller.stage) {
             SetupStage.welcome => _welcome(),
+            SetupStage.linking
+                when widget.controller.activePin == null && _actionsBusy =>
+              Center(
+                child: Semantics(
+                  liveRegion: true,
+                  child: const Text('Connecting to Plex…'),
+                ),
+              ),
             SetupStage.linking => Builder(builder: _linking),
             SetupStage.profiles => _profiles(),
             SetupStage.servers => _servers(),
@@ -1158,12 +1170,14 @@ class UpstreamOnboardingViewState extends State<UpstreamOnboardingView>
               connection: widget.controller.server?.id == server.id
                   ? widget.controller.connection
                   : null,
+              unreachable: _unreachableServerId == server.id,
               onPressed:
                   _actionsBusy ||
                       (_serverAttempt.pending &&
                           _serverAttempt.serverId == server.id)
                   ? null
-                  : widget.controller.server?.id == server.id
+                  : widget.controller.server?.id == server.id &&
+                        _unreachableServerId != server.id
                   ? () => _continueServer(server)
                   : () => _connectServer(server),
               previouslyUsed: widget.controller.savedServerId == server.id,
@@ -1234,11 +1248,19 @@ class UpstreamOnboardingViewState extends State<UpstreamOnboardingView>
     ),
   );
 
-  /// A server-specific failure and its notice render in that server's row.
+  String? get _unreachableServerId =>
+      widget.authorizationTransitionError?.call() == null &&
+          !_serverAttempt.pending
+      ? widget.controller.serverProbeFailure?.serverId
+      : null;
+
+  /// Probe feedback lives with its row. Other errors keep their recovery copy.
   String? get _serverFeedback => _serverAttempt.serverId != null
       ? null
       : _withRecoveryNotice(
-          _serverAttempt.message ?? _selectionError,
+          _unreachableServerId == null
+              ? _serverAttempt.message ?? _selectionError
+              : null,
           widget.controller.profileCredentialRecoveryNotice,
         );
 
@@ -1290,6 +1312,8 @@ class UpstreamOnboardingViewState extends State<UpstreamOnboardingView>
     if (!mounted || attempt != _serverAttemptRevision) return;
     setState(() {
       if (widget.controller.stage == SetupStage.servers &&
+          (widget.authorizationTransitionError?.call() != null ||
+              widget.controller.serverProbeFailure?.serverId != server.id) &&
           _selectionError != null) {
         _serverAttempt = _FailedServerAttempt(server.id, _selectionError!);
       } else {
@@ -1314,6 +1338,7 @@ class UpstreamOnboardingViewState extends State<UpstreamOnboardingView>
     setState(() {
       if (DeviceProfile.of(context).isTv) _invokedProfileId = user.id;
       _pinUser = user;
+      _pinContentGeneration = widget.controller.contentGeneration;
     });
   }
 
@@ -1777,6 +1802,7 @@ class _ServerCard extends StatelessWidget {
     required this.connection,
     required this.onPressed,
     this.pending = false,
+    this.unreachable = false,
     this.previouslyUsed = false,
     this.focusNode,
     this.error,
@@ -1789,6 +1815,7 @@ class _ServerCard extends StatelessWidget {
   final PlexConnection? connection;
   final VoidCallback? onPressed;
   final bool pending;
+  final bool unreachable;
   final bool previouslyUsed;
   final String? error;
   final String? profileCredentialRecoveryNotice;
@@ -1796,10 +1823,6 @@ class _ServerCard extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final measuredConnection = connection ?? _measuredConnection(server);
-    // The controller exposes the selection error as display text. Only the
-    // connection probe's explicit failure establishes unreachability.
-    final unreachable =
-        error == 'No reachable connection was found for this server.';
     final supportStyle = TextStyle(
       color: LineupTheme.of(context).secondaryText,
       fontSize: 18,
@@ -1844,7 +1867,10 @@ class _ServerCard extends StatelessWidget {
         if (unreachable || measuredConnection?.latency != null) ...[
           const SizedBox(height: 8),
           if (unreachable)
-            Text('Unreachable', style: supportStyle)
+            Semantics(
+              liveRegion: true,
+              child: Text('Unreachable', style: supportStyle),
+            )
           else
             LineupConnectionStatus(connection: measuredConnection),
         ],
@@ -1852,6 +1878,8 @@ class _ServerCard extends StatelessWidget {
     );
     final buttonLabel = pending
         ? 'Connecting…'
+        : unreachable
+        ? 'Retry'
         : current
         ? 'Continue'
         : error != null
@@ -1865,7 +1893,7 @@ class _ServerCard extends StatelessWidget {
         label: actionLabel,
         // Only continuing with the connected server is emphasized; list
         // position never promotes a row.
-        child: current
+        child: current && !unreachable
             ? FilledButton(
                 autofocus: autofocus && onPressed != null,
                 focusNode: focusNode,

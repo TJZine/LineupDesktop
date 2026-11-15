@@ -801,6 +801,23 @@ class _LineupShellState extends State<LineupShell> {
     });
   }
 
+  void _backFromFirstLibraries() {
+    final controller = widget.controller;
+    if (_player.authorizationTransitionPending ||
+        controller.busy ||
+        !controller.canSwitchServer) {
+      return;
+    }
+    switch (controller.firstLibrariesOrigin) {
+      case FirstLibrariesOrigin.profiles:
+        controller.backToFirstRunProfiles();
+      case FirstLibrariesOrigin.signIn:
+        unawaited(_logout());
+      case null:
+        break;
+    }
+  }
+
   Future<void> _requestLogout() async {
     if (_player.authorizationTransitionPending) return;
     final confirmed =
@@ -1192,6 +1209,7 @@ class _LineupShellState extends State<LineupShell> {
                       key: _setupKey,
                       controller: widget.controller,
                       onRequestLogout: _requestLogout,
+                      onFirstLibrariesBack: _backFromFirstLibraries,
                       onViewLineup: _completeSetup,
                       onAddCustomChannel: _completeSetupAndAdd,
                     ),
@@ -1251,6 +1269,7 @@ class _LineupShellState extends State<LineupShell> {
                     key: _setupKey,
                     controller: controller,
                     onRequestLogout: _requestLogout,
+                    onFirstLibrariesBack: _backFromFirstLibraries,
                     onViewLineup: _completeSetup,
                     onAddCustomChannel: _completeSetupAndAdd,
                   )

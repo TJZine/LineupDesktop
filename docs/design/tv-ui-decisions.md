@@ -302,6 +302,15 @@ the approved desktop treatment.
 - M1 or M2.
 - Whether the details chevron is wanted.
 
+### First-run server selection and Back
+
+UX assessment decision, 2026-11-13/14 (N9, N10). A sole reachable server skips
+the picker on unresolved first run. When the picker opens, a failed probe
+shows one “Unreachable” status with “Retry” on its server row. Contextual
+Back from the first Libraries step goes to Profiles or Plex sign-in according
+to where setup began. Back during a running library scan still cancels that
+scan first. After the first Libraries step, setup uses its usual Back order.
+
 ### Setup source rows and channel identity
 
 UX assessment decision, 2026-11-13/14 (Q1b, N12, N13/D10, D11, change 13).

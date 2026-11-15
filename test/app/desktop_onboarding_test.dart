@@ -562,7 +562,10 @@ void main() {
         expect(controller.profile?.id, 'protected');
         expect(store.state.profileId, 'protected');
         expect(controller.busy, isTrue);
-        expect(controller.stage, SetupStage.servers);
+        final pendingStage = failure == 'discovery'
+            ? SetupStage.profiles
+            : SetupStage.servers;
+        expect(controller.stage, pendingStage);
         expect(find.byKey(const Key('profile-pin-sheet')), findsNothing);
         if (failure == 'server save') {
           expect(store.serverSaveStarted, isTrue);
@@ -578,7 +581,7 @@ void main() {
             find.byType(UpstreamOnboardingView),
           );
           expect(state.handleBack(), isTrue);
-          expect(controller.stage, SetupStage.servers);
+          expect(controller.stage, pendingStage);
           plex.gate.completeError(
             const PlexException(
               'server-unreachable',
@@ -651,15 +654,9 @@ void main() {
         expect(controller.busy, isFalse);
         expect(controller.error, isNull);
         expect(find.byKey(const Key('profile-pin-sheet')), findsNothing);
-        expect(
-          controller.stage,
-          failure == 'none' ? SetupStage.servers : SetupStage.channelSetup,
-        );
-        if (failure == 'none') {
-          expect(find.text('Synthetic server'), findsWidgets);
-        } else {
-          expect(find.byType(UpstreamOnboardingView), findsNothing);
-        }
+        expect(controller.stage, SetupStage.channelSetup);
+        expect(find.byType(UpstreamOnboardingView), findsNothing);
+        expect(find.text('Choose libraries'), findsOneWidget);
       }
       await tester.pumpWidget(const SizedBox.shrink());
     });
@@ -1955,7 +1952,7 @@ void main() {
   testWidgets('TV moves focus to the first server when discovery settles', (
     tester,
   ) async {
-    final plex = _ProfileRecoveryPlex('discovery');
+    final plex = _ProfileRecoveryPlex('discovery', includeSecondServer: true);
     final controller = LineupController(
       store: MemoryAppStore(),
       credentials: MemoryCredentialStore(accountToken: 'synthetic-account'),
@@ -1983,17 +1980,13 @@ void main() {
     await tester.sendKeyEvent(LogicalKeyboardKey.select);
     await tester.pumpAndSettle();
     expect(plex.gatedRequestStarted, isTrue);
-    expect(find.text('Choose a server'), findsOneWidget);
+    expect(find.text('Choose a server'), findsNothing);
     expect(find.text('Connect'), findsNothing);
-    expect(
-      Focus.of(tester.element(find.text('Settings'))).hasPrimaryFocus,
-      isTrue,
-    );
 
     plex.gate.complete();
     await tester.pumpAndSettle();
     expect(
-      Focus.of(tester.element(find.text('Connect'))).hasPrimaryFocus,
+      Focus.of(tester.element(find.text('Connect').first)).hasPrimaryFocus,
       isTrue,
     );
     await tester.sendKeyEvent(LogicalKeyboardKey.select);
@@ -2047,7 +2040,8 @@ void main() {
       await tester.tap(find.text('Media room'));
       await tester.pumpAndSettle();
       expect(controller.selectCalls, 1);
-      expect(find.text('Unreachable'), findsOneWidget);
+      expect(find.text('Unreachable'), findsNothing);
+      expect(find.text(controller.selectionFailure!), findsOneWidget);
       controller.selectionFailure = 'Server selection failed.';
       await tester.tap(find.text('Shared with you'));
       await tester.pumpAndSettle();
@@ -2985,12 +2979,13 @@ class _InlineScheduleWorker extends ScheduleWorker {
 }
 
 class _ProfileRecoveryPlex extends PlexClient {
-  _ProfileRecoveryPlex(this.failure)
+  _ProfileRecoveryPlex(this.failure, {this.includeSecondServer = false})
     : super(
         clientIdentifier: 'synthetic-client',
         httpClient: testPlexHttpClient(),
       );
   final String failure;
+  final bool includeSecondServer;
   final gate = Completer<void>();
   final scanGate = Completer<PlexLibraryScan>();
   final submittedPins = <String?>[];
@@ -3033,6 +3028,15 @@ class _ProfileRecoveryPlex extends PlexClient {
         ),
         token: 'synthetic-pms',
       ),
+      if (includeSecondServer)
+        PlexServerAccess(
+          server: const PlexServer(
+            id: 'archive',
+            name: 'Archive',
+            connections: [],
+          ),
+          token: 'synthetic-archive',
+        ),
     ];
   }
 

@@ -68,6 +68,14 @@ records the dimensions and motion.
   September 9 refinement changes order only; menu hamburger/chevron icons and
   standalone branding retain their own roles.
 
+## First-run setup
+
+UX assessment decision, 2026-11-13/14. A sole reachable server opens
+Choose libraries directly on unresolved first run. In the server picker, show
+one “Unreachable” status with “Retry” on the row whose reachability probe
+failed. The first Libraries step uses origin-specific Back copy on desktop
+and the contextual Back action on TV.
+
 ## Channel identity and setup
 
 UX assessment decision, 2026-11-13/14. The channel number and outlined

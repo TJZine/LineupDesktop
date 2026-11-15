@@ -902,10 +902,14 @@ review recommended for this bounded presentation change.
 
 ### First-run server rows (surface-12)
 
-UX assessment decision, 2026-11-13/14 (N10 and change 13). Server ownership
+UX assessment decision, 2026-11-13/14 (N9, N10 and change 13). On unresolved
+first run, a sole server that connects opens Choose libraries directly.
+Several servers or a failed connection open the picker. Server ownership
 labels read “Yours” or “Shared with you.” A measured connection shows its path
-and latency. A failed reachability probe shows “Unreachable.” Focus starts on
-the first server when available, and the whole row activates its action.
+and latency. The affected row shows one “Unreachable” status with “Retry”
+after a failed reachability probe. Focus starts on the first server when
+available, and the whole row activates its action. On the first Libraries
+step, use “Back to profiles” or “Back to sign-in” when setup has that origin.
 
 ### Linking approved; profiles and servers next
 
