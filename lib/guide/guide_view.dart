@@ -1066,6 +1066,11 @@ class _GuideViewState extends State<GuideView>
     ),
   );
 
+  // The controls row already starts at the rail's leading content inset.
+  // Keep both picker edges inside the matching rail content bounds.
+  double _filterPickerWidth(GuideLayoutPolicy policy) =>
+      policy.channelRailWidth - _guideEdgeContentInset * 2;
+
   Widget _schedule(GuideLayoutPolicy policy, List<Channel> channels) {
     final scroll = _scrollFor(policy.rowHeight);
     final sourceRowFloor = DeviceProfile.of(context).isTv
@@ -1087,7 +1092,7 @@ class _GuideViewState extends State<GuideView>
           child: _GuideControls(
             key: const Key('guide-control-content'),
             controller: widget.controller,
-            railWidth: policy.channelRailWidth,
+            pickerWidth: _filterPickerWidth(policy),
             searchController: _searchController,
             libraryFocus: _libraryFocus,
             searchFocus: _searchFocus,
@@ -1345,7 +1350,7 @@ class _GuideViewState extends State<GuideView>
                     context,
                     widget.controller,
                     outer.maxWidth - _guideEdgeContentInset * 2,
-                    policy.channelRailWidth,
+                    _filterPickerWidth(policy),
                   );
                   policy = GuideLayoutPolicy.forSize(
                     outer.biggest,
@@ -1556,7 +1561,7 @@ typedef _GuideControlsKey = ({
   String nowLabel,
   String? libraryLabel,
   double width,
-  double railWidth,
+  double pickerWidth,
 });
 
 /// Counts real [_GuideControlsMetrics] measurements for memoization tests.
@@ -1579,9 +1584,9 @@ class _GuideControlsMetrics {
     BuildContext context,
     GuideController controller,
     double width,
-    double railWidth,
+    double pickerWidth,
   ) {
-    final key = _keyFor(context, controller, width, railWidth);
+    final key = _keyFor(context, controller, width, pickerWidth);
     if (key != _lastKey) {
       _last = _GuideControlsMetrics.measure(context, key);
       _lastKey = key;
@@ -1593,7 +1598,7 @@ class _GuideControlsMetrics {
     BuildContext context,
     GuideController controller,
     double width,
-    double railWidth,
+    double pickerWidth,
   ) {
     final theme = Theme.of(context);
     final selected = controller.selectedChannelFilter;
@@ -1608,7 +1613,7 @@ class _GuideControlsMetrics {
       nowLabel: _guideNowLabel(controller),
       libraryLabel: selected.key == ChannelFilter.all ? null : selected.label,
       width: width,
-      railWidth: railWidth,
+      pickerWidth: pickerWidth,
     );
   }
 
@@ -1620,7 +1625,7 @@ class _GuideControlsMetrics {
     final theme = Theme.of(context);
     final direction = key.direction;
     final width = key.width;
-    final railWidth = key.railWidth;
+    final pickerWidth = key.pickerWidth;
     final controlHeight = GuideLayoutPolicy.controlHeight(
       key.size,
       textScale: key.scaler.scale(1),
@@ -1676,7 +1681,7 @@ class _GuideControlsMetrics {
     );
     final label = key.libraryLabel;
     final labelStyle = theme.textTheme.bodyMedium!.copyWith(fontSize: 16);
-    final remaining = width - railWidth - 8 - 340 - 8 - navigationWidth;
+    final remaining = width - pickerWidth - 8 - 340 - 8 - navigationWidth;
     var wrap = remaining < 0;
     if (label != null) {
       final painter = TextPainter(
@@ -1691,7 +1696,7 @@ class _GuideControlsMetrics {
     }
     final labelTextWidth = math.max(
       0.0,
-      (wrap ? width - railWidth - 8 : remaining) - iconWidth,
+      (wrap ? width - pickerWidth - 8 : remaining) - iconWidth,
     );
     final labelHeight = label == null
         ? 0.0
@@ -1727,7 +1732,7 @@ class _GuideControls extends StatelessWidget {
   const _GuideControls({
     super.key,
     required this.controller,
-    required this.railWidth,
+    required this.pickerWidth,
     required this.searchController,
     required this.libraryFocus,
     required this.searchFocus,
@@ -1742,7 +1747,7 @@ class _GuideControls extends StatelessWidget {
   });
 
   final GuideController controller;
-  final double railWidth;
+  final double pickerWidth;
   final TextEditingController searchController;
   final FocusNode libraryFocus;
   final FocusNode searchFocus;
@@ -1816,7 +1821,7 @@ class _GuideControls extends StatelessWidget {
     Widget menuItemContent(Widget child) => child;
     final pickerLabel = activeLabel == null ? selected.label : 'Channel filter';
     final picker = SizedBox(
-      width: railWidth,
+      width: pickerWidth,
       height: controlHeight,
       child: DropdownButtonHideUnderline(
         child: LineupDropdownBox(
@@ -1841,7 +1846,7 @@ class _GuideControls extends StatelessWidget {
                   ),
                   iconSize: 24,
                   itemHeight: null,
-                  menuWidth: math.max(260.0, railWidth),
+                  menuWidth: math.max(260.0, pickerWidth),
                   value: selected.key,
                   selectedItemBuilder: (context) => [
                     for (final entry in entries)
@@ -2119,7 +2124,7 @@ class _GuideControls extends StatelessWidget {
                   context,
                   controller,
                   constraints.maxWidth,
-                  railWidth,
+                  pickerWidth,
                 )
               : null;
           if (measured?.wrap ??

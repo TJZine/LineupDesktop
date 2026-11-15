@@ -1450,6 +1450,12 @@ types, and libraries. Applying or removing a filter preserves channel numbers.
 A disappeared selection returns to All channels with a short notice. This
 changes the filter choices in the approved picker position.
 
+Controls alignment candidate (N23, maintainer visual gate): share the rail's
+12 px leading content edge with the date and channel numbers, and fit the
+filter box inside the rail's trailing content edge. The toolbar's right inset
+and the header and picture positions remain unchanged. This candidate requires
+maintainer acceptance of the matched renders (UX assessment decision, 2026-11-13/14).
+
 ## September 12 — surface27 Mini Guide proposal
 
 Astra inspected the rendered mini-guide-edge-blend.html shaped-B reference at
