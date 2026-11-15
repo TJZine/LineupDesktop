@@ -1436,6 +1436,20 @@ Independent review is not specifically recommended for this presentation pass.
 No push, deployment or publishing was performed.
 
 
+### November Guide refinements
+
+UX assessment decision, 2026-11-13/14: the time marker keeps its position and
+color and paints behind cell text. In the idle picture, the watch prompt sits
+at the bottom left with 24 canvas pixels of padding and a bottom scrim. The
+channel name stays in the adjacent information block. The desktop header shows
+**Back to player** only while playback is active; TV uses the remote Back path.
+
+The toolbar channel filter opens on **All channels** on a fresh launch. Its
+counted entries are All channels, Favourites when present, the available source
+types, and libraries. Applying or removing a filter preserves channel numbers.
+A disappeared selection returns to All channels with a short notice. This
+changes the filter choices in the approved picker position.
+
 ## September 12 — surface27 Mini Guide proposal
 
 Astra inspected the rendered mini-guide-edge-blend.html shaped-B reference at

@@ -82,7 +82,7 @@ void main() {
       expect(tester.takeException(), isNull);
     },
   );
-  testWidgets('TV Guide raw dropdowns read focused leaf ink', (tester) async {
+  testWidgets('TV Guide pickers read focused leaf ink', (tester) async {
     FocusManager.instance.highlightStrategy =
         FocusHighlightStrategy.alwaysTouch;
     addTearDown(
@@ -100,7 +100,9 @@ void main() {
       final baseSurface = LineupTheme.of(tester.element(picker))
           .elevatedSurface;
       final trigger = tester.widget<InkWell>(
-        find.descendant(of: picker, matching: find.byType(InkWell)).first,
+        key == 'guide-library-picker'
+            ? picker
+            : find.descendant(of: picker, matching: find.byType(InkWell)).first,
       );
       // Position the component test at the real trigger; subsequent open/close
       // uses keys. Native consumer navigation is checked separately.
@@ -113,12 +115,11 @@ void main() {
           .hitTestable()
           .first;
       expect(_ink(tester, label), const Color(0xFF090806), reason: key);
-      final surface = switch (tester.widget(picker)) {
-        DropdownButton<int>(:final dropdownColor) => dropdownColor,
-        DropdownButton<String?>(:final dropdownColor) => dropdownColor,
-        _ => null,
-      };
-      expect(surface, baseSurface);
+      if (tester.widget(picker) case DropdownButton<int>(
+        :final dropdownColor,
+      )) {
+        expect(dropdownColor, baseSurface);
+      }
       final icon = find.descendant(
         of: picker,
         matching: find.byIcon(Icons.arrow_drop_down),

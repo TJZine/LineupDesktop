@@ -132,6 +132,41 @@ void main() {
     expect(find.text('Readable title'), findsNothing);
   });
 
+  testWidgets(
+    'Guide visible fitting gives padded and trimmed art the same slot',
+    (tester) async {
+      final trimmed = await _solidLogoBytes(tester, size: const Size(320, 80));
+      final padded = await _rasterLogoBytes(
+        tester,
+        size: const Size(800, 290),
+        visible: const Rect.fromLTWH(240, 105, 320, 80),
+      );
+      Size? trimmedSlot;
+      for (final bytes in [trimmed, padded]) {
+        await tester.pumpWidget(
+          _logoApp(
+            bytes,
+            maximumSize: const Size(768, 128),
+            minimumVisibleSize: const Size(96, 25.6),
+            maximumVisibleHeight: 64,
+            reserveVisibleSlot: true,
+            fitVisibleContent: true,
+          ),
+        );
+        await _waitForImageDecode(tester);
+        expect(find.byKey(const Key('accepted-logo')), findsOneWidget);
+        final slot = tester.getSize(find.byType(ClearLogoImage));
+        expect(slot.height, 64);
+        if (trimmedSlot == null) {
+          trimmedSlot = slot;
+        } else {
+          // Alpha bounding is measured on a bounded decode with a small margin.
+          expect(slot.width, closeTo(trimmedSlot.width, 20));
+        }
+      }
+    },
+  );
+
   testWidgets('desktop rejects empty alpha and keeps padded contain geometry', (
     tester,
   ) async {
@@ -466,6 +501,7 @@ Widget _logoApp(
   Size maximumSize = const Size(420, 84),
   double dpr = 1,
   bool reserveVisibleSlot = false,
+  bool fitVisibleContent = false,
 }) => MaterialApp(
   home: MediaQuery(
     data: MediaQueryData(devicePixelRatio: dpr),
@@ -479,6 +515,7 @@ Widget _logoApp(
           minimumVisibleSize: minimumVisibleSize,
           maximumVisibleHeight: maximumVisibleHeight,
           reserveVisibleSlot: reserveVisibleSlot,
+          fitVisibleContent: fitVisibleContent,
           imageKey: const Key('accepted-logo'),
           fallback: const Text('Readable title'),
         ),

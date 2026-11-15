@@ -16,6 +16,7 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:lineup_desktop/ui/lineup_canvas.dart';
 import 'package:lineup_desktop/app/lineup_controller.dart';
 import 'package:lineup_desktop/channels/channel.dart';
+import 'package:lineup_desktop/channels/channel_filter.dart';
 import 'package:lineup_desktop/channels/scheduler.dart';
 import 'package:lineup_desktop/guide/guide_controller.dart';
 import 'package:lineup_desktop/guide/guide_view.dart';
@@ -179,11 +180,7 @@ void main() {
       ),
     );
     await tester.pumpAndSettle();
-    for (final label in [
-      'Close Guide',
-      'Earlier by 30 minutes',
-      'Later by 30 minutes',
-    ]) {
+    for (final label in ['Earlier by 30 minutes', 'Later by 30 minutes']) {
       final node = tester.getSemantics(find.byTooltip(label));
       expect(node.label, label);
       expect(node.getSemanticsData().flagsCollection.isButton, isTrue);
@@ -1331,6 +1328,7 @@ void main() {
       tester.view.devicePixelRatio = 1;
       addTearDown(tester.view.resetPhysicalSize);
       addTearDown(tester.view.resetDevicePixelRatio);
+      var now = DateTime.utc(2026, 1, 15, 3, 28);
       final pending = <String, Completer<Uint8List?>>{};
       final lineup = _Lineup(
         2,
@@ -1359,13 +1357,14 @@ void main() {
               ),
             ]),
             playbackMode: PlaybackMode.sequential,
-            anchor: DateTime.now().subtract(const Duration(hours: 1)),
+            anchor: now.subtract(const Duration(hours: 1)),
             shuffleSeed: i,
           ),
       ]);
       addTearDown(lineup.dispose);
       final guide = GuideController(
         lineup: lineup,
+        clock: () => now,
         loadSchedule: (c) async => _schedule(c),
       );
       addTearDown(guide.dispose);
@@ -1400,6 +1399,25 @@ void main() {
       await tester.pumpAndSettle();
       pending['/backdrop-0']!.complete(_tinyPng);
       await tester.pumpAndSettle();
+      final focusedId = guide.focusedProgramId;
+      for (final state in [
+        AppLifecycleState.inactive,
+        AppLifecycleState.hidden,
+        AppLifecycleState.paused,
+      ]) {
+        tester.binding.handleAppLifecycleStateChanged(state);
+      }
+      now = now.add(const Duration(minutes: 4));
+      for (final state in [
+        AppLifecycleState.hidden,
+        AppLifecycleState.inactive,
+        AppLifecycleState.resumed,
+      ]) {
+        tester.binding.handleAppLifecycleStateChanged(state);
+      }
+      await tester.pumpAndSettle();
+      expect(guide.focusedProgramId, focusedId);
+      expect(find.text('Choose a channel to watch'), findsNothing);
       final idle = tester.widget<Image>(
         find.byKey(const Key('guide-idle-backdrop')),
       );
@@ -1410,7 +1428,14 @@ void main() {
           (image.image as CoverResizeImage).imageProvider as MemoryImage;
       expect(source(idle).bytes, same(_wideLogoPng));
       expect(source(info).bytes, same(source(idle).bytes));
-      expect(find.text('Select to watch · Channel 1'), findsOneWidget);
+      final caption = find.byKey(const Key('guide-idle-caption'));
+      final artwork = find.byKey(const Key('guide-idle-artwork'));
+      expect(tester.widget<Text>(caption).data, 'Select to watch');
+      expect(tester.getTopLeft(caption).dx - tester.getTopLeft(artwork).dx, 24);
+      expect(
+        tester.getBottomRight(artwork).dy - tester.getBottomRight(caption).dy,
+        24,
+      );
       final switcher = find.descendant(
         of: find.byKey(const Key('guide-picture-in-picture')),
         matching: find.byType(AnimatedSwitcher),
@@ -2874,6 +2899,13 @@ void main() {
       expect(label(earlier), contains('currently airing'));
       expect(label(next), contains('upcoming'));
       expect(marker(earlier), findsOneWidget);
+      final markerElement = tester.element(marker(earlier));
+      final cellStack = markerElement.findAncestorWidgetOfExactType<Stack>()!;
+      // The marker must be drawn inside the cell, before its content.
+      expect(
+        cellStack.children.map((child) => child.runtimeType.toString()),
+        containsAllInOrder(['_ProgramNowLine', 'Padding']),
+      );
       expect(
         tester
             .widget<Text>(find.byKey(const Key('guide-now-playing-context')))
@@ -4563,6 +4595,7 @@ void main() {
               return KeyEventResult.ignored;
             },
             child: GuideView(
+              watchingChannelId: ready.id,
               controller: guide,
               focusNode: grid,
               onClose: (_, _) => closes++,
@@ -4600,7 +4633,7 @@ void main() {
       expect(chords, 1);
       expect(closes, 0);
 
-      await focus(find.byTooltip('Close Guide'));
+      await focus(find.byKey(const Key('guide-back-to-player')));
       await tester.sendKeyEvent(activation);
       await tester.pumpAndSettle();
       expect(closes, 1);
@@ -5128,6 +5161,7 @@ void main() {
           libraryId: libraryId,
           libraryType: PlexLibraryType.show,
         ),
+        sourceLibraries: const {libraryId: libraryId},
         playbackMode: PlaybackMode.sequential,
         anchor: DateTime.now(),
         shuffleSeed: 1,
@@ -5158,17 +5192,20 @@ void main() {
       find.byKey(const Key('guide-channel-search')),
       'Library',
     );
-    guide.setLibraryFilter(libraryId);
+    guide.setChannelFilter((
+      group: ChannelFilterGroup.library,
+      value: libraryId,
+    ));
     await tester.pump();
 
     final label = find.byKey(const Key('guide-active-library-label'));
     expect(label, findsOneWidget);
-    expect(find.text('Libraries'), findsOneWidget);
+    expect(find.text('Channel filter'), findsOneWidget);
     expect(tester.widget<Text>(label).data, libraryId);
     expect(_drawnSize(tester, label).height, greaterThan(16));
-    await tester.tap(find.byTooltip('Remove library filter'));
+    await tester.tap(find.byTooltip('Remove channel filter'));
     await tester.pump();
-    expect(guide.libraryFilterId, isNull);
+    expect(guide.channelFilterKey, ChannelFilter.all);
     expect(guide.searchQuery, 'library');
 
     guide.dispose();

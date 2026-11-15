@@ -112,6 +112,14 @@ fallback. In the non-dense desktop band, `k = clamp((band − 28)/296, 1, 1.4)`
 scales the title, episode line and title art. The synopsis scales by
 `1 + (k − 1)/2`. Use the base title size when the scaled title exceeds one line.
 
+UX assessment decision, 2026-11-13/14: keep the now-line behind cell text.
+Place the idle watch prompt over a bottom gradient, 24 px from the bottom and
+leading edges; keep channel identity in the information block. Keep the
+toolbar filter in place and show counts for All channels, Favourites when
+present, available source types, and libraries. On desktop **Back to player**
+appears only during active playback; TV uses Back. Fit TV title logos using
+their visible content within the approved information slot.
+
 ## Player: Protected Baseline
 
 The OSD and its expanded Now Playing state are the approved structural

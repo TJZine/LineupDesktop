@@ -6,6 +6,7 @@ import 'package:flutter/services.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:lineup_desktop/app/lineup_controller.dart';
 import 'package:lineup_desktop/channels/channel.dart';
+import 'package:lineup_desktop/channels/channel_filter.dart';
 import 'package:lineup_desktop/channels/scheduler.dart';
 import 'package:lineup_desktop/guide/guide_controller.dart';
 import 'package:lineup_desktop/guide/guide_view.dart';
@@ -37,6 +38,7 @@ void main() {
                 libraryId: 'movies-$i',
                 libraryType: PlexLibraryType.movie,
               ),
+              sourceLibraries: {'movies-$i': 'Synthetic movies $i'},
               playbackMode: PlaybackMode.sequential,
               anchor: now,
               shuffleSeed: i,
@@ -100,9 +102,7 @@ void main() {
           );
           await tester.pumpAndSettle();
           final picker = find.byKey(const Key('guide-library-picker'));
-          final node = tester
-              .widget<DropdownButton<String?>>(picker)
-              .focusNode!;
+          final node = tester.widget<InkWell>(picker).focusNode!;
           await tester.sendKeyEvent(LogicalKeyboardKey.arrowLeft);
           node.requestFocus();
           await tester.pumpAndSettle();
@@ -112,6 +112,7 @@ void main() {
             final text = find.text('Synthetic movies $i');
             expect(text, findsOneWidget);
             final paragraph = tester.renderObject<RenderParagraph>(text);
+            expect(paragraph.didExceedMaxLines, isFalse);
             final painter = TextPainter(
               text: paragraph.text,
               textDirection: paragraph.textDirection,
@@ -126,7 +127,9 @@ void main() {
             final item = find
                 .ancestor(
                   of: text,
-                  matching: find.byType(DropdownMenuItem<String?>),
+                  matching: find.byWidgetPredicate(
+                    (widget) => widget is PopupMenuEntry<ChannelFilterKey>,
+                  ),
                 )
                 .first;
             expect(

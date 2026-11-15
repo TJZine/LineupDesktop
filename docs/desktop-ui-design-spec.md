@@ -28,7 +28,7 @@ composition only, not Flutter correctness, accessibility or physical Windows pro
 | Review/results | Overview and composition bar above full-width roster; explicit, accurate apply/results |
 | Channels | Full-width directory; search, type filters, bulk deletion and explicit reorder mode |
 | Studio | Programming left, persistent schedule right; compact top settings; full source/draft safeguards |
-| Full Guide | PiP only; five comfortable rows; title-first cells; persistent search/library picker; 2/3/4 hours |
+| Full Guide | PiP only; five comfortable rows; title-first cells; persistent search/channel filter; 2/3/4 hours |
 | Mini Guide | Five nearby channels from top edge; shaped fade; selected-row tickers |
 | Tracks/timer | Right-edge track panels; small explicit playback-stop timer picker |
 | Diagnostics | Four summary groups above wide event list; technical disclosure; redacted report |
@@ -138,17 +138,19 @@ This supersedes earlier references to the configurable Guide past-time decision.
 - Single-click inspects; double-click and Enter/remote Select tune the airing
   program. Past/future entries remain inspection-only. Returning to the currently
   tuned channel must not restart it.
-- Library picker above channel column; one actual Plex library or All libraries.
-  Show a full wrapping removable library label above the schedule. Removing it
-  retains search. No multi-library selection in this package.
-- Search by channel name/number within library scope. Search is always visible
+- Channel filter above the channel column. Show counts for All channels,
+  Favourites when present, the available source types, and libraries. A wrapping
+  removable label identifies the active filter. Removing it retains search.
+  A fresh app launch or a disappeared filter returns to All channels.
+  UX assessment decision, 2026-11-13/14.
+- Search by channel name/number within the selected filter. Search is always visible
   in the approved control strip; no show/hide preference or collapsed mode.
   Ctrl+F focuses the field. Escape in a nonempty field clears its query and
   retains field focus; Escape in an empty field returns focus to the Guide
   without hiding search. That event must not also trigger Guide Back; a subsequent
   Escape follows normal Guide Back behavior. Backspace remains text editing.
-- Preserve session search, library, time and inspection across Guide/Player/
-  Settings. Restart/profile/server change resets transient search/library/time.
+- Preserve session search, filter, time and inspection across Guide/Player/
+  Settings. Restart/profile/server change resets transient search/filter/time.
   Now resets time while retaining filters. Filtering never retunes.
 - Preserve presentation preferences through the existing settings owner, except
   the explicitly retired history/density settings and narrowed time-span choices
@@ -1484,15 +1486,12 @@ does not remove PiP or the inspected-program information area. Do not add a butt
 or another header row; final layout must avoid crowding navigation. This concerns
 Guide context only, not the protected Player Now Playing shelf redesign.
 
-### Library picker availability — locked
+### Channel filter availability — locked
 
-Remove the Library filters show/hide preference. Keep the library picker available
-in its approved position above the channel column; All libraries provides the
-unfiltered view. A previously saved disabled preference must not hide the picker
-or disable filtering in the revised Guide. Preserve the approved session filter
-and reset rules. This replaces the previous ability to hide the control and clear
-the active filter by disabling the preference; it does not add multiple-library
-selection or change filtering behavior.
+Keep the channel filter available in its approved position above the channel
+column. All channels provides the unfiltered scope. The former show/hide
+preference does not affect filtering. The counted choices and reset rules are
+documented under Full Guide (UX assessment decision, 2026-11-13/14).
 
 Source basis: SettingsView in `lib/app/lineup_shell.dart` currently groups player
 auto-hide and DVR controls with Guide settings, and separates Appearance,

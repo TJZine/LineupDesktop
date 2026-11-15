@@ -7,6 +7,7 @@ import 'package:flutter/rendering.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:lineup_desktop/app/lineup_controller.dart';
 import 'package:lineup_desktop/channels/channel.dart';
+import 'package:lineup_desktop/channels/channel_filter.dart';
 import 'package:lineup_desktop/channels/scheduler.dart';
 import 'package:lineup_desktop/guide/guide_controller.dart';
 import 'package:lineup_desktop/guide/guide_view.dart';
@@ -605,6 +606,7 @@ void main() {
                   libraryId: 'library',
                   libraryType: PlexLibraryType.show,
                 ),
+                sourceLibraries: const {'library': 'Library'},
                 playbackMode: original.playbackMode,
                 anchor: original.anchor,
                 shuffleSeed: original.shuffleSeed,
@@ -612,7 +614,10 @@ void main() {
               ...channels.skip(1),
             ]);
             await tester.pumpAndSettle();
-            guide.setLibraryFilter('library');
+            guide.setChannelFilter((
+              group: ChannelFilterGroup.library,
+              value: 'library',
+            ));
             await tester.pumpAndSettle();
             expect(guide.channels, hasLength(1));
             expect(
@@ -620,7 +625,7 @@ void main() {
               numberWidth,
               reason: 'Library filtering must retain the whole-lineup column',
             );
-            guide.setLibraryFilter(null);
+            guide.setChannelFilter(ChannelFilter.all);
             await tester.pumpAndSettle();
             for (final maximum in [999, 1]) {
               await lineup.deleteChannels(

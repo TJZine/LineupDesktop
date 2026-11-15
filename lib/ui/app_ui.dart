@@ -563,6 +563,7 @@ class ClearLogoImage extends StatefulWidget {
     this.minimumVisibleSize,
     this.maximumVisibleHeight,
     this.reserveVisibleSlot = false,
+    this.fitVisibleContent = false,
     super.key,
   });
 
@@ -581,6 +582,9 @@ class ClearLogoImage extends StatefulWidget {
   /// Reserve [maximumVisibleHeight] for accepted artwork and use that height
   /// for the usability check. The fallback keeps its own dimensions.
   final bool reserveVisibleSlot;
+
+  /// Fit the detected alpha bounds rather than the full padded raster.
+  final bool fitVisibleContent;
 
   @override
   State<ClearLogoImage> createState() => _ClearLogoImageState();
@@ -670,23 +674,39 @@ class _ClearLogoImageState extends State<ClearLogoImage> {
       );
       if (request != _request) _load(request);
       final raster = _raster;
-      if (raster == null ||
-          !clearLogoIsUsable(
-            raster.intrinsicSize,
-            constraints,
-            visibleSlotHeight: widget.reserveVisibleSlot
-                ? widget.maximumVisibleHeight
-                : null,
-          )) {
+      if (raster == null) return widget.fallback;
+      final fraction = raster.visibleFraction;
+      final intrinsic = raster.intrinsicSize;
+      final fitSize = widget.fitVisibleContent
+          ? Size(
+              intrinsic.width * fraction.width,
+              intrinsic.height * fraction.height,
+            )
+          : intrinsic;
+      if (!clearLogoIsUsable(
+        fitSize,
+        constraints,
+        visibleSlotHeight: widget.reserveVisibleSlot
+            ? widget.maximumVisibleHeight
+            : null,
+      )) {
         return widget.fallback;
       }
-      final fraction = raster.visibleFraction;
       var fitted = applyBoxFit(
         BoxFit.contain,
-        raster.intrinsicSize,
+        fitSize,
         constraints.biggest,
       ).destination;
+      if (widget.fitVisibleContent) {
+        // Convert the fitted visible bounds back to the full raster's paint
+        // rectangle. The surrounding clip leaves only the visible bounds.
+        fitted = Size(
+          fitted.width / fraction.width,
+          fitted.height / fraction.height,
+        );
+      }
       final crop =
+          widget.fitVisibleContent ||
           widget.minimumVisibleSize != null ||
           widget.maximumVisibleHeight != null;
       if (crop) {

@@ -4,6 +4,7 @@ import 'package:flutter/services.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:lineup_desktop/app/lineup_controller.dart';
 import 'package:lineup_desktop/channels/channel.dart';
+import 'package:lineup_desktop/channels/channel_filter.dart';
 import 'package:lineup_desktop/channels/content_resolver.dart';
 import 'package:lineup_desktop/channels/scheduler.dart';
 import 'package:lineup_desktop/guide/guide_view.dart';
@@ -228,8 +229,7 @@ void main() {
   for (final control in [
     'Earlier by 30 minutes',
     'Now',
-    'Close Guide',
-    'Remove library filter',
+    'Remove channel filter',
   ]) {
     testWidgets('Guide $control restores its live keyboard invoker', (
       tester,
@@ -241,8 +241,11 @@ void main() {
       final liveStart = guide.windowStart;
       if (control == 'Earlier by 30 minutes' || control == 'Now') {
         guide.moveWindow(1);
-      } else if (control == 'Remove library filter') {
-        guide.setLibraryFilter('movies');
+      } else if (control == 'Remove channel filter') {
+        guide.setChannelFilter((
+          group: ChannelFilterGroup.library,
+          value: 'movies',
+        ));
       }
       await tester.pumpAndSettle();
       final button = control == 'Now'
@@ -267,10 +270,8 @@ void main() {
         case 'Earlier by 30 minutes':
         case 'Now':
           expect(guide.windowStart, liveStart);
-        case 'Close Guide':
-          expect(find.byKey(const Key('immersive-app-menu')), findsOneWidget);
-        case 'Remove library filter':
-          expect(guide.libraryFilterId, isNull);
+        case 'Remove channel filter':
+          expect(guide.channelFilterKey, ChannelFilter.all);
       }
       expect(fixture.player.loads, isEmpty);
       await tester.pumpWidget(const SizedBox.shrink());
@@ -361,21 +362,24 @@ void main() {
     await tester.pumpWidget(fixture.build());
     await tester.pumpAndSettle();
     final guide = tester.widget<GuideView>(find.byType(GuideView)).controller;
-    guide.setLibraryFilter('movies');
+    guide.setChannelFilter((
+      group: ChannelFilterGroup.library,
+      value: 'movies',
+    ));
     await tester.pumpAndSettle();
     _controlFocus(
       tester,
-      find.byTooltip('Remove library filter'),
+      find.byTooltip('Remove channel filter'),
     ).requestFocus();
     await tester.pump();
     await tester.sendKeyEvent(LogicalKeyboardKey.escape);
     await tester.pumpAndSettle();
     expect(find.byKey(const Key('immersive-app-menu')), findsOneWidget);
-    guide.setLibraryFilter(null);
+    guide.setChannelFilter(ChannelFilter.all);
     await tester.pumpAndSettle();
     await tester.sendKeyEvent(LogicalKeyboardKey.escape);
     await tester.pumpAndSettle();
-    expect(find.byTooltip('Remove library filter'), findsNothing);
+    expect(find.byTooltip('Remove channel filter'), findsNothing);
     expect(FocusManager.instance.primaryFocus?.debugLabel, 'Guide');
     expect(tester.takeException(), isNull);
     await tester.pumpWidget(const SizedBox.shrink());
@@ -544,6 +548,7 @@ Channel _channel() => Channel(
     libraryId: 'movies',
     libraryType: PlexLibraryType.movie,
   ),
+  sourceLibraries: const {'movies': 'Movies'},
   playbackMode: PlaybackMode.shuffle,
   anchor: DateTime.utc(2026),
   shuffleSeed: 7,
