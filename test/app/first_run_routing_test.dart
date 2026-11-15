@@ -5,6 +5,8 @@ import 'package:flutter/services.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:http/http.dart' as http;
 import 'package:http/testing.dart';
+import 'package:lineup_desktop/app/channel_setup/library_step.dart';
+import 'package:lineup_desktop/app/channel_setup_view.dart';
 import 'package:lineup_desktop/app/lineup_controller.dart';
 import 'package:lineup_desktop/app/lineup_shell.dart';
 import 'package:lineup_desktop/channels/channel.dart';
@@ -19,6 +21,19 @@ const _owner = PlexHomeUser(id: 'owner', name: 'Owner', protected: false);
 const _viewer = PlexHomeUser(id: 'viewer', name: 'Viewer', protected: true);
 const _accountToken = 'synthetic-account';
 const _profileToken = 'synthetic-viewer';
+
+PlexLibraryScan _playableScan() => PlexLibraryScan(
+  items: [
+    PlexMediaItem(
+      id: 'movie',
+      title: 'Synthetic movie',
+      type: 'movie',
+      libraryId: 'movies',
+      duration: const Duration(minutes: 30),
+      parts: [PlexMediaPart(path: '/synthetic/movie')],
+    ),
+  ],
+);
 
 void main() {
   test(
@@ -211,6 +226,30 @@ void main() {
     expect(controller.firstLibrariesOrigin, isNull);
   });
 
+  test(
+    'nested setup reentry keeps a new profile’s sole server explicit',
+    () async {
+      final fixture = _RoutingFixture(profiles: [_owner, _viewer]);
+      final controller = fixture.controller;
+      await controller.initialize();
+      await controller.selectProfile(_owner);
+      expect(controller.firstLibrariesOrigin, FirstLibrariesOrigin.profiles);
+      fixture.plex.scanResult = _playableScan();
+      expect(await controller.scanLibraries({'movies'}), isTrue);
+      expect(await controller.commitLibraryScan({'movies'}), isTrue);
+      controller.completeChannelSetup();
+      await controller.enterChannelSetup();
+
+      controller.showServers();
+      controller.showProfiles();
+      expect(await controller.selectProfile(_viewer, pin: '1234'), isTrue);
+      expect(controller.stage, SetupStage.servers);
+      expect(fixture.plex.probes, [('media', 'synthetic-owner-pms')]);
+      await controller.selectServer(controller.servers.single);
+      expect(controller.firstLibrariesOrigin, isNull);
+    },
+  );
+
   testWidgets('TV Back cancels a scan and returns from Channels to Libraries', (
     tester,
   ) async {
@@ -233,20 +272,7 @@ void main() {
     expect(controller.firstLibrariesOrigin, FirstLibrariesOrigin.signIn);
     expect(find.text('Choose libraries'), findsOneWidget);
 
-    scan.complete(
-      PlexLibraryScan(
-        items: [
-          PlexMediaItem(
-            id: 'movie',
-            title: 'Synthetic movie',
-            type: 'movie',
-            libraryId: 'movies',
-            duration: const Duration(minutes: 30),
-            parts: [PlexMediaPart(path: '/synthetic/movie')],
-          ),
-        ],
-      ),
-    );
+    scan.complete(_playableScan());
     fixture.plex.scanGate = null;
     await tester.pumpAndSettle();
     fixture.plex.scanResult = await scan.future;
@@ -308,37 +334,217 @@ void main() {
       },
     );
 
-    testWidgets('first Libraries Back securely returns to sign-in (TV=$tv)', (
-      tester,
-    ) async {
-      final fixture = _RoutingFixture(signedIn: false);
-      final player = _GatedStopPlayer();
-      await _show(tester, fixture, tv: tv, player: player);
-      await tester.tap(find.text('Sign in to Plex'));
-      await tester.pump();
-      expect(fixture.controller.activePin, isNotNull);
-      await tester.pump(const Duration(seconds: 1));
-      await tester.pumpAndSettle();
-      expect(find.text('Choose a server'), findsNothing);
-      expect(find.text('Choose libraries'), findsOneWidget);
-      expect(fixture.plex.pinPolls, 1);
+    testWidgets(
+      'nested first Libraries picker opens the new profile’s sole server (TV=$tv)',
+      (tester) async {
+        final fixture = _RoutingFixture(profiles: [_owner, _viewer]);
+        final controller = fixture.controller;
+        await controller.initialize();
+        await _show(tester, fixture, tv: tv);
 
-      final stop = player.stopGate = Completer<void>();
-      await _back(tester, tv: tv, label: 'Back to sign-in');
-      expect(fixture.credentials.accountToken, _accountToken);
-      expect(fixture.controller.stage, SetupStage.channelSetup);
-      stop.complete();
-      await tester.pumpAndSettle();
+        await tester.tap(find.byKey(const ValueKey('profile-card-owner')));
+        await tester.pumpAndSettle();
+        expect(controller.firstLibrariesOrigin, FirstLibrariesOrigin.profiles);
 
-      expect(find.text('Sign in to Plex'), findsOneWidget);
-      expect(fixture.credentials.accountToken, isNull);
-      expect(fixture.credentials.profileTokens, isEmpty);
-      expect(fixture.controller.activePin, isNull);
-      expect(fixture.controller.server, isNull);
-      expect(fixture.store.state.selectedServerByProfile, {'owner': 'media'});
-      await tester.pump(const Duration(seconds: 2));
-      expect(fixture.plex.pinPolls, 1);
-    });
+        Future<void> openNestedPicker() async {
+          await tester.tap(find.text('Switch server'));
+          await tester.pumpAndSettle();
+          await tester.tap(find.text('Switch profile'));
+          await tester.pumpAndSettle();
+          expect(controller.stage, SetupStage.profiles);
+          expect(controller.profile?.id, 'owner');
+          expect(controller.server?.id, 'media');
+        }
+
+        await openNestedPicker();
+        await _back(tester, tv: tv, label: 'Back');
+        expect(controller.stage, SetupStage.servers);
+        await _back(tester, tv: tv, label: 'Back');
+        expect(controller.firstLibrariesOrigin, FirstLibrariesOrigin.profiles);
+        expect(fixture.plex.probes, [('media', 'synthetic-owner-pms')]);
+
+        await openNestedPicker();
+        await tester.tap(find.byKey(const ValueKey('profile-card-viewer')));
+        await tester.pumpAndSettle();
+        final probe = Completer<int>();
+        fixture.plex.probeResponses['media'] = probe.future;
+        await _submitPin(tester);
+        await tester.pump();
+        expect(find.text('Choose a server'), findsNothing);
+        expect(controller.busy, isTrue);
+        expect(fixture.plex.probes.last, ('media', 'synthetic-viewer-pms'));
+
+        probe.complete(200);
+        await tester.pumpAndSettle();
+        expect(find.text('Choose libraries'), findsOneWidget);
+        expect(controller.firstLibrariesOrigin, FirstLibrariesOrigin.profiles);
+        expect(controller.profile?.id, 'viewer');
+        expect(fixture.store.state.selectedServerByProfile, {
+          'owner': 'media',
+          'viewer': 'media',
+        });
+        await _back(tester, tv: tv, label: 'Back to profiles');
+        expect(controller.stage, SetupStage.profiles);
+        expect(controller.profile, isNull);
+        expect(controller.server, isNull);
+        expect(controller.connection, isNull);
+        expect(controller.firstLibrariesOrigin, isNull);
+      },
+    );
+
+    for (final failStop in [false, true]) {
+      testWidgets(
+        'first Libraries sign-in Back fences setup actions (TV=$tv, failed stop=$failStop)',
+        (tester) async {
+          final fixture = _RoutingFixture(signedIn: false);
+          final controller = fixture.controller;
+          final player = _GatedStopPlayer();
+          await _show(tester, fixture, tv: tv, player: player);
+          await tester.tap(find.text('Sign in to Plex'));
+          await tester.pump();
+          expect(controller.activePin, isNotNull);
+          await tester.pump(const Duration(seconds: 1));
+          await tester.pumpAndSettle();
+          expect(find.text('Choose a server'), findsNothing);
+          expect(find.text('Choose libraries'), findsOneWidget);
+          expect(fixture.plex.pinPolls, 1);
+
+          final scanAction = find.byKey(
+            const ValueKey('scan-selected-libraries'),
+          );
+          final switchAction = find.byKey(
+            const ValueKey('setup-switch-server'),
+          );
+          final staleSwitch = tester
+              .widget<TextButton>(switchAction)
+              .onPressed!;
+          final staleBack = tv
+              ? null
+              : tester
+                    .widget<TextButton>(
+                      find.widgetWithText(TextButton, 'Back to sign-in'),
+                    )
+                    .onPressed;
+          final staleScan = tester.widget<FilledButton>(scanAction).onPressed!;
+          final staleCommit = tester
+              .widget<SetupLibraryStep>(find.byType(SetupLibraryStep))
+              .onCommit;
+          final beforeState = fixture.store.state;
+          final saves = fixture.store.savedStates.length;
+          final stop = player.stopGate = Completer<void>();
+          if (failStop) {
+            // Deliver Back when the scan settles, before the view's async scan
+            // continuation can implicitly commit the ready libraries.
+            final setup = tester.state<UpstreamChannelSetupViewState>(
+              find.byType(UpstreamChannelSetupView),
+            );
+            var backStarted = false;
+            void backOnSettledScan() {
+              if (!backStarted &&
+                  !controller.busy &&
+                  controller.libraryScanStatus == LibraryScanStatus.complete) {
+                backStarted = true;
+                expect(setup.handleBack(), isTrue);
+              }
+            }
+
+            controller.addListener(backOnSettledScan);
+            fixture.plex.scanResult = _playableScan();
+            await tester.tap(scanAction);
+            await tester.pumpAndSettle();
+            controller.removeListener(backOnSettledScan);
+            expect(backStarted, isTrue);
+            expect(fixture.plex.libraryScans, 1);
+            expect(
+              tester
+                  .widget<FilledButton>(
+                    find.byKey(const ValueKey('continue-ready-libraries')),
+                  )
+                  .onPressed,
+              isNull,
+            );
+            expect(
+              tester
+                  .widget<OutlinedButton>(
+                    find.byKey(const ValueKey('scan-again-libraries')),
+                  )
+                  .onPressed,
+              isNull,
+            );
+          } else {
+            await _back(tester, tv: tv, label: 'Back to sign-in');
+            expect(tester.widget<FilledButton>(scanAction).onPressed, isNull);
+          }
+          expect(tester.widget<TextButton>(switchAction).onPressed, isNull);
+          expect(fixture.credentials.accountToken, _accountToken);
+          expect(controller.stage, SetupStage.channelSetup);
+          expect(controller.firstLibrariesOrigin, FirstLibrariesOrigin.signIn);
+          expect(fixture.store.savedStates, hasLength(saves));
+
+          // Old callbacks can still arrive after the authorization transition
+          // starts, including before the next frame.
+          staleSwitch();
+          staleScan();
+          await staleCommit({'movies'});
+          await tester.pumpAndSettle();
+          expect(controller.stage, SetupStage.channelSetup);
+          expect(fixture.plex.libraryScans, failStop ? 1 : 0);
+          expect(fixture.store.state, same(beforeState));
+          expect(fixture.store.savedStates, hasLength(saves));
+
+          if (failStop) {
+            stop.completeError(StateError('Synthetic stop failure'));
+            await tester.pumpAndSettle();
+            expect(find.text('Could not sign out'), findsOneWidget);
+            expect(find.text('You are still signed in.'), findsOneWidget);
+            expect(controller.server?.id, 'media');
+            expect(fixture.credentials.accountToken, _accountToken);
+            expect(fixture.store.savedStates, hasLength(saves));
+
+            player.stopGate = null;
+            await tester.tap(find.text('Retry stopping playback'));
+            await tester.pumpAndSettle();
+            expect(find.text('Could not sign out'), findsNothing);
+            expect(fixture.credentials.accountToken, _accountToken);
+            expect(
+              tester.widget<TextButton>(switchAction).onPressed,
+              isNotNull,
+            );
+            expect(
+              tester
+                  .widget<FilledButton>(
+                    find.byKey(const ValueKey('continue-ready-libraries')),
+                  )
+                  .onPressed,
+              isNotNull,
+            );
+            expect(fixture.store.savedStates, hasLength(saves));
+            await _back(tester, tv: tv, label: 'Back to sign-in');
+          } else {
+            stop.complete();
+            await tester.pumpAndSettle();
+          }
+
+          expect(find.text('Sign in to Plex'), findsOneWidget);
+          staleBack?.call();
+          staleSwitch();
+          staleScan();
+          await staleCommit({'movies'});
+          expect(controller.stage, SetupStage.welcome);
+          expect(fixture.credentials.accountToken, isNull);
+          expect(fixture.credentials.profileTokens, isEmpty);
+          expect(controller.activePin, isNull);
+          expect(controller.server, isNull);
+          expect(controller.firstLibrariesOrigin, isNull);
+          expect(fixture.store.state.selectedServerByProfile, {
+            'owner': 'media',
+          });
+          expect(fixture.store.savedStates, hasLength(saves));
+          await tester.pump(const Duration(seconds: 2));
+          expect(fixture.plex.pinPolls, 1);
+        },
+      );
+    }
   }
 
   testWidgets(
@@ -488,6 +694,7 @@ class _RoutingPlex extends PlexClient {
   final Completer<void> firstProbe;
   final profileSwitches = <String?>[];
   int pinPolls = 0;
+  int libraryScans = 0;
   bool libraryAuthorizationDenied = false;
   PlexLibraryScan scanResult = const PlexLibraryScan(items: []);
   Completer<PlexLibraryScan>? scanGate;
@@ -502,8 +709,8 @@ class _RoutingPlex extends PlexClient {
   @override
   Future<String> switchHomeUser(String token, String id, String? pin) async {
     profileSwitches.add(pin);
-    expect(id, 'viewer');
-    return _profileToken;
+    expect(id, anyOf('viewer', 'owner'));
+    return id == 'viewer' ? _profileToken : _accountToken;
   }
 
   @override
@@ -567,7 +774,10 @@ class _RoutingPlex extends PlexClient {
     required void Function(PlexLibraryPageProgress progress) onProgress,
     void Function(PlexLibraryScanPhase phase)? onPhase,
     Future<void>? cancelled,
-  }) async => scanGate == null ? scanResult : scanGate!.future;
+  }) async {
+    libraryScans++;
+    return scanGate?.future ?? scanResult;
+  }
 
   @override
   Future<PlexPlaylistCatalog> playlists(

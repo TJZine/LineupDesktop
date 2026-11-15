@@ -21,6 +21,9 @@ enum SetupStage { welcome, linking, profiles, servers, channelSetup, ready }
 
 enum FirstLibrariesOrigin { profiles, signIn }
 
+// Startup can open the first Libraries step without a Back destination.
+enum _FirstLibrariesEntry { startup, profiles, signIn }
+
 /// The current server selection exhausted the available connection routes.
 @immutable
 final class ServerProbeFailure extends PlexException {
@@ -44,11 +47,13 @@ class _PickerOrigin {
     required this.stage,
     this.restoring = false,
     this.canCancelSetup = false,
+    this.fromFirstLibraries = false,
   });
 
   final SetupStage stage;
   final bool restoring;
   final bool canCancelSetup;
+  final bool fromFirstLibraries;
 }
 
 @immutable
@@ -332,11 +337,19 @@ class LineupController extends ChangeNotifier {
   bool get restoringSavedLineup => _restoringSavedLineup;
   _PickerOrigin? _profilePickerOrigin;
   _PickerOrigin? _serverPickerOrigin;
-  FirstLibrariesOrigin? _firstLibrariesOrigin;
-  FirstLibrariesOrigin? get firstLibrariesOrigin =>
-      stage == SetupStage.channelSetup && !restoringSavedLineup
-      ? _firstLibrariesOrigin
-      : null;
+  _FirstLibrariesEntry? _firstLibrariesEntry;
+  bool get _onFirstLibraries =>
+      stage == SetupStage.channelSetup &&
+      !restoringSavedLineup &&
+      _firstLibrariesEntry != null;
+
+  FirstLibrariesOrigin? get firstLibrariesOrigin => !_onFirstLibraries
+      ? null
+      : switch (_firstLibrariesEntry) {
+          _FirstLibrariesEntry.profiles => FirstLibrariesOrigin.profiles,
+          _FirstLibrariesEntry.signIn => FirstLibrariesOrigin.signIn,
+          _ => null,
+        };
 
   ServerProbeFailure? _serverProbeFailure;
   ServerProbeFailure? get serverProbeFailure => _serverProbeFailure;
@@ -599,7 +612,7 @@ class LineupController extends ChangeNotifier {
           _stage = SetupStage.profiles;
           return;
         }
-        await _discover(operation, firstRun: true);
+        await _discover(operation, entry: _FirstLibrariesEntry.startup);
       },
       operation: operation,
       fallbackStage: SetupStage.welcome,
@@ -745,11 +758,7 @@ class LineupController extends ChangeNotifier {
       } else {
         _profileToken = token;
         await _run(
-          () => _discover(
-            operation,
-            firstRun: true,
-            origin: FirstLibrariesOrigin.signIn,
-          ),
+          () => _discover(operation, entry: _FirstLibrariesEntry.signIn),
           operation: operation,
           fallbackStage: SetupStage.servers,
         );
@@ -808,16 +817,20 @@ class LineupController extends ChangeNotifier {
   /// subsequent server discovery or saved-server reconnect outcome.
   Future<bool> selectProfile(PlexHomeUser selected, {String? pin}) async {
     final entryStage = stage;
-    final origin = switch (entryStage) {
-      SetupStage.linking => FirstLibrariesOrigin.signIn,
+    final fromFirstLibraries =
+        _profilePickerOrigin?.stage == SetupStage.servers &&
+        _serverPickerOrigin?.fromFirstLibraries == true;
+    final entry = switch (entryStage) {
+      SetupStage.linking => _FirstLibrariesEntry.signIn,
       SetupStage.profiles
-          when _profilePickerOrigin?.stage != SetupStage.ready &&
-              server == null =>
-        FirstLibrariesOrigin.profiles,
+          when fromFirstLibraries ||
+              (_profilePickerOrigin?.stage != SetupStage.ready &&
+                  server == null) =>
+        _FirstLibrariesEntry.profiles,
       _ => null,
     };
     final savedId = _persisted.selectedServerByProfile[selected.id];
-    final firstRun = origin != null && savedId == null;
+    final firstRun = entry != null && savedId == null;
     final operation = _invalidateOperation();
     _invalidatePmsRefresh();
     _clearServerTarget();
@@ -857,7 +870,7 @@ class LineupController extends ChangeNotifier {
     }
     if (accepted && _isCurrent(operation)) {
       await _run(
-        () => _discover(operation, firstRun: firstRun, origin: origin),
+        () => _discover(operation, entry: entry),
         operation: operation,
         fallbackStage: SetupStage.servers,
       );
@@ -953,21 +966,21 @@ class LineupController extends ChangeNotifier {
   Future<void> _discover(
     int operation, {
     bool reconnectSaved = true,
-    bool firstRun = false,
-    FirstLibrariesOrigin? origin,
+    _FirstLibrariesEntry? entry,
   }) async {
     final token = _profileToken ?? _accountToken;
     if (token == null) return;
     final profileId = profile?.id ?? account?.id;
     final savedId = savedServerId;
-    if (origin != null) {
+    final firstRun = entry != null && savedId == null;
+    if (firstRun || (entry != null && entry != _FirstLibrariesEntry.startup)) {
       final savedLineup = profileId == null || savedId == null
           ? ScopedLineup.empty
           : _persisted.lineupFor(
               LineupScope(profileKey: profileId, serverId: savedId),
             );
       if (savedLineup.libraryIds.isEmpty && savedLineup.channels.isEmpty) {
-        _firstLibrariesOrigin = origin;
+        _firstLibrariesEntry = entry;
       }
     }
     final discovered = await plex.discoverServers(token);
@@ -980,7 +993,7 @@ class LineupController extends ChangeNotifier {
     _publishServers = List.unmodifiable(
       discovered.map((access) => access.server),
     );
-    if (firstRun && savedId == null && server == null && servers.length == 1) {
+    if (firstRun && server == null && servers.length == 1) {
       await selectServer(servers.single);
       return;
     }
@@ -1147,12 +1160,12 @@ class LineupController extends ChangeNotifier {
     _publishLineup(selection.lineup);
     _stage = SetupStage.channelSetup;
     _channelSetupCanCancel = false;
-    final origin = _firstLibrariesOrigin;
+    final entry = _firstLibrariesEntry;
     _resetSetupDiscovery();
     if (_isCurrent(operation) &&
         selection.lineup.libraryIds.isEmpty &&
         selection.lineup.channels.isEmpty) {
-      _firstLibrariesOrigin = origin;
+      _firstLibrariesEntry = entry;
     }
     // A started successful save still publishes, but obsolete requests cannot
     // create restore work they will never execute.
@@ -1279,7 +1292,7 @@ class LineupController extends ChangeNotifier {
         );
         _recordChannelChanges(previous);
         _scan.didCommit(candidate);
-        _firstLibrariesOrigin = null;
+        _firstLibrariesEntry = null;
         committed = true;
         _contentGeneration++;
         notifyListeners();
@@ -1644,7 +1657,7 @@ class LineupController extends ChangeNotifier {
 
   Future<void> enterChannelSetup() async {
     _scenarioOpen = false;
-    _firstLibrariesOrigin = null;
+    _firstLibrariesEntry = null;
     _channelSetupCanCancel = stage == SetupStage.ready;
     _stage = SetupStage.channelSetup;
     notifyListeners();
@@ -1705,6 +1718,7 @@ class LineupController extends ChangeNotifier {
               stage: stage,
               restoring: restoringSavedLineup,
               canCancelSetup: channelSetupCanCancel,
+              fromFirstLibraries: _onFirstLibraries,
             );
     }
     cancelLibraryScan();
@@ -2004,6 +2018,7 @@ class LineupController extends ChangeNotifier {
   void completeChannelSetup() {
     if (stage != SetupStage.channelSetup) return;
     _scenarioOpen = false;
+    _firstLibrariesEntry = null;
     _channelSetupCanCancel = false;
     _error = null;
     _stage = SetupStage.ready;
@@ -2891,7 +2906,7 @@ class LineupController extends ChangeNotifier {
     _restoringSavedLineup = false;
     _profilePickerOrigin = null;
     _serverPickerOrigin = null;
-    _firstLibrariesOrigin = null;
+    _firstLibrariesEntry = null;
     _scan.reset();
   }
 

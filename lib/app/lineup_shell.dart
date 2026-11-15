@@ -801,6 +801,9 @@ class _LineupShellState extends State<LineupShell> {
     });
   }
 
+  bool _setupActionsBlocked() =>
+      _player.authorizationTransitionPending || !_setupVisible;
+
   void _backFromFirstLibraries() {
     final controller = widget.controller;
     if (_player.authorizationTransitionPending ||
@@ -848,9 +851,10 @@ class _LineupShellState extends State<LineupShell> {
 
   Future<void> _logout() async {
     if (_player.authorizationTransitionPending) return;
+    final channels = _channelsKey.currentState;
     if (_destination == ShellDestination.channels &&
-        !(await (_channelsKey.currentState?.requestLeave() ??
-            Future.value(true)))) {
+        channels != null &&
+        !await channels.requestLeave()) {
       return;
     }
     if (await _player.logout() || !mounted) return;
@@ -908,6 +912,15 @@ class _LineupShellState extends State<LineupShell> {
         ),
       ),
     );
+    if (!mounted || !widget.profile.isTv || !_setupVisible) return;
+    final setup = _setupKey.currentState;
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (mounted &&
+          _setupVisible &&
+          identical(setup, _setupKey.currentState)) {
+        setup?.restoreNavigationFocus();
+      }
+    });
   }
 
   Widget _immersiveAppMenu(bool hasPlaybackSurface) {
@@ -1210,6 +1223,7 @@ class _LineupShellState extends State<LineupShell> {
                       controller: widget.controller,
                       onRequestLogout: _requestLogout,
                       onFirstLibrariesBack: _backFromFirstLibraries,
+                      setupActionsBlocked: _setupActionsBlocked,
                       onViewLineup: _completeSetup,
                       onAddCustomChannel: _completeSetupAndAdd,
                     ),
@@ -1270,6 +1284,7 @@ class _LineupShellState extends State<LineupShell> {
                     controller: controller,
                     onRequestLogout: _requestLogout,
                     onFirstLibrariesBack: _backFromFirstLibraries,
+                    setupActionsBlocked: _setupActionsBlocked,
                     onViewLineup: _completeSetup,
                     onAddCustomChannel: _completeSetupAndAdd,
                   )

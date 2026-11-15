@@ -24,6 +24,7 @@ class UpstreamChannelSetupView extends StatefulWidget {
     required this.controller,
     this.onRequestLogout,
     this.onFirstLibrariesBack,
+    this.setupActionsBlocked,
     this.onViewLineup,
     this.onAddCustomChannel,
     super.key,
@@ -32,6 +33,8 @@ class UpstreamChannelSetupView extends StatefulWidget {
   final LineupController controller;
   final Future<void> Function()? onRequestLogout;
   final VoidCallback? onFirstLibrariesBack;
+  // Also checked by callbacks that can outlive the frame that enabled them.
+  final bool Function()? setupActionsBlocked;
   final VoidCallback? onViewLineup;
   final VoidCallback? onAddCustomChannel;
 
@@ -76,6 +79,11 @@ class UpstreamChannelSetupViewState extends State<UpstreamChannelSetupView> {
   SetupReview? get _review => _phase?.review;
 
   bool get _firstSetup => _review?.base.isEmpty ?? true;
+
+  bool get _setupActionsBlocked =>
+      !mounted || (widget.setupActionsBlocked?.call() ?? false);
+
+  bool get _librariesBusy => widget.controller.busy || _setupActionsBlocked;
 
   @override
   void didChangeDependencies() {
@@ -156,9 +164,9 @@ class UpstreamChannelSetupViewState extends State<UpstreamChannelSetupView> {
       return false;
     }
     if (controller.libraries.isEmpty) {
-      return !controller.busy && controller.canSwitchServer;
+      return !_librariesBusy && controller.canSwitchServer;
     }
-    return !controller.busy;
+    return !_librariesBusy;
   }
 
   void _clearLibraryEntryFocusIfUnavailable() {
@@ -178,6 +186,7 @@ class UpstreamChannelSetupViewState extends State<UpstreamChannelSetupView> {
 
   /// Claims one contextual Back press for the active setup owner.
   bool handleBack() {
+    if (!mounted) return false;
     if (_step == _SetupStep.libraries) {
       if (_committingLibraries || !widget.controller.canSwitchServer) {
         return true;
@@ -186,6 +195,7 @@ class UpstreamChannelSetupViewState extends State<UpstreamChannelSetupView> {
         widget.controller.cancelLibraryScan();
         return true;
       }
+      if (_setupActionsBlocked) return true;
       if (widget.controller.channelSetupCanCancel) {
         widget.controller.cancelChannelSetup();
         return true;
@@ -393,9 +403,7 @@ class UpstreamChannelSetupViewState extends State<UpstreamChannelSetupView> {
                       Align(
                         alignment: Alignment.centerLeft,
                         child: TextButton.icon(
-                          onPressed: widget.controller.busy
-                              ? null
-                              : widget.onFirstLibrariesBack,
+                          onPressed: _librariesBusy ? null : handleBack,
                           icon: const Icon(Icons.chevron_left),
                           label: Text(switch (firstLibrariesOrigin) {
                             FirstLibrariesOrigin.profiles => 'Back to profiles',
@@ -540,8 +548,9 @@ class UpstreamChannelSetupViewState extends State<UpstreamChannelSetupView> {
       failedPlaylistIds: widget.controller.failedPlaylistIds,
       libraryScanStatus: widget.controller.libraryScanStatus,
       playlistCatalogUnavailable: widget.controller.playlistCatalogUnavailable,
-      busy: widget.controller.busy,
-      canSwitchServer: widget.controller.canSwitchServer,
+      busy: _librariesBusy,
+      canSwitchServer:
+          widget.controller.canSwitchServer && !_setupActionsBlocked,
       channelSetupCanCancel: widget.controller.channelSetupCanCancel,
       error: widget.controller.error,
       profileCredentialRecoveryNotice:
@@ -555,29 +564,35 @@ class UpstreamChannelSetupViewState extends State<UpstreamChannelSetupView> {
       ),
       progress: LibraryScanProgress.fromController(widget.controller),
     ),
-    onSwitchServer: widget.controller.showServers,
-    onCancelSetup: widget.controller.cancelChannelSetup,
+    onSwitchServer: () {
+      if (!_setupActionsBlocked) widget.controller.showServers();
+    },
+    onCancelSetup: () {
+      if (!_setupActionsBlocked) widget.controller.cancelChannelSetup();
+    },
     onCancelScan: widget.controller.cancelLibraryScan,
     selectedLibraryIds: Set.unmodifiable(_selectedLibraries),
     error: _error ?? widget.controller.libraryScanLimitError,
     onScan: _scan,
     onCommit: _commitLibraries,
-    onToggleLibrary: (id) => setState(() {
-      if (_selectedLibraries.contains(id)) {
-        _selectedLibraries.remove(id);
-      } else {
-        _selectedLibraries.add(id);
-      }
-    }),
-    onToggleAll: () => setState(() {
-      if (_selectedLibraries.length == widget.controller.libraries.length) {
-        _selectedLibraries.clear();
-      } else {
-        _selectedLibraries
-          ..clear()
-          ..addAll(widget.controller.libraries.map((library) => library.id));
-      }
-    }),
+    onToggleLibrary: (id) {
+      if (_setupActionsBlocked) return;
+      setState(() {
+        if (!_selectedLibraries.remove(id)) _selectedLibraries.add(id);
+      });
+    },
+    onToggleAll: () {
+      if (_setupActionsBlocked) return;
+      setState(() {
+        if (_selectedLibraries.length == widget.controller.libraries.length) {
+          _selectedLibraries.clear();
+        } else {
+          _selectedLibraries
+            ..clear()
+            ..addAll(widget.controller.libraries.map((library) => library.id));
+        }
+      });
+    },
     entryFocusNode: _libraryEntryFocus,
     onRequestLogout: widget.onRequestLogout,
   );
@@ -587,6 +602,7 @@ class UpstreamChannelSetupViewState extends State<UpstreamChannelSetupView> {
     Set<String>? retryLibraryIds,
     bool advanceWhenReady = true,
   }) async {
+    if (_setupActionsBlocked) return;
     setState(() {
       _error = null;
       _notice = null;
@@ -603,7 +619,7 @@ class UpstreamChannelSetupViewState extends State<UpstreamChannelSetupView> {
               retryFailedOnly: retryFailedOnly,
             )
           : await widget.controller.retryLibraryScan(ids, retryLibraryIds);
-      if (!mounted) return;
+      if (_setupActionsBlocked) return;
       if (!settled) {
         setState(() {});
         return;
@@ -620,7 +636,7 @@ class UpstreamChannelSetupViewState extends State<UpstreamChannelSetupView> {
         setState(() {});
       }
     } catch (error) {
-      if (mounted) {
+      if (!_setupActionsBlocked) {
         setState(
           () => _error = safeFormError(error, 'The library scan failed.'),
         );
@@ -629,12 +645,12 @@ class UpstreamChannelSetupViewState extends State<UpstreamChannelSetupView> {
   }
 
   Future<void> _commitLibraries(Set<String> ready) async {
-    if (_committingLibraries) return;
+    if (_committingLibraries || _setupActionsBlocked) return;
     final revision = ++_libraryCommitRevision;
     _committingLibraries = true;
     try {
       final saved = await widget.controller.commitLibraryScan(ready);
-      if (!mounted) return;
+      if (_setupActionsBlocked) return;
       if (!saved) {
         setState(() => _error = 'The ready libraries could not be saved.');
         return;
@@ -647,7 +663,7 @@ class UpstreamChannelSetupViewState extends State<UpstreamChannelSetupView> {
         _error = null;
       });
     } catch (error) {
-      if (mounted) {
+      if (!_setupActionsBlocked) {
         setState(
           () => _error = safeFormError(
             error,
