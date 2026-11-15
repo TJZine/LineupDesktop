@@ -801,6 +801,28 @@ class _LineupShellState extends State<LineupShell> {
     });
   }
 
+  bool _setupActionsBlocked() => !_setupVisible;
+
+  bool _authorizationTransitionPending() =>
+      _player.authorizationTransitionPending;
+
+  void _backFromFirstLibraries() {
+    final controller = widget.controller;
+    if (_player.authorizationTransitionPending ||
+        controller.busy ||
+        !controller.canSwitchServer) {
+      return;
+    }
+    switch (controller.firstLibrariesOrigin) {
+      case FirstLibrariesOrigin.profiles:
+        unawaited(controller.backToFirstRunProfiles());
+      case FirstLibrariesOrigin.signIn:
+        unawaited(_logout());
+      case null:
+        break;
+    }
+  }
+
   Future<void> _requestLogout() async {
     if (_player.authorizationTransitionPending) return;
     final confirmed =
@@ -831,9 +853,10 @@ class _LineupShellState extends State<LineupShell> {
 
   Future<void> _logout() async {
     if (_player.authorizationTransitionPending) return;
+    final channels = _channelsKey.currentState;
     if (_destination == ShellDestination.channels &&
-        !(await (_channelsKey.currentState?.requestLeave() ??
-            Future.value(true)))) {
+        channels != null &&
+        !await channels.requestLeave()) {
       return;
     }
     if (await _player.logout() || !mounted) return;
@@ -891,6 +914,15 @@ class _LineupShellState extends State<LineupShell> {
         ),
       ),
     );
+    if (!mounted || !widget.profile.isTv || !_setupVisible) return;
+    final setup = _setupKey.currentState;
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (mounted &&
+          _setupVisible &&
+          identical(setup, _setupKey.currentState)) {
+        setup?.restoreNavigationFocus();
+      }
+    });
   }
 
   Widget _immersiveAppMenu(bool hasPlaybackSurface) {
@@ -1192,6 +1224,10 @@ class _LineupShellState extends State<LineupShell> {
                       key: _setupKey,
                       controller: widget.controller,
                       onRequestLogout: _requestLogout,
+                      onFirstLibrariesBack: _backFromFirstLibraries,
+                      setupActionsBlocked: _setupActionsBlocked,
+                      authorizationTransitionPending:
+                          _authorizationTransitionPending,
                       onViewLineup: _completeSetup,
                       onAddCustomChannel: _completeSetupAndAdd,
                     ),
@@ -1251,6 +1287,10 @@ class _LineupShellState extends State<LineupShell> {
                     key: _setupKey,
                     controller: controller,
                     onRequestLogout: _requestLogout,
+                    onFirstLibrariesBack: _backFromFirstLibraries,
+                    setupActionsBlocked: _setupActionsBlocked,
+                    authorizationTransitionPending:
+                        _authorizationTransitionPending,
                     onViewLineup: _completeSetup,
                     onAddCustomChannel: _completeSetupAndAdd,
                   )

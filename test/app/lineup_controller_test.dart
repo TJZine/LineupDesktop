@@ -10168,7 +10168,7 @@ void main() {
       ..homeUsersResult = const [
         PlexHomeUser(id: 'owner', name: 'Owner', protected: false),
       ]
-      ..serversResult = [nextServer]
+      ..serversResult = [oldServer, nextServer]
       ..selectConnectionHandler = (_, _) => probe.future;
     final controller = LineupController(
       store: _MemoryStore(),
@@ -10498,7 +10498,7 @@ void main() {
       store: store,
       credentials: _MemoryCredentials(accountToken: 'token'),
       plex: _FakePlex()
-        ..serversResult = [nextServer]
+        ..serversResult = [oldServer, nextServer]
         ..connectionResult = nextServer.connections.single,
     );
     addTearDown(controller.dispose);

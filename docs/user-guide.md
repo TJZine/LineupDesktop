@@ -97,13 +97,20 @@ reuse another profile's server or lineup.
 
 ### 3. Select a Plex Media Server
 
-Choose a discovered server. Lineup prioritizes usable direct connections before
-relay connections. Choose anywhere on a server row to select it. **Yours** and **Shared with you**
+On first run, if Plex lists a single server and Lineup connects to it, setup
+opens **Choose libraries** automatically. If Plex lists several servers or the
+single server cannot be connected, choose from the server picker. Lineup
+prioritizes usable direct connections before relay connections.
+
+Choose anywhere on a server row to select it. **Yours** and **Shared with you**
 show who owns each server. **Current** marks the connected server, while
 **Previously used** identifies a saved selection. When Lineup has measured a
 connection, the row shows its path and latency. A latency of 500 ms or more is
-labeled **Very slow**, a relay is labeled **Limited**, and a failed reachability
-probe shows **Unreachable**. You can change servers later in **Settings → Account**.
+labeled **Very slow**, and a relay is labeled **Limited**. A server whose
+connection probe fails shows **Unreachable** with a **Retry** action. You can
+change servers later in **Settings → Account**.
+
+<!-- UX assessment decision, 2026-11-13/14 (N9, N10). -->
 
 Plex supplies each discovered server with its own PMS credential, separate from
 the Plex.tv account or Home-profile credential. Lineup keeps that server
@@ -125,6 +132,11 @@ Channel Setup has three stages:
 1. **Choose libraries** to build channels from, then scan their media. On TV,
    focus starts on the first library when the list is available. You can cancel
    a running scan, retry only failed libraries, or continue with the ready subset.
+   Before you advance, **Back to profiles** returns to the profile picker,
+   where selecting a protected profile again requires its PIN.
+   **Back to sign-in** ends the linked session and returns to Plex sign-in.
+   The available action depends on where you entered setup. On TV, use the
+   remote’s Back button. Back cancels a running scan first.
 2. **Choose channels** from playlists, collections, recently added content,
    genres, studios, actors, decades, and directors. Choose source grouping,
    playback order, minimum programs, and the generated-channel limit.
