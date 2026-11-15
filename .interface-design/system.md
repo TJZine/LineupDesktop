@@ -62,6 +62,22 @@ blanket decoration. Focus light and on-air coral retain separate meanings.
   September 9 refinement changes order only; menu hamburger/chevron icons and
   standalone branding retain their own roles.
 
+## Channel identity and setup
+
+UX assessment decision, 2026-11-13/14. The channel number and outlined
+TV, Film or mixed-media glyph stay visible when the name truncates. A
+single-source library tag disambiguates equal names from different libraries.
+Use supporting ink for the glyph and library tag, along with one accessible
+label. Keep the existing surface geometry. Wrap between words where the
+surface allows multiple lines. Use a one-line ellipsis when a word exceeds
+the name column. Where the Guide or Mini Guide has a spare line, move a
+library tag there when it cannot fit beside the name. Keep the full library
+in the accessible label.
+
+Setup names its steps Libraries, Channels and Review. Choose channels adds
+the saved Channel order choice and retains two-column source rows with at
+least 16 px of TV focus padding.
+
 ## Guide
 
 - Preserve the existing dynamic information-background behavior.

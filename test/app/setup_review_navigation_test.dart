@@ -461,7 +461,7 @@ FocusNode _primary(WidgetTester tester) => Focus.of(
 );
 bool _footerFocused(WidgetTester tester) =>
     _primary(tester).hasFocus ||
-    Focus.of(tester.element(find.text('Back to configure'))).hasFocus;
+    Focus.of(tester.element(find.text('Back to channels'))).hasFocus;
 
 class _Fixture {
   SetupReview review = _review();

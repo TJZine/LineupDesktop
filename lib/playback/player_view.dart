@@ -17,6 +17,7 @@ import '../guide/focused_ticker.dart';
 import '../settings/lineup_settings.dart';
 import '../ui/app_theme.dart';
 import '../ui/app_ui.dart';
+import '../ui/channel_identity.dart';
 import '../ui/lineup_canvas.dart';
 import 'native_player.dart';
 import 'native_video_surface.dart';
@@ -1911,10 +1912,13 @@ class _ChannelBug extends StatelessWidget {
     final size = MediaQuery.sizeOf(context);
     final inheritedLabelSize =
         Theme.of(context).textTheme.labelLarge?.fontSize ?? 14;
+    final libraryTag = ChannelIdentity.libraryTagFor(
+      channel,
+      controller.lineup.channels,
+    );
     return Semantics(
       container: true,
-      button: false,
-      label: 'Channel ${channel.number}, ${channel.name}',
+      label: ChannelIdentity.label(channel, libraryTag: libraryTag),
       excludeSemantics: true,
       child: DecoratedBox(
         decoration: BoxDecoration(
@@ -1922,11 +1926,14 @@ class _ChannelBug extends StatelessWidget {
           borderRadius: BorderRadius.circular(999),
           border: Border.all(color: roles.subtleBorder),
         ),
-        child: Padding(
-          padding: EdgeInsets.symmetric(horizontal: 12, vertical: 7),
-          child: Text(
-            '${channel.number} • ${channel.name}',
-            style: Theme.of(context).textTheme.labelLarge?.copyWith(
+        child: Container(
+          constraints: BoxConstraints(maxWidth: size.width * .65),
+          padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 7),
+          child: ChannelIdentity(
+            channel: channel,
+            libraryTag: libraryTag,
+            showSemantics: false,
+            nameStyle: Theme.of(context).textTheme.labelLarge?.copyWith(
               color: roles.primaryText,
               fontSize: osdPresentation
                   ? size.width >= 1920 && size.height >= 900
@@ -3177,38 +3184,60 @@ class _MiniGuideRow extends StatelessWidget {
                 reduceMotion: MediaQuery.disableAnimationsOf(context),
                 style: style,
               );
-          final channelIdentity = Column(
-            mainAxisSize: MainAxisSize.min,
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              ticker(
-                channel.name,
-                Key('mini-guide-channel-${channel.id}'),
-                style: titleStyle,
-              ),
-              if (tuned)
-                Row(
-                  mainAxisSize: MainAxisSize.min,
-                  children: [
-                    ExcludeSemantics(
-                      child: Icon(
+          final libraryTag = ChannelIdentity.libraryTagFor(
+            channel,
+            controller.lineup.channels,
+          );
+          final identityLabel = ChannelIdentity.label(
+            channel,
+            libraryTag: libraryTag,
+          );
+          final numberStyle = titleStyle;
+          final numberText = '${channel.number}';
+          final numberWidth = math.max(
+            large ? 46.0 : 32.0,
+            TextPainter.computeWidth(
+                  text: TextSpan(text: numberText, style: numberStyle),
+                  textDirection: Directionality.of(context),
+                  textScaler: MediaQuery.textScalerOf(context),
+                  locale: Localizations.maybeLocaleOf(context),
+                ) +
+                8,
+          );
+          final channelIdentity = ChannelIdentity(
+            channel: channel,
+            libraryTag: libraryTag,
+            nameStyle: titleStyle,
+            numberWidth: numberWidth,
+            supportStyle: metadataStyle,
+            showSemantics: false,
+            allowTagBelow: rowHeight != null,
+            tickerBuilder: (style) => ticker(
+              channel.name,
+              Key('mini-guide-channel-${channel.id}'),
+              style: style,
+            ),
+            secondary: tuned
+                ? Row(
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                      Icon(
                         Icons.play_arrow_rounded,
-                        size: (large ? 14 : 12),
+                        size: large ? 14 : 12,
                         color: roles.secondaryText,
                       ),
-                    ),
-                    SizedBox(width: 4),
-                    Flexible(
-                      child: Text(
-                        'Watching',
-                        maxLines: 1,
-                        overflow: TextOverflow.ellipsis,
-                        style: metadataStyle,
+                      const SizedBox(width: 4),
+                      Flexible(
+                        child: Text(
+                          'Watching',
+                          maxLines: 1,
+                          overflow: TextOverflow.ellipsis,
+                          style: metadataStyle,
+                        ),
                       ),
-                    ),
-                  ],
-                ),
-            ],
+                    ],
+                  )
+                : null,
           );
           final row = controller.guide.row(channel.id);
           final unavailable = row.state == GuideLoadState.error;
@@ -3261,28 +3290,11 @@ class _MiniGuideRow extends StatelessWidget {
                     ),
                   ],
                 );
-          final numberText = '${channel.number}';
-          final numberMeasure = TextPainter(
-            text: TextSpan(text: numberText, style: titleStyle),
-            textDirection: Directionality.of(context),
-            textScaler: MediaQuery.textScalerOf(context),
-            locale: Localizations.maybeLocaleOf(context),
-            maxLines: 1,
-          )..layout();
-          final numberWidth = math.max(
-            (large ? 46.0 : 32.0),
-            numberMeasure.width + 8,
-          );
-          numberMeasure.dispose();
-          final number = SizedBox(
-            width: numberWidth,
-            child: Text(numberText, style: titleStyle),
-          );
           return Semantics(
             key: Key('mini-guide-row-${channel.id}'),
             selected: focused,
             label:
-                'Channel ${channel.number}, ${channel.name}. Now $currentText.${next == null ? '' : ' Next ${next.scheduled.item.title}.'}${tuned ? ' Now watching.' : ''}',
+                '$identityLabel. Now $currentText.${next == null ? '' : ' Next ${next.scheduled.item.title}.'}${tuned ? ' Now watching.' : ''}',
             child: DecoratedBox(
               decoration: BoxDecoration(
                 border: Border(
@@ -3310,17 +3322,17 @@ class _MiniGuideRow extends StatelessWidget {
                             horizontal: rowInset,
                             vertical: 7,
                           ),
-                          child: Row(
+                          child: Column(
+                            crossAxisAlignment: CrossAxisAlignment.stretch,
                             children: [
-                              number,
-                              Expanded(
+                              channelIdentity,
+                              Padding(
+                                padding: EdgeInsetsDirectional.only(
+                                  start: channelIdentity.nameIndent(context),
+                                ),
                                 child: Column(
                                   crossAxisAlignment: CrossAxisAlignment.start,
-                                  children: [
-                                    channelIdentity,
-                                    currentCell,
-                                    ?nextTitle,
-                                  ],
+                                  children: [currentCell, ?nextTitle],
                                 ),
                               ),
                             ],
@@ -3334,12 +3346,7 @@ class _MiniGuideRow extends StatelessWidget {
                               children: [
                                 SizedBox(
                                   width: channelColumnWidth,
-                                  child: Row(
-                                    children: [
-                                      number,
-                                      Expanded(child: channelIdentity),
-                                    ],
-                                  ),
+                                  child: channelIdentity,
                                 ),
                                 SizedBox(width: columnGap),
                                 Expanded(flex: 115, child: currentCell),
@@ -4347,7 +4354,7 @@ class _ChannelNumber extends StatelessWidget {
   @override
   Widget build(BuildContext context) => _StatusBug(
     controller: controller,
-    text: controller.channelNumberLabel,
+    text: controller.enteredChannelNumber,
     number: true,
   );
 }
@@ -4364,6 +4371,12 @@ class _StatusBug extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final roles = LineupTheme.of(context);
+    final channel = number ? controller.enteredChannel : null;
+    final libraryTag = channel == null
+        ? null
+        : ChannelIdentity.libraryTagFor(channel, controller.lineup.channels);
+    final style = Theme.of(context).textTheme.bodyLarge
+        ?.copyWith(color: roles.primaryText, shadows: _overlayTextShadow);
     return Align(
       alignment: Alignment.topRight,
       child: SafeArea(
@@ -4381,8 +4394,12 @@ class _StatusBug extends StatelessWidget {
           child: _consumeOverlayPadding(
             context,
             Semantics(
+              container: true,
               liveRegion: true,
-              label: text,
+              label: channel == null
+                  ? text
+                  : ChannelIdentity.label(channel, libraryTag: libraryTag),
+              excludeSemantics: true,
               child: Container(
                 key: number
                     ? const Key('channel-number-buffer')
@@ -4398,13 +4415,15 @@ class _StatusBug extends StatelessWidget {
                   color: _overlayColor(context, controller),
                   borderRadius: BorderRadius.circular(8),
                 ),
-                child: Text(
-                  text,
-                  style: Theme.of(context).textTheme.bodyLarge?.copyWith(
-                    color: roles.primaryText,
-                    shadows: _overlayTextShadow,
-                  ),
-                ),
+                child: channel == null
+                    ? Text(text, style: style)
+                    : ChannelIdentity(
+                        channel: channel,
+                        libraryTag: libraryTag,
+                        numberText: text,
+                        nameStyle: style,
+                        showSemantics: false,
+                      ),
               ),
             ),
           ),
@@ -4450,9 +4469,13 @@ class _StoppedSlate extends StatelessWidget {
                   mainAxisSize: MainAxisSize.min,
                   children: [
                     if (channel != null)
-                      Text(
-                        '${channel.number} · ${channel.name}',
-                        style: Theme.of(context).textTheme.labelLarge
+                      ChannelIdentity(
+                        channel: channel,
+                        libraryTag: ChannelIdentity.libraryTagFor(
+                          channel,
+                          controller.lineup.channels,
+                        ),
+                        nameStyle: Theme.of(context).textTheme.labelLarge
                             ?.copyWith(color: roles.secondaryText),
                       ),
                     const SizedBox(height: 12),

@@ -189,6 +189,42 @@ void main() {
     },
   );
 
+  test(
+    'visible Guide snapshot refreshes saved identity without loading again',
+    () async {
+      final old = _channels(1).single;
+      final lineup = _TestLineup([old]);
+      addTearDown(lineup.dispose);
+      var requests = 0;
+      final guide = GuideController(
+        lineup: lineup,
+        loadSchedule: (channel) async {
+          requests++;
+          return _schedule(channel);
+        },
+      );
+      addTearDown(guide.dispose);
+      guide.requestChannels(guide.channels);
+      await _settle();
+      final schedule = guide.row(old.id);
+      expect(schedule.state, GuideLoadState.ready);
+      final changed = Channel.fromJson({
+        ...old.toJson(),
+        'favorite': true,
+        'kind': 'film',
+        'sourceLibraries': {'movies': 'Archive'},
+      });
+      lineup.setChannels([changed]);
+      guide.requestChannels(guide.channels);
+      await _settle();
+      expect(guide.channels.single.favorite, isTrue);
+      expect(guide.channels.single.kind, ChannelKind.film);
+      expect(guide.channels.single.libraryTitle, 'Archive');
+      expect(requests, 1);
+      expect(guide.row(old.id), same(schedule));
+    },
+  );
+
   test('successful load with failed projection owns error, evicts cache, and retries', () async {
     final lineup = _TestLineup(_channels(1));
     addTearDown(lineup.dispose);

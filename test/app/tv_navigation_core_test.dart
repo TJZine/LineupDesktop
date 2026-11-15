@@ -117,7 +117,7 @@ void main() {
             );
             await key(LogicalKeyboardKey.select);
             final saves = f.store.calls;
-            expect(find.text('Shape your lineup'), findsOneWidget);
+            expect(find.text('Choose channels'), findsOneWidget);
             void rail(int index) {
               final label = find
                   .descendant(
@@ -682,7 +682,7 @@ void main() {
       expect(before.initialSearch, 'channel');
       expect(before.initialFilter, SetupReviewFilter.unchanged);
       await back(tester);
-      expect(find.text('Shape your lineup'), findsOneWidget);
+      expect(find.text('Choose channels'), findsOneWidget);
       expect(find.byType(GuideView), findsNothing);
       expect(backgrounds, 0);
       expect(f.store.calls, saves);
@@ -1387,7 +1387,7 @@ void main() {
         tester.element(find.byType(UpstreamChannelSetupView)),
         same(element),
       );
-      expect(find.text('Shape your lineup'), findsOneWidget);
+      expect(find.text('Choose channels'), findsOneWidget);
       tester
           .widget<FilledButton>(find.byKey(const ValueKey('review-channels')))
           .onPressed!();

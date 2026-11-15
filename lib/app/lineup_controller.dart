@@ -248,6 +248,7 @@ class LineupController extends ChangeNotifier {
   LineupSettings get settings => _settings;
   ScopedLineup _lineup = ScopedLineup.empty;
   List<Channel> get channels => _lineup.channels;
+  ChannelOrder get channelOrder => _lineup.channelOrder;
   String? get currentChannelId => _lineup.currentChannelId;
   PlexAccount? _account;
   PlexAccount? get account => _account;
@@ -993,10 +994,8 @@ class LineupController extends ChangeNotifier {
           final availableIds = loadedLibraries
               .map((library) => library.id)
               .toSet();
-          final lineup = ScopedLineup(
-            libraryIds: saved.libraryIds.intersection(availableIds),
-            channels: saved.channels,
-            currentChannelId: saved.currentChannelId,
+          final lineup = saved.withLibraryIds(
+            saved.libraryIds.intersection(availableIds),
           );
           final base = _persisted
               .withProfile(profile?.id)
@@ -1177,6 +1176,7 @@ class LineupController extends ChangeNotifier {
           ScopedLineup(
             libraryIds: candidate.libraryIds,
             channels: migrated,
+            channelOrder: channelOrder,
             currentChannelId: currentChannelId,
           ),
         );
@@ -1187,6 +1187,7 @@ class LineupController extends ChangeNotifier {
           ScopedLineup(
             libraryIds: candidate.libraryIds,
             channels: migrated,
+            channelOrder: channelOrder,
             currentChannelId: currentChannelId,
           ),
         );
@@ -1674,6 +1675,8 @@ class LineupController extends ChangeNotifier {
     required ChannelBuildMode mode,
     required List<Channel> expectedBase,
     Set<String> removeChannelIds = const {},
+    ChannelOrder? channelOrder,
+    Map<String, int> reviewedNumbers = const {},
   }) async {
     final operation = _mutationScope;
     final expected = expectedBase
@@ -1683,6 +1686,7 @@ class LineupController extends ChangeNotifier {
       planned.map((channel) => channel.immutableCopy()),
     );
     final removals = Set<String>.unmodifiable(removeChannelIds);
+    final numbers = Map<String, int>.unmodifiable(reviewedNumbers);
     var result = ChannelPlanApplyResult.stale;
     await _queueScopeOperation(operation, () async {
       if (!canonicalChannelValueEquals(
@@ -1711,13 +1715,39 @@ class LineupController extends ChangeNotifier {
           );
         }
       }
-      final next = composeChannelPlan(
+      var next = composeChannelPlan(
         existing: channels
             .where((channel) => !removals.contains(channel.id))
             .toList(),
         planned: plan,
         mode: mode,
       );
+      if (numbers.isNotEmpty) {
+        final generatedIds = {
+          for (final channel in next)
+            if (channel.builderKey != null) channel.id,
+        };
+        if (mode != ChannelBuildMode.merge ||
+            numbers.length != generatedIds.length ||
+            !generatedIds.containsAll(numbers.keys)) {
+          throw const FormatException(
+            'Reviewed numbers must match the generated roster',
+          );
+        }
+        next = [
+          for (final channel in next)
+            if (numbers[channel.id] case final int number
+                when number != channel.number)
+              channel.copyWith(number: number)
+            else
+              channel,
+        ]..sort((a, b) => a.number.compareTo(b.number));
+      }
+      if (channels.isEmpty && next.isEmpty) {
+        throw const FormatException(
+          'Choose at least one channel for your first lineup',
+        );
+      }
       validateChannels(next);
       final validatedSources = <String>{};
       for (final channel in plan) {
@@ -1742,12 +1772,30 @@ class LineupController extends ChangeNotifier {
           throw const FormatException('Channel source has no playable content');
         }
       }
-      await _commitChannelList(next, operation);
+      await _commitChannelList(next, operation, order: channelOrder);
       if (_isCurrentMutationScope(operation)) {
         result = ChannelPlanApplyResult.applied;
       }
     });
     return result;
+  }
+
+  Future<void> setFavorite(String channelId, bool favorite) async {
+    final operation = _mutationScope;
+    await _queueScopeOperation(operation, () async {
+      final channel = channels
+          .where((value) => value.id == channelId)
+          .firstOrNull;
+      if (channel == null) throw const ChannelStateConflictException();
+      if (channel.favorite == favorite) return;
+      await _commitChannelList([
+        for (final current in channels)
+          if (current.id == channelId)
+            current.copyWith(favorite: favorite)
+          else
+            current,
+      ], operation);
+    });
   }
 
   Future<void> deleteChannels({required List<Channel> expectedChannels}) async {
@@ -1805,7 +1853,7 @@ class LineupController extends ChangeNotifier {
         ..sort();
       final next = [
         for (var i = 0; i < order.length; i++)
-          Channel.fromJson({...byId[order[i]]!.toJson(), 'number': numbers[i]}),
+          byId[order[i]]!.copyWith(number: numbers[i]),
       ];
       validateChannels(next);
       await _commitChannelList(next, operation);
@@ -1816,6 +1864,7 @@ class LineupController extends ChangeNotifier {
     List<Channel> next,
     int operation, {
     String? initialCurrentId,
+    ChannelOrder? order,
   }) async {
     next = List.unmodifiable(next.map((channel) => channel.immutableCopy()));
     final previous = channels;
@@ -1826,31 +1875,21 @@ class LineupController extends ChangeNotifier {
         : next.isEmpty
         ? null
         : next[oldIndex.clamp(0, next.length - 1)].id;
-    await _commitLineup(
-      ScopedLineup(
-        libraryIds: selectedLibraryIds,
-        channels: next,
-        currentChannelId: nextCurrent,
-      ),
+    final lineup = ScopedLineup(
+      libraryIds: selectedLibraryIds,
+      channels: next,
+      currentChannelId: nextCurrent,
+      channelOrder: order ?? channelOrder,
     );
+    await _commitLineup(lineup);
     if (!_isCurrentMutationScope(operation)) {
       throw const LineupScopeSuperseded();
     }
-    _publishChannelCommit(next, nextCurrent, previous);
+    _publishChannelCommit(lineup, previous);
   }
 
-  void _publishChannelCommit(
-    List<Channel> next,
-    String? currentId,
-    List<Channel> previous,
-  ) {
-    _publishLineup(
-      ScopedLineup(
-        libraryIds: selectedLibraryIds,
-        channels: next,
-        currentChannelId: currentId,
-      ),
-    );
+  void _publishChannelCommit(ScopedLineup lineup, List<Channel> previous) {
+    _publishLineup(lineup);
     _recordChannelChanges(previous);
     notifyListeners();
   }
@@ -1884,9 +1923,9 @@ class LineupController extends ChangeNotifier {
           !canonicalChannelValueEquals(current.toJson(), expected)) {
         throw const ChannelStateConflictException();
       }
+      channel.validate(channels);
+      _validateResolvedSource(channel.source);
       final savedChannel = _channelForSave(channel, current);
-      savedChannel.validate(channels);
-      _validateResolvedSource(savedChannel.source);
       final next = [...channels];
       final index = next.indexWhere(
         (candidate) => candidate.id == savedChannel.id,
@@ -1970,41 +2009,103 @@ class LineupController extends ChangeNotifier {
   }
 
   Channel _channelForSave(Channel incoming, Channel? current) {
-    if (current == null) return incoming;
+    final sameSource =
+        current != null &&
+        scheduleProgrammingSourceEquals(current.source, incoming.source);
     final sameProgramming =
-        scheduleProgrammingSourceEquals(current.source, incoming.source) &&
+        sameSource &&
         current.playbackMode == incoming.playbackMode &&
         (incoming.playbackMode != PlaybackMode.block ||
             (current.blockSize ?? 3) == (incoming.blockSize ?? 3)) &&
         (incoming.playbackMode != PlaybackMode.block ||
             current.includeSpecials == incoming.includeSpecials);
-    if (!sameProgramming) {
-      return Channel(
-        id: incoming.id,
-        number: incoming.number,
-        name: incoming.name,
-        source: incoming.source,
-        playbackMode: incoming.playbackMode,
-        anchor: incoming.anchor,
-        shuffleSeed: incoming.shuffleSeed,
-        blockSize: incoming.blockSize,
-        builderKey: incoming.builderKey,
-        includeSpecials: incoming.includeSpecials,
-      );
+    final inventory = playableInventory;
+    final libraryIds = channelSourceLibraryIds(incoming.source);
+    final playlistItems = <String, Iterable<ChannelItem>>{};
+    final scannedById = {for (final item in inventory.media) item.id: item};
+    final resolvedItems = <String, ChannelItem>{};
+    var hasPlaylist = false;
+    var playlistProvenanceIncomplete = false;
+    void collectLibraries(ContentSource source) {
+      switch (source) {
+        case LibrarySource():
+          break;
+        case ManualSource(:final items):
+          for (final item in items) {
+            if (inventory.byId[item.id] case final media?) {
+              if (media.libraryId case final id?) libraryIds.add(id);
+              resolvedItems.putIfAbsent(item.id, () => channelItemFor(media));
+            }
+          }
+        case PlaylistSource(:final playlistId):
+          hasPlaylist = true;
+          final items = inventory.playlists
+              .where((playlist) => playlist.id == playlistId)
+              .expand((playlist) => playlist.items)
+              .where((item) => item.isPlayable);
+          playlistItems[playlistId] = items.map(channelItemFor);
+          final membership = playlistLibraryMembership(items, scannedById);
+          playlistProvenanceIncomplete |=
+              membership.incomplete || items.isEmpty;
+          libraryIds.addAll(membership.ids);
+        case MixedSource(:final sources):
+          sources.forEach(collectLibraries);
+      }
     }
-    return Channel(
+
+    collectLibraries(incoming.source);
+    final currentTitles = {
+      for (final library in libraries)
+        if (libraryIds.contains(library.id)) library.id: library.title,
+    };
+    final sourceLibraries = hasPlaylist
+        ? playlistSourceLibraries(
+            currentIds: libraryIds,
+            currentTitles: currentTitles,
+            savedTitles: sameSource ? current.sourceLibraries : const {},
+          )
+        : {if (sameProgramming) ...current.sourceLibraries, ...currentTitles};
+    final saved = Channel(
       id: incoming.id,
       number: incoming.number,
       name: incoming.name,
       source: incoming.source,
       playbackMode: incoming.playbackMode,
-      anchor: current.anchor,
-      shuffleSeed: current.shuffleSeed,
+      anchor: sameProgramming ? current.anchor : incoming.anchor,
+      shuffleSeed: sameProgramming ? current.shuffleSeed : incoming.shuffleSeed,
       blockSize: incoming.blockSize,
       builderKey: incoming.builderKey,
-      includeSpecials: current.includeSpecials,
-      scheduleVersion: current.scheduleVersion,
-      scheduleTransition: current.scheduleTransition,
+      includeSpecials: incoming.includeSpecials,
+      scheduleVersion: sameProgramming
+          ? current.scheduleVersion
+          : incoming.scheduleVersion,
+      scheduleTransition: sameProgramming ? current.scheduleTransition : null,
+      favorite: current?.favorite ?? false,
+      kind: switch (channelKindFor(
+        incoming.source,
+        playlists: playlistItems,
+        resolvedItems: resolvedItems,
+      )) {
+        ChannelKind.unknown when sameProgramming => current.kind,
+        final kind => kind,
+      },
+      sourceLibraries: sourceLibraries,
+      sourceLibrariesIncomplete:
+          hasPlaylist &&
+          (playlistProvenanceIncomplete ||
+              !libraryIds.every(sourceLibraries.containsKey)),
+    );
+    if (current != null || saved.builderKey != null) return saved;
+    return saved.copyWith(
+      anchor: staggeredChannelAnchor(
+        channel: saved,
+        content: resolveContent(
+          incoming.source,
+          inventory.media,
+          inventory.playlists,
+        ),
+        createdAt: _scheduleClock(),
+      ),
     );
   }
 
@@ -2061,6 +2162,7 @@ class LineupController extends ChangeNotifier {
         ScopedLineup(
           libraryIds: selectedLibraryIds,
           channels: migrated,
+          channelOrder: channelOrder,
           currentChannelId: currentChannelId,
         ),
       );
@@ -2069,6 +2171,7 @@ class LineupController extends ChangeNotifier {
           ScopedLineup(
             libraryIds: selectedLibraryIds,
             channels: migrated,
+            channelOrder: channelOrder,
             currentChannelId: currentChannelId,
           ),
         );

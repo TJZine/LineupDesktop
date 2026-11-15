@@ -133,7 +133,15 @@ class LineupFixtureActor {
         channels.any((channel) => channel.id == controller.currentChannelId)
         ? controller.currentChannelId
         : channels.firstOrNull?.id;
-    controller._publishChannelCommit(channels, currentId, controller.channels);
+    controller._publishChannelCommit(
+      ScopedLineup(
+        libraryIds: controller.selectedLibraryIds,
+        channels: channels,
+        currentChannelId: currentId,
+        channelOrder: controller.channelOrder,
+      ),
+      controller.channels,
+    );
   }
 
   void replaceConnection(PlexConnection? connection) {

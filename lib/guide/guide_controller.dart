@@ -1229,6 +1229,11 @@ class GuideController extends ChangeNotifier {
         contentChanged ||
         (!identical(old, next) && !_listEqualsBy(old, next, _channelEquals));
     final schedulesChanged = contentChanged || !_sameSchedulesById(old, next);
+    final rowOrderChanged = !_listEqualsBy(
+      old,
+      next,
+      (a, b) => a.id == b.id && a.number == b.number && a.name == b.name,
+    );
     final settingsChanged = _settings.guideHours != lineup.settings.guideHours;
     _channels = next;
     _settings = lineup.settings;
@@ -1260,7 +1265,11 @@ class GuideController extends ChangeNotifier {
       if (!_visibleIndexById.containsKey(_selected?.channelId)) {
         _selected = null;
       }
-      _reloadRows(clearSchedules: schedulesChanged);
+      if (schedulesChanged || rowOrderChanged || settingsChanged) {
+        _reloadRows(clearSchedules: schedulesChanged);
+      } else {
+        notifyListeners();
+      }
     } else if (settingsChanged) {
       _reloadRows();
     } else {
@@ -1414,6 +1423,11 @@ bool _channelEquals(Channel left, Channel right) =>
     left.id == right.id &&
     left.number == right.number &&
     left.name == right.name &&
+    left.builderKey == right.builderKey &&
+    left.kind == right.kind &&
+    left.favorite == right.favorite &&
+    left.sourceLibrariesIncomplete == right.sourceLibrariesIncomplete &&
+    canonicalChannelValueEquals(left.sourceLibraries, right.sourceLibraries) &&
     canonicalScheduleIdentity(left) == canonicalScheduleIdentity(right);
 
 bool _isLoadInProgress(GuideLoadState state) => switch (state) {

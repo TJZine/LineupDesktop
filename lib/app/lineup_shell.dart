@@ -15,6 +15,7 @@ import '../playback/player_coordinator.dart';
 import '../playback/player_view.dart';
 import '../platform/device_profile.dart';
 import '../ui/app_ui.dart';
+import '../ui/channel_identity.dart';
 import '../ui/app_theme.dart';
 import '../ui/lineup_canvas.dart';
 import 'channel_setup_view.dart';
@@ -965,22 +966,7 @@ class _LineupShellState extends State<LineupShell> {
                             : 'Choose a channel in Guide',
                         detailStyle: detailStyle,
                       ),
-                      if (_canShowNowPlaying)
-                        LineupNavigationRow(
-                          key: const Key('app-menu-now-playing'),
-                          selected: false,
-                          onPressed: () => unawaited(_openNowPlaying()),
-                          child: Column(
-                            crossAxisAlignment: CrossAxisAlignment.start,
-                            children: [
-                              const Text('Now Playing'),
-                              _menuDetail(
-                                _player.currentProgram!.scheduled.item.title,
-                                detailStyle,
-                              ),
-                            ],
-                          ),
-                        ),
+                      if (_canShowNowPlaying) _nowPlayingMenuRow(detailStyle),
                       _menuDestination(
                         destination: ShellDestination.channels,
                         label: 'Channels',
@@ -1040,9 +1026,109 @@ class _LineupShellState extends State<LineupShell> {
     );
   }
 
-  Widget _menuDetail(String text, TextStyle? style) => Builder(
+  Widget _nowPlayingMenuRow(TextStyle? detailStyle) {
+    final program = _player.currentProgram!.scheduled.item.title;
+    final channel = _player.currentChannel;
+    final tag = channel == null
+        ? null
+        : ChannelIdentity.libraryTagFor(channel, widget.controller.channels);
+    return LineupNavigationRow(
+      key: const Key('app-menu-now-playing'),
+      selected: false,
+      onPressed: () => unawaited(_openNowPlaying()),
+      child: Semantics(
+        label: channel == null
+            ? 'Now Playing, $program'
+            : 'Now Playing, ${ChannelIdentity.label(channel, libraryTag: tag)}, $program',
+        excludeSemantics: true,
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            const Text('Now Playing'),
+            if (channel == null)
+              _menuDetail(program, detailStyle, maxLines: 1)
+            else
+              Builder(
+                builder: (context) {
+                  final style = DeviceProfile.of(context).isTv
+                      ? detailStyle?.copyWith(
+                          color: LineupTheme.of(context).secondaryText,
+                        )
+                      : detailStyle;
+                  return Stack(
+                    children: [
+                      // Use the existing program-detail line for the row's
+                      // height, independently of icon and text baselines.
+                      SizedBox(
+                        width: double.infinity,
+                        child: _menuDetail(' ', detailStyle, maxLines: 1),
+                      ),
+                      Positioned.fill(
+                        child: Align(
+                          alignment: AlignmentDirectional.centerStart,
+                          child: LayoutBuilder(
+                            builder: (context, constraints) {
+                              final textStyle = DefaultTextStyle.of(context)
+                                  .style
+                                  .merge(style);
+                              double widthOf(
+                                String text,
+                              ) => TextPainter.computeWidth(
+                                text: TextSpan(text: text, style: textStyle),
+                                textDirection: Directionality.of(context),
+                                textScaler: MediaQuery.textScalerOf(context),
+                              );
+                              const separator = ' · ';
+                              final width = math.max(
+                                0.0,
+                                constraints.maxWidth - widthOf(separator),
+                              );
+                              final programAllowance = math.min(
+                                widthOf(program).ceilToDouble(),
+                                width / 2,
+                              );
+                              return Row(
+                                children: [
+                                  ConstrainedBox(
+                                    constraints: BoxConstraints(
+                                      maxWidth: width - programAllowance,
+                                    ),
+                                    child: ChannelIdentity(
+                                      channel: channel,
+                                      libraryTag: tag,
+                                      nameStyle: style,
+                                      showSemantics: false,
+                                    ),
+                                  ),
+                                  Text(separator, style: style),
+                                  Expanded(
+                                    child: _menuDetail(
+                                      program,
+                                      detailStyle,
+                                      maxLines: 1,
+                                    ),
+                                  ),
+                                ],
+                              );
+                            },
+                          ),
+                        ),
+                      ),
+                    ],
+                  );
+                },
+              ),
+          ],
+        ),
+      ),
+    );
+  }
+
+  Widget _menuDetail(String text, TextStyle? style, {int? maxLines}) => Builder(
     builder: (context) => Text(
       text,
+      maxLines: maxLines,
+      overflow: maxLines == null ? null : TextOverflow.ellipsis,
       style: DeviceProfile.of(context).isTv
           ? style?.copyWith(color: LineupTheme.of(context).secondaryText)
           : style,

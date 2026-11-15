@@ -20,6 +20,7 @@ import 'package:flutter/services.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:lineup_desktop/ui/lineup_canvas.dart';
 import 'package:lineup_desktop/app/channel_setup_view.dart';
+import 'package:lineup_desktop/app/channel_setup/review_step.dart';
 import 'package:lineup_desktop/app/lineup_controller.dart';
 import 'package:lineup_desktop/channels/channel.dart';
 import 'package:lineup_desktop/channels/channel_builder.dart';
@@ -120,6 +121,388 @@ void main() {
     }, skip: reviewEvidence.isEmpty);
   }
 
+  testWidgets('Only a Channel order change enables Review without proposals', (
+    tester,
+  ) async {
+    Channel saved(String id, int number, ContentSource source) => Channel(
+      id: id,
+      number: number,
+      name: id,
+      source: source,
+      builderKey: id,
+      playbackMode: PlaybackMode.sequential,
+      anchor: DateTime.utc(2026),
+      shuffleSeed: number,
+    );
+    const scope = LineupScope(profileKey: 'owner', serverId: 'server');
+    final collection = saved(
+      'Collection',
+      1,
+      const LibrarySource(
+        libraryId: 'movies',
+        libraryType: PlexLibraryType.movie,
+        filters: {
+          LibraryFilter.collection: ['Archive'],
+        },
+      ),
+    );
+    final genre = saved(
+      'Drama',
+      2,
+      const LibrarySource(
+        libraryId: 'movies',
+        libraryType: PlexLibraryType.movie,
+        filters: {
+          LibraryFilter.genre: ['Drama'],
+        },
+      ),
+    );
+    final initial = const PersistedState(profileId: 'owner').withLineup(
+      scope,
+      ScopedLineup(
+        libraryIds: {'movies'},
+        channels: [collection, genre],
+        currentChannelId: collection.id,
+        channelOrder: ChannelOrder.grouped,
+      ),
+    );
+    final fixture = await _createBoundarySetup(initial: initial);
+    addTearDown(fixture.controller.dispose);
+    await _pump(tester, fixture.controller);
+    await tester.pumpAndSettle();
+    await tester.tap(find.byKey(const ValueKey('continue-ready-libraries')));
+    await tester.pumpAndSettle();
+    expect(find.text('Choose channels'), findsOneWidget);
+    await tester.tap(find.byKey(const ValueKey('configure-section-2')));
+    await tester.pumpAndSettle();
+    final minimum = find.byKey(const ValueKey('rules-minimum'));
+    await tester.ensureVisible(minimum);
+    await tester.tap(minimum);
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('50').last);
+    await tester.pumpAndSettle();
+    final review = find.byKey(const ValueKey('review-channels'));
+    expect(tester.widget<FilledButton>(review).onPressed, isNull);
+    for (var step = 0; step < 3; step++) {
+      final row = find.byKey(const ValueKey('source-order-genres'));
+      await tester.ensureVisible(row);
+      await tester.tap(
+        find.descendant(of: row, matching: find.byTooltip('Move earlier')),
+      );
+      await tester.pumpAndSettle();
+    }
+    expect(tester.widget<FilledButton>(review).onPressed, isNull);
+    final dropdown = _setupField<ChannelOrder>('Channel order');
+    tester
+        .state<FormFieldState<ChannelOrder>>(dropdown)
+        .didChange(ChannelOrder.mixed);
+    await tester.pumpAndSettle();
+    await tester.ensureVisible(review);
+    expect(tester.widget<FilledButton>(review).onPressed, isNotNull);
+    await tester.tap(review);
+    await tester.pumpAndSettle();
+    final saves = fixture.store.saveCalls;
+    await tester.tap(find.text('Apply changes'));
+    await tester.pumpAndSettle();
+    expect(fixture.store.saveCalls, saves + 1);
+    final lineup = fixture.store.state.lineupFor(scope);
+    expect(lineup.channelOrder, ChannelOrder.mixed);
+    expect(lineup.channels.map((row) => (row.id, row.number)), [
+      ('Drama', 1),
+      ('Collection', 2),
+    ]);
+  });
+
+  testWidgets(
+    'Grouped Review recovers a new number when a missing #1000 is removed',
+    (tester) async {
+      Channel saved(
+        String id,
+        int number,
+        LibraryFilter filter,
+        String value,
+      ) => Channel(
+        id: id,
+        number: number,
+        name: value,
+        source: LibrarySource(
+          libraryId: 'movies',
+          libraryType: PlexLibraryType.movie,
+          filters: {
+            filter: [value],
+          },
+        ),
+        playbackMode: PlaybackMode.shuffle,
+        anchor: DateTime.utc(2026),
+        shuffleSeed: number,
+        builderKey: id,
+      );
+      const scope = LineupScope(profileKey: 'owner', serverId: 'server');
+      final genre = saved('genre', 1, LibraryFilter.genre, 'Drama');
+      final retired = saved(
+        'studio',
+        1000,
+        LibraryFilter.studio,
+        'Missing studio',
+      );
+      final fixture = await _createBoundarySetup(
+        initial: const PersistedState(profileId: 'owner').withLineup(
+          scope,
+          ScopedLineup(
+            libraryIds: const {'movies'},
+            channels: [genre, retired],
+            currentChannelId: genre.id,
+            channelOrder: ChannelOrder.grouped,
+          ),
+        ),
+      );
+      addTearDown(fixture.controller.dispose);
+      await _pump(tester, fixture.controller);
+      await tester.pumpAndSettle();
+      await tester.tap(find.byKey(const ValueKey('continue-ready-libraries')));
+      await tester.pumpAndSettle();
+      expect(
+        fixture.controller.isGeneratedSourceConfirmedGone(retired),
+        isTrue,
+      );
+      for (final type in ['Recently Added', 'Genres']) {
+        final toggle = find.widgetWithText(CheckboxListTile, type);
+        await tester.ensureVisible(toggle);
+        await tester.tap(toggle);
+        await tester.pumpAndSettle();
+      }
+      final reviewButton = find.byKey(const ValueKey('review-channels'));
+      await tester.ensureVisible(reviewButton);
+      await tester.tap(reviewButton);
+      await tester.pumpAndSettle();
+
+      final step = find.byType(SetupReviewStep);
+      final choice = find.byKey(const ValueKey('missing-source-choice-studio'));
+      final initial = tester.widget<SetupReviewStep>(step).review;
+      expect(initial.plan.channels, isEmpty);
+      expect(initial.plan.numberLimitExcluded, 1);
+
+      Future<void> choose(bool remove) async {
+        await tester.ensureVisible(choice);
+        await tester.pumpAndSettle();
+        await tester.tap(
+          find.descendant(
+            of: choice,
+            matching: find.text(remove ? 'Remove' : 'Keep'),
+          ),
+        );
+        await tester.pumpAndSettle();
+      }
+
+      await choose(true);
+      expect(
+        tester
+            .widget<SetupReviewStep>(step)
+            .review
+            .finalChannels
+            .map((row) => (row.name, row.number)),
+        [('Drama', 1), ('Archive', 2)],
+      );
+      await choose(false);
+      expect(
+        tester.widget<SetupReviewStep>(step).review.plan.channels,
+        isEmpty,
+      );
+      await choose(true);
+      final reviewed = tester.widget<SetupReviewStep>(step).review;
+      final addition = reviewed.plan.channels.single;
+      expect(reviewed.base.map((row) => row.id), [genre.id, retired.id]);
+      expect(reviewed.removeSourceIds, {retired.id});
+      expect(addition.number, 2);
+
+      final confirmation = find.byKey(
+        const ValueKey('channel-setup-replace-confirmation'),
+      );
+      await tester.ensureVisible(confirmation);
+      await tester.tap(confirmation);
+      await tester.pumpAndSettle();
+      final saves = fixture.store.saveCalls;
+      await tester.tap(find.byKey(const ValueKey('apply-reviewed-lineup')));
+      await tester.pumpAndSettle();
+      final persisted = fixture.store.state.lineupFor(scope);
+      expect(fixture.store.saveCalls, saves + 1);
+      expect(persisted.channels.map((row) => (row.id, row.number)), [
+        (genre.id, 1),
+        (addition.id, 2),
+      ]);
+      expect(persisted.currentChannelId, genre.id);
+    },
+  );
+
+  testWidgets(
+    'Grouped Review reserves reviewed recipes before filling the cap',
+    (tester) async {
+      final genres = [for (var i = 10; i < 36; i++) 'Genre $i'];
+      final collections = [for (var i = 10; i < 36; i++) 'Collection $i'];
+      final movies = [
+        for (var i = 0; i < 5; i++)
+          PlexMediaItem(
+            id: 'movie-$i',
+            title: 'Movie $i',
+            type: 'movie',
+            libraryId: 'movies',
+            duration: const Duration(minutes: 30),
+            genres: genres,
+            collections: collections,
+            parts: [PlexMediaPart(path: '/synthetic/movie-$i')],
+          ),
+      ];
+      final genrePlan = materializeChannelPlan(
+        proposals: buildChannelProposals(
+          libraries: [_boundaryLibrary],
+          items: movies,
+          strategies: {BuilderStrategy.genres},
+          minimumItems: 5,
+        ),
+        existing: [],
+        mode: ChannelBuildMode.replace,
+        anchor: DateTime.utc(2026),
+      );
+      expect(genrePlan.channels, hasLength(26));
+      final genre = genrePlan.channels.last.copyWith(number: 1);
+      final retired = Channel(
+        id: 'studio',
+        number: 1000,
+        name: 'Missing studio',
+        source: const LibrarySource(
+          libraryId: 'movies',
+          libraryType: PlexLibraryType.movie,
+          filters: {
+            LibraryFilter.studio: ['Missing studio'],
+          },
+        ),
+        playbackMode: PlaybackMode.shuffle,
+        anchor: DateTime.utc(2026),
+        shuffleSeed: 1000,
+        builderKey: 'studio',
+      );
+      const scope = LineupScope(profileKey: 'owner', serverId: 'server');
+      final fixture = await _createBoundarySetup(
+        initial: const PersistedState(profileId: 'owner').withLineup(
+          scope,
+          ScopedLineup(
+            libraryIds: const {'movies'},
+            channels: [genre, retired],
+            currentChannelId: genre.id,
+            channelOrder: ChannelOrder.grouped,
+          ),
+        ),
+        scanResult: PlexLibraryScan(
+          collections: PlexCollectionMembership(
+            titlesByMember: {
+              for (final item in movies) item.id: collections.toSet(),
+            },
+          ),
+          items: movies,
+        ),
+      );
+      addTearDown(fixture.controller.dispose);
+      await _pump(tester, fixture.controller);
+      await tester.pumpAndSettle();
+      await tester.tap(find.byKey(const ValueKey('continue-ready-libraries')));
+      await tester.pumpAndSettle();
+      final recent = find.widgetWithText(CheckboxListTile, 'Recently Added');
+      await tester.ensureVisible(recent);
+      await tester.tap(recent);
+      await tester.pumpAndSettle();
+      await tester.tap(find.byKey(const ValueKey('configure-section-2')));
+      await tester.pumpAndSettle();
+      final maximum = find.byKey(const ValueKey('rules-maximum'));
+      await tester.ensureVisible(maximum);
+      await tester.tap(maximum);
+      await tester.pumpAndSettle();
+      await tester.tap(find.text('50').last);
+      await tester.pumpAndSettle();
+      final reviewButton = find.byKey(const ValueKey('review-channels'));
+      await tester.ensureVisible(reviewButton);
+      await tester.tap(reviewButton);
+      await tester.pumpAndSettle();
+
+      final step = find.byType(SetupReviewStep);
+      final initial = tester.widget<SetupReviewStep>(step).review;
+      expect(initial.plan.channels, hasLength(26));
+      expect(initial.plan.channels.last.id, genre.id);
+      expect(initial.plan.numberLimitExcluded, 26);
+      final choice = find.byKey(const ValueKey('missing-source-choice-studio'));
+      expect(
+        fixture.controller.isGeneratedSourceConfirmedGone(retired),
+        isTrue,
+      );
+      tester.widget<LineupSegmentedControl<bool>>(choice).onSelectionChanged!({
+        true,
+      });
+      await tester.pumpAndSettle();
+
+      final reviewed = tester.widget<SetupReviewStep>(step).review;
+      expect(reviewed.plan.allocatedOriginals, 50);
+      expect(reviewed.plan.excludedOriginals, 2);
+      expect(reviewed.plan.numberLimitExcluded, 0);
+      expect(
+        reviewed.plan.allocatedOriginalsByStrategy[BuilderStrategy.collections],
+        24,
+      );
+      final reviewedById = {
+        for (final row in reviewed.finalChannels) row.id: row,
+      };
+      for (final before in initial.plan.channels) {
+        expect(reviewedById[before.id], channelValue(before));
+      }
+      expect(
+        reviewed.finalChannels.skip(26).map((row) => (row.name, row.number)),
+        [for (var i = 0; i < 24; i++) (collections[i], i + 27)],
+      );
+
+      final confirmation = find.byKey(
+        const ValueKey('channel-setup-replace-confirmation'),
+      );
+      await tester.ensureVisible(confirmation);
+      await tester.tap(confirmation);
+      await tester.pumpAndSettle();
+      final saves = fixture.store.saveCalls;
+      await tester.tap(find.byKey(const ValueKey('apply-reviewed-lineup')));
+      await tester.pumpAndSettle();
+      final persisted = fixture.store.state.lineupFor(scope);
+      expect(fixture.store.saveCalls, saves + 1);
+      expect(persisted.channels, channelValues(reviewed.finalChannels));
+      expect(persisted.currentChannelId, genre.id);
+    },
+  );
+
+  testWidgets('Grouped cannot advance an empty first lineup', (tester) async {
+    final fixture = await _createBoundarySetup();
+    addTearDown(fixture.controller.dispose);
+    await _pump(tester, fixture.controller);
+    await _advanceToConfigure(tester);
+    await tester.tap(find.byKey(const ValueKey('configure-section-2')));
+    await tester.pumpAndSettle();
+    final dropdown = _setupField<ChannelOrder>('Channel order');
+    await tester.ensureVisible(dropdown);
+    await tester.tap(dropdown);
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('Grouped by type').last);
+    await tester.pumpAndSettle();
+    final minimum = find.byKey(const ValueKey('rules-minimum'));
+    await tester.ensureVisible(minimum);
+    await tester.tap(minimum);
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('50').last);
+    await tester.pumpAndSettle();
+    final review = find.byKey(const ValueKey('review-channels'));
+    expect(tester.widget<FilledButton>(review).onPressed, isNull);
+    final saves = fixture.store.saveCalls;
+    await tester.tap(review);
+    await tester.pumpAndSettle();
+    expect(find.text('Choose channels'), findsOneWidget);
+    expect(fixture.controller.stage, SetupStage.channelSetup);
+    expect(fixture.controller.channels, isEmpty);
+    expect(fixture.store.saveCalls, saves);
+  });
+
   testWidgets(
     'R1 real controller saves and review choices stay unchanged across region keys',
     (tester) async {
@@ -163,7 +546,7 @@ void main() {
       expect(fixture.store.saveCalls, saves);
       expect(fixture.controller.channels, channels);
       expect(tester.widget<TextField>(search).controller!.text, 'Recently');
-      expect(find.text('Review your first lineup'), findsOneWidget);
+      expect(find.text('Review channels'), findsWidgets);
       debugPrint(
         'R1 real controller navigation saveDelta=${fixture.store.saveCalls - saves} query=retained lineup=unchanged',
       );
@@ -253,7 +636,7 @@ void main() {
     );
     controller.commitGate!.complete();
     await tester.pumpAndSettle();
-    expect(find.text('Shape your lineup'), findsOneWidget);
+    expect(find.text('Choose channels'), findsOneWidget);
   });
 
   testWidgets('NAV-I2 desktop picker ignores non-Back navigation keys', (
@@ -284,7 +667,7 @@ void main() {
       await tester.sendKeyEvent(key);
       await tester.pump();
     }
-    expect(find.text('Shape your lineup'), findsOneWidget);
+    expect(find.text('Choose channels'), findsOneWidget);
     expect(state.handleBack(), isTrue);
     await tester.pump();
     expect(
@@ -696,7 +1079,7 @@ void main() {
         )
         .onPressed!();
     await tester.pumpAndSettle();
-    expect(find.text('Shape your lineup'), findsOneWidget);
+    expect(find.text('Choose channels'), findsOneWidget);
     expect(fixture.store.saveCalls, saves + 1);
   });
 
@@ -749,7 +1132,7 @@ void main() {
               )
               .onPressed!();
           await tester.pumpAndSettle();
-          expect(find.text('Shape your lineup'), findsOneWidget);
+          expect(find.text('Choose channels'), findsOneWidget);
           expect(fixture.store.saveCalls, saves + 2);
         } else {
           expect(fixture.controller.selectedLibraryIds, {'movies'});
@@ -758,7 +1141,7 @@ void main() {
               'server': ['movies'],
             },
           });
-          expect(find.text('Shape your lineup'), findsOneWidget);
+          expect(find.text('Choose channels'), findsOneWidget);
         }
       },
     );
@@ -829,7 +1212,7 @@ void main() {
 
     await tester.sendKeyEvent(LogicalKeyboardKey.escape);
     await tester.pumpAndSettle();
-    expect(find.text('Shape your lineup'), findsOneWidget);
+    expect(find.text('Choose channels'), findsOneWidget);
 
     await tester.pumpWidget(const SizedBox.shrink());
     final failedController = _SetupController(failApply: true);
@@ -842,7 +1225,7 @@ void main() {
 
     await tester.sendKeyEvent(LogicalKeyboardKey.escape);
     await tester.pumpAndSettle();
-    expect(find.text('Review your first lineup'), findsOneWidget);
+    expect(find.text('Review channels'), findsWidgets);
   });
 
   for (final tv in [false, true]) {
@@ -1552,8 +1935,8 @@ void main() {
           await activate(find.byKey(const ValueKey('scan-selected-libraries')));
           expectEntry();
           await activate(find.byKey(const ValueKey('review-channels')));
-          expect(find.text('Back to configure'), findsOneWidget);
-          await activate(find.widgetWithText(TextButton, 'Back to configure'));
+          expect(find.text('Back to channels'), findsOneWidget);
+          await activate(find.widgetWithText(TextButton, 'Back to channels'));
           expectEntry();
           expect(tester.takeException(), isNull);
         } finally {
@@ -1960,7 +2343,7 @@ void main() {
           ),
           findsNothing,
         );
-        expect(find.text('Shape your lineup'), findsOneWidget);
+        expect(find.text('Choose channels'), findsOneWidget);
         expect(controller.channels.single.id, _missingChannel.id);
       },
     );
@@ -1985,7 +2368,7 @@ void main() {
     await tester.pumpAndSettle();
     expect(
       find.text(
-        'Keep your existing lineup and add channels whose sources are not already in it.',
+        'Keep existing channel numbers. The chosen order applies to the new channels only.',
       ),
       findsOneWidget,
     );
@@ -2188,7 +2571,7 @@ void main() {
     );
     await tester.tap(find.byKey(const ValueKey('scan-selected-libraries')));
     await tester.pumpAndSettle();
-    expect(find.text('Shape your lineup'), findsOneWidget);
+    expect(find.text('Choose channels'), findsOneWidget);
     await tester.ensureVisible(find.byKey(const ValueKey('review-channels')));
     await tester.tap(find.byKey(const ValueKey('review-channels')));
     await tester.pumpAndSettle();
@@ -2325,7 +2708,7 @@ void main() {
         await tester.pumpAndSettle();
         expect(c.footerRetries, 1);
         expect(c.committedIds, {'movies'});
-        expect(find.text('Shape your lineup'), findsOneWidget);
+        expect(find.text('Choose channels'), findsOneWidget);
       },
     );
   }
@@ -2365,7 +2748,7 @@ void main() {
       await tester.tap(find.text('Retry scan'));
       await tester.pumpAndSettle();
       expect(c.footerRetries, 1);
-      expect(find.text('Shape your lineup'), findsOneWidget);
+      expect(find.text('Choose channels'), findsOneWidget);
     },
   );
 
@@ -2636,10 +3019,62 @@ void main() {
     },
   );
 
+  testWidgets('setup names the steps and offers both channel orders', (
+    tester,
+  ) async {
+    final controller = _SetupController();
+    addTearDown(controller.dispose);
+    await _pump(tester, controller);
+    expect(find.text('Choose libraries'), findsOneWidget);
+    expect(find.text('1 Libraries'), findsOneWidget);
+    expect(find.text('2 Channels'), findsOneWidget);
+    expect(find.text('3 Review'), findsOneWidget);
+
+    await _advanceToConfigure(tester);
+    await tester.tap(find.byKey(const ValueKey('configure-section-2')));
+    await tester.pumpAndSettle();
+    final order = _setupField<ChannelOrder>('Channel order');
+    await tester.ensureVisible(order);
+    expect(find.text('Mixed, like live TV'), findsOneWidget);
+    await tester.tap(order);
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('Grouped by type').last);
+    await tester.pumpAndSettle();
+    expect(
+      find.descendant(of: order, matching: find.text('Grouped by type')),
+      findsOneWidget,
+    );
+
+    await tester.tap(find.byKey(const ValueKey('review-channels')));
+    await tester.pumpAndSettle();
+    final header = find.byKey(const ValueKey('channel-setup-header'));
+    expect(
+      find.descendant(of: header, matching: find.text('Review channels')),
+      findsOneWidget,
+    );
+    expect(find.text('✓ Channels'), findsOneWidget);
+  });
+
   testWidgets(
-    'empty sources stay selectable and disabled sources are not truncation',
+    'empty playlists stay off and disabled sources are not truncation',
     (tester) async {
-      final controller = _SetupController();
+      final controller = _SetupController(
+        playlists: [
+          PlexPlaylist(
+            id: 'empty',
+            title: 'Empty playlist',
+            items: [
+              PlexMediaItem(
+                id: 'unusable',
+                title: 'Unusable',
+                type: 'movie',
+                duration: const Duration(minutes: 1),
+                parts: [PlexMediaPart(path: 'https://different.invalid/media')],
+              ),
+            ],
+          ),
+        ],
+      );
       addTearDown(controller.dispose);
       await _pump(tester, controller);
       await _advanceToConfigure(tester);
@@ -2654,13 +3089,8 @@ void main() {
         ),
         findsOneWidget,
       );
-      expect(tester.widget<CheckboxListTile>(playlists).onChanged, isNotNull);
-      await tester.tap(playlists);
-      await tester.pumpAndSettle();
+      expect(tester.widget<CheckboxListTile>(playlists).onChanged, isNull);
       expect(tester.widget<CheckboxListTile>(playlists).value, isFalse);
-      await tester.tap(playlists);
-      await tester.pumpAndSettle();
-      expect(tester.widget<CheckboxListTile>(playlists).value, isTrue);
       final recent = find.ancestor(
         of: find.text(builderStrategyLabels[BuilderStrategy.recentlyAdded]!),
         matching: find.byType(CheckboxListTile),
@@ -3160,7 +3590,7 @@ void main() {
       ),
       findsOneWidget,
     );
-    expect(find.text('No additional versions'), findsOneWidget);
+    expect(find.text('No additional versions'), findsNothing);
   });
 
   testWidgets('stale apply refreshes review and requires another apply', (
@@ -3280,7 +3710,7 @@ void main() {
           await tester.tap(find.text('Back to review'));
         }
         await tester.pumpAndSettle();
-        expect(find.text('Review your lineup'), findsOneWidget);
+        expect(find.text('Review channels'), findsWidgets);
         expect(find.text('Update and add'), findsOneWidget);
         expect(find.text('The lineup could not be saved.'), findsOneWidget);
         expect(tester.widget<CheckboxListTile>(confirmation).value, isTrue);
@@ -3380,7 +3810,7 @@ void main() {
         tester.widget<LineupTopBar>(find.byType(LineupTopBar)).divider,
         isFalse,
       );
-      for (final label in ['✓ Libraries', '✓ Configure', '✓ Review']) {
+      for (final label in ['✓ Libraries', '✓ Channels', '✓ Review']) {
         expect(find.text(label), findsOneWidget);
       }
       expect(find.textContaining('in your lineup'), findsOneWidget);
@@ -3593,7 +4023,7 @@ Future<void> _pumpRetainedSetup(
 Future<void> _advanceToConfigure(WidgetTester tester) async {
   await tester.tap(find.byKey(const ValueKey('scan-selected-libraries')));
   await tester.pumpAndSettle();
-  expect(find.text('Shape your lineup'), findsOneWidget);
+  expect(find.text('Choose channels'), findsOneWidget);
 }
 
 Future<void> _advanceToReview(WidgetTester tester) async {
@@ -3669,20 +4099,28 @@ Finder _setupField<T>(String label) => find.descendant(
 Future<
   ({LineupController controller, _BoundaryStore store, _BoundaryPlex plex})
 >
-_createBoundarySetup() async {
+_createBoundarySetup({
+  PersistedState? initial,
+  PlexLibraryScan? scanResult,
+}) async {
   final store = _BoundaryStore(
-    initial: const PersistedState(
-      profileId: 'owner',
-      selectedServerByProfile: {'owner': 'server'},
-    ),
+    initial:
+        initial ??
+        const PersistedState(
+          profileId: 'owner',
+          selectedServerByProfile: {'owner': 'server'},
+        ),
   );
-  final plex = _BoundaryPlex();
+  final plex = _BoundaryPlex()
+    ..includeGroupingTags = initial != null
+    ..scanResult = scanResult;
   final controller = LineupController(
     store: store,
     credentials: MemoryCredentialStore(accountToken: 'account-token'),
     plex: plex,
   );
   await controller.initialize();
+  if (initial != null) await controller.enterChannelSetup();
   expect(controller.stage, SetupStage.channelSetup);
   return (controller: controller, store: store, plex: plex);
 }
@@ -3753,6 +4191,8 @@ class _BoundaryPlex extends PlexClient {
         httpClient: testPlexHttpClient(),
       );
 
+  bool includeGroupingTags = false;
+  PlexLibraryScan? scanResult;
   Completer<PlexLibraryScan>? scanGate;
   final scanStarted = Completer<void>();
 
@@ -3799,7 +4239,14 @@ class _BoundaryPlex extends PlexClient {
     if (!scanStarted.isCompleted) scanStarted.complete();
     final gate = scanGate;
     if (gate != null) return gate.future;
+    if (scanResult case final result?) return result;
     return PlexLibraryScan(
+      collections: PlexCollectionMembership(
+        titlesByMember: {
+          if (includeGroupingTags)
+            for (var index = 0; index < 5; index++) 'movie-$index': {'Archive'},
+        },
+      ),
       items: [
         for (var index = 0; index < 5; index++)
           PlexMediaItem(
@@ -3808,6 +4255,8 @@ class _BoundaryPlex extends PlexClient {
             type: 'movie',
             libraryId: 'movies',
             duration: const Duration(minutes: 30),
+            genres: includeGroupingTags ? const ['Drama'] : const [],
+            collections: includeGroupingTags ? const ['Archive'] : const [],
             parts: [PlexMediaPart(path: '/synthetic/movie-$index')],
           ),
       ],
@@ -4004,6 +4453,8 @@ class _SetupController extends FixtureController {
     required ChannelBuildMode mode,
     required List<Channel> expectedBase,
     Set<String> removeChannelIds = const {},
+    ChannelOrder? channelOrder,
+    Map<String, int> reviewedNumbers = const {},
   }) async {
     applyCalls++;
     if (applyGate != null) await applyGate!.future;

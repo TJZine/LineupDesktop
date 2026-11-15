@@ -46,6 +46,7 @@ class UpstreamChannelSetupViewState extends State<UpstreamChannelSetupView> {
   final _grouped = <BuilderStrategy>{};
   final _sourceOrder = <BuilderStrategy>[...BuilderStrategy.values];
   late ChannelBuildMode _mode;
+  late ChannelOrder _channelOrder;
   PlaybackMode _playback = PlaybackMode.shuffle;
   int _blockSize = 3;
   bool _includeSpecials = false;
@@ -83,6 +84,7 @@ class UpstreamChannelSetupViewState extends State<UpstreamChannelSetupView> {
   @override
   void initState() {
     super.initState();
+    _channelOrder = widget.controller.channelOrder;
     _mode = widget.controller.channels.isEmpty
         ? ChannelBuildMode.replace
         : ChannelBuildMode.merge;
@@ -284,24 +286,16 @@ class UpstreamChannelSetupViewState extends State<UpstreamChannelSetupView> {
     maximumChannels: _maximum,
   );
 
-  ChannelPlanAllocation _allocate(
-    List<Channel> existing, {
-    List<ChannelProposal>? proposals,
-    required ChannelBuildMode mode,
-    required DateTime anchor,
-  }) => ChannelSetupProjection.allocate(
-    proposals ?? _buildProposals(),
-    existing: existing,
-    options: _allocationOptions(mode),
-    anchor: anchor,
-  );
-
   SetupReview _allocateReview(
     List<Channel> existing, {
     required ChannelBuildMode mode,
     required DateTime anchor,
   }) {
     final proposals = _buildProposals();
+    final inventory = widget.controller.playableInventory;
+    final order = _channelOrder;
+    final strategyOrder = List<BuilderStrategy>.of(_sourceOrder);
+    final reorderExisting = order != widget.controller.channelOrder;
     final strategyBySource = <String, BuilderStrategy>{};
     for (final proposal in proposals) {
       strategyBySource.putIfAbsent(
@@ -309,35 +303,46 @@ class UpstreamChannelSetupViewState extends State<UpstreamChannelSetupView> {
         () => proposal.strategy,
       );
     }
+    ChannelPlanAllocation planFactory(
+      ChannelBuildMode nextMode,
+      DateTime nextAnchor,
+      List<Channel> roster,
+      List<Channel> reviewed,
+    ) => ChannelSetupProjection.allocate(
+      proposals,
+      existing: roster,
+      options: _allocationOptions(nextMode),
+      anchor: nextAnchor,
+      order: order,
+      strategyOrder: strategyOrder,
+      items: inventory.media,
+      playlists: inventory.playlists,
+      reorderExisting: reorderExisting,
+      reviewedChannels: reviewed,
+    );
+
     return SetupReview(
       base: existing,
-      plan: _allocate(
-        existing,
-        proposals: proposals,
-        mode: mode,
-        anchor: anchor,
-      ),
+      plan: planFactory(mode, anchor, existing, const []),
       mode: mode,
       strategyBySource: strategyBySource,
-      planFactory: (nextMode, nextAnchor) {
-        final nextProposals = _buildProposals();
-        final nextStrategies = <String, BuilderStrategy>{};
-        for (final proposal in nextProposals) {
-          nextStrategies.putIfAbsent(
-            canonicalSourceIdentity(proposal.source),
-            () => proposal.strategy,
-          );
-        }
-        return (
-          plan: _allocate(
-            existing,
-            proposals: nextProposals,
-            mode: nextMode,
-            anchor: nextAnchor,
-          ),
-          strategyBySource: nextStrategies,
-        );
-      },
+      ordering: _reviewOrdering(existing),
+      planFactory: planFactory,
+      allocationAnchor: anchor,
+      recoverNumberLimitedAdditions:
+          order == ChannelOrder.grouped && !reorderExisting,
+    );
+  }
+
+  SetupReviewOrdering? _reviewOrdering(List<Channel> existing) {
+    if (_channelOrder == widget.controller.channelOrder) {
+      return null;
+    }
+
+    return (
+      order: _channelOrder,
+      strategyOrder: _sourceOrder,
+      sourceCounts: _projection.reviewSourceCounts(existing),
     );
   }
 
@@ -424,9 +429,7 @@ class UpstreamChannelSetupViewState extends State<UpstreamChannelSetupView> {
     if (_step == _SetupStep.configure) return _configurationHeader();
     if (_step == _SetupStep.review) {
       return _configurationHeader(
-        titleText: _firstSetup
-            ? 'Review your first lineup'
-            : 'Review your lineup',
+        titleText: 'Review channels',
         subtitleText: _firstSetup
             ? 'Check your channels before creating your lineup.'
             : 'Check what changes and what stays.',
@@ -447,7 +450,7 @@ class UpstreamChannelSetupViewState extends State<UpstreamChannelSetupView> {
       children: [
         for (final (index, label) in [
           (_SetupStep.libraries, 'Libraries'),
-          (_SetupStep.configure, 'Configure'),
+          (_SetupStep.configure, 'Channels'),
           (_SetupStep.review, 'Review'),
         ])
           Text(
@@ -466,7 +469,7 @@ class UpstreamChannelSetupViewState extends State<UpstreamChannelSetupView> {
   }
 
   Widget _configurationHeader({
-    String titleText = 'Shape your lineup',
+    String titleText = 'Choose channels',
     String? subtitleText,
   }) => Column(
     key: const ValueKey('channel-setup-header'),
@@ -635,10 +638,18 @@ class UpstreamChannelSetupViewState extends State<UpstreamChannelSetupView> {
 
   Widget _configureStep() {
     _buildProposals();
+    final existing = widget.controller.channels;
     final allocation = _projection.configure(
-      existing: widget.controller.channels,
+      existing: existing,
       options: _allocationOptions(_mode),
+      order: _channelOrder,
+      reorderExisting: _channelOrder != widget.controller.channelOrder,
     );
+    final canSavePreference =
+        existing.isNotEmpty &&
+        (_mode != ChannelBuildMode.replace ||
+            existing.any((channel) => channel.builderKey == null)) &&
+        _channelOrder != widget.controller.channelOrder;
     return SetupConfigureStep(
       allocation: freezeSetupAllocation(allocation),
       section: _configurationSection,
@@ -646,6 +657,7 @@ class UpstreamChannelSetupViewState extends State<UpstreamChannelSetupView> {
           setState(() => _configurationSection = section),
       onBack: _backToLibraries,
       onReview: _prepareReview,
+      orderChanged: canSavePreference,
       hasConfirmedMissingSources:
           _mode == ChannelBuildMode.merge &&
           allocation.unmatchedGenerated.any(
@@ -655,6 +667,7 @@ class UpstreamChannelSetupViewState extends State<UpstreamChannelSetupView> {
         strategies: _strategies,
         grouped: _grouped,
         sourceOrder: _sourceOrder,
+        channelOrder: _channelOrder,
         playback: _playback,
         blockSize: _blockSize,
         includeSpecials: _includeSpecials,
@@ -664,6 +677,9 @@ class UpstreamChannelSetupViewState extends State<UpstreamChannelSetupView> {
         variantBlockSize: _variantBlockSize,
         maximum: _maximum,
         minimum: _minimum,
+      ),
+      hasPlaylists: widget.controller.playableInventory.playlists.any(
+        (playlist) => playlist.items.any((item) => item.isPlayable),
       ),
       selectedLibraryCount: _selectedLibraries.length,
       disabledEligibility: Map.unmodifiable({
@@ -712,6 +728,7 @@ class UpstreamChannelSetupViewState extends State<UpstreamChannelSetupView> {
       }),
       onMaximumChanged: (value) => setState(() => _maximum = value),
       onMinimumChanged: (value) => setState(() => _minimum = value),
+      onChannelOrderChanged: (order) => setState(() => _channelOrder = order),
       onSourceOrderChanged: (order) => setState(() {
         _sourceOrder
           ..clear()
@@ -816,12 +833,15 @@ class UpstreamChannelSetupViewState extends State<UpstreamChannelSetupView> {
   }
 
   void _prepareReview() {
-    final base = List<Channel>.of(widget.controller.channels);
+    final base = widget.controller.channels;
+    final review = _allocateReview(
+      base,
+      mode: _mode,
+      anchor: DateTime.now().toUtc(),
+    );
+    if (base.isEmpty && review.finalChannels.isEmpty) return;
     setState(() {
-      _phase = Reviewing(
-        _allocateReview(base, mode: _mode, anchor: DateTime.now().toUtc()),
-        confirmed: false,
-      );
+      _phase = Reviewing(review, confirmed: false);
       _error = null;
       _notice = null;
       _step = _SetupStep.review;
@@ -853,6 +873,7 @@ class UpstreamChannelSetupViewState extends State<UpstreamChannelSetupView> {
           _phase = Reviewing(current, confirmed: confirmed);
         }
       }),
+      orderChanged: _channelOrder != widget.controller.channelOrder,
       onApply: _applyReview,
       onViewLineup: _viewLineup,
     );
@@ -910,10 +931,12 @@ class UpstreamChannelSetupViewState extends State<UpstreamChannelSetupView> {
         mode: review.mode,
         expectedBase: review.base,
         removeChannelIds: review.removeSourceIds,
+        channelOrder: review.finalChannels.isEmpty ? null : _channelOrder,
+        reviewedNumbers: review.reviewedNumbers,
       );
       if (!mounted) return;
       if (result == ChannelPlanApplyResult.stale) {
-        final base = List<Channel>.of(widget.controller.channels);
+        final base = widget.controller.channels;
         setState(() {
           _phase = Reviewing(
             _allocateReview(

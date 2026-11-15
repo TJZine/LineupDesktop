@@ -354,12 +354,9 @@ class PlayerCoordinator extends ChangeNotifier with WidgetsBindingObserver {
 
   String? get notice => _notice;
   String? get busyLabel => _busyLabel;
-  String get channelNumberLabel {
-    final channel = _channelByNumber[int.tryParse(_channelNumber)];
-    return channel == null
-        ? _channelNumber
-        : '$_channelNumber · ${channel.name}';
-  }
+  String get enteredChannelNumber => _channelNumber;
+
+  Channel? get enteredChannel => _channelByNumber[int.tryParse(_channelNumber)];
 
   String? get error => _error;
   bool get fullscreen => _fullscreen;

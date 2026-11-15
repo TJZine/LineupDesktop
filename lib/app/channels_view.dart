@@ -8,6 +8,7 @@ import '../channels/channel.dart';
 import '../playback/player_coordinator.dart';
 import '../ui/app_theme.dart';
 import '../ui/app_ui.dart';
+import '../ui/channel_identity.dart';
 import 'channel_health_monitor.dart';
 import 'channel_studio_view.dart';
 import 'lineup_controller.dart';
@@ -581,16 +582,27 @@ class ChannelsViewState extends State<ChannelsView> {
                                                   ),
                                           )
                                         : null,
-                                    number: Text(
-                                      '${channel.number}',
-                                      style: rowSupportStyle,
+                                    identity: ChannelIdentity(
+                                      maxLines: null,
+                                      channel: channel,
+                                      semanticsContainer: false,
+                                      libraryTag: ChannelIdentity.libraryTagFor(
+                                        channel,
+                                        widget.controller.channels,
+                                      ),
+                                      numberWidth:
+                                          52 *
+                                          MediaQuery.textScalerOf(context)
+                                              .scale(1),
+                                      numberStyle: rowSupportStyle,
+                                      nameStyle: rowNameStyle,
+                                      supportStyle: rowSupportStyle,
                                     ),
                                     name: Column(
                                       crossAxisAlignment:
                                           CrossAxisAlignment.start,
                                       mainAxisSize: MainAxisSize.min,
                                       children: [
-                                        Text(channel.name, style: rowNameStyle),
                                         if (_healthMonitor.issueFor(
                                               channel.id,
                                             ) ==
@@ -827,8 +839,9 @@ class ChannelsViewState extends State<ChannelsView> {
   }
 
   Widget _directoryColumns({
-    required Widget number,
+    Widget? number,
     required Widget name,
+    ChannelIdentity? identity,
     required Widget source,
     required Widget playback,
     required Widget type,
@@ -847,24 +860,53 @@ class ChannelsViewState extends State<ChannelsView> {
           horizontal: 12,
           vertical: (heading ? 8 : 10),
         ),
-        child: Row(
-          children: [
-            if (leading != null) ...[
-              SizedBox(width: 36, child: leading),
-              SizedBox(width: 16),
-            ],
-            SizedBox(width: numberWidth, child: number),
-            SizedBox(width: 16),
-            Expanded(flex: 4, child: name),
-            SizedBox(width: 16),
-            Expanded(flex: 2, child: source),
-            SizedBox(width: 16),
-            Expanded(flex: 2, child: playback),
-            SizedBox(width: 16),
-            Expanded(child: type),
-            SizedBox(width: 16),
-            SizedBox(width: 44, child: action),
-          ],
+        child: LayoutBuilder(
+          builder: (context, constraints) {
+            final lead = leading == null ? 0 : (36 + 16);
+            final flexSpace =
+                constraints.maxWidth - lead - numberWidth - 16 - 16 * 4 - 44;
+            final identityWidth =
+                numberWidth +
+                16 +
+                4 * (flexSpace.clamp(0.0, double.infinity) / 9);
+            return Row(
+              children: [
+                if (leading != null) ...[
+                  SizedBox(width: 36, child: leading),
+                  SizedBox(width: 16),
+                ],
+                if (identity == null) ...[
+                  SizedBox(width: numberWidth, child: number),
+                  SizedBox(width: 16),
+                  Expanded(flex: 4, child: name),
+                ] else
+                  SizedBox(
+                    width: identityWidth,
+                    child: Column(
+                      mainAxisSize: MainAxisSize.min,
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        identity,
+                        Padding(
+                          padding: EdgeInsetsDirectional.only(
+                            start: identity.nameIndent(context),
+                          ),
+                          child: name,
+                        ),
+                      ],
+                    ),
+                  ),
+                SizedBox(width: 16),
+                Expanded(flex: 2, child: source),
+                SizedBox(width: 16),
+                Expanded(flex: 2, child: playback),
+                SizedBox(width: 16),
+                Expanded(child: type),
+                SizedBox(width: 16),
+                SizedBox(width: 44, child: action),
+              ],
+            );
+          },
         ),
       ),
     );
@@ -1616,9 +1658,13 @@ class _MoveChannelDialogState extends State<_MoveChannelDialog> {
                   return ListTile(
                     minTileHeight: 56,
                     horizontalTitleGap: 16,
-                    title: Text(
-                      '${channel.number} · ${channel.name}',
-                      softWrap: true,
+                    title: ChannelIdentity(
+                      maxLines: null,
+                      channel: channel,
+                      libraryTag: ChannelIdentity.libraryTagFor(
+                        channel,
+                        widget.channels,
+                      ),
                     ),
                     trailing: Wrap(
                       children: [
