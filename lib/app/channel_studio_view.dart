@@ -6,6 +6,7 @@ import 'package:lineup_desktop/platform/device_profile.dart';
 
 import '../channels/channel.dart';
 import '../channels/content_resolver.dart';
+import '../channels/scheduler.dart' show ScheduleBuildException;
 import '../plex/plex_models.dart';
 import '../ui/app_theme.dart';
 import '../ui/app_ui.dart';
@@ -295,16 +296,24 @@ class ChannelStudioViewState extends State<ChannelStudioView> {
   void _updateVerification() {
     _refreshPlayableInventory();
     final resolution = _session.generated ? null : _resolveDraftContent();
-    final issue = resolution == null ? null : _programmingError(resolution);
-    _session.stageScheduleIdentity(_clock, valid: issue == null);
+    var issue = resolution == null ? null : _programmingError(resolution);
     final source = resolution?.source ?? _session.source;
-    final preview = _session.project(
+    Channel projectPreview() => _session.project(
       name: _name.text,
       number: _number.text,
       programming: source,
       preview: true,
     );
-    _verificationInputKey = channelAirCheckSnapshotKey(
+    final content = resolution?.content;
+    if (issue == null && content != null && _session.expectedBase == null) {
+      try {
+        _session.stageScheduleIdentity(projectPreview(), content, _clock);
+      } on ScheduleBuildException {
+        issue = 'Air Check could not verify the channel’s staggered start.';
+      }
+    }
+    final preview = projectPreview();
+    _verificationInputKey = channelScheduleRevision(
       preview,
       widget.controller.contentGeneration,
     );
@@ -874,7 +883,7 @@ class ChannelStudioViewState extends State<ChannelStudioView> {
   bool get _airCheckCanSave {
     final result = _verification.result;
     return result.revisionKey ==
-            channelAirCheckSnapshotKey(
+            channelScheduleRevision(
               _previewDraft,
               widget.controller.contentGeneration,
             ) &&
@@ -946,6 +955,9 @@ class ChannelStudioViewState extends State<ChannelStudioView> {
       final committed = await widget.controller.saveChannel(
         draft,
         expectedBase: rebasedExpected ?? _session.expectedBase,
+        verifiedNewScheduleRevision: _session.expectedBase == null
+            ? _verification.result.revisionKey
+            : null,
       );
       if (!mounted) return;
       setState(() {
@@ -979,6 +991,7 @@ class ChannelStudioViewState extends State<ChannelStudioView> {
                 'The channel could not be saved. No lineup changes were saved.',
               );
       });
+      if (error is ChannelScheduleChangedException) _updateVerification();
       WidgetsBinding.instance.addPostFrameCallback((_) {
         if (!mounted) return;
         if (_conflict || _baseDeleted) {

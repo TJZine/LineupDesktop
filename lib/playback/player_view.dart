@@ -4014,20 +4014,50 @@ const _sleepChoices = <(String, Duration?)>[
   ('90 minutes', Duration(minutes: 90)),
 ];
 
+const _sleepPickerTitle = 'Sleep timer';
+const _sleepTilePadding = 16.0;
+const _sleepTileTitleGap = 16.0;
+const _sleepSelectionSize = 20.0;
+
+TextStyle? _sleepTileTextStyle(BuildContext context) =>
+    ListTileTheme.of(context).titleTextStyle ??
+    Theme.of(context).textTheme.bodyLarge;
+
 double _sleepPopoverWidth(BuildContext context, String state) {
   final theme = Theme.of(context);
-  var width =
-      _textWidth(context, state, theme.textTheme.bodySmall) +
-      2 * _pickerPadding;
+  final closeStyle = const TextButton(
+    onPressed: null,
+    child: _OverlayCloseLabel(),
+  ).defaultStyleOf(context).merge(TextButtonTheme.of(context).style);
+  final closePadding = closeStyle.padding?.resolve({})?.horizontal ?? 0;
+  final closeMinimum = closeStyle.minimumSize?.resolve({})?.width ?? 0;
+  final closeWidth = math.max(
+    closeMinimum,
+    _textWidth(
+          context,
+          _OverlayCloseLabel.label,
+          closeStyle.textStyle?.resolve({}),
+        ) +
+        _OverlayCloseLabel.gap +
+        _OverlayCloseLabel.iconSize +
+        closePadding,
+  );
+  var width = math.max(
+    _textWidth(context, state, theme.textTheme.bodySmall),
+    _textWidth(context, _sleepPickerTitle, theme.textTheme.titleLarge) +
+        closeWidth,
+  );
+  final tileStyle = _sleepTileTextStyle(context);
   for (final (label, _) in _sleepChoices) {
     width = math.max(
       width,
-      _textWidth(context, label, theme.listTileTheme.titleTextStyle) +
-          2 * (_pickerPadding + 16) +
-          36,
+      _textWidth(context, label, tileStyle) +
+          2 * _sleepTilePadding +
+          _sleepTileTitleGap +
+          _sleepSelectionSize,
     );
   }
-  return _popoverWidth(context, width.ceilToDouble());
+  return _popoverWidth(context, (width + 2 * _pickerPadding).ceilToDouble());
 }
 
 /// Flutter can break an overwide word in the middle. Ellipsize just that word
@@ -4115,7 +4145,7 @@ class _SleepTimerPicker extends StatelessWidget {
           },
           child: SingleChildScrollView(
             child: Padding(
-              padding: const EdgeInsets.all(12),
+              padding: const EdgeInsets.all(_pickerPadding),
               child: Column(
                 mainAxisSize: MainAxisSize.min,
                 children: [
@@ -4123,7 +4153,7 @@ class _SleepTimerPicker extends StatelessWidget {
                     children: [
                       Expanded(
                         child: Text(
-                          'Sleep timer',
+                          _sleepPickerTitle,
                           style: theme.textTheme.titleLarge,
                         ),
                       ),
@@ -4151,13 +4181,18 @@ class _SleepTimerPicker extends StatelessWidget {
                           'sleep-timer-${choice.$2?.inMinutes ?? 'off'}',
                         ),
                         minTileHeight: 44,
+                        contentPadding: const EdgeInsets.symmetric(
+                          horizontal: _sleepTilePadding,
+                        ),
+                        horizontalTitleGap: _sleepTileTitleGap,
+                        titleTextStyle: _sleepTileTextStyle(context),
                         autofocus: choice.$2 == selected,
                         title: Text(choice.$1),
                         trailing: choice.$2 == selected
                             ? Icon(
                                 Icons.check,
                                 color: roles.progressFill,
-                                size: 20,
+                                size: _sleepSelectionSize,
                                 semanticLabel: 'Selected preset',
                               )
                             : null,
@@ -5504,13 +5539,17 @@ class _OverlayTextTheme extends StatelessWidget {
 class _OverlayCloseLabel extends StatelessWidget {
   const _OverlayCloseLabel();
 
+  static const label = 'Close';
+  static const gap = 6.0;
+  static const iconSize = 16.0;
+
   @override
   Widget build(BuildContext context) => const Row(
     mainAxisSize: MainAxisSize.min,
     children: [
-      Text('Close'),
-      SizedBox(width: 6),
-      ExcludeSemantics(child: Icon(Icons.close, size: 16)),
+      Text(label),
+      SizedBox(width: gap),
+      ExcludeSemantics(child: Icon(Icons.close, size: iconSize)),
     ],
   );
 }

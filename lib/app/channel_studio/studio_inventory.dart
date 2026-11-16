@@ -47,7 +47,7 @@ class _StudioInventoryStatus extends StatelessWidget {
           ),
           LineupInlineLink(
             onPressed: saving ? null : onGenerate,
-            child: const Text('Retry in Update lineup…'),
+            child: const Text('Retry the lineup update'),
           ),
         ],
       );
@@ -61,7 +61,7 @@ class _StudioInventoryStatus extends StatelessWidget {
           ),
           LineupInlineLink(
             onPressed: saving ? null : onGenerate,
-            child: const Text('Open Update lineup…'),
+            child: const Text('Update lineup…'),
           ),
         ],
       );

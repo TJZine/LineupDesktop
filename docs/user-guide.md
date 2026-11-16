@@ -297,7 +297,13 @@ shows a short notice.
 When you see **Select to watch** on the idle picture, activate the airing
 program to tune its channel. On desktop, **Back to player** is available in the
 header while playback is active. **Jump to now** returns the time window and focus to
-the current schedule. While the Guide follows live, its window and focus track
+the current schedule. After a failed tune, **Next channel** in the Guide
+picture follows the active filter and wraps to the first matching channel.
+When you return to the Guide after the failed program ends, its focused
+occurrence moves to the current program on the same channel. On TV, an idle
+Guide keeps its watch preview when Lineup returns from the background.
+
+While the Guide follows live, its window and focus track
 the presentation clock. Moving to an earlier or later window stops that live
 following and preserves the browsed window and explicitly inspected program
 until you choose **Now** again. When the current time is off screen, the
@@ -588,6 +594,7 @@ for a custom channel or **Duplicate as custom** for a generated channel, and
 **Delete…**. On desktop you can also right-click the row or use Shift+F10 or
 the keyboard Menu key. On TV, press Right from the row and then Select, or hold
 Select on the row. Back closes the row menu and returns focus to the channel.
+Press Menu while the row menu is open to switch to the Lineup menu.
 
 **Update lineup…** opens the bulk workflow. In an empty lineup, choose
 **Generate lineup…**. The workflow proposes generator-owned channels,
@@ -633,7 +640,10 @@ Mini-marathons uses blocks of 2 through 5 episodes and requires usable show
 grouping. **Air Check** uses the same content resolver and deterministic
 scheduler as Guide and Player to show what is on now, what follows, cycle and
 timing facts, why content was included, and actionable unavailable or invalid
-states. Each new channel gets a staggered start when saved. Shuffled schedules
+states. A new or duplicated channel, including **Save as new custom channel**,
+gets a staggered start based on its schedule cycle and saves the same anchor
+that Air Check verified. If playable inventory changes before saving, Air Check
+verifies the new schedule first. Shuffled schedules
 canonicalize each media occurrence by
 its media identity and duration before applying the seed, so a PMS response
 that merely changes input order does not reshuffle the schedule. An existing
@@ -682,11 +692,15 @@ system is destructive and removes saved local setup and preferences as well.
 
 Diagnostics are disabled by default. Enable **Record redacted diagnostics** in
 **Settings > Support** before reproducing a problem that needs support context.
+Open **Details** from a Player error to view Diagnostics and use **Back to
+Player** to return. When you open Diagnostics from Settings, Back returns to
+Support.
 
 When playback is idle, the summary explains how to see playback details.
 **Technical details** includes the Plex connection route and latency when
-measured and shows display and media facts supported by the platform. Windows
-display state does not verify the TV's picture. Source HDR metadata, renderer
+measured and shows display and media facts supported by the platform. Copied
+reports use the same platform display facts. Windows display state does not
+verify the TV's picture. Source HDR metadata, renderer
 output, and Windows display state are separate observations.
 
 When diagnostics are enabled, a completed or failed library scan can add the

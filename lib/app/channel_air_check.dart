@@ -11,10 +11,7 @@ import '../ui/app_ui.dart';
 import 'lineup_controller.dart';
 import 'air_check_verification.dart';
 export 'air_check_verification.dart'
-    show
-        ChannelAirCheckValidity,
-        channelAirCheckDebounce,
-        channelAirCheckSnapshotKey;
+    show ChannelAirCheckValidity, channelAirCheckDebounce;
 
 class ChannelAirCheck extends StatefulWidget {
   const ChannelAirCheck({

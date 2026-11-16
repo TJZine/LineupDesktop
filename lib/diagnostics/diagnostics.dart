@@ -170,6 +170,7 @@ class Diagnostics extends ChangeNotifier {
   String buildSupportReport(DiagnosticSupportSnapshot snapshot) {
     final telemetry = snapshot.playback.receivedTelemetry;
     final isMacOS = isMacOSPlatform(snapshot.platform);
+    final isAndroid = snapshot.platform == TargetPlatform.android.name;
     final lines = <String>[
       'Lineup Desktop support report',
       'Report time: ${snapshot.reportTime.toIso8601String()}',
@@ -183,7 +184,7 @@ class Diagnostics extends ChangeNotifier {
         'HDR output: $macOSHdrOutputFact',
         'Renderer output: ${rendererOutputFact(telemetry)}',
         macOSDisplayStateNote,
-      ] else ...[
+      ] else if (!isAndroid) ...[
         'Windows display: ${windowsDisplayFact(snapshot.playback.displayReport)}',
         'HDR matching: ${hdrMatchingFact(snapshot.playback.displayReport)}',
         'Renderer output: ${rendererOutputFact(telemetry)}',

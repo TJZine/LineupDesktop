@@ -378,6 +378,30 @@ void main() {
     expect(tester.takeException(), isNull);
   });
 
+  testWidgets('visible-fit resize keeps the painted logo during replacement', (
+    tester,
+  ) async {
+    final bytes = await _solidLogoBytes(tester, size: const Size(1600, 320));
+    final logo = find.byKey(const Key('accepted-logo'));
+    await tester.pumpWidget(_logoApp(bytes, fitVisibleContent: true));
+    await _waitForImageDecode(tester);
+    final before = tester.widget<RawImage>(logo).image!;
+    await tester.pumpWidget(
+      _logoApp(
+        bytes,
+        fitVisibleContent: true,
+        maximumSize: const Size(420.6, 84.2),
+      ),
+    );
+    expect(tester.widget<RawImage>(logo).image, same(before));
+    expect(find.text('Readable title'), findsNothing);
+    expect(before.debugDisposed, isFalse);
+    await _waitForImageDecode(tester);
+    final replacement = tester.widget<RawImage>(logo).image!;
+    expect(replacement.width, greaterThan(before.width));
+    expect(before.debugDisposed, isTrue);
+  });
+
   testWidgets('remounting the same bytes and slot paints on the first frame', (
     tester,
   ) async {

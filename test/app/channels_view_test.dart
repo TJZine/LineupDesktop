@@ -1176,7 +1176,33 @@ void main() {
           await tester.sendKeyEvent(LogicalKeyboardKey.arrowRight);
           await tester.pump();
           await tester.sendKeyEvent(LogicalKeyboardKey.select);
-          await checkMenuAndBack();
+          await tester.pumpAndSettle();
+          expect(find.text('Watch'), findsOneWidget);
+          await tester.sendKeyEvent(LogicalKeyboardKey.contextMenu);
+          await tester.pumpAndSettle();
+          expect(find.text('Watch'), findsNothing);
+          expect(find.byKey(const Key('immersive-app-menu')), findsOneWidget);
+          await tester.sendKeyEvent(LogicalKeyboardKey.contextMenu);
+          await tester.pumpAndSettle();
+          expect(rowFocus.hasPrimaryFocus, isTrue);
+          await tester.tap(find.byTooltip('Actions for Custom station'));
+          await tester.pumpAndSettle();
+          await tester.tap(find.text('Delete…'));
+          await tester.pumpAndSettle();
+          expect(
+            find.byKey(const ValueKey('delete-dialog-row-custom')),
+            findsOneWidget,
+          );
+          await tester.sendKeyEvent(LogicalKeyboardKey.contextMenu);
+          await tester.pumpAndSettle();
+          expect(
+            find.byKey(const ValueKey('delete-dialog-row-custom')),
+            findsOneWidget,
+          );
+          expect(find.byKey(const Key('immersive-app-menu')), findsNothing);
+          await tester.tap(find.widgetWithText(TextButton, 'Cancel'));
+          await tester.pumpAndSettle();
+          expect(rowFocus.hasPrimaryFocus, isTrue);
           await tester.sendKeyDownEvent(LogicalKeyboardKey.select);
           await tester.pump(const Duration(milliseconds: 600));
           await tester.sendKeyRepeatEvent(LogicalKeyboardKey.select);
@@ -1209,9 +1235,10 @@ void main() {
             stage: SetupStage.ready,
             channels: [
               _channel('first', 1, 'First').copyWith(favorite: !last),
-              _channel('regular', 2, 'Regular'),
-              _channel('target', 3, 'Target').copyWith(favorite: true),
-              _channel('nearest', 4, 'Nearest').copyWith(favorite: !last),
+              _channel('target', 2, 'Target').copyWith(favorite: true),
+              _channel('regular', 3, 'Regular'),
+              _channel('regular-2', 4, 'Another regular'),
+              _channel('nearest', 5, 'Nearest').copyWith(favorite: !last),
             ],
           ),
         );
@@ -1244,9 +1271,6 @@ void main() {
               .favorite,
           isTrue,
         );
-        Focus.of(tester.element(find.text('Favourites'))).requestFocus();
-        await tester.pump();
-
         controller.pendingFavorite!.complete();
         await tester.pumpAndSettle();
         expect(find.text('The favourite could not be saved.'), findsNothing);
@@ -1261,6 +1285,52 @@ void main() {
       },
     );
   }
+
+  testWidgets('a pending favourite removal leaves newer focus alone', (
+    tester,
+  ) async {
+    final controller = _RecordingDirectoryController(
+      scenario: LineupScenario(
+        stage: SetupStage.ready,
+        channels: [
+          _channel('first', 1, 'First').copyWith(favorite: true),
+          _channel('middle', 2, 'Middle').copyWith(favorite: true),
+          _channel('target', 3, 'Target').copyWith(favorite: true),
+        ],
+      ),
+    );
+    addTearDown(controller.dispose);
+    await tester.pumpWidget(
+      UiFixture(controller: controller, profile: tvProfile).build(),
+    );
+    await tester.pumpAndSettle();
+    await openDestination(tester, 'Channels');
+    await tester.tap(find.byKey(const Key('channels-filter')));
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('Favourites').last);
+    await tester.pumpAndSettle();
+    controller.pendingFavorite = Completer<void>();
+    await tester.tap(find.byTooltip('Actions for Target'));
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('Remove from favourites'));
+    await tester.pumpAndSettle();
+    final first = tester
+        .widget<InkWell>(
+          find
+              .descendant(
+                of: find.byKey(const ValueKey('channel-row-first')),
+                matching: find.byType(InkWell),
+              )
+              .first,
+        )
+        .focusNode!;
+    first.requestFocus();
+    await tester.pump();
+    controller.pendingFavorite!.complete();
+    await tester.pumpAndSettle();
+    expect(find.byKey(const ValueKey('channel-row-target')), findsNothing);
+    expect(first.hasPrimaryFocus, isTrue);
+  });
 
   testWidgets(
     'menu items expose enabled button semantics and open Edit or Duplicate',

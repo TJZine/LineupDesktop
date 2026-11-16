@@ -567,6 +567,16 @@ class ChannelsViewState extends State<ChannelsView> {
                                   onActivate: _mode == _DirectoryMode.selection
                                       ? () => _toggleSelected(channel.id)
                                       : () => _open(channel),
+                                  onLineupMenu:
+                                      DeviceProfile.of(menuContext).isTv
+                                      ? () {
+                                          final anchor =
+                                              widget.menuFocusNode.context;
+                                          if (anchor != null) {
+                                            widget.onOpenMenu(anchor, rowFocus);
+                                          }
+                                        }
+                                      : null,
                                   onAction: (action) =>
                                       _applyRowAction(action, channel),
                                   builder: (action) => _directoryColumns(
@@ -695,7 +705,9 @@ class ChannelsViewState extends State<ChannelsView> {
         unawaited(widget.player.tune(channel.id));
         widget.onOpenPlayer();
       case _RowAction.favourite:
-        final index = _sortedChannels().indexWhere(
+        final row = _openFocus[channel.id];
+        final rowScope = row?.enclosingScope;
+        final index = _visibleChannels().indexWhere(
           (row) => row.id == channel.id,
         );
         try {
@@ -706,6 +718,14 @@ class ChannelsViewState extends State<ChannelsView> {
             _restoreNavigationFocus(
               preferredId: channel.id,
               preferredIndex: index,
+              visibleIndex: true,
+              canRestore: () {
+                final primary = FocusManager.instance.primaryFocus;
+                return primary == null ||
+                    identical(primary, rowScope) ||
+                    identical(primary, FocusManager.instance.rootScope) ||
+                    (row?.hasFocus ?? false);
+              },
             );
           }
         } catch (_) {
@@ -817,6 +837,7 @@ class ChannelsViewState extends State<ChannelsView> {
     List<Channel> visible, {
     String? preferredId,
     int? preferredIndex,
+    bool visibleIndex = false,
   }) {
     final visibleIds = visible.map((channel) => channel.id).toSet();
     final preferred = preferredId == null ? null : _openFocus[preferredId];
@@ -828,6 +849,15 @@ class ChannelsViewState extends State<ChannelsView> {
         if (_usableFocus(_openFocus[visible[index].id])) index,
     ];
     if (attached.isEmpty) return null;
+    if (visibleIndex && preferredIndex != null) {
+      final nearest = attached.reduce(
+        (best, candidate) =>
+            (candidate - preferredIndex).abs() < (best - preferredIndex).abs()
+            ? candidate
+            : best,
+      );
+      return _openFocus[visible[nearest].id];
+    }
     final all = _sortedChannels();
     final anchorId =
         preferredId ??
@@ -859,9 +889,11 @@ class ChannelsViewState extends State<ChannelsView> {
     String? preferredId,
     FocusNode? preferredNode,
     int? preferredIndex,
+    bool visibleIndex = false,
+    bool Function()? canRestore,
   }) {
     WidgetsBinding.instance.addPostFrameCallback((_) {
-      if (!mounted || _studioOpen) return;
+      if (!mounted || _studioOpen || canRestore?.call() == false) return;
       final pruneAnchorIndex =
           preferredId != null && _focusPruneAnchorId == preferredId
           ? _focusPruneAnchorIndex
@@ -886,6 +918,7 @@ class ChannelsViewState extends State<ChannelsView> {
                   visible,
                   preferredId: preferredId,
                   preferredIndex: preferredIndex ?? pruneAnchorIndex,
+                  visibleIndex: visibleIndex,
                 ) ??
                 (_mode == _DirectoryMode.selection &&
                         !_showSelected &&
@@ -1881,6 +1914,7 @@ class _DirectoryRow extends StatefulWidget {
     required this.showActions,
     required this.onActivate,
     required this.onAction,
+    required this.onLineupMenu,
     required this.builder,
   });
 
@@ -1891,6 +1925,7 @@ class _DirectoryRow extends StatefulWidget {
   final bool showActions;
   final VoidCallback onActivate;
   final Future<void> Function(_RowAction) onAction;
+  final VoidCallback? onLineupMenu;
   final Widget Function(Widget action) builder;
 
   @override
@@ -1979,6 +2014,9 @@ class _DirectoryRowState extends State<_DirectoryRow> {
     final channel = widget.channel;
     final onAction = widget.onAction;
     _menuOpen = true;
+    var openLineupMenu = false;
+    void requestLineupMenu() => openLineupMenu = true;
+    final onMenu = widget.onLineupMenu == null ? null : requestLineupMenu;
     final action = await showMenu<_RowAction>(
       // Capture the list theme above the row's temporary TV focus ink.
       context: widget.menuContext,
@@ -1987,21 +2025,35 @@ class _DirectoryRowState extends State<_DirectoryRow> {
       menuPadding: EdgeInsets.zero,
       constraints: const BoxConstraints(minWidth: 224, maxWidth: 320),
       items: [
-        const _DirectoryMenuItem(_RowAction.watch, 'Watch', autofocus: true),
+        _DirectoryMenuItem(
+          _RowAction.watch,
+          'Watch',
+          autofocus: true,
+          onMenu: onMenu,
+        ),
         _DirectoryMenuItem(
           _RowAction.favourite,
           channel.favorite ? 'Remove from favourites' : 'Favourite',
+          onMenu: onMenu,
         ),
         if (channel.builderKey == null)
-          const _DirectoryMenuItem(_RowAction.edit, 'Edit')
+          _DirectoryMenuItem(_RowAction.edit, 'Edit', onMenu: onMenu)
         else
-          const _DirectoryMenuItem(_RowAction.duplicate, 'Duplicate as custom'),
-        const _DirectoryMenuItem(_RowAction.delete, 'Delete…'),
+          _DirectoryMenuItem(
+            _RowAction.duplicate,
+            'Duplicate as custom',
+            onMenu: onMenu,
+          ),
+        _DirectoryMenuItem(_RowAction.delete, 'Delete…', onMenu: onMenu),
       ],
     );
     _menuOpen = false;
     if (!mounted || ModalRoute.of(context)?.isCurrent == false) return;
     widget.focusNode.requestFocus();
+    if (openLineupMenu) {
+      widget.onLineupMenu?.call();
+      return;
+    }
     if (action != null && widget.enabled && widget.showActions) {
       await onAction(action);
     }
@@ -2046,10 +2098,12 @@ class _DirectoryMenuItem extends PopupMenuItem<_RowAction> {
     _RowAction action,
     this.label, {
     this.autofocus = false,
+    this.onMenu,
   }) : super(value: action, height: 48, child: null);
 
   final String label;
   final bool autofocus;
+  final VoidCallback? onMenu;
 
   @override
   PopupMenuItemState<_RowAction, _DirectoryMenuItem> createState() =>
@@ -2060,6 +2114,15 @@ class _DirectoryMenuItemState
     extends PopupMenuItemState<_RowAction, _DirectoryMenuItem> {
   KeyEventResult _key(FocusNode _, KeyEvent event) {
     final key = event.logicalKey;
+    if (key == LogicalKeyboardKey.contextMenu &&
+        widget.onMenu != null &&
+        ModalRoute.of(context)?.isCurrent == true) {
+      if (event is KeyDownEvent) {
+        widget.onMenu!();
+        Navigator.pop(context);
+      }
+      return KeyEventResult.handled;
+    }
     final select =
         key == LogicalKeyboardKey.select || key == LogicalKeyboardKey.enter;
     if (key != LogicalKeyboardKey.goBack &&

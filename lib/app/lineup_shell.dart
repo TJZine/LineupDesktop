@@ -50,6 +50,13 @@ class _LineupShellState extends State<LineupShell> {
       ? ShellDestination.guide
       : ShellDestination.player;
   ShellDestination? _settingsReturnDestination;
+  bool _desktopDiagnosticsFromPlayer = false;
+  bool get _diagnosticsFromPlayer => widget.profile.isTv
+      ? switch (_tvLocation) {
+          _TvDiagnostics(origin: _TvPlayer()) => true,
+          _ => false,
+        }
+      : _desktopDiagnosticsFromPlayer;
   late final GuideController _guide;
   late final PlayerCoordinator _player;
   final _playerKey = GlobalKey<PlayerViewState>();
@@ -141,6 +148,8 @@ class _LineupShellState extends State<LineupShell> {
     _player.authorizationStopPending,
     _player.authorizationTransitionError,
     _player.error,
+    _player.failureCause,
+    _player.failedChannelId,
     _player.canRetry,
     _player.status.state,
     _player.status.message,
@@ -283,7 +292,8 @@ class _LineupShellState extends State<LineupShell> {
   _TvWatch get _tvWatch => _tvLocation.watch;
   _TvSettings get _tvSettings => switch (_tvLocation) {
     final _TvSettings location => location,
-    _TvDiagnostics(:final settings) => settings,
+    _TvDiagnostics(:final origin) =>
+      origin is _TvSettings ? origin : _TvSettings(origin),
     final _TvChannels location => _TvSettings(location),
     final _TvWatch location => _TvSettings(location),
   };
@@ -294,7 +304,10 @@ class _LineupShellState extends State<LineupShell> {
     ShellDestination.player => const _TvPlayer(),
     ShellDestination.channels => _TvChannels(_tvWatch),
     ShellDestination.settings => _tvSettings,
-    ShellDestination.diagnostics => _TvDiagnostics(_tvSettings),
+    ShellDestination.diagnostics => switch (_tvLocation) {
+      final _TvDiagnostics location => location,
+      _ => _TvDiagnostics(_tvSettings),
+    },
   };
 
   _TvLocation _validTvLocation(_TvLocation location) {
@@ -305,9 +318,10 @@ class _LineupShellState extends State<LineupShell> {
         _validTvLocation(origin) as _TvWatch,
       ),
       _TvSettings(:final origin) => _TvSettings(_validTvLocation(origin)),
-      _TvDiagnostics(:final settings) => _TvDiagnostics(
-        _validTvLocation(settings) as _TvSettings,
+      _TvDiagnostics(origin: final _TvSettings origin) => _TvDiagnostics(
+        _validTvLocation(origin),
       ),
+      _TvDiagnostics() => location,
       _TvHome() => location,
     };
   }
@@ -352,9 +366,8 @@ class _LineupShellState extends State<LineupShell> {
       case _TvSettings(:final origin):
         _returnTv(origin);
         return true;
-      case _TvDiagnostics(:final settings):
-        _settingsCategory = SettingsCategory.support;
-        _returnTv(settings);
+      case _TvDiagnostics():
+        _returnFromDiagnostics();
         return true;
     }
     WidgetsBinding.instance.addPostFrameCallback((_) => _restoreRouteFocus());
@@ -369,6 +382,7 @@ class _LineupShellState extends State<LineupShell> {
   Future<void> _select(
     ShellDestination destination, {
     _TvLocation? tvLocation,
+    bool diagnosticsFromPlayer = false,
     ({Object menuId, String channelId})? tunedRow,
   }) async {
     bool tunedRowIsCurrent() =>
@@ -449,6 +463,9 @@ class _LineupShellState extends State<LineupShell> {
         _licensesOpen = false;
         if (committed != null) _tvLocation = committed;
         _destination = routeDestination;
+        _desktopDiagnosticsFromPlayer =
+            routeDestination == ShellDestination.diagnostics &&
+            diagnosticsFromPlayer;
         _player.setPlayerDestinationVisible(
           routeDestination == ShellDestination.player,
         );
@@ -469,6 +486,39 @@ class _LineupShellState extends State<LineupShell> {
             !_hasPlaybackSurface
       ? ShellDestination.guide
       : _settingsReturnDestination;
+
+  void _openPlayerDiagnostics() => unawaited(
+    _select(
+      ShellDestination.diagnostics,
+      tvLocation: const _TvDiagnostics(_TvPlayer()),
+      diagnosticsFromPlayer: true,
+    ),
+  );
+
+  void _openSupportSettings() {
+    _settingsCategory = SettingsCategory.support;
+    if (widget.profile.isTv) {
+      _returnTv(_tvSettings);
+    } else {
+      unawaited(_select(ShellDestination.settings));
+    }
+  }
+
+  void _returnFromDiagnostics() {
+    if (!_diagnosticsFromPlayer) {
+      _openSupportSettings();
+    } else if (widget.profile.isTv) {
+      _returnTv(const _TvPlayer());
+    } else {
+      unawaited(
+        _select(
+          _hasPlaybackSurface
+              ? ShellDestination.player
+              : ShellDestination.guide,
+        ),
+      );
+    }
+  }
 
   void _returnFromSettings() {
     if (widget.profile.isTv) {
@@ -597,6 +647,13 @@ class _LineupShellState extends State<LineupShell> {
         : _player.tune(channelId);
     await _select(ShellDestination.player);
     await tuning;
+  }
+
+  void _tuneNextFromGuide() {
+    final failed = _player.failedChannelId;
+    if (failed == null) return;
+    final next = _guide.successorOf(failed);
+    if (next != null) unawaited(_tuneFromGuide(next.id));
   }
 
   void _closeAppMenu({bool restoreInvoker = true}) {
@@ -770,8 +827,7 @@ class _LineupShellState extends State<LineupShell> {
         (event.logicalKey == LogicalKeyboardKey.escape ||
             event.logicalKey == LogicalKeyboardKey.backspace ||
             event.logicalKey == LogicalKeyboardKey.goBack)) {
-      _settingsCategory = SettingsCategory.support;
-      unawaited(_select(ShellDestination.settings));
+      _returnFromDiagnostics();
       return KeyEventResult.handled;
     }
     if (_destination == ShellDestination.settings &&
@@ -1308,11 +1364,13 @@ class _LineupShellState extends State<LineupShell> {
           ? () => _returnTv(const _TvHome())
           : null,
       openMenu: _openAppMenu,
+      onOpenDiagnostics: _openPlayerDiagnostics,
     );
     final hasPlaybackSurface = _hasPlaybackSurface;
     final guidePlaybackUnavailable =
         _player.status.state == PlayerState.unsupported ||
         _player.error != null;
+    final failureCause = _player.failureCause;
     final guideHasPicture = hasPlaybackSurface && !guidePlaybackUnavailable;
     final guideView = GuideView(
       controller: _guide,
@@ -1326,10 +1384,14 @@ class _LineupShellState extends State<LineupShell> {
           : GuidePlaybackPlaceholder(
               unavailable: guidePlaybackUnavailable,
               reduceMotion: controller.settings.reduceMotion,
-              message:
-                  _player.error ??
-                  (guidePlaybackUnavailable ? _player.status.message : null),
+              failureCause: failureCause,
+              message: guidePlaybackUnavailable && failureCause == null
+                  ? _player.error ?? _player.status.message
+                  : null,
               onRetry: _player.canRetry ? _player.retry : null,
+              onNextChannel: _player.failedChannelId == null
+                  ? null
+                  : _tuneNextFromGuide,
             ),
       onOpenPlayer: guideHasPicture
           ? () => unawaited(_select(ShellDestination.player))
@@ -1393,21 +1455,14 @@ class _LineupShellState extends State<LineupShell> {
       ShellDestination.diagnostics => DiagnosticsView(
         controller: controller,
         playback: _player.diagnosticPlaybackSnapshot,
-        onRecordingSettings: () {
-          _settingsCategory = SettingsCategory.support;
-          widget.profile.isTv
-              ? _returnTv(_tvSettings)
-              : unawaited(_select(ShellDestination.settings));
-        },
+        onRecordingSettings: _openSupportSettings,
         focusNode: _diagnosticsFocus,
         menuFocusNode: _diagnosticsMenuFocus,
         onOpenMenu: _openAppMenu,
-        onBack: () {
-          _settingsCategory = SettingsCategory.support;
-          widget.profile.isTv
-              ? _returnTv(_tvSettings)
-              : unawaited(_select(ShellDestination.settings));
-        },
+        onBack: _returnFromDiagnostics,
+        backLabel: _diagnosticsFromPlayer
+            ? '‹ Back to Player'
+            : '‹ Settings · Support',
       ),
       ShellDestination.player => playerView,
     };
@@ -1539,12 +1594,13 @@ final class _TvSettings extends _TvLocation {
 }
 
 final class _TvDiagnostics extends _TvLocation {
-  const _TvDiagnostics(this.settings);
-  final _TvSettings settings;
+  const _TvDiagnostics(this.origin)
+    : assert(origin is _TvSettings || origin is _TvPlayer);
+  final _TvLocation origin;
   @override
   ShellDestination get destination => ShellDestination.diagnostics;
   @override
-  _TvWatch get watch => settings.watch;
+  _TvWatch get watch => origin.watch;
 }
 
 class _AnchoredMenuLayout extends SingleChildLayoutDelegate {

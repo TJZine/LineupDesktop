@@ -256,16 +256,19 @@ class PlayerCoordinator extends ChangeNotifier with WidgetsBindingObserver {
   String? _miniGuideChannelId;
   int? _miniGuideWindowStart;
   PlaybackFailureCause? _failureCause;
+  GuideProgram? _failedGuideProgram;
   String? _operationError;
   bool _hasStartedPlayback = false;
 
   String? get _error => _failureCause?.message ?? _operationError;
   set _error(String? message) {
     _failureCause = null;
+    _failedGuideProgram = null;
     _operationError = message;
   }
 
-  void _setFailureCause(PlaybackFailureCause cause) {
+  void _setFailureCause(PlaybackFailureCause cause, {GuideProgram? program}) {
+    _failedGuideProgram = program;
     _failureCause = cause;
     _operationError = null;
   }
@@ -394,6 +397,10 @@ class PlayerCoordinator extends ChangeNotifier with WidgetsBindingObserver {
   Channel? get enteredChannel => _channelByNumber[int.tryParse(_channelNumber)];
 
   PlaybackFailureCause? get failureCause => _failureCause;
+  String? get failedChannelId =>
+      _failureCause == null || _authorizationPlaybackBlocked
+      ? null
+      : _retryChannelId;
   bool get hasStartedPlayback => _hasStartedPlayback;
   String? get error => _error;
   bool get fullscreen => _fullscreen;
@@ -800,6 +807,7 @@ class PlayerCoordinator extends ChangeNotifier with WidgetsBindingObserver {
       // The terminal event owns the outcome even if stop rejects the pending
       // load and its tune continuation runs after the native load is retired.
       if (load != null) _terminalNativeFailureTune = load.tuneGeneration;
+      final failedProgram = _resolvingProgram ?? _active?.program;
       unawaited(_stopQuietly());
       _invalidateAuthorizationRecovery();
       _setFailureCause(
@@ -807,6 +815,7 @@ class PlayerCoordinator extends ChangeNotifier with WidgetsBindingObserver {
           Diagnostics.failureCategory(event.status.failureCode ?? ''),
           authorizationRejected: _isAuthorizationFailure(event.status),
         ),
+        program: failedProgram,
       );
       _tuning = false;
       _canRetry = event.status.recoverable && _retryChannelId != null;
@@ -1211,7 +1220,7 @@ class PlayerCoordinator extends ChangeNotifier with WidgetsBindingObserver {
       _tuning = false;
       _canRetry = true;
       _recordPlaybackFailure(error);
-      _setFailureCause(_failureCauseFor(error));
+      _setFailureCause(_failureCauseFor(error), program: program);
       _setOverlay(PlayerOverlay.error, timed: false);
       return false;
     }
@@ -1717,6 +1726,7 @@ class PlayerCoordinator extends ChangeNotifier with WidgetsBindingObserver {
   }
 
   Future<void> _failTransition(Object error, int tuneGeneration) async {
+    final failedProgram = _resolvingProgram ?? _active?.program;
     final nativeStop = _beginNativeStop();
     _invalidateAuthorizationRecovery();
     if (nativeStop != null) {
@@ -1727,7 +1737,7 @@ class PlayerCoordinator extends ChangeNotifier with WidgetsBindingObserver {
     if (_disposed || tuneGeneration != _tuneGeneration) return;
     _tuning = false;
     _recordPlaybackFailure(error);
-    _setFailureCause(_failureCauseFor(error));
+    _setFailureCause(_failureCauseFor(error), program: failedProgram);
     _canRetry = true;
     _setOverlay(PlayerOverlay.error, timed: false);
   }
@@ -1771,6 +1781,10 @@ class PlayerCoordinator extends ChangeNotifier with WidgetsBindingObserver {
   Future<void> stop() => _stop();
 
   Future<void> _stop({bool forBackground = false}) async {
+    final keepIdle =
+        forBackground &&
+        _status.state == PlayerState.idle &&
+        !hasPlaybackIntent;
     _subtitleCuesSuppressed = true;
     _clearSubtitleCues();
     if (!forBackground) _resumeAfterBackground = false;
@@ -1799,10 +1813,12 @@ class PlayerCoordinator extends ChangeNotifier with WidgetsBindingObserver {
     final operation = _tuneOperations.then((_) async {
       if (nativeStop != null) await nativeStop;
       if (_disposed || generation != _tuneGeneration) return;
-      _status = const PlayerStatus(
-        state: PlayerState.stopped,
-        message: 'Stopped',
-      );
+      if (!keepIdle) {
+        _status = const PlayerStatus(
+          state: PlayerState.stopped,
+          message: 'Stopped',
+        );
+      }
       notifyListeners();
     });
     _tuneOperations = operation.catchError((_) {});
@@ -2199,6 +2215,10 @@ class PlayerCoordinator extends ChangeNotifier with WidgetsBindingObserver {
   }
 
   void showFullGuide() {
+    if (_failedGuideProgram case final failed?) {
+      _failedGuideProgram = null;
+      guide.repairFailedTuneInspection(failed);
+    }
     final selected = miniGuideChannelId;
     if (_overlay == PlayerOverlay.miniGuide && selected != null) {
       final target = guide.channels.indexWhere(

@@ -182,6 +182,41 @@ void main() {
     expect(report, isNot(contains('reported by Windows')));
   });
 
+  test(
+    'Android support report excludes desktop display and renderer facts',
+    () {
+      final diagnostics = Diagnostics();
+      final report = diagnostics.buildSupportReport(
+        diagnostics.snapshot(
+          reportTime: DateTime.utc(2026),
+          timeZone: 'UTC',
+          appVersion: '1.0',
+          appBuild: '1',
+          platform: 'android',
+          plexServerSelected: true,
+          plexConnectionVerified: true,
+          playback: const PlaybackDiagnosticSnapshot(
+            state: PlayerState.playing,
+            receivedTelemetry: PlayerTelemetry(
+              width: 1920,
+              height: 1080,
+              gamma: 'pq',
+              targetGamma: 'gamma2.2',
+            ),
+          ),
+        ),
+      );
+      expect(report, contains('Platform: android'));
+      expect(report, contains('Received video: 1920x1080'));
+      expect(report, contains('Reported media transfer: pq'));
+      expect(report, contains('Plex connection verified: Yes'));
+      expect(report, isNot(contains('Windows display')));
+      expect(report, isNot(contains('HDR matching')));
+      expect(report, isNot(contains(Diagnostics.windowsDisplayStateNote)));
+      expect(report, isNot(contains('Renderer output')));
+    },
+  );
+
   test('display and renderer support facts are normalized independently', () {
     final d = Diagnostics();
     final snapshot = d.snapshot(
