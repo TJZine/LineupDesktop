@@ -504,19 +504,25 @@ class _LineupShellState extends State<LineupShell> {
     }
   }
 
+  ShellDestination get _diagnosticsBackDestination {
+    if (!_diagnosticsFromPlayer) return ShellDestination.settings;
+    return _hasPlaybackSurface
+        ? ShellDestination.player
+        : ShellDestination.guide;
+  }
+
   void _returnFromDiagnostics() {
-    if (!_diagnosticsFromPlayer) {
+    final destination = _diagnosticsBackDestination;
+    if (destination == ShellDestination.settings) {
       _openSupportSettings();
     } else if (widget.profile.isTv) {
-      _returnTv(const _TvPlayer());
-    } else {
-      unawaited(
-        _select(
-          _hasPlaybackSurface
-              ? ShellDestination.player
-              : ShellDestination.guide,
-        ),
+      _returnTv(
+        destination == ShellDestination.player
+            ? const _TvPlayer()
+            : const _TvHome(),
       );
+    } else {
+      unawaited(_select(destination));
     }
   }
 
@@ -649,11 +655,14 @@ class _LineupShellState extends State<LineupShell> {
     await tuning;
   }
 
+  String? get _nextGuideChannelId => switch (_player.failedChannelId) {
+    final failed? => _guide.successorOf(failed)?.id,
+    null => null,
+  };
+
   void _tuneNextFromGuide() {
-    final failed = _player.failedChannelId;
-    if (failed == null) return;
-    final next = _guide.successorOf(failed);
-    if (next != null) unawaited(_tuneFromGuide(next.id));
+    final next = _nextGuideChannelId;
+    if (next != null) unawaited(_tuneFromGuide(next));
   }
 
   void _closeAppMenu({bool restoreInvoker = true}) {
@@ -1381,17 +1390,20 @@ class _LineupShellState extends State<LineupShell> {
       onOpenMenu: _openAppMenu,
       pictureInPicture: guideHasPicture
           ? PlayerSurface(controller: _player, showErrors: true)
-          : GuidePlaybackPlaceholder(
-              unavailable: guidePlaybackUnavailable,
-              reduceMotion: controller.settings.reduceMotion,
-              failureCause: failureCause,
-              message: guidePlaybackUnavailable && failureCause == null
-                  ? _player.error ?? _player.status.message
-                  : null,
-              onRetry: _player.canRetry ? _player.retry : null,
-              onNextChannel: _player.failedChannelId == null
-                  ? null
-                  : _tuneNextFromGuide,
+          : ListenableBuilder(
+              listenable: _guide,
+              builder: (context, _) => GuidePlaybackPlaceholder(
+                unavailable: guidePlaybackUnavailable,
+                reduceMotion: controller.settings.reduceMotion,
+                failureCause: failureCause,
+                message: guidePlaybackUnavailable && failureCause == null
+                    ? _player.error ?? _player.status.message
+                    : null,
+                onRetry: _player.canRetry ? _player.retry : null,
+                onNextChannel: _nextGuideChannelId == null
+                    ? null
+                    : _tuneNextFromGuide,
+              ),
             ),
       onOpenPlayer: guideHasPicture
           ? () => unawaited(_select(ShellDestination.player))
@@ -1460,9 +1472,11 @@ class _LineupShellState extends State<LineupShell> {
         menuFocusNode: _diagnosticsMenuFocus,
         onOpenMenu: _openAppMenu,
         onBack: _returnFromDiagnostics,
-        backLabel: _diagnosticsFromPlayer
-            ? '‹ Back to Player'
-            : '‹ Settings · Support',
+        backLabel: switch (_diagnosticsBackDestination) {
+          ShellDestination.player => '‹ Back to Player',
+          ShellDestination.guide => '‹ Back to Guide',
+          _ => '‹ Settings · Support',
+        },
       ),
       ShellDestination.player => playerView,
     };

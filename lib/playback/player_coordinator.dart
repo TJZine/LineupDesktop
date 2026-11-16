@@ -90,6 +90,7 @@ class PlayerCoordinator extends ChangeNotifier with WidgetsBindingObserver {
     _subscription = player.events.listen(_event);
     lineup.addListener(_lineupChanged);
     guide.addListener(_guideChanged);
+    guide.focus.addListener(_guideFocusChanged);
     if (suspendInBackground) {
       WidgetsBinding.instance.addObserver(this);
       final lifecycle = WidgetsBinding.instance.lifecycleState;
@@ -2216,8 +2217,10 @@ class PlayerCoordinator extends ChangeNotifier with WidgetsBindingObserver {
 
   void showFullGuide() {
     if (_failedGuideProgram case final failed?) {
-      _failedGuideProgram = null;
-      guide.repairFailedTuneInspection(failed);
+      if (!guide.isInspecting(failed) ||
+          guide.repairFailedTuneInspection(failed)) {
+        _failedGuideProgram = null;
+      }
     }
     final selected = miniGuideChannelId;
     if (_overlay == PlayerOverlay.miniGuide && selected != null) {
@@ -2620,6 +2623,13 @@ class PlayerCoordinator extends ChangeNotifier with WidgetsBindingObserver {
     notifyListeners();
   }
 
+  void _guideFocusChanged() {
+    if (_failedGuideProgram case final failed?
+        when !guide.isInspecting(failed)) {
+      _failedGuideProgram = null;
+    }
+  }
+
   void _guideChanged() {
     if (_overlay == PlayerOverlay.programInfo && currentProgram == null) {
       showOsd();
@@ -2845,6 +2855,7 @@ class PlayerCoordinator extends ChangeNotifier with WidgetsBindingObserver {
     _tuning = false;
     lineup.removeListener(_lineupChanged);
     guide.removeListener(_guideChanged);
+    guide.focus.removeListener(_guideFocusChanged);
     unawaited(_cancelPlayerSubscription(_subscription));
     _subscription = null;
     _cancelOverlayTimer();

@@ -720,6 +720,8 @@ class ChannelsViewState extends State<ChannelsView> {
               preferredIndex: index,
               visibleIndex: true,
               canRestore: () {
+                // setFavorite publishes at the end of its queued operation, so
+                // the departing row may have left primary focus null by now.
                 final primary = FocusManager.instance.primaryFocus;
                 return primary == null ||
                     identical(primary, rowScope) ||

@@ -88,6 +88,76 @@ void main() {
     );
   }
 
+  for (final tv in [false, true]) {
+    testWidgets(
+      'Player Diagnostics returns to Guide when playback is gone (TV: $tv)',
+      (tester) async {
+        final fixture = await _pumpShell(tester, tv: tv);
+        await _tune(tester, 'three');
+        _fail(fixture, known: true);
+        await tester.pumpAndSettle();
+        await tester.tap(find.text('Details'));
+        await tester.pumpAndSettle();
+        expect(find.text('‹ Back to Player'), findsOneWidget);
+
+        fixture.controller.fixtureActor.replaceChannels([
+          for (final channel in fixture.controller.channels)
+            if (channel.id != 'three') channel,
+        ]);
+        await tester.pumpAndSettle();
+        final guideLink = find.text('‹ Back to Guide');
+        expect(guideLink, findsOneWidget);
+        expect(find.text('‹ Back to Player'), findsNothing);
+        if (tv) {
+          await tester.binding.handlePopRoute();
+        } else {
+          await tester.tap(guideLink);
+        }
+        await tester.pumpAndSettle();
+        final guide = tester.widget<GuideView>(find.byType(GuideView));
+        expect(find.byType(PlayerView), findsNothing);
+        if (tv) {
+          // TV Home has no in-app parent.
+          expect(guide.onBack!(), isFalse);
+        }
+      },
+    );
+  }
+
+  testWidgets('A single visible failed channel has no Next focus target', (
+    tester,
+  ) async {
+    final fixture = await _pumpShell(tester, tv: true);
+    final guide = _guide(tester);
+    await _tune(tester, 'one');
+    _fail(fixture, known: true, recoverable: false);
+    await tester.pumpAndSettle();
+    await _returnToGuide(tester);
+    final next = find.widgetWithText(TextButton, 'Next channel');
+    expect(next, findsOneWidget);
+    guide.setSearchQuery('Synthetic one');
+    await tester.pumpAndSettle();
+    expect(guide.channels.single.id, 'one');
+    expect(next, findsNothing);
+    expect(find.widgetWithText(TextButton, 'Retry'), findsNothing);
+    final filter = tester
+        .widget<InkWell>(find.byKey(const Key('guide-channel-filter')))
+        .focusNode!;
+    filter.requestFocus();
+    await tester.pump();
+    await tester.sendKeyEvent(LogicalKeyboardKey.arrowUp);
+    await tester.pumpAndSettle();
+    expect(
+      FocusManager.instance.primaryFocus?.context
+          ?.findAncestorWidgetOfExactType<GuidePlaybackPlaceholder>(),
+      isNull,
+    );
+    expect(fixture.player.loads, hasLength(1));
+    guide.setSearchQuery('Synthetic three');
+    await tester.pumpAndSettle();
+    expect(next, findsOneWidget);
+  });
+
   testWidgets('Guide failure Next tunes the filtered successor and wraps', (
     tester,
   ) async {
@@ -245,6 +315,40 @@ void main() {
     expect(artwork, findsOneWidget);
   });
 
+  for (final moveFocus in [false, true]) {
+    testWidgets(
+      'TV failed inspection survives an early return when focus stays (moved: $moveFocus)',
+      (tester) async {
+        var now = _now;
+        final fixture = await _pumpShell(tester, tv: true, clock: () => now);
+        final guide = _guide(tester);
+        final attempted = guide.focusedProgram!;
+        await tester.sendKeyEvent(LogicalKeyboardKey.select);
+        await tester.pump();
+        _fail(fixture, known: true);
+        await tester.pumpAndSettle();
+        await _returnToGuide(tester);
+        expect(guide.focusedProgramId, attempted.id);
+        if (moveFocus) {
+          await tester.sendKeyEvent(LogicalKeyboardKey.arrowDown);
+          await tester.pumpAndSettle();
+          expect(guide.focusedChannelId, isNot(attempted.channelId));
+          guide.focusProgram(attempted);
+        }
+
+        await openDestination(tester, 'Player');
+        expect(find.byType(PlayerView), findsOneWidget);
+        now = attempted.scheduled.end.add(const Duration(minutes: 1));
+        final current = guide.currentProgram(attempted.channelId)!;
+        expect(current.id, isNot(attempted.id));
+        await _returnToGuide(tester);
+        expect(guide.focusedChannelId, attempted.channelId);
+        expect(guide.focusedProgramId, moveFocus ? attempted.id : current.id);
+        expect(fixture.player.loads, hasLength(1));
+      },
+    );
+  }
+
   for (final failed in [true, false]) {
     testWidgets(
       'TV Guide repairs only failed ended inspection (failed: $failed)',
@@ -283,12 +387,12 @@ Future<void> _tune(WidgetTester tester, String id) async {
   await tester.pump();
 }
 
-void _fail(UiFixture fixture, {required bool known}) {
+void _fail(UiFixture fixture, {required bool known, bool recoverable = true}) {
   fixture.player.emit(
     PlayerStatus(
       state: PlayerState.error,
       message: 'Synthetic playback error',
-      recoverable: true,
+      recoverable: recoverable,
       failureCode: known ? 'network_error' : null,
     ),
     eventGeneration: fixture.player.generation,

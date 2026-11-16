@@ -2079,6 +2079,14 @@ class LineupController extends ChangeNotifier {
       final current = channels
           .where((candidate) => candidate.id == channel.id)
           .firstOrNull;
+      if (verifiedNewScheduleRevision != null &&
+          (expectedBase != null ||
+              current != null ||
+              channel.builderKey != null)) {
+        throw ArgumentError(
+          'A verified schedule revision requires a new custom channel.',
+        );
+      }
       if (expectedBase == null) {
         if (current != null) {
           throw const FormatException('Channel already exists');
@@ -2088,10 +2096,8 @@ class LineupController extends ChangeNotifier {
         throw const ChannelStateConflictException();
       }
       if (verifiedNewScheduleRevision != null &&
-          (current != null ||
-              channel.builderKey != null ||
-              verifiedNewScheduleRevision !=
-                  channelScheduleRevision(channel, contentGeneration))) {
+          verifiedNewScheduleRevision !=
+              channelScheduleRevision(channel, contentGeneration)) {
         throw const ChannelScheduleChangedException();
       }
       channel.validate(channels);

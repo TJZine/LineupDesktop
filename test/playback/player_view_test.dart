@@ -3365,13 +3365,30 @@ void main() {
       LineupThemeName.emberSteel,
       formFactor: profileFor(true).formFactor,
     );
-    Future<void> show({double? headerSize, double? tileSize}) async {
+    Future<void> show({
+      double? headerSize,
+      double? tileSize,
+      bool wideClose = false,
+    }) async {
       await tester.pumpWidget(
         MaterialApp(
           theme: theme.copyWith(
+            textButtonTheme: wideClose
+                ? TextButtonThemeData(
+                    style: theme.textButtonTheme.style!.copyWith(
+                      padding: const WidgetStatePropertyAll(
+                        EdgeInsets.symmetric(horizontal: 42),
+                      ),
+                      textStyle: const WidgetStatePropertyAll(
+                        TextStyle(fontFamily: 'Ahem', fontSize: 22),
+                      ),
+                    ),
+                  )
+                : null,
             textTheme: theme.textTheme.copyWith(
               titleLarge: theme.textTheme.titleLarge!.copyWith(
                 fontSize: headerSize,
+                fontFamily: wideClose ? 'Ahem' : null,
               ),
             ),
             listTileTheme: theme.listTileTheme.copyWith(
@@ -3398,13 +3415,23 @@ void main() {
     final baseline = width();
     await show(headerSize: 44);
     expect(width(), greaterThan(baseline));
+    await show(headerSize: 29, wideClose: true);
+    final heading = tester.renderObject<RenderParagraph>(
+      find.text('Sleep timer'),
+    );
+    final lines = heading.getBoxesForSelection(
+      TextSelection(baseOffset: 0, extentOffset: 'Sleep timer'.length),
+    );
+    expect(lines.map((box) => box.top).toSet(), hasLength(1));
+    expect(width(), lessThan(720));
+
     await show(tileSize: 104);
     expect(width(), closeTo(720, .01));
     expect(find.text('Close'), findsOneWidget);
-    expect(
-      find.byKey(const Key('sleep-timer-90')).hitTestable(),
-      findsOneWidget,
-    );
+    final lastPreset = find.byKey(const Key('sleep-timer-90'));
+    await tester.ensureVisible(lastPreset);
+    await tester.pumpAndSettle();
+    expect(lastPreset.hitTestable(), findsOneWidget);
   });
 
   testWidgets(

@@ -4023,29 +4023,57 @@ TextStyle? _sleepTileTextStyle(BuildContext context) =>
     ListTileTheme.of(context).titleTextStyle ??
     Theme.of(context).textTheme.bodyLarge;
 
+TextButton _sleepCloseButton(VoidCallback onPressed) =>
+    TextButton(onPressed: onPressed, child: const _OverlayCloseLabel());
+
+double _sleepCloseWidth(BuildContext context) {
+  final button = _sleepCloseButton(() {});
+  final themeStyle = button.themeStyleOf(context);
+  final defaultStyle = button.defaultStyleOf(context);
+  // Match ButtonStyleButton's precedence for an enabled, resting Close button.
+  T? resolveStyle<T>(T? Function(ButtonStyle style) value) =>
+      (button.style == null ? null : value(button.style!)) ??
+      (themeStyle == null ? null : value(themeStyle)) ??
+      value(defaultStyle);
+  T? resolve<T>(
+    WidgetStateProperty<T?>? Function(ButtonStyle style) property,
+  ) => resolveStyle((style) => property(style)?.resolve({}));
+
+  final density = resolveStyle((style) => style.visualDensity)!;
+  final dx = density.baseSizeAdjustment.dx;
+  final padding = resolve((style) => style.padding)!.horizontal;
+  final constraints = density.effectiveConstraints(
+    BoxConstraints(
+      minWidth: resolve((style) => style.minimumSize)!.width,
+      maxWidth: resolve((style) => style.maximumSize)!.width,
+    ),
+  );
+  final contentWidth =
+      _textWidth(
+        context,
+        _OverlayCloseLabel.label,
+        resolve((style) => style.textStyle),
+      ) +
+      _OverlayCloseLabel.gap +
+      _OverlayCloseLabel.iconSize +
+      padding +
+      2 * math.max(0, dx);
+  final fixedWidth = resolve((style) => style.fixedSize)?.width;
+  final buttonWidth = constraints.constrainWidth(
+    fixedWidth != null && fixedWidth.isFinite ? fixedWidth : contentWidth,
+  );
+  return resolveStyle((style) => style.tapTargetSize) ==
+          MaterialTapTargetSize.padded
+      ? math.max(buttonWidth, kMinInteractiveDimension + dx)
+      : buttonWidth;
+}
+
 double _sleepPopoverWidth(BuildContext context, String state) {
   final theme = Theme.of(context);
-  final closeStyle = const TextButton(
-    onPressed: null,
-    child: _OverlayCloseLabel(),
-  ).defaultStyleOf(context).merge(TextButtonTheme.of(context).style);
-  final closePadding = closeStyle.padding?.resolve({})?.horizontal ?? 0;
-  final closeMinimum = closeStyle.minimumSize?.resolve({})?.width ?? 0;
-  final closeWidth = math.max(
-    closeMinimum,
-    _textWidth(
-          context,
-          _OverlayCloseLabel.label,
-          closeStyle.textStyle?.resolve({}),
-        ) +
-        _OverlayCloseLabel.gap +
-        _OverlayCloseLabel.iconSize +
-        closePadding,
-  );
   var width = math.max(
     _textWidth(context, state, theme.textTheme.bodySmall),
     _textWidth(context, _sleepPickerTitle, theme.textTheme.titleLarge) +
-        closeWidth,
+        _sleepCloseWidth(context),
   );
   final tileStyle = _sleepTileTextStyle(context);
   for (final (label, _) in _sleepChoices) {
@@ -4157,13 +4185,10 @@ class _SleepTimerPicker extends StatelessWidget {
                           style: theme.textTheme.titleLarge,
                         ),
                       ),
-                      TextButton(
-                        onPressed: () {
-                          controller.closeOverlay();
-                          restoreFocus();
-                        },
-                        child: const _OverlayCloseLabel(),
-                      ),
+                      _sleepCloseButton(() {
+                        controller.closeOverlay();
+                        restoreFocus();
+                      }),
                     ],
                   ),
                   if (remaining != null)
