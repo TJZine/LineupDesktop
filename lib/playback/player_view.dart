@@ -84,6 +84,7 @@ class PlayerViewState extends State<PlayerView> with WidgetsBindingObserver {
   final _trackDisplays = PlayerTrackDisplayCache();
   final _subtitleAvoidance = SubtitlePanelAvoidance();
   final _subtitleLayerKey = GlobalKey();
+  final _overlayFocus = FocusNode(debugLabel: 'Player overlay controls');
   late PlayerOverlay _renderedOverlay;
   late int _bottomPanelGeneration;
   var _overlayTransitionDuration = const Duration(milliseconds: 350);
@@ -157,6 +158,7 @@ class PlayerViewState extends State<PlayerView> with WidgetsBindingObserver {
       node.dispose();
     }
     super.dispose();
+    _overlayFocus.dispose();
   }
 
   @override
@@ -393,13 +395,7 @@ class PlayerViewState extends State<PlayerView> with WidgetsBindingObserver {
     if (bottomPanelChanged) {
       final generation = widget.controller.overlayPresentationGeneration;
       WidgetsBinding.instance.addPostFrameCallback((_) {
-        if (mounted &&
-            FocusManager.instance.primaryFocus?.context
-                    ?.findAncestorWidgetOfExactType<_Osd>()
-                    ?.controller ==
-                widget.controller &&
-            _keyboardInput &&
-            !_isTv) {
+        if (mounted && _overlayFocus.hasFocus && _keyboardInput && !_isTv) {
           widget.controller.overlayFocusChanged(nextOverlay, generation, true);
         }
       });
@@ -878,166 +874,170 @@ class PlayerViewState extends State<PlayerView> with WidgetsBindingObserver {
                       controller: controller,
                       text: controller.notice ?? controller.busyLabel!,
                     ),
-                  AnimatedSwitcher(
-                    duration: transitionDuration,
-                    reverseDuration: transitionDuration,
-                    layoutBuilder: (currentChild, previousChildren) => Stack(
-                      alignment: Alignment.center,
-                      children: [
-                        for (final child in previousChildren)
-                          if (overlay != PlayerOverlay.programInfo)
-                            ExcludeFocus(
-                              child: ExcludeSemantics(
-                                // Dispose tooltip overlays with their retiring
-                                // semantics origin, before further label updates.
-                                child: TooltipVisibility(
-                                  visible: false,
-                                  child: child,
-                                ),
-                              ),
-                            ),
-                        ?currentChild,
-                      ],
-                    ),
-                    transitionBuilder: (child, animation) {
-                      final fade = CurvedAnimation(
-                        parent: animation,
-                        curve: Curves.easeOut,
-                        reverseCurve: Curves.easeIn,
-                      );
-                      final transitioned = FadeTransition(
-                        opacity: fade,
-                        child: child,
-                      );
-                      final childOverlay =
-                          (child.key as ValueKey<(PlayerOverlay, int)>)
-                              .value
-                              .$1;
-                      if (childOverlay == PlayerOverlay.audioTracks ||
-                          childOverlay == PlayerOverlay.subtitleTracks ||
-                          childOverlay == PlayerOverlay.programInfo) {
-                        return SlideTransition(
-                          position: Tween(
-                            begin: const Offset(1, 0),
-                            end: Offset.zero,
-                          ).animate(fade),
-                          child: transitioned,
-                        );
-                      }
-                      if (childOverlay == PlayerOverlay.miniGuide) {
-                        return SlideTransition(
-                          position: Tween(
-                            begin: const Offset(0, -1),
-                            end: Offset.zero,
-                          ).animate(fade),
-                          child: transitioned,
-                        );
-                      }
-                      if (childOverlay != PlayerOverlay.osd) {
-                        return transitioned;
-                      }
-                      return SubtitlePanelAnimationRepaint(
-                        avoidance: _subtitleAvoidance,
-                        animation: fade,
-                        child: SlideTransition(
-                          position: Tween(
-                            begin: const Offset(0, 1),
-                            end: Offset.zero,
-                          ).animate(fade),
-                          child: transitioned,
-                        ),
+                  Focus(
+                    focusNode: _overlayFocus,
+                    canRequestFocus: false,
+                    onFocusChange: (focused) {
+                      controller.overlayFocusChanged(
+                        overlay,
+                        presentationGeneration,
+                        focused && _keyboardInput && !_isTv,
                       );
                     },
-                    child: _OverlayTextTheme(
-                      key: presentationKey,
-                      child: Focus(
-                        canRequestFocus: false,
-                        onFocusChange: (focused) {
-                          controller.overlayFocusChanged(
-                            overlay,
-                            presentationGeneration,
-                            focused && _keyboardInput && !_isTv,
-                          );
-                        },
-                        child: switch (overlay) {
-                          _ when showsBottomPanel => _Osd(
-                            trackDisplays: _trackDisplays,
-                            detailsExpanded:
-                                overlay == PlayerOverlay.nowPlaying ||
-                                (trackPopover != null &&
-                                    _trackOrigin == PlayerOverlay.nowPlaying),
-                            trackPopover: trackPopover,
-                            controller: controller,
-                            subtitleAvoidance: _subtitleAvoidance,
-                            subtitleLayerKey: _subtitleLayerKey,
-                            openMenu: widget.openMenu,
-                            openGuide: widget.openGuide,
-                            menuFocus: _menuFocus,
-                            sleepFocus: _sleepFocus,
-                            pickerAnchors: _pickerAnchors,
-                            restoreSleepFocus: _restoreSleepFocus,
-                            controls: _controls,
-                          ),
-                          PlayerOverlay.programInfo =>
-                            infoProgram == null
-                                ? const SizedBox.shrink()
-                                : _NowPlayingInfo(
-                                    controller: controller,
-                                    program: infoProgram,
-                                  ),
-                          PlayerOverlay.miniGuide => _MiniGuide(
-                            controller: controller,
-                            active: _appActive,
-                            openGuide: widget.openGuide,
-                          ),
-                          PlayerOverlay.audioTracks => _Tracks(
-                            trackDisplays: _trackDisplays,
-                            controller: controller,
-                            type: PlayerTrackType.audio,
-                          ),
-                          PlayerOverlay.subtitleTracks => _Tracks(
-                            trackDisplays: _trackDisplays,
-                            controller: controller,
-                            type: PlayerTrackType.subtitle,
-                          ),
-                          PlayerOverlay.channelNumber => _ChannelNumber(
-                            controller: controller,
-                          ),
-                          PlayerOverlay.error => const SizedBox.shrink(),
-                          PlayerOverlay.none ||
-                          PlayerOverlay.fullGuide ||
-                          PlayerOverlay.osd ||
-                          PlayerOverlay.nowPlaying => const SizedBox.shrink(),
-                        },
-                      ),
-                    ),
-                  ),
-                  Positioned(
-                    top: insets.top,
-                    right: insets.right,
-                    child: _AnimatedChannelBug(
-                      visible: showChannelTag,
-                      suppressed: channelTagSuppressed,
-                      interactive: desktop && bottomPanel,
-                      duration: _overlayTransitionDuration,
-                      child: channel == null
-                          ? const SizedBox.shrink()
-                          : _OverlayTextTheme(
-                              child: _ChannelBug(
-                                key: const Key('player-osd-channel-bug'),
-                                channel: channel,
-                                controller: controller,
-                                interactive:
-                                    desktop && bottomPanel && showChannelTag,
-                                onFocusChange: (focused) {
-                                  controller.overlayFocusChanged(
-                                    overlay,
-                                    presentationGeneration,
-                                    focused && _keyboardInput,
-                                  );
-                                },
+                    child: Stack(
+                      fit: StackFit.expand,
+                      children: [
+                        AnimatedSwitcher(
+                          duration: transitionDuration,
+                          reverseDuration: transitionDuration,
+                          layoutBuilder: (currentChild, previousChildren) =>
+                              Stack(
+                                alignment: Alignment.center,
+                                children: [
+                                  for (final child in previousChildren)
+                                    if (overlay != PlayerOverlay.programInfo)
+                                      ExcludeFocus(
+                                        child: ExcludeSemantics(
+                                          // Dispose tooltip overlays with their retiring
+                                          // semantics origin, before further label updates.
+                                          child: TooltipVisibility(
+                                            visible: false,
+                                            child: child,
+                                          ),
+                                        ),
+                                      ),
+                                  ?currentChild,
+                                ],
                               ),
-                            ),
+                          transitionBuilder: (child, animation) {
+                            final fade = CurvedAnimation(
+                              parent: animation,
+                              curve: Curves.easeOut,
+                              reverseCurve: Curves.easeIn,
+                            );
+                            final transitioned = FadeTransition(
+                              opacity: fade,
+                              child: child,
+                            );
+                            final childOverlay =
+                                (child.key as ValueKey<(PlayerOverlay, int)>)
+                                    .value
+                                    .$1;
+                            if (childOverlay == PlayerOverlay.audioTracks ||
+                                childOverlay == PlayerOverlay.subtitleTracks ||
+                                childOverlay == PlayerOverlay.programInfo) {
+                              return SlideTransition(
+                                position: Tween(
+                                  begin: const Offset(1, 0),
+                                  end: Offset.zero,
+                                ).animate(fade),
+                                child: transitioned,
+                              );
+                            }
+                            if (childOverlay == PlayerOverlay.miniGuide) {
+                              return SlideTransition(
+                                position: Tween(
+                                  begin: const Offset(0, -1),
+                                  end: Offset.zero,
+                                ).animate(fade),
+                                child: transitioned,
+                              );
+                            }
+                            if (childOverlay != PlayerOverlay.osd) {
+                              return transitioned;
+                            }
+                            return SubtitlePanelAnimationRepaint(
+                              avoidance: _subtitleAvoidance,
+                              animation: fade,
+                              child: SlideTransition(
+                                position: Tween(
+                                  begin: const Offset(0, 1),
+                                  end: Offset.zero,
+                                ).animate(fade),
+                                child: transitioned,
+                              ),
+                            );
+                          },
+                          child: _OverlayTextTheme(
+                            key: presentationKey,
+                            child: switch (overlay) {
+                              _ when showsBottomPanel => _Osd(
+                                trackDisplays: _trackDisplays,
+                                detailsExpanded:
+                                    overlay == PlayerOverlay.nowPlaying ||
+                                    (trackPopover != null &&
+                                        _trackOrigin ==
+                                            PlayerOverlay.nowPlaying),
+                                trackPopover: trackPopover,
+                                controller: controller,
+                                subtitleAvoidance: _subtitleAvoidance,
+                                subtitleLayerKey: _subtitleLayerKey,
+                                openMenu: widget.openMenu,
+                                openGuide: widget.openGuide,
+                                menuFocus: _menuFocus,
+                                sleepFocus: _sleepFocus,
+                                pickerAnchors: _pickerAnchors,
+                                restoreSleepFocus: _restoreSleepFocus,
+                                controls: _controls,
+                              ),
+                              PlayerOverlay.programInfo =>
+                                infoProgram == null
+                                    ? const SizedBox.shrink()
+                                    : _NowPlayingInfo(
+                                        controller: controller,
+                                        program: infoProgram,
+                                      ),
+                              PlayerOverlay.miniGuide => _MiniGuide(
+                                controller: controller,
+                                active: _appActive,
+                                openGuide: widget.openGuide,
+                              ),
+                              PlayerOverlay.audioTracks => _Tracks(
+                                trackDisplays: _trackDisplays,
+                                controller: controller,
+                                type: PlayerTrackType.audio,
+                              ),
+                              PlayerOverlay.subtitleTracks => _Tracks(
+                                trackDisplays: _trackDisplays,
+                                controller: controller,
+                                type: PlayerTrackType.subtitle,
+                              ),
+                              PlayerOverlay.channelNumber => _ChannelNumber(
+                                controller: controller,
+                              ),
+                              PlayerOverlay.error => const SizedBox.shrink(),
+                              PlayerOverlay.none ||
+                              PlayerOverlay.fullGuide ||
+                              PlayerOverlay.osd ||
+                              PlayerOverlay.nowPlaying =>
+                                const SizedBox.shrink(),
+                            },
+                          ),
+                        ),
+                        Positioned(
+                          top: insets.top,
+                          right: insets.right,
+                          child: _AnimatedChannelBug(
+                            visible: showChannelTag,
+                            suppressed: channelTagSuppressed,
+                            interactive: desktop && bottomPanel,
+                            duration: _overlayTransitionDuration,
+                            child: channel == null
+                                ? const SizedBox.shrink()
+                                : _OverlayTextTheme(
+                                    child: _ChannelBug(
+                                      key: const Key('player-osd-channel-bug'),
+                                      channel: channel,
+                                      controller: controller,
+                                      interactive:
+                                          desktop &&
+                                          bottomPanel &&
+                                          showChannelTag,
+                                    ),
+                                  ),
+                          ),
+                        ),
+                      ],
                     ),
                   ),
                 ],
@@ -1602,30 +1602,31 @@ class _Osd extends StatelessWidget {
     final iconActionWidth = math
         .max(minimumWidth, 20 + padding.horizontal)
         .ceilToDouble();
-    final standardWidth =
+    double labelledActionWidth(String label) => math
+        .max(
+          minimumWidth,
+          _textWidth(context, label, labelStyle) + 20 + 8 + padding.horizontal,
+        )
+        .ceilToDouble();
+    final baselineStandardWidth =
         [
-          if (desktop) 'Guide',
           subtitlesLabel,
           audioLabel,
           sleepLabel,
-        ].fold<double>(
-          0,
-          (sum, label) =>
-              sum +
-              math
-                  .max(
-                    minimumWidth,
-                    _textWidth(context, label, labelStyle) +
-                        20 +
-                        8 +
-                        padding.horizontal,
-                  )
-                  .ceilToDouble(),
-        ) +
+        ].map(labelledActionWidth).fold(0.0, (total, width) => total + width) +
         windowActions.length * iconActionWidth +
         16;
-    final controlsWidth = standardWidth + (dvrControlsEnabled ? 168 : 0);
-    final wrapActions = controlsWidth > availableWidth * .65;
+    final transportWidth = dvrControlsEnabled ? 168 : 0;
+    final baselineControlsWidth = baselineStandardWidth + transportWidth;
+    final wrapActions = baselineControlsWidth > availableWidth * .65;
+    final standardWidth =
+        baselineStandardWidth + (desktop ? labelledActionWidth('Guide') : 0);
+    // The Guide action can wrap within its row. Keep the baseline choice
+    // between beside-title and below-title controls.
+    final controlsWidth = math.min(
+      standardWidth + transportWidth,
+      wrapActions ? availableWidth : availableWidth * .65,
+    );
     final groupedActions = SizedBox(
       width: math.min(controlsWidth, availableWidth),
       child: LayoutBuilder(
@@ -2037,15 +2038,12 @@ class _ChannelBug extends StatefulWidget {
     required this.channel,
     required this.controller,
     required this.interactive,
-    required this.onFocusChange,
     super.key,
   });
 
   final Channel channel;
   final PlayerCoordinator controller;
   final bool interactive;
-  final ValueChanged<bool> onFocusChange;
-
   @override
   State<_ChannelBug> createState() => _ChannelBugState();
 }
@@ -2088,16 +2086,24 @@ class _ChannelBugState extends State<_ChannelBug> {
     );
     final identity = Container(
       constraints: BoxConstraints(maxWidth: size.width * .65),
-      padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 7),
+  @override
+  void didUpdateWidget(_ChannelBug oldWidget) {
+    super.didUpdateWidget(oldWidget);
+    if (!widget.interactive) {
+      _hovering = false;
+      _focused = false;
+    }
+  }
+
+      padding: const EdgeInsets.symmetric(
+        horizontal: 12,
+        vertical: verticalPadding,
+      ),
       child: ChannelIdentity(
         channel: channel,
         libraryTag: libraryTag,
         showSemantics: false,
-        nameStyle: Theme.of(context).textTheme.labelLarge?.copyWith(
-          color: roles.primaryText,
-          fontSize: size.width >= 1920 && size.height >= 900 ? 16 : 14,
-          fontWeight: FontWeight.w500,
-        ),
+        nameStyle: labelStyle,
       ),
     );
     final badge = Semantics(
@@ -2120,6 +2126,15 @@ class _ChannelBugState extends State<_ChannelBug> {
                 child: CallbackShortcuts(
                   bindings: {
                     const SingleActivator(LogicalKeyboardKey.enter):
+    final labelStyle = Theme.of(context).textTheme.labelLarge?.copyWith(
+      color: roles.primaryText,
+      fontSize: size.width >= 1920 && size.height >= 900 ? 16 : 14,
+      fontWeight: FontWeight.w500,
+    );
+    const verticalPadding = 7.0;
+    final badgeHeight =
+        _textSize(context, channel.name, labelStyle).height +
+        2 * verticalPadding;
                         _openMiniGuide,
                     const SingleActivator(LogicalKeyboardKey.numpadEnter):
                         _openMiniGuide,
@@ -2128,8 +2143,9 @@ class _ChannelBugState extends State<_ChannelBug> {
                     customBorder: shape,
                     onTap: _openMiniGuide,
                     onFocusChange: (focused) {
-                      setState(() => _focused = focused);
-                      widget.onFocusChange(focused);
+                      if (mounted && widget.interactive) {
+                        setState(() => _focused = focused);
+                      }
                     },
                     hoverColor: Colors.transparent,
                     focusColor: Colors.transparent,
@@ -2153,37 +2169,48 @@ class _ChannelBugState extends State<_ChannelBug> {
       },
       child: Row(
         mainAxisSize: MainAxisSize.min,
-        crossAxisAlignment: CrossAxisAlignment.start,
+        crossAxisAlignment: CrossAxisAlignment.center,
         children: [
           if (_hovering && canStep) ...[
             ExcludeFocus(
               child: Material(
                 color: _overlayColor(context, widget.controller),
                 shape: const StadiumBorder(),
-                child: Row(
-                  mainAxisSize: MainAxisSize.min,
-                  children: [
-                    IconButton(
-                      tooltip: 'Channel up',
-                      onPressed: () => _step(up: true),
-                      icon: const Icon(Icons.keyboard_arrow_up),
-                      iconSize: 20,
-                      constraints: const BoxConstraints.tightFor(
-                        width: 36,
-                        height: 36,
+                child: SizedBox(
+                  height: badgeHeight,
+                  child: Row(
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                      IconButton(
+                        tooltip: 'Channel up',
+                        onPressed: () => _step(up: true),
+                        icon: const Icon(Icons.keyboard_arrow_up),
+                        iconSize: 20,
+                        padding: EdgeInsets.zero,
+                        style: IconButton.styleFrom(
+                          tapTargetSize: MaterialTapTargetSize.shrinkWrap,
+                        ),
+                        constraints: BoxConstraints.tightFor(
+                          width: 36,
+                          height: badgeHeight,
+                        ),
                       ),
-                    ),
-                    IconButton(
-                      tooltip: 'Channel down',
-                      onPressed: () => _step(up: false),
-                      icon: const Icon(Icons.keyboard_arrow_down),
-                      iconSize: 20,
-                      constraints: const BoxConstraints.tightFor(
-                        width: 36,
-                        height: 36,
+                      IconButton(
+                        tooltip: 'Channel down',
+                        onPressed: () => _step(up: false),
+                        icon: const Icon(Icons.keyboard_arrow_down),
+                        iconSize: 20,
+                        padding: EdgeInsets.zero,
+                        style: IconButton.styleFrom(
+                          tapTargetSize: MaterialTapTargetSize.shrinkWrap,
+                        ),
+                        constraints: BoxConstraints.tightFor(
+                          width: 36,
+                          height: badgeHeight,
+                        ),
                       ),
-                    ),
-                  ],
+                    ],
+                  ),
                 ),
               ),
             ),
@@ -2193,6 +2220,7 @@ class _ChannelBugState extends State<_ChannelBug> {
         ],
       ),
     );
+                key: const Key('player-channel-step-pill'),
   }
 }
 
@@ -2774,7 +2802,10 @@ class _NowPlayingBadge extends StatelessWidget {
   }
 }
 
-double _textWidth(BuildContext context, String text, TextStyle? style) {
+double _textWidth(BuildContext context, String text, TextStyle? style) =>
+    _textSize(context, text, style).width;
+
+Size _textSize(BuildContext context, String text, TextStyle? style) {
   final painter = TextPainter(
     text: TextSpan(text: text, style: style),
     textDirection: Directionality.of(context),
@@ -2782,9 +2813,9 @@ double _textWidth(BuildContext context, String text, TextStyle? style) {
     locale: Localizations.maybeLocaleOf(context),
     maxLines: 1,
   )..layout();
-  final width = painter.width;
+  final size = painter.size;
   painter.dispose();
-  return width;
+  return size;
 }
 
 class _NowPlayingCast extends StatelessWidget {

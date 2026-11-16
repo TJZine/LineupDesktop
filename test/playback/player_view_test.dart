@@ -4955,9 +4955,93 @@ void main() {
   }, semanticsEnabled: true);
 
   testWidgets(
+    'desktop Guide action preserves the title status and timing stack across viewports',
+    (tester) async {
+      tester.view.devicePixelRatio = 1;
+      addTearDown(tester.view.resetPhysicalSize);
+      addTearDown(tester.view.resetDevicePixelRatio);
+      final fixture = _Fixture(
+        PlayerState.paused,
+        richProgram: true,
+        tracks: const [
+          PlayerTrack(
+            id: 1,
+            type: PlayerTrackType.audio,
+            selected: true,
+            language: 'en',
+            title: 'Synthetic choice 1',
+          ),
+          PlayerTrack(
+            id: 1,
+            type: PlayerTrackType.subtitle,
+            selected: true,
+            language: 'en',
+            title: 'Synthetic choice 1',
+          ),
+        ],
+      );
+      await fixture.player.tune('channel');
+      fixture.native.emitState(PlayerState.paused);
+      for (final size in const [
+        Size(1280, 720),
+        Size(1512, 945),
+        Size(1920, 1080),
+        Size(2560, 1080),
+      ]) {
+        tester.view.physicalSize = size;
+        await tester.pumpWidget(
+          MaterialApp(
+            builder: _playerDesktopCanvasBuilder,
+            home: PlayerView(
+              controller: fixture.player,
+              openGuide: () {},
+              openMenu: (_, _) {},
+            ),
+          ),
+        );
+        await tester.pumpAndSettle();
+        await tester.runAsync(clearLogoDecodesSettled);
+        await tester.pumpAndSettle();
+
+        final art = _drawnRect(
+          tester,
+          find.byKey(const Key('player-osd-logo')),
+        );
+        final status = _drawnRect(
+          tester,
+          find.byKey(const Key('player-osd-status')),
+        );
+        final timing = _drawnRect(
+          tester,
+          find.byKey(const Key('player-osd-timing')),
+        );
+        final scale = LineupCanvas.scaleFor(size);
+        expect(status.top, closeTo(art.bottom + 8 * scale, 1), reason: '$size');
+        expect(
+          timing.top,
+          closeTo(status.bottom + 10 * scale, 1),
+          reason: '$size',
+        );
+        expect(timing.left, closeTo(art.left, 1), reason: '$size');
+        expect(
+          find.byKey(const Key('player-osd-guide')).hitTestable(),
+          findsOneWidget,
+        );
+        expect(find.byTooltip('Full screen').hitTestable(), findsOneWidget);
+      }
+      await tester.pumpWidget(const SizedBox.shrink());
+      fixture.dispose();
+    },
+  );
+
+  testWidgets(
     'desktop OSD Guide and live channel badge open their destinations',
     (tester) async {
-      final fixture = _Fixture(PlayerState.playing, channelCount: 3);
+      final fixture = _Fixture(
+        PlayerState.playing,
+        channelCount: 3,
+        overlayTimeout: const Duration(seconds: 2),
+      );
       tester.view.physicalSize = const Size(1280, 720);
       tester.view.devicePixelRatio = 1;
       addTearDown(tester.view.resetPhysicalSize);
@@ -5001,6 +5085,25 @@ void main() {
       await pointer.addPointer();
       await pointer.moveTo(tester.getCenter(identity));
       await tester.pumpAndSettle();
+      final pill = find.byKey(const Key('player-channel-step-pill'));
+      final badgeBox = find
+          .ancestor(of: identity, matching: find.byType(InkWell))
+          .first;
+      expect(
+        _drawnRect(tester, pill).height,
+        closeTo(_drawnRect(tester, badgeBox).height, .1),
+      );
+      expect(
+        _drawnRect(tester, pill).center.dy,
+        closeTo(_drawnRect(tester, badgeBox).center.dy, .1),
+      );
+      fixture.player.closeOverlay();
+      await tester.pump();
+      fixture.player.showOsd();
+      await tester.pumpAndSettle();
+      expect(pill, findsNothing);
+      await pointer.moveTo(tester.getCenter(identity) + const Offset(1, 0));
+      await tester.pumpAndSettle();
       expect(up, findsOneWidget);
       expect(down, findsOneWidget);
       expect(
@@ -5039,6 +5142,29 @@ void main() {
         await tester.pump();
       }
       expect(Focus.of(tester.element(identity)).hasFocus, isTrue);
+      await tester.pump(const Duration(seconds: 3));
+      expect(fixture.player.overlay, PlayerOverlay.osd);
+      fixture.player.closeOverlay();
+      await tester.pump();
+      fixture.player.showOsd();
+      await tester.pumpAndSettle();
+      expect(Focus.of(tester.element(identity)).hasFocus, isFalse);
+      expect(
+        tester.widget<InkWell>(badgeBox).customBorder,
+        isA<StadiumBorder>().having(
+          (shape) => shape.side.width,
+          'resting border width',
+          1,
+        ),
+      );
+      for (
+        var i = 0;
+        i < 20 && !Focus.of(tester.element(identity)).hasFocus;
+        i++
+      ) {
+        await tester.sendKeyEvent(LogicalKeyboardKey.tab);
+        await tester.pump();
+      }
       await tester.sendKeyEvent(LogicalKeyboardKey.enter);
       await tester.pumpAndSettle();
       expect(fixture.player.overlay, PlayerOverlay.miniGuide);
