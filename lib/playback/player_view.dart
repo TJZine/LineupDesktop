@@ -1524,8 +1524,7 @@ class _Osd extends StatelessWidget {
       episodeFacts,
       _statusLabel(controller.presentedState),
     ].nonNulls.toList(growable: false);
-    final identity = Column(
-      key: const Key('player-osd-identity'),
+    final programIdentity = Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
         if (controller.lineup.settings.preferClearLogos &&
@@ -1569,6 +1568,32 @@ class _Osd extends StatelessWidget {
           ),
         ],
       ],
+    );
+    void openProgramDetails() {
+      controller.closeSleepPicker();
+      controller.showNowPlaying();
+    }
+
+    final identity = KeyedSubtree(
+      key: const Key('player-osd-identity'),
+      child: desktop && program != null
+          ? Semantics(
+              container: true,
+              explicitChildNodes: true,
+              label: 'Show program details',
+              button: true,
+              onTap: openProgramDetails,
+              child: MouseRegion(
+                cursor: SystemMouseCursors.click,
+                child: GestureDetector(
+                  behavior: HitTestBehavior.opaque,
+                  excludeFromSemantics: true,
+                  onTap: openProgramDetails,
+                  child: programIdentity,
+                ),
+              ),
+            )
+          : programIdentity,
     );
     final osdSecondaryStyle = Theme.of(context).textTheme.bodySmall?.copyWith(
       color: roles.secondaryText,
@@ -1817,6 +1842,11 @@ class _Osd extends StatelessWidget {
           controller: controller,
           panel: panel,
           anchor: pickerAnchors[anchor],
+          preferredWidth: type != null
+              ? _trackPopoverWidth(context, controller, displays, type)
+              : sleepOpen
+              ? _sleepPopoverWidth(context, sleepLabel)
+              : 0,
           surfaceKey: Key(
             type == null ? 'sleep-timer-picker' : 'player-track-popover',
           ),
@@ -1842,11 +1872,6 @@ class _Osd extends StatelessWidget {
             key: const Key('player-safe-dvr-target'),
             left: safe.left,
             right: safe.right,
-          preferredWidth: type != null
-              ? _trackPopoverWidth(context, controller, displays, type)
-              : sleepOpen
-              ? _sleepPopoverWidth(context, sleepLabel)
-              : 0,
             // Slider's invisible 48cu semantics target extends 4cu beyond
             // this 40cu portal. Keep that target above the bottom safe edge.
             bottom: safe.bottom + (kMinInteractiveDimension - 40) / 2,
@@ -2061,6 +2086,15 @@ class _ChannelBugState extends State<_ChannelBug> {
   bool _hovering = false;
   bool _focused = false;
 
+  @override
+  void didUpdateWidget(_ChannelBug oldWidget) {
+    super.didUpdateWidget(oldWidget);
+    if (!widget.interactive) {
+      _hovering = false;
+      _focused = false;
+    }
+  }
+
   void _openMiniGuide() {
     widget.controller.closeSleepPicker();
     widget.controller.showMiniGuide();
@@ -2086,15 +2120,6 @@ class _ChannelBugState extends State<_ChannelBug> {
     );
     final label = ChannelIdentity.label(channel, libraryTag: libraryTag);
     final interactive = widget.interactive;
-  @override
-  void didUpdateWidget(_ChannelBug oldWidget) {
-    super.didUpdateWidget(oldWidget);
-    if (!widget.interactive) {
-      _hovering = false;
-      _focused = false;
-    }
-  }
-
     final border = interactive && LineupFocusScope.visible(context, _focused);
     final shape = StadiumBorder(
       side: BorderSide(
@@ -2102,6 +2127,15 @@ class _ChannelBugState extends State<_ChannelBug> {
         width: border ? roles.focusBorderWidth : 1,
       ),
     );
+    final labelStyle = Theme.of(context).textTheme.labelLarge?.copyWith(
+      color: roles.primaryText,
+      fontSize: size.width >= 1920 && size.height >= 900 ? 16 : 14,
+      fontWeight: FontWeight.w500,
+    );
+    const verticalPadding = 7.0;
+    final badgeHeight =
+        _textSize(context, channel.name, labelStyle).height +
+        2 * verticalPadding;
     final identity = Container(
       constraints: BoxConstraints(maxWidth: size.width * .65),
       padding: const EdgeInsets.symmetric(
@@ -2126,15 +2160,6 @@ class _ChannelBugState extends State<_ChannelBug> {
       child: DecoratedBox(
         decoration: BoxDecoration(
           color: _overlayColor(context, widget.controller),
-    final labelStyle = Theme.of(context).textTheme.labelLarge?.copyWith(
-      color: roles.primaryText,
-      fontSize: size.width >= 1920 && size.height >= 900 ? 16 : 14,
-      fontWeight: FontWeight.w500,
-    );
-    const verticalPadding = 7.0;
-    final badgeHeight =
-        _textSize(context, channel.name, labelStyle).height +
-        2 * verticalPadding;
           borderRadius: BorderRadius.circular(999),
           border: Border.fromBorderSide(shape.side),
         ),
@@ -2184,6 +2209,7 @@ class _ChannelBugState extends State<_ChannelBug> {
             ExcludeFocus(
               child: Material(
                 color: _overlayColor(context, widget.controller),
+                key: const Key('player-channel-step-pill'),
                 shape: const StadiumBorder(),
                 child: SizedBox(
                   height: badgeHeight,
@@ -2220,7 +2246,6 @@ class _ChannelBugState extends State<_ChannelBug> {
                       ),
                     ],
                   ),
-                key: const Key('player-channel-step-pill'),
                 ),
               ),
             ),
@@ -3435,8 +3460,9 @@ class _MiniGuideRow extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final focused = channel.id == controller.miniGuideChannelId;
+    final tuned = channel.id == controller.watchingChannelId;
     return LineupRowSurface(
-      selected: channel.id == controller.watchingChannelId,
+      selected: tuned || (focused && !LineupFocusScope.visible(context)),
       focused: focused,
       child: Builder(
         builder: (context) {
@@ -3446,7 +3472,6 @@ class _MiniGuideRow extends StatelessWidget {
               DeviceProfile.of(context).isTv &&
               roles.focusTreatment == LineupFocusTreatment.fill &&
               LineupFocusScope.visible(context, focused);
-          final tuned = channel.id == controller.watchingChannelId;
           final unsupported =
               controller.status.state == PlayerState.unsupported;
           final current = controller.guide.currentProgram(channel.id);
@@ -3615,11 +3640,20 @@ class _MiniGuideRow extends StatelessWidget {
                     ),
                   ],
                 );
+          final semantics = [
+            identityLabel,
+            'Now $currentText',
+            if (current?.scheduled.item.showTitle?.trim().isNotEmpty == true)
+              ?currentSupport,
+            if (nextText != null) 'Next $nextText',
+            if (next?.scheduled.item.showTitle?.trim().isNotEmpty == true)
+              ?nextSupport,
+            if (tuned) 'Now watching',
+          ].join('. ');
           return Semantics(
             key: Key('mini-guide-row-${channel.id}'),
             selected: focused,
-            label:
-                '$identityLabel. Now $currentText.${next == null ? '' : ' Next $nextText.'}${tuned ? ' Now watching.' : ''}',
+            label: '$semantics.',
             child: DecoratedBox(
               decoration: BoxDecoration(
                 border: Border(
@@ -3753,6 +3787,7 @@ class _PlayerPickerLayout extends StatelessWidget {
     required this.controller,
     required this.panel,
     required this.anchor,
+    required this.preferredWidth,
     required this.surfaceKey,
     required this.picker,
   });
@@ -3760,6 +3795,7 @@ class _PlayerPickerLayout extends StatelessWidget {
   final PlayerCoordinator controller;
   final Widget panel;
   final _PickerAnchorHandle? anchor;
+  final double preferredWidth;
   final Key surfaceKey;
   final Widget? picker;
 
@@ -3767,6 +3803,7 @@ class _PlayerPickerLayout extends StatelessWidget {
   Widget build(BuildContext context) => CustomMultiChildLayout(
     delegate: _PlayerPickerPlacement(
       anchor: anchor,
+      preferredWidth: preferredWidth,
       insets: DeviceProfile.of(context).isTv
           ? LineupCanvas.contentInsets(context)
           : MediaQuery.paddingOf(context),
@@ -3787,7 +3824,6 @@ class _PlayerPickerLayout extends StatelessWidget {
             ),
           ),
         ),
-    required this.preferredWidth,
     ],
   );
 }
@@ -3795,7 +3831,6 @@ class _PlayerPickerLayout extends StatelessWidget {
 class _PickerAnchorHandle {
   _RenderPickerAnchor? attachedBox;
 }
-  final double preferredWidth;
 
 class _PickerAnchor extends SingleChildRenderObjectWidget {
   const _PickerAnchor({required this.handle, required super.child});
@@ -3803,7 +3838,6 @@ class _PickerAnchor extends SingleChildRenderObjectWidget {
   final _PickerAnchorHandle handle;
 
   @override
-      preferredWidth: preferredWidth,
   _RenderPickerAnchor createRenderObject(BuildContext context) =>
       _RenderPickerAnchor(handle);
 
@@ -3866,6 +3900,7 @@ class _PlayerPickerPlacement extends MultiChildLayoutDelegate {
 
   final _PickerAnchorHandle? anchor;
   final EdgeInsets insets;
+  final double preferredWidth;
 
   @override
   void performLayout(Size size) {
@@ -3900,7 +3935,6 @@ class _PlayerPickerPlacement extends MultiChildLayoutDelegate {
       _PickerSlot.popover,
       BoxConstraints.tightFor(width: width)
           .copyWith(maxHeight: bottom - insets.top),
-  final double preferredWidth;
     );
     positionChild(
       _PickerSlot.popover,
@@ -3924,34 +3958,6 @@ class _PlayerPickerPlacement extends MultiChildLayoutDelegate {
   bool shouldRelayout(_PlayerPickerPlacement oldDelegate) => true;
 }
 
-class _SleepTimerPicker extends StatelessWidget {
-  const _SleepTimerPicker({
-    required this.controller,
-    required this.restoreFocus,
-  });
-
-  final PlayerCoordinator controller;
-  final VoidCallback restoreFocus;
-
-  void _choose(Duration? duration) {
-    controller.setSleepTimer(duration);
-    restoreFocus();
-  }
-
-  @override
-  Widget build(BuildContext context) {
-    final roles = LineupTheme.of(context);
-    final supportingText = Color.lerp(
-      roles.secondaryText,
-      roles.primaryText,
-      0.65,
-    )!;
-    final theme = Theme.of(context);
-    final selected = controller.sleepDuration;
-    final remaining = controller.sleepRemaining;
-    // A newly opened TV picker must take focus from its invoking action.
-    // Its selected preset can autofocus within this fresh scope; without it,
-    // the already-focused OSD scope keeps the arrow keys on the action row.
 const _pickerPadding = 12.0;
 const _trackRowPadding = 12.0;
 const _trackTrailingWidth = 30.0;
@@ -4057,6 +4063,34 @@ Widget _pickerChoiceText(String label, TextStyle? style) => LayoutBuilder(
   },
 );
 
+class _SleepTimerPicker extends StatelessWidget {
+  const _SleepTimerPicker({
+    required this.controller,
+    required this.restoreFocus,
+  });
+
+  final PlayerCoordinator controller;
+  final VoidCallback restoreFocus;
+
+  void _choose(Duration? duration) {
+    controller.setSleepTimer(duration);
+    restoreFocus();
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final roles = LineupTheme.of(context);
+    final supportingText = Color.lerp(
+      roles.secondaryText,
+      roles.primaryText,
+      0.65,
+    )!;
+    final theme = Theme.of(context);
+    final selected = controller.sleepDuration;
+    final remaining = controller.sleepRemaining;
+    // A newly opened TV picker must take focus from its invoking action.
+    // Its selected preset can autofocus within this fresh scope; without it,
+    // the already-focused OSD scope keeps the arrow keys on the action row.
     Widget pickerFocus(Widget child) => DeviceProfile.of(context).isTv
         ? FocusScope(autofocus: true, child: child)
         : child;

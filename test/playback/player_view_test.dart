@@ -5182,6 +5182,35 @@ void main() {
     semanticsEnabled: true,
   );
 
+  testWidgets(
+    'desktop program block shows Now Playing through pointer and semantics',
+    (tester) async {
+      final fixture = _Fixture(PlayerState.playing, richProgram: true);
+      expect(await fixture.player.tune('channel'), isTrue);
+      await tester.pumpWidget(
+        MaterialApp(
+          builder: _playerDesktopCanvasBuilder,
+          home: PlayerView(controller: fixture.player, openGuide: () {}),
+        ),
+      );
+      await tester.pumpAndSettle();
+      final action = find.bySemanticsLabel('Show program details');
+      expect(
+        tester
+            .getSemantics(action)
+            .getSemanticsData()
+            .hasAction(SemanticsAction.tap),
+        isTrue,
+      );
+      await tester.tap(find.byKey(const Key('player-osd-identity')));
+      await tester.pumpAndSettle();
+      expect(fixture.player.overlay, PlayerOverlay.nowPlaying);
+      await tester.pumpWidget(const SizedBox.shrink());
+      fixture.dispose();
+    },
+    semanticsEnabled: true,
+  );
+
   testWidgets('OSD uses stateful labeled track and sleep actions', (
     tester,
   ) async {
@@ -8185,35 +8214,6 @@ void main() {
     );
   }
 
-  testWidgets('audio requires a track and empty subtitles explains Off', (
-    tester,
-  ) async {
-    final fixture = _Fixture(PlayerState.playing);
-    await tester.pumpWidget(
-      MaterialApp(
-        builder: _playerDesktopCanvasBuilder,
-        home: PlayerView(controller: fixture.player, openGuide: () {}),
-      ),
-    );
-
-    await tester.sendKeyEvent(LogicalKeyboardKey.keyA);
-    expect(fixture.player.overlay, PlayerOverlay.none);
-
-    fixture.player.showOsd();
-    await tester.sendKeyEvent(LogicalKeyboardKey.keyC);
-    await tester.pump();
-    expect(fixture.player.overlay, PlayerOverlay.subtitleTracks);
-    expect(find.byKey(const Key('player-track-popover')), findsOneWidget);
-    expect(find.text('No subtitle tracks available'), findsOneWidget);
-    expect(find.text('Off'), findsOneWidget);
-
-    await tester.pumpWidget(const SizedBox.shrink());
-    fixture.dispose();
-  });
-
-  testWidgets(
-    'focused horizontal Mini Guide scrolls only titles with fitting words',
-    (tester) async {
   testWidgets(
     'desktop track picker fits the hint, keeps its mode and restores keyboard focus',
     (tester) async {
@@ -8311,6 +8311,35 @@ void main() {
     },
   );
 
+  testWidgets('audio requires a track and empty subtitles explains Off', (
+    tester,
+  ) async {
+    final fixture = _Fixture(PlayerState.playing);
+    await tester.pumpWidget(
+      MaterialApp(
+        builder: _playerDesktopCanvasBuilder,
+        home: PlayerView(controller: fixture.player, openGuide: () {}),
+      ),
+    );
+
+    await tester.sendKeyEvent(LogicalKeyboardKey.keyA);
+    expect(fixture.player.overlay, PlayerOverlay.none);
+
+    fixture.player.showOsd();
+    await tester.sendKeyEvent(LogicalKeyboardKey.keyC);
+    await tester.pump();
+    expect(fixture.player.overlay, PlayerOverlay.subtitleTracks);
+    expect(find.byKey(const Key('player-track-popover')), findsOneWidget);
+    expect(find.text('No subtitle tracks available'), findsOneWidget);
+    expect(find.text('Off'), findsOneWidget);
+
+    await tester.pumpWidget(const SizedBox.shrink());
+    fixture.dispose();
+  });
+
+  testWidgets(
+    'focused horizontal Mini Guide scrolls only titles with fitting words',
+    (tester) async {
       const oneWord = 'ExtraordinarilyLongUnbrokenChannelName';
       const manyWords =
           'Independent Productions From Across the World and Beyond';
@@ -8383,7 +8412,6 @@ void main() {
       tester.view.devicePixelRatio = 1;
       addTearDown(tester.view.resetPhysicalSize);
       addTearDown(tester.view.resetDevicePixelRatio);
-      addTearDown(fixture.dispose);
       expect(await fixture.player.tune('channel'), isTrue);
       await tester.pumpWidget(
         MaterialApp(
@@ -8435,7 +8463,17 @@ void main() {
         ),
         findsOneWidget,
       );
+      final announcement = tester
+          .widget<Semantics>(row('channel'))
+          .properties
+          .label!;
+      expect(announcement, contains('The Lost Frequency · 3:15–4:15 AM'));
+      await tester.tap(row('channel-1'));
+      await tester.pumpAndSettle();
+      expect(fixture.player.miniGuideChannelId, 'channel-1');
+      expect(surface('channel-1').selected, isTrue);
       await tester.pumpWidget(const SizedBox.shrink());
+      fixture.dispose();
     },
   );
 

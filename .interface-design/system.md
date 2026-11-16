@@ -147,6 +147,7 @@ Preserve:
   from Watching and keeps the existing TV fill.
 - The shared themed overlay material, per-level transparency and feather only
   beyond text; preserve spacing, scalable controls and Reduce Motion behavior.
+- On desktop, clicking the program block opens Now Playing.
 - `I` or `Down` expands Now Playing; `I`, `Enter`, Close or Back/Esc collapses it
   to the OSD. Preserve artwork currentness and text/portrait fallbacks.
 

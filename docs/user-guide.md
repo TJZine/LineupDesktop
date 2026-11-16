@@ -418,7 +418,8 @@ When Plex supplies cast facts, up to four actor portraits appear in one row,
 with names and roles beneath them. Full cast facts remain available to
 accessibility. Missing or failed headshots use a neutral person silhouette,
 never fabricated initials, and no cast space is reserved when cast facts are
-absent. Pointer movement leaves the expanded reading surface open. Press `I`,
+absent. On desktop, click the Player’s program title or artwork to open Now
+Playing. Pointer movement leaves the expanded reading surface open. Press `I`,
 `Enter`, `Esc`, or Back, or choose **Close**, to collapse it to the OSD. `A` or
 `C` opens the requested track list directly when that track type is available.
 Subtitles, Audio and Sleep use a popover for six or fewer choices. Longer lists
