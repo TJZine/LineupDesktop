@@ -286,6 +286,10 @@ active video appears in a responsive picture-in-picture area. PiP is the sole
 full Guide presentation; the retired full-screen Overlay layout is not
 available. The Guide and Player share one playback session.
 
+An empty lineup opens the Guide with **No channels yet** and **Set up channels**
+in the content area. On TV, Select activates **Set up channels** immediately.
+The schedule and its controls appear after channels have been created.
+
 The Guide opens on **All channels** each time you launch Lineup. The toolbar
 filter lists All channels, Favourites when present, the available source types,
 and libraries, with counts. Search accepts a channel name or number within
@@ -575,7 +579,8 @@ Player action keys reset the OSD timeout; auto-hide returns focus to video.
 Closing a track picker or sleep picker returns to its invoking action. A
 playback failure shows a short cause and offers **Try again** when retry is
 available, or **Choose another channel**. Back closes the Mini Guide and returns
-to the slate. From a newly opened failure, Back dismisses the error overlay; the
+to the slate. Pressing Menu twice returns focus to the action that was focused
+on the slate. From a newly opened failure, Back dismisses the error overlay; the
 next Back opens Guide.
 
 Use the Player's OSD controls for tracks and sleep. Plex linking uses the code
@@ -597,10 +602,9 @@ Select on the row. Back closes the row menu and returns focus to the channel.
 Press Menu while the row menu is open to switch to the Lineup menu.
 
 **Update lineup…** opens the bulk workflow. In an empty lineup, choose
-**Generate lineup…**. The workflow proposes generator-owned channels,
-then lets you replace generated channels, add generated channels, or refresh
-matching generated channels after review. All three modes preserve every custom
-channel. Refresh preserves a matching generated channel's name, schedule anchor,
+**Generate lineup…** or **Add a custom channel**. The generation workflow
+proposes generator-owned channels and lets you replace, add, or refresh them
+after review. All three modes preserve every custom channel. Refresh preserves a matching generated channel's name, schedule anchor,
 shuffle identity, and favourite status while updating its programming recipe.
 Changing **Channel order** can renumber generated channels. **Replace all**
 keeps favourites for matching generated channels and may reset their schedule
@@ -696,7 +700,8 @@ Open **Details** from a Player error to view Diagnostics and use **Back to
 Player** to return. When you open Diagnostics from Settings, Back returns to
 Support.
 
-When playback is idle, the summary explains how to see playback details.
+When recent events are empty, Diagnostics explains whether recording is off or
+no events have been recorded yet. When playback is idle, the summary explains how to see playback details.
 **Technical details** includes the Plex connection route and latency when
 measured and shows display and media facts supported by the platform. Copied
 reports use the same platform display facts. Windows display state does not

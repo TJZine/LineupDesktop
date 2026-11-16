@@ -53,17 +53,13 @@ class _StudioInventoryStatus extends StatelessWidget {
       );
     }
     if (!hasInventory) {
-      return Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          const Text(
-            'No usable programming is loaded. A new channel needs a selected Plex movie/show library or video playlist.',
-          ),
-          LineupInlineLink(
-            onPressed: saving ? null : onGenerate,
-            child: const Text('Update lineup…'),
-          ),
-        ],
+      return LineupEmptyState(
+        title: 'No usable programming is loaded',
+        message: 'Select a Plex movie or show library or a video playlist to create a channel.',
+        action: LineupInlineLink(
+          onPressed: saving ? null : onGenerate,
+          child: const Text('Update lineup…'),
+        ),
       );
     }
     return const SizedBox.shrink();

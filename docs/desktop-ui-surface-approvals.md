@@ -72,6 +72,21 @@ may cover multiple listed states only when that scope is clear to the user.
 | surface-44 | Diagnostics · technical details | Approved at 1080p | Behavior checks passed; adaptive/Windows pending | September12 conditional lock completed; `7193d52e` |
 | surface-45 | Diagnostics · events and details | Approved at 1080p | Behavior checks passed; adaptive/Windows pending | September12 conditional lock completed; `7193d52e` |
 
+## November 13–14 visual-system assessment
+
+UX assessment decision, 2026-11-13/14 (N20–N22, D8, N6). Use the bullet only
+for channel number and name, and the middle dot between metadata items. The
+LINEUP wordmark uses the bundled [Arimo Regular](licenses-and-rebuilding.md#arimo-wordmark)
+at the approved size, weight and letter spacing. Earlier captures retain their
+recorded font from the time of approval.
+
+The empty Guide shows **No channels yet** and **Set up channels** across its
+content area with the toolbar controls and picture absent. Studio programming,
+the empty Manage channels directory and Diagnostics recent events use the
+shared centered empty state. **Generate lineup…** remains primary and **Add
+a custom channel** remains available in the empty directory. Diagnostics'
+one-line idle playback summary remains in place.
+
 ## Approval records
 
 Surface-01 was explicitly approved on September 9, 2026, as recorded below.

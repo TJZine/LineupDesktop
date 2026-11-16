@@ -226,6 +226,7 @@ void main() {
         profile: profileFor(true),
         scenario: LineupScenario(
           stage: SetupStage.ready,
+          channels: [syntheticGuideChannel()],
           settings: LineupSettings(theme: theme),
         ),
       );

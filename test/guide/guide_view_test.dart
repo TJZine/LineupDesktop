@@ -1218,7 +1218,8 @@ void main() {
       final emptyHeading = find.text('No channels yet');
       expect(
         tester.widget<Text>(emptyHeading).style,
-        Theme.of(tester.element(emptyHeading)).textTheme.titleLarge,
+        Theme.of(tester.element(emptyHeading)).textTheme.titleLarge
+            ?.copyWith(fontSize: 24),
       );
       expect(
         tester
@@ -2910,7 +2911,7 @@ void main() {
         tester
             .widget<Text>(find.byKey(const Key('guide-now-playing-context')))
             .data,
-        '1 · Channel 0 — Earlier 0',
+        '1 • Channel 0 · Earlier 0',
       );
       final oldNowLine = tester
           .getTopLeft(find.byKey(const Key('guide-now-line')))
@@ -2926,7 +2927,7 @@ void main() {
         tester
             .widget<Text>(find.byKey(const Key('guide-now-playing-context')))
             .data,
-        '1 · Channel 0 — Next 0',
+        '1 • Channel 0 · Next 0',
       );
       expect(label(next), contains('currently airing'));
       expect(marker(earlier), findsNothing);

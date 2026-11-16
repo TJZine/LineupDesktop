@@ -280,7 +280,7 @@ _BaseDisplay _baseDisplay(PlayerTrack track, _TrackFacts facts) {
       ? qualifier ?? _fallbackTrackLabel(track.type, track.id)
       : qualifier == null
       ? facts.language!
-      : '${facts.language} — $qualifier';
+      : '${facts.language} · $qualifier';
   final secondary = <String>[];
   final seen = <String>{};
   for (final value in [facts.language, title]) {
@@ -319,12 +319,12 @@ String? _compactText(
   final purposes = facts.purposes;
   final title = base.titleText;
   if (language == null) return title ?? purposes.firstOrNull;
-  final purposeText = purposes.join(' • ');
+  final purposeText = purposes.join(' · ');
   if (title == null || !sameCompact || !titleDiffers) {
-    return purposeText.isEmpty ? language : '$language — $purposeText';
+    return purposeText.isEmpty ? language : '$language · $purposeText';
   }
   final detail = purposeText.isEmpty ? title : '$purposeText · $title';
-  return '$language — $detail';
+  return '$language · $detail';
 }
 
 String _compactKey(_TrackFacts facts) =>

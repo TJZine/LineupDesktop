@@ -93,7 +93,7 @@ void main() {
       final us = _track(id: 1, language: 'en-US', title: 'Original');
       final sameRegion = _track(id: 2, language: 'en-US', title: 'Restored');
       final first = cache.forTracks([us, sameRegion]);
-      expect(first.displayFor(us).compactText, 'English — Original');
+      expect(first.displayFor(us).compactText, 'English · Original');
       final second = cache.forTracks([
         us,
         _track(id: 2, language: 'en-GB', title: 'Restored'),
@@ -101,7 +101,7 @@ void main() {
       expect(second, isNot(same(first)));
       expect(
         second.displayFor(us).primaryText,
-        'English (United States of America) — Original',
+        'English (United States of America) · Original',
       );
       expect(
         second.displayFor(us).compactText,
@@ -219,7 +219,7 @@ void main() {
           codec: 'aac',
         ),
       );
-      expect(display.primaryText, 'English — Audio description');
+      expect(display.primaryText, 'English · Audio description');
       expect(display.secondaryFacts, ['Commentary', 'Stereo', 'AAC']);
     });
 
@@ -234,7 +234,7 @@ void main() {
           codec: 'subrip',
         ),
       );
-      expect(display.primaryText, 'English — Festival edition');
+      expect(display.primaryText, 'English · Festival edition');
       expect(display.secondaryFacts, ['SDH', 'Forced', 'SRT (text)']);
       expect(
         display.semanticsText,
@@ -252,8 +252,8 @@ void main() {
       final display = formatPlayerTrackDisplay(
         _track(type: PlayerTrackType.subtitle, language: 'en', forced: true),
       );
-      expect(display.primaryText, 'English — Forced');
-      expect(display.semanticsText, contains('English — marked as forced'));
+      expect(display.primaryText, 'English · Forced');
+      expect(display.semanticsText, contains('English · marked as forced'));
       expect(display.semanticsText, isNot(contains('foreign-language')));
     });
 
@@ -271,7 +271,7 @@ void main() {
         ),
       );
       expect(audio.secondaryFacts, isEmpty);
-      expect(subtitle.primaryText, 'English — Audio description');
+      expect(subtitle.primaryText, 'English · Audio description');
       expect(subtitle.secondaryFacts, isEmpty);
     });
 
@@ -391,7 +391,7 @@ void main() {
     final titled = formatPlayerTrackDisplay(
       _track(language: 'en', title: 'Stereo', channelLayout: 'stereo'),
     );
-    expect(titled.primaryText, 'English — Stereo');
+    expect(titled.primaryText, 'English · Stereo');
     expect(titled.secondaryFacts, isEmpty);
 
     final generated = formatPlayerTrackDisplay(
@@ -402,7 +402,7 @@ void main() {
     final external = formatPlayerTrackDisplay(
       _track(language: 'en', title: 'External', external: true),
     );
-    expect(external.primaryText, 'English — External');
+    expect(external.primaryText, 'English · External');
     expect(external.secondaryFacts, isEmpty);
   });
 
@@ -416,7 +416,7 @@ void main() {
           commentary: true,
         ),
       );
-      expect(display.primaryText, 'English — Commentary');
+      expect(display.primaryText, 'English · Commentary');
       expect(display.secondaryFacts, ['AAC']);
     });
 
@@ -459,11 +459,11 @@ void main() {
         ];
         expect(
           formatPlayerTrackDisplay(peers[0], peers: peers).compactText,
-          'English — Theatrical mix',
+          'English · Theatrical mix',
         );
         expect(
           formatPlayerTrackDisplay(peers[1], peers: peers).compactText,
-          'English — Director mix',
+          'English · Director mix',
         );
       },
     );
@@ -477,11 +477,11 @@ void main() {
       expect(display.secondaryFacts, ['Track 8', 'AAC']);
       expect(
         display.tooltipText,
-        'Audio track: English — Original; Track 8; AAC',
+        'Audio track: English · Original; Track 8; AAC',
       );
       expect(
         display.semanticsText,
-        'Select Audio track: English — Original; Track 8; AAC.',
+        'Select Audio track: English · Original; Track 8; AAC.',
       );
     });
 
@@ -515,7 +515,7 @@ void main() {
       ];
       expect(
         formatPlayerTrackDisplay(peers[0], peers: peers).compactText,
-        'English — Original',
+        'English · Original',
       );
       expect(
         formatPlayerTrackDisplay(peers[1], peers: peers).compactText,
@@ -552,10 +552,10 @@ void main() {
       throwsUnsupportedError,
     );
     expect(display.secondaryFacts, ['AAC']);
-    expect(display.tooltipText, 'Audio track: English — Original; AAC');
+    expect(display.tooltipText, 'Audio track: English · Original; AAC');
     expect(
       display.semanticsText,
-      'Select Audio track: English — Original; AAC.',
+      'Select Audio track: English · Original; AAC.',
     );
   });
 }

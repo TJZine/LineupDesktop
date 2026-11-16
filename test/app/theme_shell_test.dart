@@ -388,6 +388,7 @@ void main() {
         player: player,
         scenario: LineupScenario(
           stage: SetupStage.ready,
+          channels: [syntheticGuideChannel()],
           settings: const LineupSettings(reduceMotion: true),
         ),
       );
@@ -414,6 +415,7 @@ void main() {
       player: player,
       scenario: LineupScenario(
         stage: SetupStage.ready,
+        channels: [syntheticGuideChannel()],
         settings: LineupSettings.fromJson({
           ...const LineupSettings().toJson(),
           'guideLayoutMode': 'overlay',

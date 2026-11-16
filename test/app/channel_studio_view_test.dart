@@ -303,7 +303,7 @@ void main() {
             },
             order: LibraryOrder.addedDescending,
           ),
-          'Library: TV Shows • Collection: Prestige • Genre: Drama • Newest first • unwatched only',
+          'Library: TV Shows · Collection: Prestige · Genre: Drama · Newest first · unwatched only',
         ),
         (const ManualSource([]), '0 hand-picked programs'),
         (
@@ -311,7 +311,7 @@ void main() {
             sources: [PlaylistSource('one'), PlaylistSource('two')],
             interleave: true,
           ),
-          '2-source mix • interleaved',
+          '2-source mix · interleaved',
         ),
       ]) {
         final channel = _channel(
@@ -2509,7 +2509,7 @@ void main() {
       expect(find.textContaining('unavailable'), findsNothing);
       expect(find.text('Actor: Example Person'), findsOneWidget);
       expect(
-        find.textContaining('Actor: Example Person • Director: Director Name'),
+        find.textContaining('Actor: Example Person · Director: Director Name'),
         findsWidgets,
       );
       expect(find.textContaining('Actor: example person'), findsNothing);
@@ -5217,8 +5217,8 @@ void main() {
     await _settleAirCheck(tester);
 
     expect(find.text('Also used by'), findsOneWidget);
-    expect(find.text('22 · Second playlist channel'), findsOneWidget);
-    expect(find.text('10 · First playlist channel'), findsNothing);
+    expect(find.text('22 • Second playlist channel'), findsOneWidget);
+    expect(find.text('10 • First playlist channel'), findsNothing);
     expect(
       find.text('Uses an existing Plex playlist. Manage its contents in Plex.'),
       findsOneWidget,
@@ -5299,6 +5299,7 @@ void main() {
         ),
       );
       expect(find.textContaining('2 unavailable'), findsOneWidget);
+      await tester.ensureVisible(find.text('Show selected'));
       await tester.tap(find.text('Show selected'));
       await tester.pump();
       expect(

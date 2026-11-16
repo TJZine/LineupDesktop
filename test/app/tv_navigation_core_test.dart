@@ -330,7 +330,7 @@ void main() {
           expect(player.overlay.name, 'none');
           await back(tester, settle: !failed);
         }
-        expect(find.byKey(const Key('guide-channel-search')), findsOneWidget);
+        expect(find.text('No channels yet'), findsOneWidget);
         expect(backgrounds, 0);
         await back(tester, settle: !failed);
         expect(backgrounds, 1);
@@ -765,7 +765,7 @@ void main() {
     await openDestination(tester, 'Channels');
     await strand(tester);
     await back(tester);
-    expect(find.byKey(const Key('guide-channel-search')), findsOneWidget);
+    expect(find.text('No channels yet'), findsOneWidget);
     expect(backgrounds, 0);
     await strand(tester);
     await back(tester);
@@ -817,11 +817,11 @@ void main() {
         isNotNull,
       );
       await back(tester);
-      expect(find.byKey(const Key('guide-channel-search')), findsOneWidget);
+      expect(find.text('No channels yet'), findsOneWidget);
       await back(tester);
       expect(find.byType(PlayerView), findsOneWidget);
       await back(tester);
-      expect(find.byKey(const Key('guide-channel-search')), findsOneWidget);
+      expect(find.text('No channels yet'), findsOneWidget);
       await back(tester);
       expect(backgrounds, 1);
       expect(fixture.player.loads, isEmpty);
@@ -841,7 +841,10 @@ void main() {
       (tester) async {
         final fixture = UiFixture(
           profile: profileFor(true),
-          scenario: const LineupScenario(stage: SetupStage.ready),
+          scenario: LineupScenario(
+            stage: SetupStage.ready,
+            channels: [syntheticGuideChannel()],
+          ),
         );
         await tester.pumpWidget(
           Focus(focusNode: outside, child: fixture.build()),
@@ -911,7 +914,7 @@ void main() {
     await tester.pumpAndSettle();
     expect(find.byType(ChannelsView), findsOneWidget);
     await back(tester);
-    expect(find.byKey(const Key('guide-channel-search')), findsOneWidget);
+    expect(find.text('No channels yet'), findsOneWidget);
     expect(fixture.controller.fixtureStore.savedStates, isEmpty);
     await tester.pumpWidget(const SizedBox.shrink());
   });
@@ -946,7 +949,7 @@ void main() {
     await back(tester);
     expect(player.overlay.name, 'none');
     await back(tester);
-    expect(find.byKey(const Key('guide-channel-search')), findsOneWidget);
+    expect(find.text('No channels yet'), findsOneWidget);
     expect(backgrounds, 0);
     await back(tester);
     expect(backgrounds, 1);

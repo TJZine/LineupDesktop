@@ -187,17 +187,17 @@ class _DiagnosticsViewState extends State<DiagnosticsView> {
                         if (!snapshot.recordingEnabled)
                           SizedBox(
                             height: 180,
-                            child: _emptyEvents(
-                              'Diagnostic recording is off',
-                              'Enable recording in Settings > Support, then reproduce the issue.',
+                            child: LineupEmptyState(
+                              title: 'Diagnostic recording is off',
+                              message: 'Enable recording in Settings > Support, then reproduce the issue.',
                             ),
                           )
                         else if (_visibleEvents.isEmpty)
                           SizedBox(
                             height: 180,
-                            child: _emptyEvents(
-                              'No events recorded yet',
-                              'Reproduce the issue to collect support events.',
+                            child: LineupEmptyState(
+                              title: 'No events recorded yet',
+                              message: 'Reproduce the issue to collect support events.',
                             ),
                           )
                         else
@@ -758,24 +758,6 @@ class _DiagnosticsViewState extends State<DiagnosticsView> {
             ),
     );
   }
-
-  Widget _emptyEvents(String title, String message) => Center(
-    child: Column(
-      mainAxisSize: MainAxisSize.min,
-      children: [
-        Text(
-          title,
-          style: TextStyle(fontSize: 20, fontWeight: FontWeight.w500),
-        ),
-        SizedBox(height: 8),
-        Text(
-          message,
-          textAlign: TextAlign.center,
-          style: TextStyle(fontSize: 18),
-        ),
-      ],
-    ),
-  );
 
   String _eventTime(DateTime time) {
     final local = time.toLocal();

@@ -383,6 +383,7 @@ class GuideView extends StatefulWidget {
     this.onOpenMenu,
     this.onBack,
     this.onSetUpChannels,
+    this.setupFocusNode,
     this.showIdleArtwork = false,
     this.pictureInPicture,
     this.onOpenPlayer,
@@ -399,6 +400,7 @@ class GuideView extends StatefulWidget {
   final LineupMenuCallback? onOpenMenu;
   final Widget? pictureInPicture;
   final VoidCallback? onSetUpChannels;
+  final FocusNode? setupFocusNode;
   final bool showIdleArtwork;
   final VoidCallback? onOpenPlayer;
   final String? playbackMessage;
@@ -412,7 +414,9 @@ class GuideView extends StatefulWidget {
 class _GuideViewState extends State<GuideView>
     with SingleTickerProviderStateMixin, WidgetsBindingObserver {
   final _retryFocus = FocusNode(debugLabel: 'Guide retry all schedules');
-  final _setupFocus = FocusNode(debugLabel: 'Guide set up channels');
+  final _internalSetupFocus = FocusNode(debugLabel: 'Guide set up channels');
+  FocusNode get _setupFocus => widget.setupFocusNode ?? _internalSetupFocus;
+  bool get _empty => widget.controller.lineup.channels.isEmpty;
   bool _allVisibleFailed = false;
   final _menuFocus = FocusNode(debugLabel: 'Guide Lineup menu');
   final _guideFocus = FocusNode(debugLabel: 'Guide grid');
@@ -548,7 +552,7 @@ class _GuideViewState extends State<GuideView>
   void dispose() {
     WidgetsBinding.instance.removeObserver(this);
     _retryFocus.dispose();
-    _setupFocus.dispose();
+    _internalSetupFocus.dispose();
     _menuFocus.dispose();
     _guideFocus.dispose();
     _channelFilterFocus.dispose();
@@ -832,7 +836,8 @@ class _GuideViewState extends State<GuideView>
         keyboard.isMetaPressed;
     if (key == LogicalKeyboardKey.keyF &&
         commandModifier(keyboard) &&
-        !nativeFullscreenChord) {
+        !nativeFullscreenChord &&
+        !_empty) {
       _searchFocus.requestFocus();
       return KeyEventResult.handled;
     }
@@ -843,7 +848,10 @@ class _GuideViewState extends State<GuideView>
         isAndroidTvMenu &&
         widget.onOpenMenu != null) {
       final invokerContext = _menuFocus.context ?? context;
-      widget.onOpenMenu!(invokerContext, _menuFocus);
+      widget.onOpenMenu!(
+        invokerContext,
+        _setupFocus.hasPrimaryFocus ? _setupFocus : _menuFocus,
+      );
       return KeyEventResult.handled;
     }
     if (_searchFocus.hasFocus && !commandModified) {
@@ -933,19 +941,21 @@ class _GuideViewState extends State<GuideView>
     return KeyEventResult.handled;
   }
 
-  List<FocusNode> _toolbarFocusOrder() => [
-    _channelFilterFocus,
-    if (widget.controller.channelFilterKey != ChannelFilter.all)
-      _removeChannelFilterFocus,
-    _searchFocus,
-    if (_searchController.text.isNotEmpty) _clearSearchFocus,
-    _earlierFocus,
-    _nowFocus,
-    _laterFocus,
-    _hoursFocus,
-    _menuFocus,
-    if (_showBackToPlayer) _closeFocus,
-  ];
+  List<FocusNode> _toolbarFocusOrder() => _empty
+      ? [_menuFocus, _setupFocus]
+      : [
+          _channelFilterFocus,
+          if (widget.controller.channelFilterKey != ChannelFilter.all)
+            _removeChannelFilterFocus,
+          _searchFocus,
+          if (_searchController.text.isNotEmpty) _clearSearchFocus,
+          _earlierFocus,
+          _nowFocus,
+          _laterFocus,
+          _hoursFocus,
+          _menuFocus,
+          if (_showBackToPlayer) _closeFocus,
+        ];
 
   void _focusNearestToolbarControl() {
     Rect? programRect;
@@ -1200,14 +1210,11 @@ class _GuideViewState extends State<GuideView>
                       ),
                       Expanded(
                         child: channels.isEmpty
-                            ? _NoMatchingChannels(
-                                onSetUpChannels: widget.onSetUpChannels,
-                                setupFocus: _setupFocus,
-                                filtered: widget
-                                    .controller
-                                    .lineup
-                                    .channels
-                                    .isNotEmpty,
+                            ? const Center(
+                                child: Text(
+                                  'No matching channels\nTry another channel name or number.',
+                                  textAlign: TextAlign.center,
+                                ),
                               )
                             : ListView.builder(
                                 key: const Key('guide-schedule-list'),
@@ -1316,15 +1323,33 @@ class _GuideViewState extends State<GuideView>
         backgroundColor: Colors.transparent,
         body: Focus(
           focusNode: widget.focusNode ?? _guideFocus,
-          autofocus: true,
+          autofocus: !_empty || !DeviceProfile.of(context).isTv,
           onKeyEvent: _key,
           child: Material(
             key: const Key('classic-guide'),
             color: Colors.transparent,
             child: LayoutBuilder(
               builder: (context, outer) {
-                final numberWidth = _measureNumberColumn(context);
                 final isTv = DeviceProfile.of(context).isTv;
+                if (_empty) {
+                  return _ClassicGuideSurface(
+                    color: roles.deepBackground,
+                    showcaseHeight: 0,
+                    toolbar: _toolbar(),
+                    showcase: null,
+                    body: LineupEmptyState(
+                      title: 'No channels yet',
+                      message: 'Set up your channels to start watching.',
+                      action: FilledButton(
+                        focusNode: _setupFocus,
+                        autofocus: isTv,
+                        onPressed: widget.onSetUpChannels,
+                        child: const Text('Set up channels'),
+                      ),
+                    ),
+                  );
+                }
+                final numberWidth = _measureNumberColumn(context);
                 var policy = GuideLayoutPolicy.forSize(
                   outer.biggest,
                   hasPicture: widget.pictureInPicture != null,
@@ -1492,7 +1517,8 @@ class _Toolbar extends StatelessWidget {
         .firstOrNull;
     final showPlaying =
         tunedChannel != null && controller.lineup.settings.nowWatchingBanner;
-    final showDate = size.width >= 1100;
+    final showDate =
+        size.width >= 1100 && controller.lineup.channels.isNotEmpty;
     final supportingStyle = TextStyle(
       fontSize: 18.0,
       color: roles.secondaryText,
@@ -1519,7 +1545,7 @@ class _Toolbar extends StatelessWidget {
                       tunedChannel.id,
                     );
                     return Text(
-                      '${tunedChannel.number} · ${tunedChannel.name}${tunedProgram == null ? '' : ' — ${tunedProgram.scheduled.item.title}'}',
+                      '${tunedChannel.number} • ${tunedChannel.name}${tunedProgram == null ? '' : ' · ${tunedProgram.scheduled.item.title}'}',
                       key: const Key('guide-now-playing-context'),
                       maxLines: 1,
                       overflow: TextOverflow.ellipsis,
@@ -3474,56 +3500,6 @@ class _ScheduleStatus extends StatelessWidget {
         ],
       ),
     ),
-  );
-}
-
-class _NoMatchingChannels extends StatelessWidget {
-  const _NoMatchingChannels({
-    required this.filtered,
-    this.onSetUpChannels,
-    this.setupFocus,
-  });
-
-  final bool filtered;
-  final VoidCallback? onSetUpChannels;
-  final FocusNode? setupFocus;
-
-  @override
-  Widget build(BuildContext context) => Center(
-    child: filtered
-        ? const Text(
-            'No matching channels\nTry another channel name or number.',
-            textAlign: TextAlign.center,
-          )
-        : SingleChildScrollView(
-            padding: const EdgeInsets.all(16),
-            child: Column(
-              mainAxisSize: MainAxisSize.min,
-              children: [
-                Semantics(
-                  header: true,
-                  child: Text(
-                    'No channels yet',
-                    style: Theme.of(context).textTheme.titleLarge,
-                    textAlign: TextAlign.center,
-                  ),
-                ),
-                const SizedBox(height: 8),
-                Text(
-                  'Set up your channels to start watching.',
-                  style: Theme.of(context).textTheme.bodyMedium
-                      ?.copyWith(color: LineupTheme.of(context).secondaryText),
-                  textAlign: TextAlign.center,
-                ),
-                const SizedBox(height: 16),
-                FilledButton(
-                  focusNode: setupFocus,
-                  onPressed: onSetUpChannels,
-                  child: const Text('Set up channels'),
-                ),
-              ],
-            ),
-          ),
   );
 }
 

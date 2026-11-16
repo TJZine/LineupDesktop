@@ -91,7 +91,10 @@ void main() {
     );
     final fixture = UiFixture(
       profile: profileFor(true),
-      scenario: const LineupScenario(stage: SetupStage.ready),
+      scenario: LineupScenario(
+        stage: SetupStage.ready,
+        channels: [syntheticGuideChannel()],
+      ),
     );
     await tester.pumpWidget(fixture.build());
     await tester.pumpAndSettle();

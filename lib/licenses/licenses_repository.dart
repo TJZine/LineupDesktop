@@ -203,6 +203,7 @@ class LicensesRepository {
   Future<List<LicenseItem>> _notices() async => [
     _asset('Instrument Sans', 'assets/fonts/instrumentsans/OFL.txt'),
     _asset('Inter', 'assets/fonts/inter/OFL.txt'),
+    _asset('Arimo', 'assets/fonts/arimo/LICENSE.txt'),
     _asset('JetBrains Mono', 'assets/fonts/subtitles/monoSans/OFL.txt'),
     _asset('Source Serif 4', 'assets/fonts/subtitles/serif/OFL.txt'),
     _asset('Courier Prime', 'assets/fonts/subtitles/monoSerif/OFL.txt'),

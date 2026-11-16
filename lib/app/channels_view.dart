@@ -474,30 +474,38 @@ class ChannelsViewState extends State<ChannelsView> {
           ],
           Expanded(
             child: channels.isEmpty
-                ? LineupEmptyState(
-                    icon: Icons.view_list,
-                    title: 'Build your first channel',
-                    message: 'Generate a lineup from Plex or create one custom channel.',
-                    action: Wrap(
-                      spacing: 8,
-                      runSpacing: 8,
-                      alignment: WrapAlignment.center,
-                      children: [
-                        FilledButton.icon(
-                          focusNode: widget.focusNode,
-                          onPressed: _saving
-                              ? null
-                              : widget.controller.enterChannelSetup,
-                          icon: const Icon(Icons.auto_awesome_outlined),
-                          label: const Text('Generate lineup…'),
+                ? LayoutBuilder(
+                    builder: (context, constraints) => SingleChildScrollView(
+                      child: ConstrainedBox(
+                        constraints: BoxConstraints(
+                          minHeight: constraints.maxHeight,
                         ),
-                        OutlinedButton.icon(
-                          focusNode: _addFocus,
-                          onPressed: _saving ? null : openNew,
-                          icon: const Icon(Icons.add),
-                          label: const Text('Add a custom channel'),
+                        child: Column(
+                          mainAxisAlignment: MainAxisAlignment.center,
+                          children: [
+                            LineupEmptyState(
+                              icon: Icons.view_list,
+                              title: 'Build your first channel',
+                              message: 'Generate a lineup from Plex or create one custom channel.',
+                              action: FilledButton.icon(
+                                focusNode: widget.focusNode,
+                                onPressed: _saving
+                                    ? null
+                                    : widget.controller.enterChannelSetup,
+                                icon: const Icon(Icons.auto_awesome_outlined),
+                                label: const Text('Generate lineup…'),
+                              ),
+                            ),
+                            const SizedBox(height: 8),
+                            OutlinedButton.icon(
+                              focusNode: _addFocus,
+                              onPressed: _saving ? null : openNew,
+                              icon: const Icon(Icons.add),
+                              label: const Text('Add a custom channel'),
+                            ),
+                          ],
                         ),
-                      ],
+                      ),
                     ),
                   )
                 : _mode == _DirectoryMode.reorder

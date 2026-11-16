@@ -554,14 +554,20 @@ void main() {
       LineupBootstrap(player: _PlayingPlayer(), controller: controller),
     );
     await tester.pumpAndSettle();
-    expect(FocusManager.instance.primaryFocus?.debugLabel, 'Guide');
+    expect(
+      FocusManager.instance.primaryFocus?.debugLabel,
+      'Guide set up channels',
+    );
 
     await openDestination(tester, 'Player');
     expect(FocusManager.instance.primaryFocus?.debugLabel, 'Player');
 
     await tester.sendKeyEvent(LogicalKeyboardKey.keyG);
     await tester.pumpAndSettle();
-    expect(FocusManager.instance.primaryFocus?.debugLabel, 'Guide');
+    expect(
+      FocusManager.instance.primaryFocus?.debugLabel,
+      'Guide set up channels',
+    );
 
     await tester.sendKeyEvent(LogicalKeyboardKey.escape);
     await tester.pumpAndSettle();
@@ -624,7 +630,10 @@ void main() {
     await tester.sendKeyEvent(LogicalKeyboardKey.keyG);
     await tester.sendKeyUpEvent(LogicalKeyboardKey.controlLeft);
     await tester.pumpAndSettle();
-    expect(FocusManager.instance.primaryFocus?.debugLabel, 'Guide');
+    expect(
+      FocusManager.instance.primaryFocus?.debugLabel,
+      'Guide set up channels',
+    );
   });
 
   testWidgets('F3 opens Settings from Guide and Player routes', (tester) async {
@@ -643,7 +652,10 @@ void main() {
 
     await tester.sendKeyEvent(LogicalKeyboardKey.escape);
     await tester.pumpAndSettle();
-    expect(FocusManager.instance.primaryFocus?.debugLabel, 'Guide');
+    expect(
+      FocusManager.instance.primaryFocus?.debugLabel,
+      'Guide set up channels',
+    );
 
     await tester.sendKeyDownEvent(LogicalKeyboardKey.controlLeft);
     await tester.sendKeyEvent(LogicalKeyboardKey.digit5);

@@ -51,7 +51,7 @@ void main() {
     await tester.binding.handlePopRoute();
     await tester.pumpAndSettle();
     expect(backgrounded, 0);
-    expect(find.byKey(const Key('guide-channel-search')), findsOneWidget);
+    expect(find.text('No channels yet'), findsOneWidget);
     await tester.binding.handlePopRoute();
     await tester.pumpAndSettle();
     expect(backgrounded, 1);
@@ -77,7 +77,7 @@ void main() {
     expect(find.byType(PlayerView), findsOneWidget);
     await tester.binding.handlePopRoute();
     await tester.pumpAndSettle();
-    expect(find.byKey(const Key('guide-channel-search')), findsOneWidget);
+    expect(find.text('No channels yet'), findsOneWidget);
     await tester.binding.handlePopRoute();
     await tester.pumpAndSettle();
     expect(backgrounded, 1);

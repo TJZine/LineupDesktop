@@ -648,23 +648,29 @@ class PlayerViewState extends State<PlayerView> with WidgetsBindingObserver {
             menuBox.hasSize) {
           openMenu(menuContext!, _menuFocus);
         } else {
-          final readerScope = switch (controller.overlay) {
+          final primary = FocusManager.instance.primaryFocus;
+          final primaryContext = primary?.context;
+          final scope = switch (controller.overlay) {
             PlayerOverlay.audioTracks ||
             PlayerOverlay.subtitleTracks ||
-            PlayerOverlay.programInfo =>
-              FocusManager.instance.primaryFocus?.enclosingScope,
+            PlayerOverlay.programInfo => primary?.enclosingScope,
+            PlayerOverlay.none || PlayerOverlay.error
+                when _isTv &&
+                    primaryContext?.mounted == true &&
+                    primaryContext!
+                            .findAncestorWidgetOfExactType<_StoppedSlate>() !=
+                        null =>
+              primary?.enclosingScope,
             _ => null,
           };
-          // Return through the current reader's history: restoring the full
-          // Player root strands arrows outside the drawer. The scope also
-          // survives a track row retiring while the shell menu is open.
-          final returnToReader =
-              readerScope != null &&
-              readerScope.parent != null &&
-              readerScope.context?.mounted == true &&
-              readerScope.canRequestFocus &&
-              readerScope.ancestors.contains(_rootFocus);
-          openMenu(context, returnToReader ? readerScope : _rootFocus);
+          // Return through the drawer or recovery scope's focus history.
+          final returnToScope =
+              scope != null &&
+              scope.parent != null &&
+              scope.context?.mounted == true &&
+              scope.canRequestFocus &&
+              scope.ancestors.contains(_rootFocus);
+          openMenu(context, returnToScope ? scope : _rootFocus);
         }
       case PlayerAction.collapseNowPlaying || PlayerAction.closeOverlay:
         final restoreSleep = controller.sleepPickerOpen;
@@ -1402,7 +1408,7 @@ class _Osd extends StatelessWidget {
         : displays.displayFor(selectedAudio);
     final audioLabel = audioDisplay == null || audioDisplay.compactText == null
         ? 'Audio'
-        : 'Audio • ${audioDisplay.compactText}';
+        : 'Audio · ${audioDisplay.compactText}';
     final audioDescription =
         audioDisplay?.tooltipText ??
         (audioAvailable ? 'Audio tracks' : 'Audio tracks unavailable');
@@ -1410,10 +1416,10 @@ class _Osd extends StatelessWidget {
         ? null
         : displays.displayFor(selectedSubtitles);
     final subtitlesLabel = subtitlesDisplay == null
-        ? '${expanded ? 'Subtitles' : 'Subs'} • Off'
+        ? '${expanded ? 'Subtitles' : 'Subs'} · Off'
         : subtitlesDisplay.compactText == null
         ? (expanded ? 'Subtitles' : 'Subs')
-        : '${expanded ? 'Subtitles' : 'Subs'} • ${subtitlesDisplay.compactText}';
+        : '${expanded ? 'Subtitles' : 'Subs'} · ${subtitlesDisplay.compactText}';
     final subtitlesDescription = subtitlesDisplay == null
         ? (subtitlesAvailable
               ? 'Subtitle tracks: Off'
@@ -1556,7 +1562,7 @@ class _Osd extends StatelessWidget {
         if (statusFacts.isNotEmpty) ...[
           SizedBox(height: 8),
           Text(
-            statusFacts.join(' • '),
+            statusFacts.join(' · '),
             key: const Key('player-osd-status'),
             maxLines: 1,
             overflow: TextOverflow.ellipsis,
@@ -1973,7 +1979,7 @@ class _OsdProgress extends StatelessWidget {
               [
                 '${_duration(displayedPosition)} / ${_duration(timingDuration)}',
                 ?remaining,
-              ].join(' • '),
+              ].join(' · '),
               key: const Key('player-osd-timing'),
               style: osdSecondaryStyle?.copyWith(
                 fontFeatures: const [FontFeature.tabularFigures()],
@@ -1986,7 +1992,7 @@ class _OsdProgress extends StatelessWidget {
               child: Align(
                 alignment: Alignment.centerRight,
                 child: Text(
-                  'Up next • ${_time(context, next.scheduled.start)} • '
+                  'Up next · ${_time(context, next.scheduled.start)} · '
                   '${next.scheduled.item.title}',
                   key: const Key('player-osd-next'),
                   maxLines: 1,
@@ -3997,7 +4003,7 @@ double _trackPopoverWidth(
             _textWidth(context, display.primaryText, titleStyle),
             _textWidth(
               context,
-              display.secondaryFacts.join(' • '),
+              display.secondaryFacts.join(' · '),
               theme.bodyMedium,
             ),
           ) +
@@ -4422,7 +4428,7 @@ class _TracksState extends State<_Tracks> {
                                     : display!.primaryText;
                                 final metadata =
                                     display?.secondaryFacts ?? const <String>[];
-                                final metadataText = metadata.join(' • ');
+                                final metadataText = metadata.join(' · ');
 
                                 final tooltip = display?.tooltipText ?? title;
                                 final pending =
@@ -5334,7 +5340,7 @@ String? _episodeLabel(ChannelItem item) {
   return [
     if (season != null) 'Season $season',
     if (episode != null) 'Episode $episode',
-  ].join(' • ');
+  ].join(' · ');
 }
 
 String _programTitle(ChannelItem item) {

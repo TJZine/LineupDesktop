@@ -6,6 +6,21 @@ Approved items are listed under Maintainer decisions; this document is the singl
 
 The maintainer adopted the October 26 reconciliation (local evidence, not tracked), including item 7: no-change Review Back returns to Configure. Provisional override approvals yield to that reconciliation. Historical diagnoses, options and specimen evidence below retain their original source attribution; the approved rules and revised acceptance requirements govern current implementation.
 
+## November 13–14 visual-system assessment
+
+UX assessment decision, 2026-11-13/14 (N20–N22, D8, N6). The Guide opens on
+**Set up channels** when the lineup is empty. Its content area shows one
+centered empty-state block with neither navigation controls for the schedule
+nor the idle picture prompt. The empty Manage channels directory focuses
+**Generate lineup…** first and offers **Add a custom channel** as a secondary
+action. Studio inventory and Diagnostics recent events also use the shared
+empty state. The Diagnostics idle playback summary stays inline.
+
+Use • for channel number and name, and · between metadata items. Use the
+bundled [Arimo Regular](../licenses-and-rebuilding.md#arimo-wordmark) for LINEUP.
+On an active Player recovery slate, closing the Lineup menu returns remote
+focus to the recovery action that opened it.
+
 ## Maintainer decisions (October 26, 2026)
 
 - **2. Composition: option A (desktop parity) is approved.** A bigger picture is only possible by making the info band taller, and that shortens every Guide row (option B). We stay with desktop.

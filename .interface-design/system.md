@@ -63,10 +63,25 @@ records the dimensions and motion.
 - Inputs are darker than their parent surface.
 - Motion is short and decelerating. Reduce Motion must settle immediately.
 - When the actual Lineup logo and LINEUP wordmark appear together horizontally,
-  place the logo first, then the wordmark. Preserve the approved Arial Regular
-  uppercase/letter-spaced wordmark treatment in the configuration header. This
-  September 9 refinement changes order only; menu hamburger/chevron icons and
-  standalone branding retain their own roles.
+  place the logo first, then the wordmark. Use bundled Arimo Regular for LINEUP
+  only, at 22 px, weight 400, and letter spacing 3. UX assessment decision,
+  2026-11-13/14 (N20). The pinned font and licence are listed in the
+  [font provenance record](../docs/licenses-and-rebuilding.md#arimo-wordmark).
+
+## Separators and empty states
+
+UX assessment decision, 2026-11-13/14 (N21, N22, D8, N6). Use • between a
+channel number and its name. Use · between metadata items. Preserve punctuation
+from authored episode and program titles.
+
+Use the shared `LineupEmptyState` where a surface has no content. It centers a
+24 px heading, one sentence, and up to one action using existing theme tokens.
+The empty Guide fills the content area with **No channels yet** and **Set up
+channels**, focused on entry with a remote. Manage channels keeps **Generate
+lineup…** as the primary action and offers **Add a custom channel** separately.
+Studio offers **Update lineup…** when programming is unavailable. Diagnostics
+uses the shared component for the recent-events area and keeps its idle
+playback summary inline.
 
 ## First-run setup
 
