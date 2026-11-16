@@ -1154,9 +1154,16 @@ void main() {
         }
 
         if (tv) {
+          // The shell owns the remote Menu key: it opens the Lineup menu,
+          // never the row actions, and a second press returns to the row.
           await tester.sendKeyEvent(LogicalKeyboardKey.contextMenu);
           await tester.pumpAndSettle();
           expect(find.text('Watch'), findsNothing);
+          expect(find.byKey(const Key('immersive-app-menu')), findsOneWidget);
+          await tester.sendKeyEvent(LogicalKeyboardKey.contextMenu);
+          await tester.pumpAndSettle();
+          expect(find.byKey(const Key('immersive-app-menu')), findsNothing);
+          expect(rowFocus.hasPrimaryFocus, isTrue);
           await tester.sendKeyEvent(LogicalKeyboardKey.arrowRight);
           await tester.pump();
           expect(
