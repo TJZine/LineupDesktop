@@ -4248,6 +4248,98 @@ void main() {
   });
 
   testWidgets(
+    'network failure after observed playback says Playback stopped even at zero',
+    (tester) async {
+      final fixture = _Fixture(PlayerState.idle, channelCount: 2);
+      await tester.pumpWidget(
+        MaterialApp(
+          builder: _playerDesktopCanvasBuilder,
+          home: PlayerView(controller: fixture.player, openGuide: () {}),
+        ),
+      );
+      expect(await fixture.player.tune('channel'), isTrue);
+      fixture.native.emitState(PlayerState.playing, at: Duration.zero);
+      await tester.pumpAndSettle();
+      expect(fixture.player.hasStartedPlayback, isTrue);
+
+      fixture.native.emitState(
+        PlayerState.error,
+        at: Duration.zero,
+        failureCode: 'network_error',
+      );
+      await tester.pumpAndSettle();
+      expect(
+        fixture.player.failureCause,
+        PlaybackFailureCause.serverUnreachable,
+      );
+      expect(find.text('Playback stopped'), findsOneWidget);
+      expect(find.text("Couldn't start playback"), findsNothing);
+      expect(find.text("Lineup can't reach your Plex server."), findsOneWidget);
+
+      expect(await fixture.player.tune('channel-1'), isTrue);
+      fixture.native.emitState(PlayerState.playing);
+      await tester.pumpAndSettle();
+      expect(fixture.player.failureCause, isNull);
+      expect(fixture.player.error, isNull);
+      await tester.pumpWidget(const SizedBox.shrink());
+      fixture.dispose();
+    },
+  );
+
+  testWidgets(
+    'Guide slot shows typed causes and preserves message-only status',
+    (tester) async {
+      for (final (cause, message, visible) in [
+        (
+          PlaybackFailureCause.serverUnreachable,
+          'Unused fallback',
+          "Lineup can't reach your Plex server.",
+        ),
+        (PlaybackFailureCause.unknown, 'Unused fallback', null),
+        (null, PlaybackFailureCause.unknown.message, null),
+        (
+          null,
+          'Playback could not be stopped.',
+          'Playback could not be stopped.',
+        ),
+        (
+          null,
+          'Playback is unavailable on this platform.',
+          'Playback is unavailable on this platform.',
+        ),
+      ]) {
+        var retries = 0;
+        var advances = 0;
+        await tester.pumpWidget(
+          MaterialApp(
+            home: GuidePlaybackPlaceholder(
+              unavailable: true,
+              reduceMotion: true,
+              message: message,
+              failureCause: cause,
+              onRetry: () => retries++,
+              onNextChannel: () => advances++,
+            ),
+          ),
+        );
+        expect(find.text('Playback unavailable'), findsOneWidget);
+        if (visible != null) {
+          expect(find.text(visible), findsOneWidget);
+          expect(find.bySemanticsLabel(visible), findsOneWidget);
+        } else {
+          expect(find.text(message), findsNothing);
+          expect(find.bySemanticsLabel(message), findsNothing);
+        }
+        await tester.tap(find.text('Retry'));
+        await tester.tap(find.text('Next channel'));
+        expect(retries, 1);
+        expect(advances, 1);
+      }
+    },
+    semanticsEnabled: true,
+  );
+
+  testWidgets(
     'Guide failure slot offers Retry and Next channel independently',
     (tester) async {
       var retried = false;
@@ -9866,14 +9958,18 @@ class _Native implements NativePlayer {
   bool emitControlEvents = false;
   int? lastLoadGeneration;
 
-  void emitState(PlayerState state, {Duration? at}) {
+  void emitState(
+    PlayerState state, {
+    Duration? at,
+    String failureCode = 'synthetic',
+  }) {
     _events.add(
       PlayerEvent(
         status: PlayerStatus(
           state: state,
           message: state.name,
           recoverable: true,
-          failureCode: state == PlayerState.error ? 'synthetic' : null,
+          failureCode: state == PlayerState.error ? failureCode : null,
         ),
         position: at ?? position,
         duration: duration,

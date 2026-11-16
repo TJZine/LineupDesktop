@@ -11,6 +11,7 @@ class GuidePlaybackPlaceholder extends StatefulWidget {
     required this.unavailable,
     required this.reduceMotion,
     this.message,
+    this.failureCause,
     this.onRetry,
     this.onNextChannel,
     super.key,
@@ -19,6 +20,7 @@ class GuidePlaybackPlaceholder extends StatefulWidget {
   final bool unavailable;
   final bool reduceMotion;
   final String? message;
+  final PlaybackFailureCause? failureCause;
   final VoidCallback? onRetry;
   final VoidCallback? onNextChannel;
 
@@ -135,10 +137,14 @@ class _GuidePlaybackPlaceholderState extends State<GuidePlaybackPlaceholder>
   Widget build(BuildContext context) {
     final roles = LineupTheme.of(context);
 
-    final message =
-        widget.message == PlayerCoordinator.unknownPlaybackFailureCause
-        ? null
-        : widget.message;
+    final message = switch (widget.failureCause) {
+      PlaybackFailureCause.unknown => null,
+      final cause? => cause.message,
+      // The shell still passes the combined message. Remove this compatibility
+      // branch when the shell supplies the cause and status message separately.
+      null when widget.message == PlaybackFailureCause.unknown.message => null,
+      null => widget.message,
+    };
     return ColoredBox(
       color: roles.deepBackground,
       child: Stack(

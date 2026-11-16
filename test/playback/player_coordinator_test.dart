@@ -2716,10 +2716,17 @@ void main() {
         } else {
           expect(fixture.player.loads, hasLength(1));
           expect(fixture.coordinator.hasPlaybackIntent, isFalse);
-          expect(fixture.coordinator.error, 'Playback could not start.');
+          expect(
+            fixture.coordinator.error,
+            'Playback ended before the program finished.',
+          );
           expect(fixture.coordinator.overlay, PlayerOverlay.error);
           expect(fixture.coordinator.canRetry, isTrue);
           expect(fixture.coordinator.status.failureCode, 'premature_end');
+          expect(
+            fixture.coordinator.failureCause,
+            PlaybackFailureCause.prematureEnd,
+          );
         }
       },
     );
@@ -2746,7 +2753,10 @@ void main() {
       );
       await pumpEventQueue(times: 8);
       expect(fixture.player.loads, hasLength(1));
-      expect(fixture.coordinator.error, 'Playback could not start.');
+      expect(
+        fixture.coordinator.error,
+        'Playback ended before the program finished.',
+      );
       expect(fixture.coordinator.overlay, PlayerOverlay.error);
       expect(fixture.coordinator.canRetry, isTrue);
     },
@@ -3037,7 +3047,10 @@ void main() {
           await pumpEventQueue(times: 8);
           expect(fixture.player.loads, hasLength(1));
           expect(fixture.coordinator.hasPlaybackIntent, isFalse);
-          expect(fixture.coordinator.error, 'Playback could not start.');
+          expect(
+            fixture.coordinator.error,
+            'Playback ended before the program finished.',
+          );
           expect(fixture.coordinator.overlay, PlayerOverlay.error);
           expect(fixture.coordinator.canRetry, isTrue);
           expect(fixture.coordinator.status.failureCode, 'premature_end');
@@ -3151,7 +3164,10 @@ void main() {
       );
       await pumpEventQueue(times: 8);
       expect(fixture.player.loads, hasLength(2));
-      expect(fixture.coordinator.error, 'Playback could not start.');
+      expect(
+        fixture.coordinator.error,
+        'Playback ended before the program finished.',
+      );
       expect(fixture.coordinator.canRetry, isTrue);
     },
   );
@@ -3908,13 +3924,9 @@ void main() {
   );
 
   for (final (code, httpStatus, cause) in [
-    (
-      'audio_decode_error',
-      null,
-      "This video's audio can't play on this device.",
-    ),
-    ('network_error', null, "Lineup can't reach your Plex server."),
-    ('http_error', 403, 'Plex needs you to sign in again.'),
+    ('audio_decode_error', null, PlaybackFailureCause.unsupportedAudio),
+    ('network_error', null, PlaybackFailureCause.serverUnreachable),
+    ('http_error', 403, PlaybackFailureCause.authorization),
   ]) {
     test(
       'pending native load preserves the terminal $code cause after stop',
@@ -3980,7 +3992,8 @@ void main() {
           'failureCode': code,
           'httpStatus': ?httpStatus,
         });
-        expect(coordinator.error, cause);
+        expect(coordinator.failureCause, cause);
+        expect(coordinator.error, cause.message);
         await _nativeEvent({
           'type': 'stopResult',
           'stopId': await stop.future,
@@ -3988,13 +4001,18 @@ void main() {
         });
 
         expect(await tune, isFalse);
-        expect(coordinator.error, cause);
+        expect(coordinator.failureCause, cause);
+        expect(coordinator.error, cause.message);
         expect(coordinator.overlay, PlayerOverlay.error);
         expect(coordinator.canRetry, isTrue);
         expect(coordinator.hasPlaybackIntent, isFalse);
         expect(lineup.currentChannelId, 'channel-0');
         expect(stopCalls, 1);
         expect(lineup.recoveryCalls, httpStatus == null ? 0 : 1);
+
+        lineup.changeContentScope();
+        expect(coordinator.failureCause, isNull);
+        expect(coordinator.error, isNull);
       },
     );
   }
@@ -4362,14 +4380,14 @@ void main() {
   });
 
   for (final (category, cause) in [
-    ('offline', "Lineup can't reach your Plex server."),
-    ('network-unavailable', "Lineup can't reach your Plex server."),
-    ('server-unreachable', "Lineup can't reach your Plex server."),
-    ('network-timeout', 'Your Plex server took too long to respond.'),
-    ('auth-invalid', 'Plex needs you to sign in again.'),
-    ('unsupported', "This video can't play on this device."),
-    ('audio_decode_error', "This video's audio can't play on this device."),
-    ('synthetic-private-code', 'Playback could not start.'),
+    ('offline', PlaybackFailureCause.serverUnreachable),
+    ('network-unavailable', PlaybackFailureCause.serverUnreachable),
+    ('server-unreachable', PlaybackFailureCause.serverUnreachable),
+    ('network-timeout', PlaybackFailureCause.serverTimeout),
+    ('auth-invalid', PlaybackFailureCause.authorization),
+    ('unsupported', PlaybackFailureCause.unsupportedVideo),
+    ('audio_decode_error', PlaybackFailureCause.unsupportedAudio),
+    ('synthetic-private-code', PlaybackFailureCause.unknown),
   ]) {
     test(
       'safe playback cause for $category from request and native event',
@@ -4394,7 +4412,8 @@ void main() {
         addTearDown(coordinator.dispose);
 
         expect(await coordinator.tune('channel-b'), isFalse);
-        expect(coordinator.error, cause);
+        expect(coordinator.failureCause, cause);
+        expect(coordinator.error, cause.message);
         expect(
           lineup.diagnostics.entries.last.context['code'],
           category == 'synthetic-private-code' ? 'unexpected' : category,
@@ -4409,7 +4428,8 @@ void main() {
           ),
         );
         await pumpEventQueue();
-        expect(coordinator.error, cause);
+        expect(coordinator.failureCause, cause);
+        expect(coordinator.error, cause.message);
       },
     );
   }

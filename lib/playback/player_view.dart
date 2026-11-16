@@ -257,9 +257,7 @@ class PlayerViewState extends State<PlayerView> with WidgetsBindingObserver {
       controller.tuning,
       controller.hasPlaybackIntent,
       controller.lineup.settings,
-      controller.error != null || controller.status.state == PlayerState.error
-          ? controller.position == Duration.zero
-          : null,
+      controller.hasStartedPlayback,
     );
   }
 
@@ -4879,7 +4877,7 @@ class _StoppedSlate extends StatelessWidget {
     final unsupported = controller.status.state == PlayerState.unsupported;
     final title = unsupported
         ? 'Playback unavailable'
-        : failed
+        : failed && !controller.hasStartedPlayback
         ? "Couldn't start playback"
         : 'Playback stopped';
     final channel = controller.currentChannel;
@@ -4921,7 +4919,7 @@ class _StoppedSlate extends StatelessWidget {
                     Text(
                       controller.error ??
                           (failed
-                              ? PlayerCoordinator.unknownPlaybackFailureCause
+                              ? PlaybackFailureCause.unknown.message
                               : controller.status.message),
                       textAlign: TextAlign.center,
                     ),
