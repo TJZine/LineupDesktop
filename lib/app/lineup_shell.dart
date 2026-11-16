@@ -439,7 +439,7 @@ class _LineupShellState extends State<LineupShell> {
       final committed = proposed == null ? null : _validTvLocation(proposed);
       final routeDestination = committed?.destination ?? destination;
       if (tunedRow != null && routeDestination == ShellDestination.player) {
-        _returnToNormalPlayer();
+        _player.returnToPicture();
       } else if (routeDestination == ShellDestination.guide) {
         _player.showFullGuide();
       } else if (_player.overlay == PlayerOverlay.fullGuide) {
@@ -458,21 +458,6 @@ class _LineupShellState extends State<LineupShell> {
     } finally {
       _selectionPending = false;
     }
-  }
-
-  void _returnToNormalPlayer() {
-    _player.closeSleepPicker();
-    // Back from a reader returns to its parent overlay. This explicit menu
-    // destination goes all the way back to the picture.
-    switch (_player.overlay) {
-      case PlayerOverlay.programInfo ||
-          PlayerOverlay.audioTracks ||
-          PlayerOverlay.subtitleTracks:
-        _player.closeOverlay();
-      default:
-        break;
-    }
-    if (_player.overlay != PlayerOverlay.none) _player.closeOverlay();
   }
 
   bool get _hasPlaybackSurface =>
@@ -558,12 +543,31 @@ class _LineupShellState extends State<LineupShell> {
     if (!widget.profile.isTv ||
         event.logicalKey != LogicalKeyboardKey.contextMenu ||
         ModalRoute.of(context)?.isCurrent != true ||
-        (widget.controller.stage != SetupStage.ready &&
-            !_onboardingMenuAvailable)) {
+        _onboardingSupport) {
       return KeyEventResult.ignored;
     }
-    // A held key cannot toggle repeatedly, including on the frame before
-    // focus moves into (or returns from) the menu.
+    final ready = widget.controller.stage == SetupStage.ready;
+    if (!ready &&
+        (!_onboardingMenuAvailable || widget.controller.restoringSavedLineup)) {
+      return KeyEventResult.ignored;
+    }
+    // Guide and Player open the menu with their own overlay anchors.
+    final anchorNode = !ready
+        ? _settingsMenuFocus
+        : switch ((_licensesOpen, _destination)) {
+            (true, _) => _licensesMenuFocus,
+            (_, ShellDestination.settings) => _settingsMenuFocus,
+            (_, ShellDestination.diagnostics) => _diagnosticsMenuFocus,
+            (_, ShellDestination.channels) => _channelsMenuFocus,
+            _ => null,
+          };
+    Rect? anchor;
+    if (anchorNode != null) {
+      if (anchorNode.parent == null) return KeyEventResult.ignored;
+      anchor = _menuAnchor(anchorNode.context);
+      if (anchor == null) return KeyEventResult.ignored;
+    }
+    // A held key cannot toggle repeatedly while focus moves between surfaces.
     if (event is KeyRepeatEvent) return KeyEventResult.handled;
     if (event is! KeyDownEvent) return KeyEventResult.ignored;
     _keyboardInput = true;
@@ -571,22 +575,8 @@ class _LineupShellState extends State<LineupShell> {
       _closeAppMenu();
       return KeyEventResult.handled;
     }
-    // The existing Guide/Player handlers know their overlay anchors and
-    // where to restore focus. Other TV destinations share this shell path,
-    // ahead of descendant shortcuts (including Studio within Channels).
-    final anchorNode = switch ((_licensesOpen, _destination)) {
-      (true, _) => _licensesMenuFocus,
-      (_, ShellDestination.settings) => _settingsMenuFocus,
-      (_, ShellDestination.diagnostics) => _diagnosticsMenuFocus,
-      (_, ShellDestination.channels) => _channelsMenuFocus,
-      _ => null,
-    };
-    if (anchorNode == null) return KeyEventResult.ignored;
-    final primary = FocusManager.instance.primaryFocus;
-    _showAppMenu(
-      _menuAnchor(anchorNode.context) ?? Rect.zero,
-      primary ?? anchorNode,
-    );
+    if (anchor == null || anchorNode == null) return KeyEventResult.ignored;
+    _showAppMenu(anchor, FocusManager.instance.primaryFocus ?? anchorNode);
     return KeyEventResult.handled;
   }
 
@@ -650,6 +640,7 @@ class _LineupShellState extends State<LineupShell> {
 
   void _showOnboardingSupport() {
     setState(() {
+      _appMenu = null;
       _licensesOpen = false;
       _onboardingSupport = true;
       _settingsCategory = SettingsCategory.support;
@@ -1104,9 +1095,10 @@ class _LineupShellState extends State<LineupShell> {
       channel,
       widget.controller.channels,
     );
+    final selected = _destination == ShellDestination.player;
     return LineupNavigationRow(
       key: const Key('app-menu-now-playing'),
-      selected: _destination == ShellDestination.player,
+      selected: selected,
       onPressed: () => unawaited(
         _select(
           ShellDestination.player,
@@ -1115,7 +1107,8 @@ class _LineupShellState extends State<LineupShell> {
       ),
       child: Semantics(
         label:
-            'Now Playing, ${ChannelIdentity.label(channel, libraryTag: tag)}, $program',
+            'Now Playing, ${ChannelIdentity.label(channel, libraryTag: tag)}, $program'
+            '${selected ? ', current page' : ''}',
         excludeSemantics: true,
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,

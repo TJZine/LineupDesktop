@@ -85,7 +85,8 @@ void main() {
       final action = find.byKey(const Key('app-menu-now-playing'));
       expect(action, findsOneWidget);
       final semantics = find.bySemanticsLabel(
-        'Now Playing, Channel ${_channel.number}, ${_channel.name}, ${_program.title}',
+        'Now Playing, Channel ${_channel.number}, ${_channel.name}, ${_program.title}'
+        '${route == 'Player' ? ', current page' : ''}',
       );
       expect(semantics, findsOneWidget);
       expect(

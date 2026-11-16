@@ -421,6 +421,7 @@ class _SettingsViewState extends State<SettingsView> {
                 : null,
             onKeyEvent: (_, event) {
               if (tv &&
+                  !compact &&
                   event is KeyDownEvent &&
                   event.logicalKey == LogicalKeyboardKey.arrowRight) {
                 _enterDetail(category);

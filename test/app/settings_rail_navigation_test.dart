@@ -128,4 +128,38 @@ void main() {
       },
     );
   }
+
+  testWidgets(
+    'Right moves along the compact TV rail before changing sections',
+    (tester) async {
+      tester.view
+        ..devicePixelRatio = 1
+        ..physicalSize = const Size(1920, 1080);
+      tester.platformDispatcher.textScaleFactorTestValue = 2;
+      addTearDown(tester.view.reset);
+      addTearDown(tester.platformDispatcher.clearTextScaleFactorTestValue);
+      final fixture = UiFixture(
+        profile: tvProfile,
+        scenario: const LineupScenario(
+          stage: SetupStage.ready,
+          settings: LineupSettings(reduceMotion: true),
+        ),
+      );
+      addTearDown(fixture.controller.dispose);
+      await tester.pumpWidget(fixture.build());
+      await tester.pumpAndSettle();
+      await openDestination(tester, 'Settings');
+      final guide = find.widgetWithText(TextButton, 'Guide');
+      final guideFocus = tester.widget<TextButton>(guide).focusNode!;
+      expect(find.text('Theme'), findsOneWidget);
+      await tester.sendKeyEvent(LogicalKeyboardKey.arrowRight);
+      await tester.pump();
+      expect(guideFocus.hasPrimaryFocus, isTrue);
+      expect(find.text('Theme'), findsOneWidget);
+      await tester.pump(const Duration(milliseconds: 150));
+      expect(find.text('Visible hours'), findsOneWidget);
+      expect(guideFocus.hasPrimaryFocus, isTrue);
+      await tester.pumpWidget(const SizedBox.shrink());
+    },
+  );
 }

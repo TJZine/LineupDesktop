@@ -2233,6 +2233,21 @@ class PlayerCoordinator extends ChangeNotifier with WidgetsBindingObserver {
     notifyListeners();
   }
 
+  /// Closes the current overlay and any parent overlay to show the picture.
+  void returnToPicture() {
+    closeSleepPicker();
+    // Closing a reader normally returns to its parent overlay.
+    switch (overlay) {
+      case PlayerOverlay.programInfo ||
+          PlayerOverlay.audioTracks ||
+          PlayerOverlay.subtitleTracks:
+        closeOverlay();
+      default:
+        break;
+    }
+    if (overlay != PlayerOverlay.none) closeOverlay();
+  }
+
   /// Dismiss the sleep picker before another OSD action runs.
   ///
   /// The picker is a sub-state of the OSD, so dismissing it must not create a

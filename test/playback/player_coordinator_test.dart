@@ -7916,6 +7916,33 @@ void main() {
     expect(coordinator.overlayPresentationGeneration, generation);
   });
 
+  test('returnToPicture closes a sleep picker or track drawer', () {
+    final lineup = _TestLineup();
+    final guide = GuideController(
+      lineup: lineup,
+      loadSchedule: (channel) async => _schedule(channel),
+    );
+    final coordinator = PlayerCoordinator(
+      player: _Player(),
+      lineup: lineup,
+      guide: guide,
+    );
+    addTearDown(coordinator.dispose);
+    addTearDown(guide.dispose);
+    addTearDown(lineup.dispose);
+
+    coordinator.showSleepTimer();
+    expect(coordinator.sleepPickerOpen, isTrue);
+    coordinator.returnToPicture();
+    expect(coordinator.sleepPickerOpen, isFalse);
+    expect(coordinator.overlay, PlayerOverlay.none);
+
+    coordinator.showTracks(PlayerTrackType.subtitle);
+    expect(coordinator.overlay, PlayerOverlay.subtitleTracks);
+    coordinator.returnToPicture();
+    expect(coordinator.overlay, PlayerOverlay.none);
+  });
+
   test('a tune supersedes a pending initial media load', () async {
     final lineup = _TestLineup();
     final guide = GuideController(

@@ -18,7 +18,9 @@ LogicalKeyboardKey? tvRemoteKeyAlias(
     LogicalKeyboardKey.channelUp => LogicalKeyboardKey.pageUp,
     LogicalKeyboardKey.channelDown => LogicalKeyboardKey.pageDown,
     LogicalKeyboardKey.guide => LogicalKeyboardKey.f2,
-    LogicalKeyboardKey.info ||
+    LogicalKeyboardKey.info => LogicalKeyboardKey.keyI,
+    // Guide checks this alias alongside the raw Menu key. The Player handles
+    // the raw key before aliasing, and the shell handles Menu on other screens.
     LogicalKeyboardKey.contextMenu => LogicalKeyboardKey.keyI,
     _ => null,
   };

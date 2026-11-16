@@ -778,13 +778,21 @@ void main() {
       await showSettings(
         tester,
         controller,
-        size: const Size(412, 877),
+        size: const Size(412, 915),
         text: 2,
       );
       await reveal(tester, field('Styled'));
       final toggle = tester.widget<Switch>(field('Styled'));
       toggle.focusNode!.requestFocus();
       await tester.pumpAndSettle();
+      final scrollingHeading = find.byKey(
+        const ValueKey('subtitle-scrolling-heading'),
+      );
+      expect(scrollingHeading, findsNothing);
+      // The shorter viewport forces the heading to scroll once Saving appears.
+      tester.view.physicalSize = const Size(412, 877);
+      await tester.pumpAndSettle();
+      expect(toggle.focusNode!.hasFocus, isTrue);
       toggle.onChanged!(true);
       await tester.pump(const Duration(milliseconds: 350));
       await tester.pumpAndSettle();

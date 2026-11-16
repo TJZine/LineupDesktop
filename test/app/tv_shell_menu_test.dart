@@ -9,6 +9,7 @@ import 'package:lineup_desktop/channels/channel.dart';
 import 'package:lineup_desktop/licenses/licenses_view.dart';
 import 'package:lineup_desktop/playback/native_player.dart';
 import 'package:lineup_desktop/playback/player_view.dart';
+import 'package:lineup_desktop/plex/plex_models.dart';
 import 'package:lineup_desktop/settings/lineup_settings.dart';
 
 import '../support/ui_fixture.dart';
@@ -104,4 +105,79 @@ void main() {
       fixture.controller.dispose();
     }
   });
+
+  testWidgets('TV Menu follows the active Settings and onboarding surface', (
+    tester,
+  ) async {
+    tester.view
+      ..devicePixelRatio = 1
+      ..physicalSize = const Size(1920, 1080);
+    addTearDown(tester.view.reset);
+    const profile = PlexHomeUser(
+      id: 'synthetic-profile',
+      name: 'Synthetic profile',
+      protected: false,
+    );
+    final fixture = UiFixture(
+      profile: tvProfile,
+      scenario: const LineupScenario(
+        stage: SetupStage.ready,
+        profile: profile,
+        profiles: [profile],
+        settings: LineupSettings(reduceMotion: true),
+      ),
+    );
+    addTearDown(fixture.controller.dispose);
+    await tester.pumpWidget(fixture.build());
+    await tester.pumpAndSettle();
+
+    final menu = find.byKey(const Key('immersive-app-menu'));
+    Future<void> pressMenu() async {
+      await tester.sendKeyEvent(LogicalKeyboardKey.contextMenu);
+      await tester.pumpAndSettle();
+    }
+
+    Future<void> tap(Finder finder) async {
+      await tester.ensureVisible(finder);
+      await tester.tap(finder);
+      await tester.pumpAndSettle();
+    }
+
+    await pressMenu();
+    await tap(find.byKey(const Key('app-menu-account')));
+    await tap(find.text('Sign out of Plex'));
+    final dialog = find.byType(AlertDialog);
+    expect(dialog, findsOneWidget);
+    final confirmationFocus = FocusManager.instance.primaryFocus;
+    await pressMenu();
+    expect(dialog, findsOneWidget);
+    expect(FocusManager.instance.primaryFocus, same(confirmationFocus));
+    await tap(find.widgetWithText(TextButton, 'Cancel'));
+    expect(menu, findsNothing);
+    expect(fixture.controller.stage, SetupStage.ready);
+
+    await tap(find.text('Switch profile'));
+    expect(fixture.controller.stage, SetupStage.profiles);
+    expect(find.byKey(const ValueKey('onboarding-app-menu')), findsOneWidget);
+    await pressMenu();
+    expect(menu, findsOneWidget);
+    await pressMenu();
+    expect(menu, findsNothing);
+    await tap(find.widgetWithText(TextButton, 'Settings'));
+    expect(find.text('Open Licenses'), findsOneWidget);
+    expect(find.byTooltip('Open Lineup menu'), findsNothing);
+    await pressMenu();
+    expect(menu, findsNothing);
+    expect(find.text('Open Licenses'), findsOneWidget);
+    expect(fixture.controller.stage, SetupStage.profiles);
+
+    await tester.binding.handlePopRoute();
+    await tester.pumpAndSettle();
+    expect(find.text('Open Licenses'), findsNothing);
+    expect(menu, findsNothing);
+    await pressMenu();
+    expect(menu, findsOneWidget);
+    expect(tester.takeException(), isNull);
+    await tester.pumpWidget(const SizedBox.shrink());
+  }, variant: TargetPlatformVariant.only(TargetPlatform.android));
 }
