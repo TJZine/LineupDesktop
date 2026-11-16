@@ -126,10 +126,25 @@ Renders: `short-current/` and `short-A/` (15–45-minute programs); comparisons 
 | 1.15 | 345 → 398 | 1575 → 1522 (−3.4%) | 394 → 381 |
 | 1.3 | 390 → 456 | 1530 → 1464 (−4.3%) | 383 → 366 |
 
-**What changes**
+**November Guide refinement (UX assessment decision, 2026-11-13/14).**
+The channel rail returns surplus enlarged-text width to the timeline while
+preserving the real channel number, separator, icon, and duplicate-name tag
+allocation. At 1920×1080 with up to two-digit numbers, the matched 1.3-scale
+sample narrows from 408 to about 350 canvas pixels. The normal-scale rail is
+already narrower than the cap. The information band, picture size, row geometry,
+series-title order, and right-aligned episode codes retain their approved bounds.
+
+The toolbar's channel filter shows counts and opens with Select. Back or Right
+dismisses the open list; Select applies the highlighted option. At the live
+edge, Left retains the existing rail-focus route. The top bar has no close
+button on TV. Idle artwork uses the bottom watch prompt and scrim. The title
+logo is fitted by its alpha-bearing content within the existing visible slot
+and minimum dimensions; no extra text fallback was added.
+
+**What changed in the earlier number-column comparison**
 - Every time slot narrows by the same small fraction.
 - Titles in short cells truncate about one character earlier: "Coastal Kit…" becomes "Coastal Ki…" at 1.3. 15-minute cells look essentially the same.
-- The "All libraries" filter box follows the rail width, so it gets wider.
+- The then-current library filter box follows the rail width, so it gets wider.
 
 **What does not change**
 - Row heights, five rows, and the top composition.

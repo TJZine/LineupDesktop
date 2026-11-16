@@ -4,11 +4,14 @@ import 'package:flutter/services.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:lineup_desktop/app/lineup_controller.dart';
 import 'package:lineup_desktop/channels/channel.dart';
+import 'package:lineup_desktop/channels/channel_filter.dart';
 import 'package:lineup_desktop/channels/scheduler.dart';
+import 'package:lineup_desktop/guide/guide_controller.dart';
 import 'package:lineup_desktop/guide/guide_view.dart';
 import 'package:lineup_desktop/settings/lineup_settings.dart';
 import 'package:lineup_desktop/ui/lineup_text_field_activation.dart';
 import 'package:lineup_desktop/ui/lineup_canvas.dart';
+import 'package:lineup_desktop/ui/lineup_controls.dart';
 import 'package:lineup_desktop/ui/lineup_focus.dart';
 
 import '../support/ui_fixture.dart';
@@ -32,11 +35,9 @@ Future<void> _settle(WidgetTester tester) async {
 bool _hasFocus(FocusNode node) => node.hasPrimaryFocus;
 
 FocusNode _toolbarNode(WidgetTester tester, String name) => switch (name) {
-  'library' =>
+  'channelFilter' =>
     tester
-        .widget<DropdownButton<String?>>(
-          find.byKey(const Key('guide-library-picker')),
-        )
+        .widget<InkWell>(find.byKey(const Key('guide-channel-filter')))
         .focusNode!,
   'search' =>
     tester
@@ -60,26 +61,17 @@ FocusNode _toolbarNode(WidgetTester tester, String name) => switch (name) {
     tester
         .widget<TextButton>(find.byKey(const Key('guide-app-menu')))
         .focusNode!,
-  'close' =>
-    tester
-        .widget<IconButton>(
-          find.byWidgetPredicate(
-            (widget) => widget is IconButton && widget.tooltip == 'Close Guide',
-          ),
-        )
-        .focusNode!,
   _ => throw StateError('Unknown Guide toolbar control: $name'),
 };
 
 Finder _toolbarFinder(String name) => switch (name) {
-  'library' => find.byKey(const Key('guide-library-picker')),
+  'channelFilter' => find.byKey(const Key('guide-channel-filter')),
   'search' => find.byKey(const Key('guide-channel-search')),
   'earlier' => find.byKey(const Key('guide-earlier')),
   'now' => find.byKey(const Key('guide-now')),
   'later' => find.byKey(const Key('guide-later')),
   'hours' => find.byKey(const Key('guide-hours')),
   'menu' => find.byKey(const Key('guide-app-menu')),
-  'close' => find.byTooltip('Close Guide'),
   _ => throw StateError('Unknown Guide toolbar control: $name'),
 };
 
@@ -100,14 +92,13 @@ String _expectedToolbarControl(WidgetTester tester, {double? target}) {
   final targetX =
       target ?? (visibleCell.isEmpty ? cell : visibleCell).center.dx;
   const controls = [
-    'library',
+    'channelFilter',
     'search',
     'earlier',
     'now',
     'later',
     'hours',
     'menu',
-    'close',
   ];
   final candidates = controls.where(
     (name) => _toolbarNode(tester, name).canRequestFocus,
@@ -174,6 +165,100 @@ UiFixture _geometryFixture({required bool isTv, int channelCount = 2}) =>
     );
 
 void main() {
+  testWidgets(
+    'TV filter opens from its toolbar, dismisses, and reconciles a lost favourite',
+    (tester) async {
+      final fixture = _geometryFixture(isTv: true, channelCount: 3);
+      final lineup = fixture.controller;
+      final channels = lineup.channels;
+      lineup.fixtureActor.replaceChannels([
+        channels.first,
+        channels[1].copyWith(favorite: true, number: 17),
+        channels.last,
+      ]);
+      addTearDown(lineup.dispose);
+      await tester.pumpWidget(fixture.build());
+      await _settle(tester);
+      final view = tester.widget<GuideView>(find.byType(GuideView));
+      final controller = view.controller;
+      final picker = _toolbarNode(tester, 'channelFilter');
+      void expectFilterSemantics(String value) {
+        final data = tester
+            .getSemantics(_toolbarFinder('channelFilter'))
+            .getSemanticsData();
+        expect(data.flagsCollection.isButton, isTrue);
+        expect(data.label, 'Channel filter');
+        expect(data.value, value);
+      }
+
+      expectFilterSemantics('All channels');
+      expect(controller.channelFilterKey, ChannelFilter.all);
+
+      // Left at the live edge has an established rail-focus route.
+      view.focusNode!.requestFocus();
+      await _key(tester, _left);
+      expect(controller.focusedChannelIndex, 0);
+      expect(controller.focusedProgramId, isNull);
+      expect(find.text('Favourites'), findsNothing);
+
+      final select = LogicalKeyboardKey.select;
+      Finder countFor(String label, int count) {
+        final row = find.ancestor(
+          of: find.text(label),
+          matching: find.byType(LineupDropdownMenuRow),
+        );
+        return find.descendant(of: row, matching: find.text('$count'));
+      }
+
+      for (final dismiss in [_right, LogicalKeyboardKey.escape, null]) {
+        picker.requestFocus();
+        await tester.pump();
+        await _key(tester, select);
+        expect(countFor('All channels', 3), findsOneWidget);
+        expect(countFor('Favourites', 1), findsOneWidget);
+        expect(countFor('Custom', 3), findsOneWidget);
+        await _key(tester, _down);
+        if (dismiss == null) {
+          expect(await tester.binding.handlePopRoute(), isTrue);
+          await tester.pumpAndSettle();
+        } else {
+          await _key(tester, dismiss);
+        }
+        expect(find.byType(GuideView), findsOneWidget);
+        expect(countFor('Favourites', 1), findsNothing);
+        expect(controller.channelFilterKey, ChannelFilter.all);
+        expect(picker.hasPrimaryFocus, isTrue);
+      }
+      await _key(tester, select);
+      await _key(tester, _down);
+      await _key(tester, select);
+      expect(picker.hasPrimaryFocus, isTrue);
+      expectFilterSemantics('Favourites');
+      expect(controller.channelFilterKey, ChannelFilter.favourites);
+      final freshGuide = GuideController(lineup: lineup);
+      expect(freshGuide.channelFilterKey, ChannelFilter.all);
+      expect(freshGuide.channels, hasLength(3));
+      freshGuide.dispose();
+      expect(controller.channels.map((channel) => channel.number), [17]);
+      expect(lineup.channels.map((channel) => channel.number), [1, 17, 3]);
+      expect(find.text('Favourites'), findsOneWidget);
+      expect(find.byKey(const Key('guide-back-to-player')), findsNothing);
+
+      await lineup.setFavorite(channels[1].id, false);
+      await _settle(tester);
+      expect(controller.channelFilterKey, ChannelFilter.all);
+      expect(controller.channels, hasLength(3));
+      expect(find.text('All channels'), findsOneWidget);
+      expect(find.text('Favourites'), findsNothing);
+      expect(
+        find.text('Filter no longer available. Showing All channels.'),
+        findsOneWidget,
+      );
+      await tester.pumpWidget(const SizedBox.shrink());
+    },
+    variant: const TargetPlatformVariant({TargetPlatform.android}),
+  );
+
   for (final platform in [TargetPlatform.windows, TargetPlatform.android]) {
     for (final tv in [false, true]) {
       testWidgets(
@@ -480,14 +565,13 @@ void main() {
       }
 
       final controls = [
-        'library',
+        'channelFilter',
         'search',
         'earlier',
         'now',
         'later',
         'hours',
         'menu',
-        'close',
       ];
       guide.controller.focusProgram(firstProgram);
       await tester.pumpAndSettle();

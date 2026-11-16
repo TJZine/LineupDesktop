@@ -482,7 +482,11 @@ void main() {
     }
   }
 
-  for (final invocation in ['Close', 'Escape', 'root-focus semantics Close']) {
+  for (final invocation in [
+    'Lineup menu',
+    'Escape',
+    'root-focus semantics Lineup menu',
+  ]) {
     testWidgets('Guide $invocation opens the menu on the first '
         'action after sleep expiry', (tester) async {
       final semantics = tester.ensureSemantics();
@@ -510,11 +514,12 @@ void main() {
         expect(nativePlayer.stops, 1);
         expect(player.status.message, 'Playback stopped by timer');
         expect(find.byType(PlayerSurface), findsNothing);
+        expect(find.byKey(const Key('guide-back-to-player')), findsNothing);
         final loads = List<Uri>.of(nativePlayer.loads);
 
         if (invocation == 'Escape') {
           await tester.sendKeyEvent(LogicalKeyboardKey.escape);
-        } else if (invocation == 'root-focus semantics Close') {
+        } else if (invocation == 'root-focus semantics Lineup menu') {
           FocusManager.instance.rootScope.requestScopeFocus();
           FocusManager.instance.applyFocusChangesIfNeeded();
           expect(
@@ -522,14 +527,16 @@ void main() {
             FocusManager.instance.rootScope,
           );
           expect(FocusManager.instance.primaryFocus!.context, isNull);
-          final close = tester.getSemantics(find.byTooltip('Close Guide'));
+          final close = tester.getSemantics(
+            find.byKey(const Key('guide-app-menu')),
+          );
           expect(
             close.getSemanticsData().hasAction(SemanticsAction.tap),
             isTrue,
           );
           close.owner!.performAction(close.id, SemanticsAction.tap);
         } else {
-          await tester.tap(find.byTooltip('Close Guide'));
+          await tester.tap(find.byTooltip('Open Lineup menu'));
         }
         await tester.pumpAndSettle();
 
@@ -563,56 +570,44 @@ void main() {
     });
   }
 
-  for (final useEscape in [false, true]) {
-    testWidgets(
-      'Guide ${useEscape ? "Escape" : "Close"} uses live playback before rebuild',
-      (tester) async {
-        final nativePlayer = FixturePlayer()
-          ..emit(
-            const PlayerStatus(state: PlayerState.ready, message: 'Ready'),
-          );
-        final fixture = UiFixture(
-          player: nativePlayer,
-          scenario: LineupScenario(stage: SetupStage.ready),
-        );
-        await tester.pumpWidget(fixture.build());
-        await tester.pumpAndSettle();
-        await _routeShortcut(tester, 4);
-        final player = tester
-            .widget<PlayerView>(find.byType(PlayerView))
-            .controller;
-        await _routeShortcut(tester, 0);
-        final close = tester.widget<IconButton>(
-          find.byWidgetPredicate(
-            (widget) => widget is IconButton && widget.tooltip == 'Close Guide',
-          ),
-        );
-        expect(find.byType(PlayerSurface), findsOneWidget);
-        final loads = List<Uri>.of(nativePlayer.loads);
+  {
+    testWidgets('Guide Escape uses live playback before rebuild', (
+      tester,
+    ) async {
+      final nativePlayer = FixturePlayer()
+        ..emit(const PlayerStatus(state: PlayerState.ready, message: 'Ready'));
+      final fixture = UiFixture(
+        player: nativePlayer,
+        scenario: LineupScenario(stage: SetupStage.ready),
+      );
+      await tester.pumpWidget(fixture.build());
+      await tester.pumpAndSettle();
+      await _routeShortcut(tester, 4);
+      final player = tester
+          .widget<PlayerView>(find.byType(PlayerView))
+          .controller;
+      await _routeShortcut(tester, 0);
+      expect(find.byType(PlayerSurface), findsOneWidget);
+      final loads = List<Uri>.of(nativePlayer.loads);
 
-        await player.stop();
-        expect(player.hasPlaybackIntent, isFalse);
-        expect(player.error, isNull);
-        // Deliberately do not pump: this Guide callback was built while playback
-        // was still available, but the routing decision must read current facts.
-        if (useEscape) {
-          await tester.sendKeyEvent(LogicalKeyboardKey.escape);
-        } else {
-          close.onPressed!();
-        }
-        await tester.pumpAndSettle();
-        expect(find.byKey(const Key('immersive-app-menu')), findsOneWidget);
-        _expectDestination('Guide');
-        expect(
-          tester
-              .widget<TextButton>(find.widgetWithText(TextButton, 'Player'))
-              .onPressed,
-          isNull,
-        );
-        expect(nativePlayer.loads, orderedEquals(loads));
-        await tester.pumpWidget(const SizedBox.shrink());
-      },
-    );
+      await player.stop();
+      expect(player.hasPlaybackIntent, isFalse);
+      expect(player.error, isNull);
+      // Deliberately do not pump: this Guide callback was built while playback
+      // was still available, but the routing decision must read current facts.
+      await tester.sendKeyEvent(LogicalKeyboardKey.escape);
+      await tester.pumpAndSettle();
+      expect(find.byKey(const Key('immersive-app-menu')), findsOneWidget);
+      _expectDestination('Guide');
+      expect(
+        tester
+            .widget<TextButton>(find.widgetWithText(TextButton, 'Player'))
+            .onPressed,
+        isNull,
+      );
+      expect(nativePlayer.loads, orderedEquals(loads));
+      await tester.pumpWidget(const SizedBox.shrink());
+    });
   }
 
   for (final (index, name) in [(0, 'Guide'), (1, 'Channels'), (4, 'Player')]) {

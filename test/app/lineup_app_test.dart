@@ -1079,22 +1079,65 @@ void main() {
         currentChannelId: 'channel',
       ),
     );
-    final player = _PlayingPlayer();
+    final player = FakeNativePlayer();
     await tester.pumpWidget(
-      LineupBootstrap(player: player, controller: controller),
+      LineupBootstrap(
+        player: player,
+        controller: controller,
+        profile: desktopProfile,
+      ),
     );
     await tester.pumpAndSettle();
 
-    await openDestination(tester, 'Settings');
+    await tester.sendKeyEvent(LogicalKeyboardKey.enter);
+    await tester.pumpAndSettle();
+    expect(player.loads, hasLength(1));
+    player.emit(
+      const PlayerStatus(state: PlayerState.playing, message: 'Playing'),
+    );
+    await tester.pumpAndSettle();
+
+    expect(
+      tester
+          .widget<PlayerView>(find.byType(PlayerView))
+          .controller
+          .watchingChannelId,
+      'channel',
+    );
+    await tester.sendKeyDownEvent(LogicalKeyboardKey.controlLeft);
+    await tester.sendKeyEvent(LogicalKeyboardKey.digit3);
+    await tester.sendKeyUpEvent(LogicalKeyboardKey.controlLeft);
+    await tester.pumpAndSettle();
+    expect(find.byType(DropdownButton<LineupThemeName>), findsOneWidget);
     await tester.sendKeyDownEvent(LogicalKeyboardKey.controlLeft);
     await tester.sendKeyEvent(LogicalKeyboardKey.keyG);
     await tester.sendKeyUpEvent(LogicalKeyboardKey.controlLeft);
     await tester.pumpAndSettle();
-    await tester.tap(find.byTooltip('Close Guide'));
+    await tester.tap(find.byKey(const Key('guide-back-to-player')));
     await tester.pumpAndSettle();
 
     expect(FocusManager.instance.primaryFocus?.debugLabel, 'Player');
     expect(find.byType(DropdownButton<LineupThemeName>), findsNothing);
+
+    final playback = tester
+        .widget<PlayerView>(find.byType(PlayerView))
+        .controller;
+    await tester.sendKeyDownEvent(LogicalKeyboardKey.controlLeft);
+    await tester.sendKeyEvent(LogicalKeyboardKey.keyG);
+    await tester.sendKeyUpEvent(LogicalKeyboardKey.controlLeft);
+    await tester.pumpAndSettle();
+    final button = tester.widget<TextButton>(
+      find.byKey(const Key('guide-back-to-player')),
+    );
+    await playback.stop();
+    // The last rendered callback must consult live playback before the next
+    // frame hides the button.
+    button.onPressed!();
+    await tester.pumpAndSettle();
+    expect(find.byType(GuideView), findsOneWidget);
+    expect(find.byKey(const Key('guide-back-to-player')), findsNothing);
+    expect(find.byKey(const Key('immersive-app-menu')), findsOneWidget);
+    expect(player.loads, hasLength(1));
   });
 
   testWidgets('onboarding link action is keyboard reachable', (tester) async {

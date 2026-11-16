@@ -7,6 +7,7 @@ import 'package:flutter/rendering.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:lineup_desktop/app/lineup_controller.dart';
 import 'package:lineup_desktop/channels/channel.dart';
+import 'package:lineup_desktop/channels/channel_filter.dart';
 import 'package:lineup_desktop/channels/scheduler.dart';
 import 'package:lineup_desktop/guide/guide_controller.dart';
 import 'package:lineup_desktop/guide/guide_view.dart';
@@ -43,6 +44,28 @@ void main() {
       });
     }
   }
+  test('TV rail caps the base and grows the measured number column', () {
+    const screen = Size(1920, 1080);
+    GuideLayoutPolicy policy(double scale, double numberWidth) =>
+        GuideLayoutPolicy.forSize(
+          screen,
+          hasPicture: true,
+          isTv: true,
+          textScale: scale,
+          numberColumnWidth: numberWidth,
+        );
+
+    final normal = policy(1, 37);
+    expect(normal.channelRailWidth, 303);
+    expect(normal.timelineWidthFor(screen.width), 1616);
+    final enlarged = policy(1.3, 48);
+    expect(enlarged.channelRailWidth, closeTo(350.2, .001));
+    expect(enlarged.timelineWidthFor(screen.width), closeTo(1568.8, .001));
+    final widerNumber = policy(1.3, 68);
+    expect(widerNumber.channelRailWidth, closeTo(370.2, .001));
+    expect(widerNumber.timelineWidthFor(screen.width), closeTo(1548.8, .001));
+  });
+
   for (final scale in [1.0, 1.15, 1.3]) {
     for (final large in [false, true]) {
       testWidgets(
@@ -362,7 +385,7 @@ void main() {
                       .first,
                 )
                 .width,
-            'libraryPicker': rect('guide-library-picker'),
+            'channelFilter': rect('guide-channel-filter'),
             'rows': tester.widget<ListView>(list).itemExtent,
             'list': rect('guide-schedule-list'),
             'numberLines': {for (final n in numbers) '$n': lines('$n')},
@@ -605,6 +628,7 @@ void main() {
                   libraryId: 'library',
                   libraryType: PlexLibraryType.show,
                 ),
+                sourceLibraries: const {'library': 'Library'},
                 playbackMode: original.playbackMode,
                 anchor: original.anchor,
                 shuffleSeed: original.shuffleSeed,
@@ -612,7 +636,10 @@ void main() {
               ...channels.skip(1),
             ]);
             await tester.pumpAndSettle();
-            guide.setLibraryFilter('library');
+            guide.setChannelFilter((
+              group: ChannelFilterGroup.library,
+              value: 'library',
+            ));
             await tester.pumpAndSettle();
             expect(guide.channels, hasLength(1));
             expect(
@@ -620,7 +647,7 @@ void main() {
               numberWidth,
               reason: 'Library filtering must retain the whole-lineup column',
             );
-            guide.setLibraryFilter(null);
+            guide.setChannelFilter(ChannelFilter.all);
             await tester.pumpAndSettle();
             for (final maximum in [999, 1]) {
               await lineup.deleteChannels(

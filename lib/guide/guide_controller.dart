@@ -6,6 +6,7 @@ import 'package:flutter/widgets.dart';
 
 import '../app/lineup_controller.dart';
 import '../channels/channel.dart';
+import '../channels/channel_filter.dart';
 import '../channels/channel_artwork.dart';
 import '../channels/scheduler.dart';
 import '../diagnostics/diagnostics.dart';
@@ -117,6 +118,7 @@ class GuideController extends ChangeNotifier {
        _clock = clock ?? DateTime.now {
     _channels = lineup.channels;
     _contentGeneration = lineup.contentGeneration;
+    _replaceChannelFilterModel();
     _updateVisibleChannels();
     _settings = lineup.settings;
     _windowStart = _initialWindowStart;
@@ -149,7 +151,10 @@ class GuideController extends ChangeNotifier {
   Map<String, Channel> _channelById = const {};
   List<Channel> _visibleChannels = const [];
   Map<String, int> _visibleIndexById = const {};
-  Set<String> _availableLibraryIds = const {};
+  late ChannelFilter _channelFilter;
+  late List<ChannelFilterEntry> _channelFilterEntries;
+  ChannelFilterKey _channelFilterKey = ChannelFilter.all;
+  bool _filterFallbackNoticePending = false;
   LineupSettings _settings = const LineupSettings();
   late DateTime _windowStart;
   late DateTime _focusTime;
@@ -160,7 +165,6 @@ class GuideController extends ChangeNotifier {
   GuideProgram? _inspectedProgram;
   ({String channelId, DateTime time})? _pendingProgramFocus;
   ({String channelId, String programId})? _selected;
-  String? _libraryFilterId;
   String _searchQuery = '';
   ({String channelId, String? programId})? _preservedFocused;
   int _generation = 0;
@@ -209,7 +213,18 @@ class GuideController extends ChangeNotifier {
   String? get focusedProgramId => _focusedProgramId;
   String? get selectedChannelId => _selected?.channelId;
   String? get selectedProgramId => _selected?.programId;
-  String? get libraryFilterId => _libraryFilterId;
+  ChannelFilterKey get channelFilterKey => _channelFilterKey;
+  List<ChannelFilterEntry> get channelFilterEntries => _channelFilterEntries;
+  ChannelFilterEntry get selectedChannelFilter => _channelFilterEntries
+      .firstWhere((entry) => entry.key == _channelFilterKey);
+  bool get filterFallbackNoticePending => _filterFallbackNoticePending;
+
+  /// Keep the notice until the Guide is displayed, including filter changes
+  /// made while Manage channels owns the route.
+  void acknowledgeFilterFallbackNotice() {
+    _filterFallbackNoticePending = false;
+  }
+
   String get searchQuery => _searchQuery;
   int get guideHours => _settings.guideHours;
   bool get followingLive => _followingLive;
@@ -339,8 +354,6 @@ class GuideController extends ChangeNotifier {
     }
     return currentProgram(channelId);
   }
-
-  Set<String> get availableLibraryIds => _availableLibraryIds;
 
   /// Called only by a visible cast surface. Scheduling and activation do no IO.
   CastView castFor(GuideProgram program) {
@@ -831,13 +844,15 @@ class GuideController extends ChangeNotifier {
     }
   }
 
-  void setLibraryFilter(String? libraryId) {
-    final next = libraryId != null && !_availableLibraryIds.contains(libraryId)
-        ? null
-        : libraryId;
-    if (_libraryFilterId == next) return;
+  void setChannelFilter(ChannelFilterKey filter) {
+    if (!_channelFilterEntries.any((entry) => entry.key == filter)) {
+      filter = ChannelFilter.all;
+      _filterFallbackNoticePending = true;
+    } else if (_channelFilterKey == filter) {
+      return;
+    }
     _rememberInspection();
-    _libraryFilterId = next;
+    _channelFilterKey = filter;
     _applyFilters();
     _finishFilterSessionIfInactive();
     notifyListeners();
@@ -1238,17 +1253,23 @@ class GuideController extends ChangeNotifier {
     _channels = next;
     _settings = lineup.settings;
     if (contentChanged) {
-      _libraryFilterId = null;
+      _channelFilterKey = ChannelFilter.all;
+      _filterFallbackNoticePending = false;
       _searchQuery = '';
       _preservedFocused = null;
       _focusedProgramId = null;
       _selected = null;
     }
     if (lineupChanged) {
-      _updateVisibleChannels();
-      if (_libraryFilterId != null &&
-          !availableLibraryIds.contains(_libraryFilterId)) {
-        _libraryFilterId = null;
+      _replaceChannelFilterModel();
+      if (!_channelFilterEntries.any(
+        (entry) => entry.key == _channelFilterKey,
+      )) {
+        _channelFilterKey = ChannelFilter.all;
+        _filterFallbackNoticePending = true;
+        _applyFilters();
+        _finishFilterSessionIfInactive();
+      } else {
         _updateVisibleChannels();
       }
       if (!_visibleIndexById.containsKey(_focusedChannelId)) {
@@ -1277,24 +1298,24 @@ class GuideController extends ChangeNotifier {
     }
   }
 
-  void _updateVisibleChannels() {
+  void _replaceChannelFilterModel() {
     _channelById = {for (final channel in _channels) channel.id: channel};
-    _availableLibraryIds = {
-      for (final channel in _channels) ..._sourceLibraryIds(channel.source),
-    };
-    final filter = _libraryFilterId;
+    _channelFilter = ChannelFilter(_channels);
+    _channelFilterEntries = _channelFilter.entries;
+  }
+
+  void _updateVisibleChannels() {
+    final matching = _channelFilter.channelsFor(_channelFilterKey);
     final query = _searchQuery;
-    _visibleChannels = _channels
-        .where((channel) {
-          if (filter != null &&
-              !_sourceLibraryIds(channel.source).contains(filter)) {
-            return false;
-          }
-          return query.isEmpty ||
-              channel.name.toLowerCase().contains(query) ||
-              '${channel.number}'.contains(query);
-        })
-        .toList(growable: false);
+    _visibleChannels = query.isEmpty
+        ? matching
+        : matching
+              .where(
+                (channel) =>
+                    channel.name.toLowerCase().contains(query) ||
+                    '${channel.number}'.contains(query),
+              )
+              .toList(growable: false);
     _visibleIndexById = {
       for (var index = 0; index < _visibleChannels.length; index++)
         _visibleChannels[index].id: index,
@@ -1311,7 +1332,9 @@ class GuideController extends ChangeNotifier {
   }
 
   void _finishFilterSessionIfInactive() {
-    if (_libraryFilterId != null || _searchQuery.isNotEmpty) return;
+    if (_channelFilterKey != ChannelFilter.all || _searchQuery.isNotEmpty) {
+      return;
+    }
     _preservedFocused = null;
   }
 
@@ -1473,14 +1496,6 @@ int _distanceFrom(DateTime time, GuideProgram program) {
   }
   return time.difference(program.scheduled.end).inMicroseconds;
 }
-
-Set<String> _sourceLibraryIds(ContentSource source) => switch (source) {
-  LibrarySource(:final libraryId) => {libraryId},
-  MixedSource(:final sources) => {
-    for (final source in sources) ..._sourceLibraryIds(source),
-  },
-  ManualSource() || PlaylistSource() => const {},
-};
 
 class _CastEntry {
   _CastEntry(this.item, this.generation);

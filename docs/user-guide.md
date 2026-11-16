@@ -195,7 +195,7 @@ Success offers **View lineup** and **Add a custom channel**.
 
 | Destination | Purpose |
 | --- | --- |
-| Guide | Browse the schedule, inspect focused programs, filter by library, jump to now, tune current programs, and open the Player |
+| Guide | Browse the schedule, inspect focused programs, filter by channel group, jump to now, tune current programs, and open the Player |
 | Channels | Generate a lineup or create, inspect, duplicate, edit, and delete individual channels |
 | Settings | Configure appearance, Guide, playback, accessibility, account, and support preferences |
 | Diagnostics | Review bounded, redacted support events from the current session |
@@ -286,9 +286,17 @@ active video appears in a responsive picture-in-picture area. PiP is the sole
 full Guide presentation; the retired full-screen Overlay layout is not
 available. The Guide and Player share one playback session.
 
-The Guide toolbar always shows a library picker and channel search. The picker
-offers **All libraries** or one library, and search accepts a channel name or
-number within that scope. **Jump to now** returns the time window and focus to
+The Guide opens on **All channels** each time you launch Lineup. The toolbar
+filter lists All channels, Favourites when present, the available source types,
+and libraries, with counts. Search accepts a channel name or number within
+the selected filter. Filtering keeps the original channel numbers: direct
+number entry can still reach all channels. If a filter disappears, such as
+when you remove the last favourite, the Guide returns to All channels and
+shows a short notice.
+
+When you see **Select to watch** on the idle picture, activate the airing
+program to tune its channel. On desktop, **Back to player** is available in the
+header while playback is active. **Jump to now** returns the time window and focus to
 the current schedule. While the Guide follows live, its window and focus track
 the presentation clock. Moving to an earlier or later window stops that live
 following and preserves the browsed window and explicitly inspected program
@@ -535,7 +543,7 @@ navigation, so the D-pad can reach the next control.
 | Left / Right | Move through focused Player actions; seek only with DVR enabled and video focused |
 | Up / Down | Hidden Player: Up opens Mini Guide and Down shows the compact OSD; from the compact OSD action row, Down expands details when a program exists; in expanded details, move within the details |
 | Channel Up / Channel Down | Player: previous/next channel; Mini Guide: move seven channels; Guide: move a visible page, like Page Up / Page Down |
-| Guide | Open the full Guide from Player; in Guide, follow its Close Guide action |
+| Guide | Open the full Guide from Player; in Guide, follow its usual return action |
 | Info | Player: expand details from hidden or compact OSD; collapse expanded details to compact OSD; with no current program, show the compact OSD |
 | Menu | Open the Lineup menu from Player or Guide |
 | Play/Pause, Rewind, Fast Forward | Existing Player transport actions when DVR playback controls are enabled |
@@ -552,12 +560,17 @@ When lineup generation completes on TV, **Open guide** goes to Guide. **Add a
 custom channel** goes to Studio; desktop keeps its existing View lineup action.
 
 Up from the Guide's first channel row enters the nearest toolbar control; Down
-returns to the selected grid cell. Player action keys reset the OSD timeout;
-auto-hide returns focus to video. Closing a track picker or sleep picker returns
-to its invoking action. A playback failure shows a short cause and offers
-**Try again** when retry is available, or **Choose another channel**. Back
-closes the Mini Guide and returns to the slate. From a newly opened failure,
-Back dismisses the error overlay; the next Back opens Guide.
+returns to the selected grid cell. Move to the channel filter and press Select
+to open it. Select applies the highlighted entry; Back or Right closes the list
+without applying it. Left at the live time edge continues to focus the channel
+rail.
+
+Player action keys reset the OSD timeout; auto-hide returns focus to video.
+Closing a track picker or sleep picker returns to its invoking action. A
+playback failure shows a short cause and offers **Try again** when retry is
+available, or **Choose another channel**. Back closes the Mini Guide and returns
+to the slate. From a newly opened failure, Back dismisses the error overlay; the
+next Back opens Guide.
 
 Use the Player's OSD controls for tracks and sleep. Plex linking uses the code
 and QR shown on the TV; open plex.tv/link on another device when the TV has no

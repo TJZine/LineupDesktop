@@ -6,6 +6,7 @@ import 'package:flutter/scheduler.dart' show SchedulerPhase;
 import 'package:flutter_test/flutter_test.dart';
 import 'package:lineup_desktop/app/lineup_controller.dart';
 import 'package:lineup_desktop/channels/channel.dart';
+import 'package:lineup_desktop/channels/channel_filter.dart';
 import 'package:lineup_desktop/channels/scheduler.dart';
 import 'package:lineup_desktop/channels/schedule_worker.dart';
 import 'package:lineup_desktop/guide/guide_controller.dart';
@@ -2154,6 +2155,7 @@ void main() {
           ],
           interleave: true,
         ),
+        sourceLibraries: const {'library-1': 'Library 1'},
         playbackMode: PlaybackMode.sequential,
         anchor: DateTime.utc(2026),
         shuffleSeed: 1,
@@ -2161,17 +2163,26 @@ void main() {
       final lineup = _TestLineup([...channels, mixed]);
       final guide = GuideController(lineup: lineup);
 
-      guide.setLibraryFilter('library-1');
-      expect(guide.libraryFilterId, 'library-1');
+      guide.setChannelFilter((
+        group: ChannelFilterGroup.library,
+        value: 'library-1',
+      ));
+      expect(guide.channelFilterKey, (
+        group: ChannelFilterGroup.library,
+        value: 'library-1',
+      ));
       expect(guide.channels.map((channel) => channel.id), contains('mixed'));
       expect(guide.channels.map((channel) => channel.number), contains(900));
 
-      guide.setLibraryFilter(null);
-      expect(guide.libraryFilterId, isNull);
+      guide.setChannelFilter(ChannelFilter.all);
+      expect(guide.channelFilterKey, ChannelFilter.all);
       expect(guide.channels, hasLength(3));
 
-      guide.setLibraryFilter('unavailable-library');
-      expect(guide.libraryFilterId, isNull);
+      guide.setChannelFilter((
+        group: ChannelFilterGroup.library,
+        value: 'unavailable-library',
+      ));
+      expect(guide.channelFilterKey, ChannelFilter.all);
       expect(guide.channels, hasLength(3));
 
       guide.dispose();
