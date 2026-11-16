@@ -2778,6 +2778,7 @@ void main() {
       f.dispose();
       await f.native.dispose();
     },
+    variant: TargetPlatformVariant.only(TargetPlatform.windows),
   );
 
   testWidgets(

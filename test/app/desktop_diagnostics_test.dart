@@ -21,6 +21,7 @@ void main() {
     bool isTv = false,
     bool largeFocus = false,
     VoidCallback? onRecordingSettings,
+    PlayerState playbackState = PlayerState.stopped,
   }) async {
     await tester.pumpWidget(
       DeviceProfileScope(
@@ -37,9 +38,7 @@ void main() {
             child: Scaffold(
               body: DiagnosticsView(
                 controller: controller,
-                playback: const PlaybackDiagnosticSnapshot(
-                  state: PlayerState.stopped,
-                ),
+                playback: PlaybackDiagnosticSnapshot(state: playbackState),
                 onRecordingSettings: onRecordingSettings ?? () {},
               ),
             ),
@@ -105,7 +104,7 @@ void main() {
             isTrue,
           );
           expect(tester.getRect(tile), rect);
-          final body = find.text('Windows display');
+          final body = find.text('Video decoder');
           expect(
             LineupTheme.of(tester.element(body)).primaryText,
             roles.primaryText,
@@ -140,7 +139,7 @@ void main() {
   testWidgets(
     'TV arrows read the full technical panel and reach recording settings',
     (tester) async {
-      debugDefaultTargetPlatformOverride = TargetPlatform.android;
+      debugDefaultTargetPlatformOverride = TargetPlatform.windows;
       tester.view
         ..physicalSize = const Size(1920, 1080)
         ..devicePixelRatio = 2;
@@ -152,11 +151,12 @@ void main() {
           tester,
           controller,
           isTv: true,
+          playbackState: PlayerState.playing,
           onRecordingSettings: () => recordingCalls++,
         );
         await tester.pumpAndSettle();
         Future<void> key(LogicalKeyboardKey key) async {
-          await tester.sendKeyEvent(key);
+          await tester.sendKeyEvent(key, platform: 'android');
           await tester.pumpAndSettle();
         }
 
@@ -253,12 +253,25 @@ void main() {
   ) async {
     final controller = FixtureController();
     addTearDown(controller.dispose);
-    await show(tester, controller);
-    await tester.pumpAndSettle();
+    debugDefaultTargetPlatformOverride = TargetPlatform.windows;
+    try {
+      await show(tester, controller);
+      await tester.pumpAndSettle();
+      expect(find.text('Recording off'), findsOneWidget);
+      await tester.tap(find.text('Technical details'));
+      await tester.pumpAndSettle();
+    } finally {
+      debugDefaultTargetPlatformOverride = null;
+    }
     expect(find.text('Copy redacted report'), findsOneWidget);
-    expect(find.text('Recording off'), findsOneWidget);
-    await tester.tap(find.text('Technical details'));
-    await tester.pumpAndSettle();
+    expect(
+      find.text('Nothing is playing. Start a channel to see playback details.'),
+      findsOneWidget,
+    );
+    expect(
+      find.byKey(const ValueKey('diagnostics-summary-Playback')),
+      findsNothing,
+    );
     expect(tester.takeException(), isNull);
     for (final row in ['Windows display', 'HDR matching', 'Renderer output']) {
       expect(find.text(row), findsOneWidget);
@@ -299,6 +312,53 @@ void main() {
       debugDefaultTargetPlatformOverride = null;
     }
   });
+
+  testWidgets(
+    'Android technical details show reported facts and the Plex route',
+    (tester) async {
+      final controller = FixtureController(
+        scenario: LineupScenario(
+          connection: PlexConnection(
+            uri: Uri.parse('https://synthetic.invalid'),
+            local: true,
+            relay: false,
+            latency: const Duration(milliseconds: 46),
+          ),
+        ),
+      );
+      addTearDown(controller.dispose);
+      debugDefaultTargetPlatformOverride = TargetPlatform.android;
+      try {
+        await show(tester, controller, isTv: true);
+        await tester.pumpAndSettle();
+        await tester.tap(find.text('Technical details'));
+        await tester.pumpAndSettle();
+        for (final label in [
+          'Windows display',
+          'HDR matching',
+          'HDR output',
+          'Renderer output',
+          'Pixel format',
+          'Color matrix',
+          'Reported signal peak',
+        ]) {
+          expect(find.text(label), findsNothing);
+        }
+        expect(find.textContaining('reported by Windows'), findsNothing);
+        expect(
+          find.byKey(const ValueKey('diagnostics-technical-fact-Video output')),
+          findsNothing,
+        );
+        expect(find.text('Video decoder'), findsOneWidget);
+        expect(find.text('Transfer'), findsOneWidget);
+        expect(find.text('Primaries'), findsOneWidget);
+        expect(find.text('Plex connection'), findsOneWidget);
+        expect(find.text('Direct local · 46 ms'), findsOneWidget);
+      } finally {
+        debugDefaultTargetPlatformOverride = null;
+      }
+    },
+  );
 
   testWidgets(
     'copy failure retains context and retry produces an allowlisted snapshot',
@@ -521,9 +581,14 @@ void main() {
     addTearDown(controller.dispose);
     controller.diagnostics.enabled = true;
     controller.diagnostics.add(DiagnosticEvent.guideScheduleLoadTimedOut);
-    await show(tester, controller);
-    await tester.tap(find.text('Technical details'));
-    await tester.pumpAndSettle();
+    debugDefaultTargetPlatformOverride = TargetPlatform.windows;
+    try {
+      await show(tester, controller, playbackState: PlayerState.playing);
+      await tester.tap(find.text('Technical details'));
+      await tester.pumpAndSettle();
+    } finally {
+      debugDefaultTargetPlatformOverride = null;
+    }
 
     final summaryPlayback = tester.getRect(
       find.byKey(const ValueKey('diagnostics-summary-Playback')),

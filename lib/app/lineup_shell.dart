@@ -91,7 +91,7 @@ class _LineupShellState extends State<LineupShell> {
   bool _onboardingSupport = false;
   bool _selectionPending = false;
   bool _keyboardInput = false;
-  ({Rect anchor, FocusNode invokerFocus})? _appMenu;
+  ({Object id, Rect anchor, FocusNode invokerFocus})? _appMenu;
   static const _appMenuChannel = MethodChannel('lineup/app_menu');
   bool _onboardingFromAccount = false;
   SettingsCategory _settingsCategory = SettingsCategory.appearance;
@@ -105,6 +105,7 @@ class _LineupShellState extends State<LineupShell> {
         _lastStage == SetupStage.channelSetup &&
         !widget.controller.restoringSavedLineup;
     HardwareKeyboard.instance.addHandler(_trackKeyboardInput);
+    FocusManager.instance.addEarlyKeyEventHandler(_handleTvMenuKey);
     if (defaultTargetPlatform != TargetPlatform.android) {
       _appMenuChannel.setMethodCallHandler(_handleAppMenuCall);
     }
@@ -219,6 +220,7 @@ class _LineupShellState extends State<LineupShell> {
   @override
   void dispose() {
     HardwareKeyboard.instance.removeHandler(_trackKeyboardInput);
+    FocusManager.instance.removeEarlyKeyEventHandler(_handleTvMenuKey);
     if (defaultTargetPlatform != TargetPlatform.android) {
       _appMenuChannel.setMethodCallHandler(null);
     }
@@ -367,8 +369,15 @@ class _LineupShellState extends State<LineupShell> {
   Future<void> _select(
     ShellDestination destination, {
     _TvLocation? tvLocation,
+    ({Object menuId, String channelId})? tunedRow,
   }) async {
-    if (_selectionPending) return;
+    bool tunedRowIsCurrent() =>
+        tunedRow == null ||
+        (_appMenu?.id == tunedRow.menuId &&
+            _canShowNowPlaying &&
+            _player.currentChannel?.id == tunedRow.channelId);
+
+    if (_selectionPending || !tunedRowIsCurrent()) return;
     final proposed = widget.profile.isTv
         ? tvLocation ?? _tvOpen(destination)
         : null;
@@ -383,7 +392,8 @@ class _LineupShellState extends State<LineupShell> {
     if (destination == ShellDestination.settings && _licensesOpen) {
       _closeLicenses();
     }
-    if (destination == _destination &&
+    if (tunedRow == null &&
+        destination == _destination &&
         (proposed == null || proposed == _tvLocation) &&
         !(destination == ShellDestination.channels &&
             (_channelsKey.currentState?.studioOpen ?? false))) {
@@ -401,7 +411,8 @@ class _LineupShellState extends State<LineupShell> {
         return;
       }
       if (!mounted ||
-          (widget.profile.isTv &&
+          !tunedRowIsCurrent() ||
+          ((widget.profile.isTv || tunedRow != null) &&
               (intent != _routeIntent ||
                   stage != widget.controller.stage ||
                   scope != _scopeStamp))) {
@@ -427,7 +438,9 @@ class _LineupShellState extends State<LineupShell> {
       }
       final committed = proposed == null ? null : _validTvLocation(proposed);
       final routeDestination = committed?.destination ?? destination;
-      if (routeDestination == ShellDestination.guide) {
+      if (tunedRow != null && routeDestination == ShellDestination.player) {
+        _player.returnToPicture();
+      } else if (routeDestination == ShellDestination.guide) {
         _player.showFullGuide();
       } else if (_player.overlay == PlayerOverlay.fullGuide) {
         _player.closeOverlay();
@@ -480,29 +493,8 @@ class _LineupShellState extends State<LineupShell> {
       _player.hasPlaybackIntent &&
       !_player.tuning &&
       _player.error == null &&
+      _player.currentChannel != null &&
       _player.currentProgram != null;
-
-  Future<void> _openNowPlaying() async {
-    if (_selectionPending || !_canShowNowPlaying) return;
-    await _select(ShellDestination.player);
-    if (!mounted ||
-        widget.controller.stage != SetupStage.ready ||
-        _destination != ShellDestination.player ||
-        _appMenu != null ||
-        !_canShowNowPlaying) {
-      return;
-    }
-    _player.showNowPlaying();
-    WidgetsBinding.instance.addPostFrameCallback((_) {
-      if (mounted &&
-          widget.controller.stage == SetupStage.ready &&
-          _destination == ShellDestination.player &&
-          _appMenu == null &&
-          _player.overlay == PlayerOverlay.nowPlaying) {
-        _playerFocus.requestFocus();
-      }
-    });
-  }
 
   void _restoreRouteFocus() {
     if (!mounted ||
@@ -527,15 +519,65 @@ class _LineupShellState extends State<LineupShell> {
   }
 
   void _openAppMenu(BuildContext invokerContext, FocusNode invokerFocus) {
-    final renderObject = invokerContext.findRenderObject();
-    if (renderObject is! RenderBox || !renderObject.hasSize) return;
-    setState(() {
-      final anchor = MatrixUtils.transformRect(
-        renderObject.getTransformTo(context.findRenderObject()),
-        Offset.zero & renderObject.size,
-      );
-      _appMenu = (anchor: anchor, invokerFocus: invokerFocus);
-    });
+    final anchor = _menuAnchor(invokerContext);
+    if (anchor != null) _showAppMenu(anchor, invokerFocus);
+  }
+
+  Rect? _menuAnchor(BuildContext? anchorContext) {
+    if (anchorContext?.mounted != true) return null;
+    final box = anchorContext!.findRenderObject();
+    if (box is! RenderBox || !box.attached || !box.hasSize) return null;
+    return MatrixUtils.transformRect(
+      box.getTransformTo(context.findRenderObject()),
+      Offset.zero & box.size,
+    );
+  }
+
+  void _showAppMenu(Rect anchor, FocusNode invoker) {
+    setState(
+      () => _appMenu = (id: Object(), anchor: anchor, invokerFocus: invoker),
+    );
+  }
+
+  KeyEventResult _handleTvMenuKey(KeyEvent event) {
+    if (!widget.profile.isTv ||
+        event.logicalKey != LogicalKeyboardKey.contextMenu ||
+        ModalRoute.of(context)?.isCurrent != true ||
+        _onboardingSupport) {
+      return KeyEventResult.ignored;
+    }
+    final ready = widget.controller.stage == SetupStage.ready;
+    if (!ready &&
+        (!_onboardingMenuAvailable || widget.controller.restoringSavedLineup)) {
+      return KeyEventResult.ignored;
+    }
+    // Guide and Player open the menu with their own overlay anchors.
+    final anchorNode = !ready
+        ? _settingsMenuFocus
+        : switch ((_licensesOpen, _destination)) {
+            (true, _) => _licensesMenuFocus,
+            (_, ShellDestination.settings) => _settingsMenuFocus,
+            (_, ShellDestination.diagnostics) => _diagnosticsMenuFocus,
+            (_, ShellDestination.channels) => _channelsMenuFocus,
+            _ => null,
+          };
+    Rect? anchor;
+    if (anchorNode != null) {
+      if (anchorNode.parent == null) return KeyEventResult.ignored;
+      anchor = _menuAnchor(anchorNode.context);
+      if (anchor == null) return KeyEventResult.ignored;
+    }
+    // A held key cannot toggle repeatedly while focus moves between surfaces.
+    if (event is KeyRepeatEvent) return KeyEventResult.handled;
+    if (event is! KeyDownEvent) return KeyEventResult.ignored;
+    _keyboardInput = true;
+    if (_appMenu != null) {
+      _closeAppMenu();
+      return KeyEventResult.handled;
+    }
+    if (anchor == null || anchorNode == null) return KeyEventResult.ignored;
+    _showAppMenu(anchor, FocusManager.instance.primaryFocus ?? anchorNode);
+    return KeyEventResult.handled;
   }
 
   void _closeGuide(BuildContext invokerContext, FocusNode invokerFocus) {
@@ -598,6 +640,7 @@ class _LineupShellState extends State<LineupShell> {
 
   void _showOnboardingSupport() {
     setState(() {
+      _appMenu = null;
       _licensesOpen = false;
       _onboardingSupport = true;
       _settingsCategory = SettingsCategory.support;
@@ -925,9 +968,10 @@ class _LineupShellState extends State<LineupShell> {
     });
   }
 
-  Widget _immersiveAppMenu(bool hasPlaybackSurface) {
-    final anchor = _appMenu?.anchor;
-    if (anchor == null) return const SizedBox.shrink();
+  Widget _immersiveAppMenu() {
+    final menu = _appMenu;
+    if (menu == null) return const SizedBox.shrink();
+    final anchor = menu.anchor;
     final roles = LineupTheme.of(context);
     final textTheme = Theme.of(context).textTheme;
     final detailStyle = textTheme.bodyMedium?.copyWith(
@@ -983,31 +1027,20 @@ class _LineupShellState extends State<LineupShell> {
                     mainAxisSize: MainAxisSize.min,
                     crossAxisAlignment: CrossAxisAlignment.stretch,
                     children: [
+                      if (_canShowNowPlaying)
+                        _nowPlayingMenuRow(menu.id, detailStyle),
                       _menuDestination(
                         destination: ShellDestination.guide,
                         label: 'Guide',
                         autofocus: true,
-                        detailStyle: detailStyle,
                       ),
-                      _menuDestination(
-                        destination: ShellDestination.player,
-                        label: 'Player',
-                        enabled: hasPlaybackSurface,
-                        helper: hasPlaybackSurface
-                            ? null
-                            : 'Choose a channel in Guide',
-                        detailStyle: detailStyle,
-                      ),
-                      if (_canShowNowPlaying) _nowPlayingMenuRow(detailStyle),
                       _menuDestination(
                         destination: ShellDestination.channels,
-                        label: 'Channels',
-                        detailStyle: detailStyle,
+                        label: 'Manage channels',
                       ),
                       _menuDestination(
                         destination: ShellDestination.settings,
                         label: 'Settings',
-                        detailStyle: detailStyle,
                       ),
                       Divider(height: 24, thickness: 1.0),
                       Semantics(
@@ -1035,9 +1068,6 @@ class _LineupShellState extends State<LineupShell> {
                                   children: [
                                     Text(profileName ?? accountName),
                                     _menuDetail(serverName, detailStyle),
-                                    LineupConnectionStatus(
-                                      connection: widget.controller.connection,
-                                    ),
                                   ],
                                 ),
                               ),
@@ -1058,98 +1088,37 @@ class _LineupShellState extends State<LineupShell> {
     );
   }
 
-  Widget _nowPlayingMenuRow(TextStyle? detailStyle) {
+  Widget _nowPlayingMenuRow(Object menuId, TextStyle? detailStyle) {
     final program = _player.currentProgram!.scheduled.item.title;
-    final channel = _player.currentChannel;
-    final tag = channel == null
-        ? null
-        : ChannelIdentity.libraryTagFor(channel, widget.controller.channels);
+    final channel = _player.currentChannel!;
+    final tag = ChannelIdentity.libraryTagFor(
+      channel,
+      widget.controller.channels,
+    );
+    final selected = _destination == ShellDestination.player;
     return LineupNavigationRow(
       key: const Key('app-menu-now-playing'),
-      selected: false,
-      onPressed: () => unawaited(_openNowPlaying()),
+      selected: selected,
+      onPressed: () => unawaited(
+        _select(
+          ShellDestination.player,
+          tunedRow: (menuId: menuId, channelId: channel.id),
+        ),
+      ),
       child: Semantics(
-        label: channel == null
-            ? 'Now Playing, $program'
-            : 'Now Playing, ${ChannelIdentity.label(channel, libraryTag: tag)}, $program',
+        label:
+            'Now Playing, ${ChannelIdentity.label(channel, libraryTag: tag)}, $program'
+            '${selected ? ', current page' : ''}',
         excludeSemantics: true,
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-            const Text('Now Playing'),
-            if (channel == null)
-              _menuDetail(program, detailStyle, maxLines: 1)
-            else
-              Builder(
-                builder: (context) {
-                  final style = DeviceProfile.of(context).isTv
-                      ? detailStyle?.copyWith(
-                          color: LineupTheme.of(context).secondaryText,
-                        )
-                      : detailStyle;
-                  return Stack(
-                    children: [
-                      // Use the existing program-detail line for the row's
-                      // height, independently of icon and text baselines.
-                      SizedBox(
-                        width: double.infinity,
-                        child: _menuDetail(' ', detailStyle, maxLines: 1),
-                      ),
-                      Positioned.fill(
-                        child: Align(
-                          alignment: AlignmentDirectional.centerStart,
-                          child: LayoutBuilder(
-                            builder: (context, constraints) {
-                              final textStyle = DefaultTextStyle.of(context)
-                                  .style
-                                  .merge(style);
-                              double widthOf(
-                                String text,
-                              ) => TextPainter.computeWidth(
-                                text: TextSpan(text: text, style: textStyle),
-                                textDirection: Directionality.of(context),
-                                textScaler: MediaQuery.textScalerOf(context),
-                              );
-                              const separator = ' · ';
-                              final width = math.max(
-                                0.0,
-                                constraints.maxWidth - widthOf(separator),
-                              );
-                              final programAllowance = math.min(
-                                widthOf(program).ceilToDouble(),
-                                width / 2,
-                              );
-                              return Row(
-                                children: [
-                                  ConstrainedBox(
-                                    constraints: BoxConstraints(
-                                      maxWidth: width - programAllowance,
-                                    ),
-                                    child: ChannelIdentity(
-                                      channel: channel,
-                                      libraryTag: tag,
-                                      nameStyle: style,
-                                      showSemantics: false,
-                                    ),
-                                  ),
-                                  Text(separator, style: style),
-                                  Expanded(
-                                    child: _menuDetail(
-                                      program,
-                                      detailStyle,
-                                      maxLines: 1,
-                                    ),
-                                  ),
-                                ],
-                              );
-                            },
-                          ),
-                        ),
-                      ),
-                    ],
-                  );
-                },
-              ),
+            ChannelIdentity(
+              channel: channel,
+              libraryTag: tag,
+              showSemantics: false,
+            ),
+            _menuDetail(program, detailStyle, maxLines: 1),
           ],
         ),
       ),
@@ -1170,35 +1139,22 @@ class _LineupShellState extends State<LineupShell> {
   Widget _menuDestination({
     required ShellDestination destination,
     required String label,
-    bool enabled = true,
     bool autofocus = false,
-    String? helper,
-    required TextStyle? detailStyle,
   }) {
     final selected = _destination == destination;
-    final semanticLabel = [
-      label,
-      ?helper,
-      if (selected) 'current page',
-    ].join(', ');
+    void select() => unawaited(_select(destination));
     return Semantics(
       excludeSemantics: true,
       selected: selected,
       button: true,
-      enabled: enabled,
-      label: semanticLabel,
-      onTap: enabled ? () => unawaited(_select(destination)) : null,
+      enabled: true,
+      label: selected ? '$label, current page' : label,
+      onTap: select,
       child: LineupNavigationRow(
         selected: selected,
         autofocus: autofocus,
-        onPressed: enabled ? () => unawaited(_select(destination)) : null,
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            Text(label),
-            if (helper != null) _menuDetail(helper, detailStyle),
-          ],
-        ),
+        onPressed: select,
+        child: Text(label),
       ),
     );
   }
@@ -1337,7 +1293,7 @@ class _LineupShellState extends State<LineupShell> {
                   ),
                 ),
               ),
-              if (_appMenu != null) _immersiveAppMenu(_hasPlaybackSurface),
+              if (_appMenu != null) _immersiveAppMenu(),
             ],
           ),
         ),
@@ -1523,7 +1479,7 @@ class _LineupShellState extends State<LineupShell> {
                 ),
               ),
             ),
-            if (_appMenu != null) _immersiveAppMenu(hasPlaybackSurface),
+            if (_appMenu != null) _immersiveAppMenu(),
           ],
         ),
       ),

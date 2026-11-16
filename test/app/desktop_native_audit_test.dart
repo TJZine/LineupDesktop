@@ -10,6 +10,7 @@ import 'package:lineup_desktop/playback/native_player.dart';
 import 'package:lineup_desktop/playback/player_coordinator.dart';
 import 'package:lineup_desktop/playback/player_view.dart';
 import 'package:lineup_desktop/plex/plex_models.dart';
+import 'package:lineup_desktop/ui/channel_identity.dart';
 
 import '../support/ui_fixture.dart';
 
@@ -32,7 +33,7 @@ final _channel = Channel(
 
 void main() {
   for (final route in ['Guide', 'Player', 'Settings']) {
-    testWidgets('Now Playing opens from $route without a playback command', (
+    testWidgets('Tuned menu row from $route returns to Player without retuning', (
       tester,
     ) async {
       _setViewport(tester, const Size(1280, 720));
@@ -58,13 +59,21 @@ void main() {
       await tester.pumpAndSettle();
 
       if (route != 'Guide') {
-        await openDestination(tester, route);
-      }
-      if (route == 'Player') {
-        tester.widget<PlayerView>(find.byType(PlayerView)).controller.showOsd();
+        await openDestination(tester, 'Player');
+        await tester.sendKeyEvent(LogicalKeyboardKey.keyI);
         await tester.pumpAndSettle();
+        final playback = tester
+            .widget<PlayerView>(find.byType(PlayerView))
+            .controller;
+        expect(playback.overlay, PlayerOverlay.nowPlaying);
+        if (route == 'Settings') {
+          await tester.sendKeyEvent(LogicalKeyboardKey.f3);
+          await tester.pumpAndSettle();
+          expect(playback.overlay, PlayerOverlay.nowPlaying);
+        }
       }
       final before = List<String>.of(player.commands);
+      final generation = player.generation;
       await tester.tap(
         route == 'Settings'
             ? find.byKey(const Key('settings-app-menu'))
@@ -76,7 +85,8 @@ void main() {
       final action = find.byKey(const Key('app-menu-now-playing'));
       expect(action, findsOneWidget);
       final semantics = find.bySemanticsLabel(
-        'Now Playing, Channel ${_channel.number}, ${_channel.name}, ${_program.title}',
+        'Now Playing, Channel ${_channel.number}, ${_channel.name}, ${_program.title}'
+        '${route == 'Player' ? ', current page' : ''}',
       );
       expect(semantics, findsOneWidget);
       expect(
@@ -90,24 +100,184 @@ void main() {
         find.descendant(of: action, matching: find.text(_program.title)),
         findsOneWidget,
       );
+      final identity = find.descendant(
+        of: action,
+        matching: find.byType(ChannelIdentity),
+      );
+      expect(
+        tester.getBottomLeft(identity).dy,
+        lessThanOrEqualTo(
+          tester
+              .getTopLeft(
+                find.descendant(
+                  of: action,
+                  matching: find.text(_program.title),
+                ),
+              )
+              .dy,
+        ),
+      );
+      expect(
+        tester.getTopLeft(action).dy,
+        lessThan(tester.getTopLeft(find.text('Guide').last).dy),
+      );
       await tester.tap(action);
       await tester.pumpAndSettle();
 
       expect(find.byKey(const Key('immersive-app-menu')), findsNothing);
       final view = tester.widget<PlayerView>(find.byType(PlayerView));
-      expect(view.controller.overlay, PlayerOverlay.nowPlaying);
+      expect(view.controller.overlay, PlayerOverlay.none);
       expect(view.focusNode!.hasFocus, isTrue);
       expect(controller.currentChannelId, _channel.id);
       expect(player.commands, before);
+      expect(player.generation, generation);
 
-      await tester.sendKeyEvent(LogicalKeyboardKey.escape);
+      await tester.sendKeyEvent(LogicalKeyboardKey.keyI);
       await tester.pumpAndSettle();
-      expect(view.controller.overlay, PlayerOverlay.osd);
+      expect(view.controller.overlay, PlayerOverlay.nowPlaying);
       expect(find.byType(PlayerView), findsOneWidget);
       expect(player.commands, before);
       await tester.pumpWidget(const SizedBox.shrink());
     }, semanticsEnabled: true);
   }
+
+  for (final overlay in [
+    PlayerOverlay.subtitleTracks,
+    PlayerOverlay.programInfo,
+  ]) {
+    testWidgets('TV tuned row exits $overlay and Menu dismissal preserves it', (
+      tester,
+    ) async {
+      _setViewport(tester, const Size(1920, 1080));
+      final controller = _AuditController(
+        scenario: LineupScenario(
+          stage: SetupStage.ready,
+          channels: [_channel],
+          currentChannelId: _channel.id,
+        ),
+      );
+      final player = _CountingPlayer()
+        ..emit(
+          const PlayerStatus(state: PlayerState.playing, message: 'Playing'),
+          duration: _program.duration,
+        );
+      await tester.pumpWidget(
+        UiFixture(
+          controller: controller,
+          player: player,
+          profile: tvProfile,
+          guideClock: () => _now,
+        ).build(),
+      );
+      await tester.pumpAndSettle();
+      await openDestination(tester, 'Player');
+      final view = tester.widget<PlayerView>(find.byType(PlayerView));
+      final playback = view.controller;
+      await tester.sendKeyEvent(LogicalKeyboardKey.info);
+      await tester.pumpAndSettle();
+      expect(playback.overlay, PlayerOverlay.nowPlaying);
+      if (overlay == PlayerOverlay.subtitleTracks) {
+        playback.showTracks(PlayerTrackType.subtitle);
+      } else {
+        playback.showProgramInfo();
+      }
+      await tester.pumpAndSettle();
+      expect(playback.overlay, overlay);
+
+      final before = List<String>.of(player.commands);
+      final generation = player.generation;
+      final menu = find.byKey(const Key('immersive-app-menu'));
+      Future<void> key(LogicalKeyboardKey key) async {
+        await tester.sendKeyEvent(key);
+        await tester.pumpAndSettle();
+      }
+
+      await key(LogicalKeyboardKey.contextMenu);
+      expect(menu, findsOneWidget);
+      await key(LogicalKeyboardKey.contextMenu);
+      expect(menu, findsNothing);
+      expect(playback.overlay, overlay);
+
+      await key(LogicalKeyboardKey.contextMenu);
+      await key(LogicalKeyboardKey.arrowUp);
+      await key(LogicalKeyboardKey.select);
+      expect(menu, findsNothing);
+      expect(playback.overlay, PlayerOverlay.none);
+      expect(view.focusNode!.hasPrimaryFocus, isTrue);
+      expect(player.commands, before);
+      expect(player.generation, generation);
+
+      await tester.binding.handlePopRoute();
+      await tester.pumpAndSettle();
+      expect(find.byKey(const Key('classic-guide')), findsOneWidget);
+      expect(player.commands, before);
+      await tester.pumpWidget(const SizedBox.shrink());
+    }, variant: TargetPlatformVariant.only(TargetPlatform.android));
+  }
+
+  testWidgets('Tuned row honors cancellation and stale Studio leave', (
+    tester,
+  ) async {
+    _setViewport(tester, const Size(1280, 720));
+    final controller = _AuditController(
+      scenario: LineupScenario(
+        stage: SetupStage.ready,
+        channels: [_channel],
+        currentChannelId: _channel.id,
+      ),
+    );
+    final player = _CountingPlayer()
+      ..emit(
+        const PlayerStatus(state: PlayerState.playing, message: 'Playing'),
+      );
+    await tester.pumpWidget(
+      UiFixture(
+        controller: controller,
+        player: player,
+        guideClock: () => _now,
+      ).build(),
+    );
+    await tester.pumpAndSettle();
+    await openDestination(tester, 'Player');
+    final playback = tester
+        .widget<PlayerView>(find.byType(PlayerView))
+        .controller;
+    await tester.sendKeyEvent(LogicalKeyboardKey.keyI);
+    await tester.pumpAndSettle();
+    expect(playback.overlay, PlayerOverlay.nowPlaying);
+    await tester.tap(find.byTooltip('Lineup menu'));
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('Manage channels'));
+    await tester.pumpAndSettle();
+    await tester.tap(find.byTooltip('Open Audit channel'));
+    await tester.pumpAndSettle();
+    final name = find.byKey(const Key('studio-name'));
+    await tester.enterText(name, 'Synthetic unsaved name');
+    final commands = List<String>.of(player.commands);
+    await tester.tap(find.byTooltip('Open Lineup menu'));
+    await tester.pumpAndSettle();
+    final tunedRow = find.byKey(const Key('app-menu-now-playing'));
+    await tester.tap(tunedRow);
+    await tester.pumpAndSettle();
+    expect(find.text('Discard changes?'), findsOneWidget);
+    expect(playback.overlay, PlayerOverlay.nowPlaying);
+    await tester.tap(find.text('Keep editing'));
+    await tester.pumpAndSettle();
+    expect(name, findsOneWidget);
+    expect(playback.overlay, PlayerOverlay.nowPlaying);
+    expect(player.commands, commands);
+
+    await tester.tap(tunedRow);
+    await tester.pumpAndSettle();
+    expect(find.text('Discard changes?'), findsOneWidget);
+    controller.fixtureActor.publishInventory();
+    await tester.pump();
+    await tester.tap(find.text('Discard changes'));
+    await tester.pumpAndSettle();
+    expect(find.byType(PlayerView), findsNothing);
+    expect(find.byKey(const Key('channels-app-menu')), findsOneWidget);
+    await tester.pumpWidget(const SizedBox.shrink());
+  });
 
   for (final hasPlayback in [false, true]) {
     testWidgets(
