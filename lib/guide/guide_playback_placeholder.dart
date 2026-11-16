@@ -140,9 +140,6 @@ class _GuidePlaybackPlaceholderState extends State<GuidePlaybackPlaceholder>
     final message = switch (widget.failureCause) {
       PlaybackFailureCause.unknown => null,
       final cause? => cause.message,
-      // The shell still passes the combined message. Remove this compatibility
-      // branch when the shell supplies the cause and status message separately.
-      null when widget.message == PlaybackFailureCause.unknown.message => null,
       null => widget.message,
     };
     return ColoredBox(

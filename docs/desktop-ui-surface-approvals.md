@@ -1090,7 +1090,9 @@ secondary.
 Rows open Studio. The row menu opens from the ellipsis, right-click, Shift+F10
 or the keyboard Menu key. Watch receives initial focus, followed by the
 favourite action, Edit or Duplicate as custom, and Delete. Dismissal restores
-row focus. Delete opens the approved surface 19 confirmation.
+row focus. When a favourite removal hides a row, restore focus in visible
+order if it still belongs to the row or its popup, or no control has focus.
+Delete opens the approved surface 19 confirmation.
 
 ### Channel identity and Choose channels / Review channels
 
@@ -1317,7 +1319,9 @@ UX assessment decision, 2026-11-13/14 (N18, D9, D12). On TV, a new custom draft
 starts on the programming source choice. It suggests a name from the selected
 source until the user edits the name. Source details use original inventory
 labels for people where available, and the Mini-marathons availability message
-uses plural agreement.
+uses plural agreement. Q11 uses the staggered anchor from the verified
+Air Check for New, Duplicate and Save as new custom channel. Studio asks for
+a fresh verification if the playable inventory changes before saving.
 
 ## September 9, 2026 — Guide 25/26 polish proposal
 
@@ -1374,8 +1378,10 @@ unit was interrupted after its main presentation edits; Astra completed
 integration and fixed rounded-border painting, text-height measurement and
 small-space overflow. Details center when they fit and scroll when necessary.
 The shell keeps a stable Guide PiP region for idle, supported and unavailable
-states, with a Guide-only silent static effect for unavailable playback and
-the existing Retry callback when available. Reduce Motion freezes the effect.
+states, with a Guide-only silent static effect for unavailable playback.
+Reduce Motion freezes the effect. UX assessment decision, 2026-11-13/14:
+the Guide picture offers Retry and Next channel when available. Next channel
+follows the active Guide order and filter and wraps at the end.
 The protected Player views and native owners are unchanged.
 
 Astra inspected three fresh candidate03 1920×1080/DPR1/text100% captures, using
@@ -1861,7 +1867,10 @@ recommended. Surface40 stays skipped/unreviewed. Next: Diagnostics42–45.
 
 **UX assessment decision, 2026-11-13/14:** The idle summary is one sentence pair. Technical details preserve the
 Windows and macOS display rows and show only supported playback facts on
-Android. Plex connection details include measured route and latency.
+Android. Copied reports use the same platform display facts. Plex connection
+details include measured route and latency. **Details** on the Player error
+opens Diagnostics with a link back to Player. The Settings entry returns to
+Support.
 
 User approved the Diagnostics direction after root inspected the refined four-group
 A mock, all four frozen states, source owners, event retention/copy behavior and

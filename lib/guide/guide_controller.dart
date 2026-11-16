@@ -204,6 +204,30 @@ class GuideController extends ChangeNotifier {
 
   List<Channel> get channels => _visibleChannels;
 
+  Channel? successorOf(String channelId) {
+    final lineupOrder = lineup.channels;
+    if (!identical(_channels, lineupOrder)) {
+      // A lineup publication can reach callers before Guide has reconciled it.
+      if (lineupOrder.isEmpty) return null;
+      final index = lineupOrder.indexWhere((row) => row.id == channelId);
+      final next = lineupOrder[(index + 1) % lineupOrder.length];
+      return next.id == channelId ? null : next;
+    }
+    final visible = channels;
+    if (visible.isEmpty) return null;
+    final index = _visibleIndexById[channelId];
+    if (index != null) {
+      return visible.length == 1 ? null : visible[(index + 1) % visible.length];
+    }
+    // Keep the failed channel's position when a newly applied filter hides it.
+    final originalIndex = _channels.indexWhere((row) => row.id == channelId);
+    if (originalIndex < 0) return visible.first;
+    for (final channel in _channels.skip(originalIndex + 1)) {
+      if (_visibleIndexById.containsKey(channel.id)) return channel;
+    }
+    return visible.first;
+  }
+
   DateTime get windowStart => _windowStart;
   DateTime get windowEnd =>
       _windowStart.add(Duration(hours: _settings.guideHours));
@@ -767,6 +791,21 @@ class GuideController extends ChangeNotifier {
     }
     _retainInspection();
     _publishCursor();
+  }
+
+  bool isInspecting(GuideProgram program) =>
+      _focusedChannelId == program.channelId && _focusedProgramId == program.id;
+
+  bool repairFailedTuneInspection(GuideProgram failed) {
+    final now = _clock();
+    if (!isInspecting(failed) || now.isBefore(failed.scheduled.end)) {
+      return false;
+    }
+    final current = currentProgram(failed.channelId, now);
+    if (current == null) return false;
+    playToNow();
+    focusProgram(current);
+    return true;
   }
 
   void playToNow() {

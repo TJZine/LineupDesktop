@@ -21,6 +21,7 @@ class DiagnosticsView extends StatefulWidget {
     this.menuFocusNode,
     this.focusNode,
     this.onBack,
+    this.backLabel = '‹ Settings · Support',
     super.key,
   });
 
@@ -31,6 +32,7 @@ class DiagnosticsView extends StatefulWidget {
   final FocusNode? menuFocusNode;
   final FocusNode? focusNode;
   final VoidCallback? onBack;
+  final String backLabel;
 
   @override
   State<DiagnosticsView> createState() => _DiagnosticsViewState();
@@ -265,7 +267,7 @@ class _DiagnosticsViewState extends State<DiagnosticsView> {
         if (widget.onBack != null)
           LineupInlineLink(
             onPressed: widget.onBack,
-            child: const Text('‹ Settings · Support'),
+            child: Text(widget.backLabel),
           ),
         Text(
           'Diagnostics',

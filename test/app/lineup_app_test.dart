@@ -2262,6 +2262,7 @@ class _LogoutController extends _FakeController {
   Future<Channel> saveChannel(
     Channel channel, {
     required Channel? expectedBase,
+    String? verifiedNewScheduleRevision,
   }) async {
     final release = _saveRelease;
     if (release != null) await release.future;

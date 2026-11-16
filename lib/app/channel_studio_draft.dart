@@ -1,4 +1,5 @@
 import '../channels/channel.dart';
+import '../channels/scheduler.dart';
 import '../plex/plex_models.dart';
 import 'manual_rundown.dart';
 
@@ -21,11 +22,13 @@ class ChannelStudioDraft {
        blockSize = original?.blockSize,
        includeSpecials = original?.includeSpecials ?? false,
        builderKey = generated ? original?.builderKey : null,
-       scheduleIdentityCommitted = original != null;
+       _duplicateSeed = duplicate ? original?.shuffleSeed : null,
+       scheduleIdentityCommitted = expectedBase != null;
 
   final rundown = ManualRundown();
 
   final bool duplicate;
+
   final PlaybackMode? originalMode;
   String id;
   ContentSource source;
@@ -76,6 +79,8 @@ class ChannelStudioDraft {
       });
   }
 
+  DateTime? _createdAt;
+  int? _duplicateSeed;
   DateTime? _candidateAnchor;
   int? _candidateSeed;
   bool scheduleIdentityCommitted;
@@ -280,14 +285,33 @@ class ChannelStudioDraft {
         base.includeSpecials == effectiveIncludeSpecials;
   }
 
-  void stageScheduleIdentity(DateTime Function() clock, {required bool valid}) {
-    if (scheduleIdentityCommitted || !valid || _candidateAnchor != null) return;
-    _candidateAnchor = clock().toUtc();
-    _candidateSeed = stableChannelSeed(id);
+  void stageScheduleIdentity(
+    Channel recipe,
+    List<ChannelItem> content,
+    DateTime Function() clock,
+  ) {
+    if (expectedBase != null) return;
+    // Keep one creation instant for this new channel. A different recipe or
+    // inventory can change the cycle length and needs a fresh verification.
+    final createdAt = _createdAt ??= clock().toUtc();
+    final candidate = staggeredChannelAnchor(
+      channel: recipe,
+      content: content,
+      createdAt: createdAt,
+    );
+    final seed = _duplicateSeed ?? stableChannelSeed(id);
+    if (scheduleIdentityCommitted &&
+        candidate == anchor &&
+        seed == shuffleSeed) {
+      _candidateAnchor = null;
+      _candidateSeed = null;
+      return;
+    }
+    _candidateAnchor = candidate;
+    _candidateSeed = seed;
   }
 
   void commitScheduleIdentity(Map<String, Object?> signature) {
-    if (scheduleIdentityCommitted) return;
     final candidate = _candidateAnchor;
     final seed = _candidateSeed;
     if (candidate == null || seed == null) return;
@@ -322,6 +346,8 @@ class ChannelStudioDraft {
     expectedBase = channel;
     generated = channel.builderKey != null;
     scheduleIdentityCommitted = true;
+    _createdAt = null;
+    _duplicateSeed = null;
     _candidateAnchor = null;
     _candidateSeed = null;
   }
@@ -333,6 +359,8 @@ class ChannelStudioDraft {
     generated = false;
     sourceReadOnly = false;
     scheduleIdentityCommitted = false;
+    _createdAt = null;
+    _duplicateSeed = null;
     _candidateAnchor = null;
     _candidateSeed = null;
     dirty = true;

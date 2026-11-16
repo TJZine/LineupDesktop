@@ -93,6 +93,11 @@ class ChannelStateConflictException extends FormatException {
     : super('The lineup changed. Review the current channels and try again.');
 }
 
+class ChannelScheduleChangedException extends FormatException {
+  const ChannelScheduleChangedException()
+    : super('The schedule changed. Wait for Air Check to verify it again.');
+}
+
 Iterable<String> _playlistIds(ContentSource source) sync* {
   if (source case PlaylistSource(:final playlistId)) {
     yield playlistId;
@@ -2064,6 +2069,7 @@ class LineupController extends ChangeNotifier {
   Future<Channel> saveChannel(
     Channel channel, {
     required Channel? expectedBase,
+    String? verifiedNewScheduleRevision,
   }) async {
     channel = channel.immutableCopy();
     final expected = expectedBase?.immutableCopy().toJson();
@@ -2073,6 +2079,14 @@ class LineupController extends ChangeNotifier {
       final current = channels
           .where((candidate) => candidate.id == channel.id)
           .firstOrNull;
+      if (verifiedNewScheduleRevision != null &&
+          (expectedBase != null ||
+              current != null ||
+              channel.builderKey != null)) {
+        throw ArgumentError(
+          'A verified schedule revision requires a new custom channel.',
+        );
+      }
       if (expectedBase == null) {
         if (current != null) {
           throw const FormatException('Channel already exists');
@@ -2081,9 +2095,18 @@ class LineupController extends ChangeNotifier {
           !canonicalChannelValueEquals(current.toJson(), expected)) {
         throw const ChannelStateConflictException();
       }
+      if (verifiedNewScheduleRevision != null &&
+          verifiedNewScheduleRevision !=
+              channelScheduleRevision(channel, contentGeneration)) {
+        throw const ChannelScheduleChangedException();
+      }
       channel.validate(channels);
       _validateResolvedSource(channel.source);
-      final savedChannel = _channelForSave(channel, current);
+      final savedChannel = _channelForSave(
+        channel,
+        current,
+        verifiedNewTiming: verifiedNewScheduleRevision != null,
+      );
       final next = [...channels];
       final index = next.indexWhere(
         (candidate) => candidate.id == savedChannel.id,
@@ -2166,7 +2189,11 @@ class LineupController extends ChangeNotifier {
     return worker.build(channel);
   }
 
-  Channel _channelForSave(Channel incoming, Channel? current) {
+  Channel _channelForSave(
+    Channel incoming,
+    Channel? current, {
+    required bool verifiedNewTiming,
+  }) {
     final sameSource =
         current != null &&
         scheduleProgrammingSourceEquals(current.source, incoming.source);
@@ -2253,7 +2280,9 @@ class LineupController extends ChangeNotifier {
           (playlistProvenanceIncomplete ||
               !libraryIds.every(sourceLibraries.containsKey)),
     );
-    if (current != null || saved.builderKey != null) return saved;
+    if (current != null || saved.builderKey != null || verifiedNewTiming) {
+      return saved;
+    }
     return saved.copyWith(
       anchor: staggeredChannelAnchor(
         channel: saved,

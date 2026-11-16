@@ -3351,6 +3351,89 @@ void main() {
     fixture.dispose();
   });
 
+  testWidgets('TV Sleep uses the measured header and tile width up to 720 px', (
+    tester,
+  ) async {
+    tester.view
+      ..devicePixelRatio = 1
+      ..physicalSize = const Size(1920, 1080);
+    addTearDown(tester.view.reset);
+    final fixture = _Fixture(PlayerState.playing);
+    addTearDown(fixture.dispose);
+    fixture.player.showSleepTimer();
+    final theme = LineupTheme.forName(
+      LineupThemeName.emberSteel,
+      formFactor: profileFor(true).formFactor,
+    );
+    Future<void> show({
+      double? headerSize,
+      double? tileSize,
+      bool wideClose = false,
+    }) async {
+      await tester.pumpWidget(
+        MaterialApp(
+          theme: theme.copyWith(
+            textButtonTheme: wideClose
+                ? TextButtonThemeData(
+                    style: theme.textButtonTheme.style!.copyWith(
+                      padding: const WidgetStatePropertyAll(
+                        EdgeInsets.symmetric(horizontal: 42),
+                      ),
+                      textStyle: const WidgetStatePropertyAll(
+                        TextStyle(fontFamily: 'Ahem', fontSize: 22),
+                      ),
+                    ),
+                  )
+                : null,
+            textTheme: theme.textTheme.copyWith(
+              titleLarge: theme.textTheme.titleLarge!.copyWith(
+                fontSize: headerSize,
+                fontFamily: wideClose ? 'Ahem' : null,
+              ),
+            ),
+            listTileTheme: theme.listTileTheme.copyWith(
+              titleTextStyle: theme.listTileTheme.titleTextStyle!.copyWith(
+                fontSize: tileSize,
+              ),
+            ),
+          ),
+          builder: (context, child) => MediaQuery(
+            data: MediaQuery.of(context)
+                .copyWith(textScaler: const TextScaler.linear(1.3)),
+            child: _playerTvCanvasBuilder(context, child),
+          ),
+          home: PlayerView(controller: fixture.player, openGuide: () {}),
+        ),
+      );
+      await tester.pumpAndSettle();
+      expect(tester.takeException(), isNull);
+    }
+
+    final picker = find.byKey(const Key('sleep-timer-picker'));
+    double width() => _drawnRect(tester, picker).width;
+    await show();
+    final baseline = width();
+    await show(headerSize: 44);
+    expect(width(), greaterThan(baseline));
+    await show(headerSize: 29, wideClose: true);
+    final heading = tester.renderObject<RenderParagraph>(
+      find.text('Sleep timer'),
+    );
+    final lines = heading.getBoxesForSelection(
+      TextSelection(baseOffset: 0, extentOffset: 'Sleep timer'.length),
+    );
+    expect(lines.map((box) => box.top).toSet(), hasLength(1));
+    expect(width(), lessThan(720));
+
+    await show(tileSize: 104);
+    expect(width(), closeTo(720, .01));
+    expect(find.text('Close'), findsOneWidget);
+    final lastPreset = find.byKey(const Key('sleep-timer-90'));
+    await tester.ensureVisible(lastPreset);
+    await tester.pumpAndSettle();
+    expect(lastPreset.hitTestable(), findsOneWidget);
+  });
+
   testWidgets(
     'video click closes the sleep picker and restarts the OSD timer',
     (tester) async {
@@ -4297,7 +4380,6 @@ void main() {
           "Lineup can't reach your Plex server.",
         ),
         (PlaybackFailureCause.unknown, 'Unused fallback', null),
-        (null, PlaybackFailureCause.unknown.message, null),
         (
           null,
           'Playback could not be stopped.',

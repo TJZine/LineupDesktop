@@ -45,15 +45,23 @@ class FixtureController extends LineupController {
     MemoryAppStore? store,
     bool restoreOnInitialize = false,
     LineupScenario? scenario,
-  }) : this._(store ?? MemoryAppStore(), restoreOnInitialize, scenario);
+    DateTime Function()? scheduleClock,
+  }) : this._(
+         store ?? MemoryAppStore(),
+         restoreOnInitialize,
+         scenario,
+         scheduleClock,
+       );
 
   FixtureController._(
     MemoryAppStore store,
     this.restoreOnInitialize,
     LineupScenario? scenario,
+    DateTime Function()? scheduleClock,
   ) : fixtureStore = store,
       super(
         store: store,
+        scheduleClock: scheduleClock,
         credentials: MemoryCredentialStore(),
         plex: _FixturePlex(
           clientIdentifier: 'lineup-desktop-test-abcdefghijklmnopqrst',

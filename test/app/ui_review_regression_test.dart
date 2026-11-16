@@ -351,8 +351,8 @@ void main() {
     await tester.enterText(find.byKey(const Key('studio-name')), 'Unsaved');
     await tester.pump();
 
-    await tester.ensureVisible(find.text('Open Update lineup…'));
-    await tester.tap(find.text('Open Update lineup…'));
+    await tester.ensureVisible(find.text('Update lineup…'));
+    await tester.tap(find.text('Update lineup…'));
     await tester.pumpAndSettle();
     expect(find.text('Open Update lineup?'), findsOneWidget);
     await tester.tap(find.text('Keep editing'));
@@ -360,9 +360,9 @@ void main() {
     expect(controller.setupEntries, 0);
     expect(find.text('Create custom channel'), findsOneWidget);
 
-    await tester.ensureVisible(find.text('Open Update lineup…'));
+    await tester.ensureVisible(find.text('Update lineup…'));
     final recovery = tester.widget<TextButton>(
-      find.widgetWithText(TextButton, 'Open Update lineup…'),
+      find.widgetWithText(TextButton, 'Update lineup…'),
     );
     recovery.onPressed!();
     recovery.onPressed!();

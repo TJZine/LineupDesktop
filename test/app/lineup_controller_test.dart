@@ -8747,6 +8747,22 @@ void main() {
     expect(store.saveCalls, 1);
 
     await expectLater(
+      controller.saveChannel(
+        created,
+        expectedBase: created,
+        verifiedNewScheduleRevision: 'synthetic revision',
+      ),
+      throwsArgumentError,
+    );
+    await expectLater(
+      controller.saveChannel(
+        _generatedChannel('generated', 2),
+        expectedBase: null,
+        verifiedNewScheduleRevision: 'synthetic revision',
+      ),
+      throwsArgumentError,
+    );
+    await expectLater(
       controller.saveChannel(created, expectedBase: null),
       throwsFormatException,
     );

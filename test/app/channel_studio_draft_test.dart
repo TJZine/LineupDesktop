@@ -35,10 +35,9 @@ void main() {
         return anchor;
       }
 
-      draft.stageScheduleIdentity(clock, valid: false);
       expect(clockCalls, 0);
-      draft.stageScheduleIdentity(clock, valid: true);
-      draft.stageScheduleIdentity(clock, valid: true);
+      draft.stageScheduleIdentity(placeholder, const [], clock);
+      draft.stageScheduleIdentity(placeholder, const [], clock);
       expect(clockCalls, 1);
       final preview = project(draft, preview: true);
       expect(preview.anchor, anchor);
@@ -84,7 +83,11 @@ void main() {
     () {
       final draft = newDraft();
       draft.acceptBaseline(signature(draft));
-      draft.stageScheduleIdentity(() => DateTime.utc(2026), valid: true);
+      draft.stageScheduleIdentity(
+        project(draft, preview: true),
+        const [],
+        () => DateTime.utc(2026),
+      );
       draft.prepareSaveAsNew('replacement');
       expect(draft.dirty, isTrue);
       expect(draft.scheduleIdentityCommitted, isFalse);
@@ -93,7 +96,11 @@ void main() {
         DateTime.fromMillisecondsSinceEpoch(0, isUtc: true),
       );
       final replacementAnchor = DateTime.utc(2027);
-      draft.stageScheduleIdentity(() => replacementAnchor, valid: true);
+      draft.stageScheduleIdentity(
+        project(draft, preview: true),
+        const [],
+        () => replacementAnchor,
+      );
       draft.commitScheduleIdentity(signature(draft));
       final saved = project(draft, preview: false);
       expect(saved.shuffleSeed, stableChannelSeed('replacement'));

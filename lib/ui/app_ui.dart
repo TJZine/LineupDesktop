@@ -673,22 +673,31 @@ class _ClearLogoImageState extends State<ClearLogoImage> {
   }
 
   void _load(_ClearLogoRequest request) {
-    _reset();
+    // Layout changes can request a sharper decode of the same logo. Keep
+    // painting the previous frame until the replacement is ready.
+    if (request.visibleDecode == null ||
+        !identical(_request?.bytes, request.bytes)) {
+      _reset();
+    }
+    final generation = ++_generation;
     _request = request;
     final entry = _clearLogoCacheEntry(request);
     if (entry.completed) {
       // Called from build before `_raster` is read, so no setState is needed.
-      _raster = entry.cloneRaster();
+      _replaceRaster(entry.cloneRaster());
       return;
     }
-    final generation = _generation;
     unawaited(
       entry.done.then((_) {
         if (!mounted || generation != _generation) return;
-        final raster = entry.cloneRaster();
-        if (raster != null) setState(() => _raster = raster);
+        setState(() => _replaceRaster(entry.cloneRaster()));
       }),
     );
+  }
+
+  void _replaceRaster(_ClearLogoRaster? raster) {
+    _raster?.image.dispose();
+    _raster = raster;
   }
 
   // Round down so every bucket still fits the current slot. Changes within a

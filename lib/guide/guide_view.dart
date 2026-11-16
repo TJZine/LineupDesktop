@@ -2622,11 +2622,13 @@ class _GuideShowcaseState extends State<_GuideShowcase> {
       fit: StackFit.expand,
       children: [
         ClipRRect(borderRadius: pictureRadius, child: picture),
-        CustomPaint(
-          key: const Key('guide-picture-corner-mask'),
-          painter: _CornerMaskPainter(
-            color: LineupTheme.of(context).deepBackground,
-            borderRadius: pictureRadius,
+        IgnorePointer(
+          child: CustomPaint(
+            key: const Key('guide-picture-corner-mask'),
+            painter: _CornerMaskPainter(
+              color: LineupTheme.of(context).deepBackground,
+              borderRadius: pictureRadius,
+            ),
           ),
         ),
       ],

@@ -802,6 +802,10 @@ bool canonicalChannelValueEquals(Object? left, Object? right) {
 String canonicalSourceIdentity(ContentSource source) =>
     jsonEncode(source.toJson());
 
+/// Schedule verification expires when either the recipe or playable inventory changes.
+String channelScheduleRevision(Channel channel, int contentGeneration) =>
+    '${canonicalScheduleIdentity(channel)}|${channel.id}|$contentGeneration';
+
 String canonicalScheduleIdentity(Channel channel) => jsonEncode({
   'source': channel.source.toJson(),
   'mode': channel.playbackMode.name,

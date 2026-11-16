@@ -127,7 +127,10 @@ leading edges; keep channel identity in the information block. Keep the
 toolbar filter in place and show counts for All channels, Favourites when
 present, available source types, and libraries. On desktop **Back to player**
 appears only during active playback; TV uses Back. Fit TV title logos using
-their visible content within the approved information slot.
+their visible content within the approved information slot and keep the previous
+decode visible during a size replacement. In the unavailable picture slot,
+**Retry** uses the failed tune and **Next channel** follows the Guide filter
+and channel order.
 
 ## Player: Protected Baseline
 
@@ -157,7 +160,8 @@ Preserve:
   anchored popover for up to six choices (including Subtitle Off). Track lists
   with seven or more choices use the side panel. Fit the choice labels and
   key hint up to the width cap, and keep the chosen presentation while the
-  picker is open. Closing returns keyboard focus to its invoking action.
+  picker is open. Fit Sleep from its choices and header, including Close,
+  within the same cap. Closing returns keyboard focus to its invoking action.
 - UX assessment decision, 2026-11-13/14: channel entry uses the overlay
   material at the top center, with 48 px digits above a matched 20 px channel
   identity. The Mini Guide paints a standard desktop focus border separately
@@ -200,6 +204,7 @@ The menu starts with the tuned channel identity and program title on separate
 lines when available. Guide, Manage channels, Settings, and the profile/server
 card follow. The tuned row opens the Player, and connection measurements belong
 in Account and Diagnostics. TV Menu opens or closes this menu on ready screens.
+On Manage channels it first closes an open row-action popup.
 
 ## September 12 collaborative Diagnostics refinement
 
@@ -208,8 +213,10 @@ Diagnostics42–45 use a local96px header and48px horizontal margins at1080p,
 Copy redacted report, with stable feedback space. Present the four summary groups
 Playback, Video, Media signal and Plex before optional grouped technical details
 and recent events. UX assessment decision, 2026-11-13/14: collapse the summary
-when idle. Show platform-supported facts in technical details and include the
-Plex route and latency when measured. Reported media facts do not establish physical HDR output;
+when idle. **Details** on the Player failure slate opens Diagnostics with
+**Back to Player**. Settings opens Diagnostics with a link back to Support.
+Show platform-supported facts in technical details and copied reports. Include
+the Plex route and latency in technical details when measured. Reported media facts do not establish physical HDR output;
 unavailable method/stream decisions must remain explicit.
 
 On Windows and macOS, keep one quiet inline “Per-stream handling · Unavailable” while those facts are not supplied. Expanded events align beneath the message and lay out labeled facts

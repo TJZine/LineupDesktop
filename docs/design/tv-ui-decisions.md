@@ -10,7 +10,7 @@ The maintainer adopted the October 26 reconciliation (local evidence, not tracke
 
 - **2. Composition: option A (desktop parity) is approved.** A bigger picture is only possible by making the info band taller, and that shortens every Guide row (option B). We stay with desktop.
 - **4. Menu/details: M1 is approved, with no chevron.**
-  - Menu opens or closes the Lineup menu on every ready screen, including Studio, Settings, Diagnostics and Licenses (UX assessment decision, 2026-11-13/14).
+  - Menu opens or closes the Lineup menu on every ready screen, including Studio, Settings, Diagnostics and Licenses (UX assessment decision, 2026-11-13/14). An open channel row-action popup closes first. Confirmation dialogs retain input.
   - Select or Down from hidden opens the compact OSD. Down again expands.
   - Info and return from More info still expand directly. The menu's tuned channel/program row returns to the standard Player (UX assessment decision, 2026-11-13/14).
   - A track drawer returns to where it was opened: the compact OSD or expanded details, with its invoking action focused (clarified November 5, 2026).
@@ -140,7 +140,12 @@ dismisses the open list; Select applies the highlighted option. At the live
 edge, Left retains the existing rail-focus route. The top bar has no close
 button on TV. Idle artwork uses the bottom watch prompt and scrim. The title
 logo is fitted by its alpha-bearing content within the existing visible slot
-and minimum dimensions; no extra text fallback was added.
+and minimum dimensions. An existing decode stays visible during a resize.
+After a failed tune, **Next channel** follows the current Guide order and
+filter, wrapping to the beginning. From the channel filter, Up reaches the
+picture's recovery actions when available. Returning from a failed, ended
+program restores the current program when the failed occurrence is still
+focused.
 
 **What changed in the earlier number-column comparison**
 - Every time slot narrows by the same small fraction.
@@ -290,12 +295,15 @@ the approved desktop treatment.
 UX assessment decision, 2026-11-13/14: Mini Guide uses a show title with
 an episode and time support line; movie rows keep their existing layout. The
 TV focus fill is unchanged. On a failed tune, **Choose another channel** opens
-Mini Guide on plain canvas; Back restores the failure slate.
+Mini Guide on plain canvas; Back restores the failure slate. **Details**
+opens Diagnostics and Back returns to Player. Diagnostics opened from
+Settings returns to Support.
 
 UX assessment decision, 2026-11-13/14: track lists with at most six choices
 (including subtitle Off) use the same anchored popover as Sleep. Longer track
 lists retain the side panel. The selected choice takes focus in either form,
-and closing returns focus to the invoking OSD action.
+and closing returns focus to the invoking OSD action. The Sleep popover
+measures its choices, heading and Close button, up to 720 canvas pixels.
 
 ### Option M1 (recommended): one meaning per key
 
