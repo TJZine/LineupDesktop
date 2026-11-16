@@ -76,6 +76,11 @@ void main() {
           find.byKey(const Key('guide-picture-in-picture')),
           findsOneWidget,
         );
+        expect(
+          tester.widget<GuideView>(find.byType(GuideView)).watchingChannelId,
+          'channel',
+        );
+        expect(find.byKey(const Key('guide-back-to-player')), findsNothing);
         expect(FocusManager.instance.primaryFocus?.debugLabel, 'Guide');
         await tester.sendKeyEvent(LogicalKeyboardKey.select);
         await tester.pump(const Duration(milliseconds: 250));
@@ -124,6 +129,29 @@ void main() {
     expect(controller.requests, hasLength(2));
     expect(native.loads, hasLength(2));
     expect(native.stops, 1);
+
+    final playback = tester
+        .widget<PlayerView>(find.byType(PlayerView))
+        .controller;
+    native.emit(
+      const PlayerStatus(state: PlayerState.playing, message: 'Playing'),
+    );
+    await tester.pump();
+    await tester.sendKeyEvent(LogicalKeyboardKey.keyG);
+    await tester.pumpAndSettle();
+    final back = find.byKey(const Key('guide-back-to-player'));
+    final menu = find.byKey(const Key('guide-app-menu'));
+    final buttonFocus = tester.widget<TextButton>(back).focusNode!;
+    final menuFocus = tester.widget<TextButton>(menu).focusNode!;
+    buttonFocus.requestFocus();
+    await tester.pump();
+    expect(buttonFocus.hasPrimaryFocus, isTrue);
+
+    await playback.stop();
+    await tester.pumpAndSettle();
+    expect(back, findsNothing);
+    expect(menuFocus.hasPrimaryFocus, isTrue);
+
     await tester.pumpWidget(const SizedBox.shrink());
     await tester.pumpAndSettle();
     controller.dispose();

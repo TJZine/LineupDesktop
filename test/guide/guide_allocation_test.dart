@@ -229,7 +229,9 @@ void main() {
               value: 'library',
             ));
             await tester.pumpAndSettle();
-            final label = find.byKey(const Key('guide-active-library-label'));
+            final label = find.byKey(
+              const Key('guide-active-channel-filter-label'),
+            );
             expect(label, findsOneWidget);
             expect(
               tester.renderObject<RenderParagraph>(label).didExceedMaxLines,
@@ -518,7 +520,7 @@ void main() {
           );
           final controlRects = <String, Object?>{};
           for (final name in [
-            'guide-library-picker',
+            'guide-channel-filter',
             'guide-channel-search',
             'guide-earlier',
             'guide-now',
@@ -662,7 +664,7 @@ void main() {
             await tester.sendKeyEvent(LogicalKeyboardKey.arrowUp);
             await tester.pumpAndSettle();
             final picker = tester.widget<InkWell>(
-              find.byKey(const Key('guide-library-picker')),
+              find.byKey(const Key('guide-channel-filter')),
             );
             for (
               var step = 0;

@@ -23,8 +23,8 @@ import 'guide_playback_placeholder.dart';
 
 const _guideTimelineGutter = 1.0;
 const _guideEdgeContentInset = 12.0;
-// At 130% text, the full two-digit rail needs about 350 canvas pixels to
-// retain the fitted name and library tag with ChannelIdentity's real prefix.
+// Cap the scaled TV base before applying the measured number-column adjustment.
+// With the reference two-digit column at 130% text, the result is about 350 px.
 const _guideTvRailBaseCap = 332.0;
 const _guidePictureAspectRatio = 16 / 9;
 const _guideReferencePictureHeight = 324.0;
@@ -207,6 +207,9 @@ class GuideLayoutPolicy {
       minimumIdentityWidth: tvControlsHeight == null ? 0 : tvIdentityWidth,
     );
   }
+
+  double timelineWidthFor(double viewportWidth) =>
+      viewportWidth - channelRailWidth - _guideTimelineGutter;
 
   static double toolbarHeight(Size size, {double textScale = 1}) => 80;
 
@@ -413,7 +416,7 @@ class _GuideViewState extends State<GuideView>
   bool _allVisibleFailed = false;
   final _menuFocus = FocusNode(debugLabel: 'Guide Lineup menu');
   final _guideFocus = FocusNode(debugLabel: 'Guide grid');
-  final _libraryFocus = FocusNode(debugLabel: 'Guide library picker');
+  final _channelFilterFocus = FocusNode(debugLabel: 'Guide channel filter');
   final _searchFocus = FocusNode(debugLabel: 'Guide channel search');
   // TooltipVisibility replaces each tooltip's child when the menu opens.
   // Keep these invokers alive so closing the menu can restore exact focus.
@@ -423,8 +426,8 @@ class _GuideViewState extends State<GuideView>
   final _laterFocus = FocusNode(debugLabel: 'Guide later');
   final _hoursFocus = FocusNode(debugLabel: 'Guide hours picker');
   final _clearSearchFocus = FocusNode(debugLabel: 'Guide clear search');
-  final _removeLibraryFilterFocus = FocusNode(
-    debugLabel: 'Guide remove library filter',
+  final _removeChannelFilterFocus = FocusNode(
+    debugLabel: 'Guide remove channel filter',
   );
   final _messengerKey = GlobalKey<ScaffoldMessengerState>();
   bool _filterNoticeScheduled = false;
@@ -518,6 +521,17 @@ class _GuideViewState extends State<GuideView>
     _scheduleViewportRequest();
   }
 
+  @override
+  void didUpdateWidget(covariant GuideView oldWidget) {
+    super.didUpdateWidget(oldWidget);
+    if (!_showBackToPlayer && _closeFocus.hasFocus) {
+      final target = widget.onOpenMenu != null
+          ? _menuFocus
+          : widget.focusNode ?? _guideFocus;
+      target.requestFocus();
+    }
+  }
+
   void _refreshClock() {
     if (!mounted) return;
     widget.controller.refreshForPresentation();
@@ -537,7 +551,7 @@ class _GuideViewState extends State<GuideView>
     _setupFocus.dispose();
     _menuFocus.dispose();
     _guideFocus.dispose();
-    _libraryFocus.dispose();
+    _channelFilterFocus.dispose();
     _searchFocus.dispose();
     _closeFocus.dispose();
     _earlierFocus.dispose();
@@ -545,7 +559,7 @@ class _GuideViewState extends State<GuideView>
     _laterFocus.dispose();
     _hoursFocus.dispose();
     _clearSearchFocus.dispose();
-    _removeLibraryFilterFocus.dispose();
+    _removeChannelFilterFocus.dispose();
     _searchController
       ..removeListener(_searchChanged)
       ..dispose();
@@ -680,8 +694,8 @@ class _GuideViewState extends State<GuideView>
     if (!mounted) return;
     _scheduleFilterFallbackNotice();
     if (widget.controller.channelFilterKey == ChannelFilter.all &&
-        _removeLibraryFilterFocus.hasFocus) {
-      _libraryFocus.requestFocus();
+        _removeChannelFilterFocus.hasFocus) {
+      _channelFilterFocus.requestFocus();
     }
     final searchQuery = widget.controller.searchQuery;
     final contentGeneration = widget.controller.lineup.contentGeneration;
@@ -920,9 +934,9 @@ class _GuideViewState extends State<GuideView>
   }
 
   List<FocusNode> _toolbarFocusOrder() => [
-    _libraryFocus,
+    _channelFilterFocus,
     if (widget.controller.channelFilterKey != ChannelFilter.all)
-      _removeLibraryFilterFocus,
+      _removeChannelFilterFocus,
     _searchFocus,
     if (_searchController.text.isNotEmpty) _clearSearchFocus,
     _earlierFocus,
@@ -1094,14 +1108,14 @@ class _GuideViewState extends State<GuideView>
             controller: widget.controller,
             pickerWidth: _filterPickerWidth(policy),
             searchController: _searchController,
-            libraryFocus: _libraryFocus,
+            channelFilterFocus: _channelFilterFocus,
             searchFocus: _searchFocus,
             earlierFocus: _earlierFocus,
             nowFocus: _nowFocus,
             laterFocus: _laterFocus,
             hoursFocus: _hoursFocus,
             clearSearchFocus: _clearSearchFocus,
-            removeLibraryFilterFocus: _removeLibraryFilterFocus,
+            removeChannelFilterFocus: _removeChannelFilterFocus,
             onSearchKey: _searchKey,
             onKeyEvent: _toolbarKey,
           ),
@@ -1134,10 +1148,9 @@ class _GuideViewState extends State<GuideView>
                             GuideLoadState.error,
                       );
               _scheduleViewportRequest();
-              final timelineWidth =
-                  constraints.maxWidth -
-                  policy.channelRailWidth -
-                  _guideTimelineGutter;
+              final timelineWidth = policy.timelineWidthFor(
+                constraints.maxWidth,
+              );
               return Stack(
                 children: [
                   ListenableBuilder(
@@ -1559,7 +1572,7 @@ typedef _GuideControlsKey = ({
   TextScaler scaler,
   TextStyle controlStyle,
   String nowLabel,
-  String? libraryLabel,
+  String? channelFilterLabel,
   double width,
   double pickerWidth,
 });
@@ -1611,7 +1624,9 @@ class _GuideControlsMetrics {
       scaler: MediaQuery.textScalerOf(context),
       controlStyle: _GuideControls.controlStyle(context),
       nowLabel: _guideNowLabel(controller),
-      libraryLabel: selected.key == ChannelFilter.all ? null : selected.label,
+      channelFilterLabel: selected.key == ChannelFilter.all
+          ? null
+          : selected.label,
       width: width,
       pickerWidth: pickerWidth,
     );
@@ -1679,7 +1694,7 @@ class _GuideControlsMetrics {
         math.max(minimum.height, now.height + buttonPadding.vertical),
       ),
     );
-    final label = key.libraryLabel;
+    final label = key.channelFilterLabel;
     final labelStyle = theme.textTheme.bodyMedium!.copyWith(fontSize: 16);
     final remaining = width - pickerWidth - 8 - 340 - 8 - navigationWidth;
     var wrap = remaining < 0;
@@ -1734,14 +1749,14 @@ class _GuideControls extends StatelessWidget {
     required this.controller,
     required this.pickerWidth,
     required this.searchController,
-    required this.libraryFocus,
+    required this.channelFilterFocus,
     required this.searchFocus,
     required this.earlierFocus,
     required this.nowFocus,
     required this.laterFocus,
     required this.hoursFocus,
     required this.clearSearchFocus,
-    required this.removeLibraryFilterFocus,
+    required this.removeChannelFilterFocus,
     required this.onSearchKey,
     required this.onKeyEvent,
   });
@@ -1749,14 +1764,14 @@ class _GuideControls extends StatelessWidget {
   final GuideController controller;
   final double pickerWidth;
   final TextEditingController searchController;
-  final FocusNode libraryFocus;
+  final FocusNode channelFilterFocus;
   final FocusNode searchFocus;
   final FocusNode earlierFocus;
   final FocusNode nowFocus;
   final FocusNode laterFocus;
   final FocusNode hoursFocus;
   final FocusNode clearSearchFocus;
-  final FocusNode removeLibraryFilterFocus;
+  final FocusNode removeChannelFilterFocus;
   final FocusOnKeyEventCallback onSearchKey;
   final FocusOnKeyEventCallback onKeyEvent;
 
@@ -1830,14 +1845,14 @@ class _GuideControls extends StatelessWidget {
           child: menuTheme != null
               ? _TvChannelFilterPicker(
                   controller: controller,
-                  focusNode: libraryFocus,
+                  focusNode: channelFilterFocus,
                   theme: menuTheme,
                   surfaceColor: roles.elevatedSurface,
                   label: pickerLabel,
                 )
               : DropdownButton<ChannelFilterKey>(
-                  key: const Key('guide-library-picker'),
-                  focusNode: libraryFocus,
+                  key: const Key('guide-channel-filter'),
+                  focusNode: channelFilterFocus,
                   style: controlStyle,
                   isExpanded: true,
                   isDense: enlargedControls,
@@ -1884,7 +1899,7 @@ class _GuideControls extends StatelessWidget {
               Flexible(
                 child: Text(
                   activeLabel,
-                  key: const Key('guide-active-library-label'),
+                  key: const Key('guide-active-channel-filter-label'),
                   maxLines: 2,
                   overflow: TextOverflow.ellipsis,
                   style: TextStyle(fontSize: 16, color: roles.mutedText),
@@ -1892,7 +1907,7 @@ class _GuideControls extends StatelessWidget {
               ),
               IconButton(
                 tooltip: 'Remove channel filter',
-                focusNode: removeLibraryFilterFocus,
+                focusNode: removeChannelFilterFocus,
                 onPressed: () => controller.setChannelFilter(ChannelFilter.all),
                 iconSize: 17,
                 icon: const Icon(
@@ -2178,7 +2193,26 @@ class _GuideControls extends StatelessWidget {
 Widget _channelFilterOptionLabel(ChannelFilterEntry entry) => Row(
   children: [
     Expanded(
-      child: Text(entry.label, maxLines: 2, overflow: TextOverflow.ellipsis),
+      child: LayoutBuilder(
+        builder: (context, constraints) {
+          final style = DefaultTextStyle.of(context).style;
+          final scaler = MediaQuery.textScalerOf(context);
+          final direction = Directionality.of(context);
+          final overwideWord = entry.label
+              .split(RegExp(r'\s+'))
+              .any(
+                (word) =>
+                    _textWidth(word, style, scaler, direction) >
+                    constraints.maxWidth,
+              );
+          return Text(
+            entry.label,
+            maxLines: overwideWord ? 1 : 2,
+            softWrap: !overwideWord,
+            overflow: TextOverflow.ellipsis,
+          );
+        },
+      ),
     ),
     const SizedBox(width: 8),
     Text('${entry.count}'),
@@ -2231,28 +2265,38 @@ class _TvChannelFilterPicker extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final roles = LineupTheme.of(context);
-    return InkWell(
-      key: const Key('guide-library-picker'),
-      focusNode: focusNode,
-      onTap: () => unawaited(_open(context)),
-      child: Padding(
-        padding: const EdgeInsets.symmetric(horizontal: _guideEdgeContentInset),
-        child: Row(
-          children: [
-            Expanded(
-              child: Text(
-                label,
-                style: _GuideControls.controlStyle(context)
-                    .copyWith(color: roles.primaryText),
-                maxLines: 1,
-                overflow: TextOverflow.ellipsis,
-              ),
+    return Semantics(
+      container: true,
+      button: true,
+      label: 'Channel filter',
+      value: controller.selectedChannelFilter.label,
+      child: InkWell(
+        key: const Key('guide-channel-filter'),
+        focusNode: focusNode,
+        onTap: () => unawaited(_open(context)),
+        child: ExcludeSemantics(
+          child: Padding(
+            padding: const EdgeInsets.symmetric(
+              horizontal: _guideEdgeContentInset,
             ),
-            IconTheme.merge(
-              data: IconThemeData(color: roles.secondaryText),
-              child: const Icon(Icons.arrow_drop_down, size: 24),
+            child: Row(
+              children: [
+                Expanded(
+                  child: Text(
+                    label,
+                    style: _GuideControls.controlStyle(context)
+                        .copyWith(color: roles.primaryText),
+                    maxLines: 1,
+                    overflow: TextOverflow.ellipsis,
+                  ),
+                ),
+                IconTheme.merge(
+                  data: IconThemeData(color: roles.secondaryText),
+                  child: const Icon(Icons.arrow_drop_down, size: 24),
+                ),
+              ],
             ),
-          ],
+          ),
         ),
       ),
     );

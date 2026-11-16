@@ -35,9 +35,9 @@ Future<void> _settle(WidgetTester tester) async {
 bool _hasFocus(FocusNode node) => node.hasPrimaryFocus;
 
 FocusNode _toolbarNode(WidgetTester tester, String name) => switch (name) {
-  'library' =>
+  'channelFilter' =>
     tester
-        .widget<InkWell>(find.byKey(const Key('guide-library-picker')))
+        .widget<InkWell>(find.byKey(const Key('guide-channel-filter')))
         .focusNode!,
   'search' =>
     tester
@@ -65,7 +65,7 @@ FocusNode _toolbarNode(WidgetTester tester, String name) => switch (name) {
 };
 
 Finder _toolbarFinder(String name) => switch (name) {
-  'library' => find.byKey(const Key('guide-library-picker')),
+  'channelFilter' => find.byKey(const Key('guide-channel-filter')),
   'search' => find.byKey(const Key('guide-channel-search')),
   'earlier' => find.byKey(const Key('guide-earlier')),
   'now' => find.byKey(const Key('guide-now')),
@@ -92,7 +92,7 @@ String _expectedToolbarControl(WidgetTester tester, {double? target}) {
   final targetX =
       target ?? (visibleCell.isEmpty ? cell : visibleCell).center.dx;
   const controls = [
-    'library',
+    'channelFilter',
     'search',
     'earlier',
     'now',
@@ -181,7 +181,17 @@ void main() {
       await _settle(tester);
       final view = tester.widget<GuideView>(find.byType(GuideView));
       final controller = view.controller;
-      final picker = _toolbarNode(tester, 'library');
+      final picker = _toolbarNode(tester, 'channelFilter');
+      void expectFilterSemantics(String value) {
+        final data = tester
+            .getSemantics(_toolbarFinder('channelFilter'))
+            .getSemanticsData();
+        expect(data.flagsCollection.isButton, isTrue);
+        expect(data.label, 'Channel filter');
+        expect(data.value, value);
+      }
+
+      expectFilterSemantics('All channels');
       expect(controller.channelFilterKey, ChannelFilter.all);
 
       // Left at the live edge has an established rail-focus route.
@@ -200,7 +210,7 @@ void main() {
         return find.descendant(of: row, matching: find.text('$count'));
       }
 
-      for (final dismiss in [_right, LogicalKeyboardKey.escape]) {
+      for (final dismiss in [_right, LogicalKeyboardKey.escape, null]) {
         picker.requestFocus();
         await tester.pump();
         await _key(tester, select);
@@ -208,7 +218,13 @@ void main() {
         expect(countFor('Favourites', 1), findsOneWidget);
         expect(countFor('Custom', 3), findsOneWidget);
         await _key(tester, _down);
-        await _key(tester, dismiss);
+        if (dismiss == null) {
+          expect(await tester.binding.handlePopRoute(), isTrue);
+          await tester.pumpAndSettle();
+        } else {
+          await _key(tester, dismiss);
+        }
+        expect(find.byType(GuideView), findsOneWidget);
         expect(countFor('Favourites', 1), findsNothing);
         expect(controller.channelFilterKey, ChannelFilter.all);
         expect(picker.hasPrimaryFocus, isTrue);
@@ -216,6 +232,8 @@ void main() {
       await _key(tester, select);
       await _key(tester, _down);
       await _key(tester, select);
+      expect(picker.hasPrimaryFocus, isTrue);
+      expectFilterSemantics('Favourites');
       expect(controller.channelFilterKey, ChannelFilter.favourites);
       final freshGuide = GuideController(lineup: lineup);
       expect(freshGuide.channelFilterKey, ChannelFilter.all);
@@ -238,6 +256,7 @@ void main() {
       );
       await tester.pumpWidget(const SizedBox.shrink());
     },
+    variant: const TargetPlatformVariant({TargetPlatform.android}),
   );
 
   for (final platform in [TargetPlatform.windows, TargetPlatform.android]) {
@@ -546,7 +565,7 @@ void main() {
       }
 
       final controls = [
-        'library',
+        'channelFilter',
         'search',
         'earlier',
         'now',

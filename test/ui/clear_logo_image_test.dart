@@ -167,6 +167,52 @@ void main() {
     },
   );
 
+  testWidgets('Guide padded logo decodes enough alpha pixels for its DPR', (
+    tester,
+  ) async {
+    const sourceSize = Size(1600, 640);
+    const sourceArt = Rect.fromLTWH(480, 240, 640, 160);
+    final bytes = await _rasterLogoBytes(
+      tester,
+      size: sourceSize,
+      visible: sourceArt,
+    );
+    const logoKey = Key('accepted-logo');
+    Widget logo(double dpr) => _logoApp(
+      bytes,
+      maximumSize: const Size(768, 128),
+      maximumVisibleHeight: 64,
+      minimumVisibleSize: const Size(96, 25.6),
+      reserveVisibleSlot: true,
+      fitVisibleContent: true,
+      dpr: dpr,
+    );
+    await tester.pumpWidget(logo(2));
+    await _waitForImageDecode(tester);
+    final finder = find.byKey(logoKey);
+    final decoded = tester.widget<RawImage>(finder).image!;
+    final paintedSize = tester.getSize(finder);
+    final visiblePixels = await tester.runAsync(() => _alphaSize(decoded));
+    expect(
+      visiblePixels!.width,
+      greaterThanOrEqualTo(
+        paintedSize.width * sourceArt.width / sourceSize.width * 2,
+      ),
+    );
+    expect(
+      visiblePixels.height,
+      greaterThanOrEqualTo(
+        paintedSize.height * sourceArt.height / sourceSize.height * 2,
+      ),
+    );
+
+    // A physical target larger than the encoded raster uses the source size.
+    await tester.pumpWidget(logo(4));
+    await _waitForImageDecode(tester);
+    final capped = tester.widget<RawImage>(finder).image!;
+    expect(Size(capped.width.toDouble(), capped.height.toDouble()), sourceSize);
+  });
+
   testWidgets('desktop rejects empty alpha and keeps padded contain geometry', (
     tester,
   ) async {
@@ -532,6 +578,21 @@ Future<void> _waitForImageDecode(WidgetTester tester) async {
     );
     await tester.pump();
   }
+}
+
+Future<Size> _alphaSize(ui.Image image) async {
+  final rgba = (await image.toByteData(format: ui.ImageByteFormat.rawRgba))!;
+  var left = image.width, right = -1, top = image.height, bottom = -1;
+  for (var y = 0; y < image.height; y++) {
+    for (var x = 0; x < image.width; x++) {
+      if (rgba.getUint8((y * image.width + x) * 4 + 3) < 32) continue;
+      if (x < left) left = x;
+      if (x > right) right = x;
+      if (y < top) top = y;
+      if (y > bottom) bottom = y;
+    }
+  }
+  return Size((right - left + 1).toDouble(), (bottom - top + 1).toDouble());
 }
 
 bool _containsLogoColor(Uint8List rgba, Color expected) {

@@ -4647,7 +4647,7 @@ void main() {
       expect(guide.followingLive, isTrue);
       expect(tunes, 0);
 
-      for (final picker in ['guide-hours', 'guide-library-picker']) {
+      for (final picker in ['guide-hours', 'guide-channel-filter']) {
         final control = find.byKey(Key(picker));
         // DropdownButton owns an internal focus node on its InkWell. Focus that
         // actual trigger rather than a selected-item Text inside its stack.
@@ -5198,7 +5198,7 @@ void main() {
     ));
     await tester.pump();
 
-    final label = find.byKey(const Key('guide-active-library-label'));
+    final label = find.byKey(const Key('guide-active-channel-filter-label'));
     expect(label, findsOneWidget);
     expect(find.text('Channel filter'), findsOneWidget);
     expect(tester.widget<Text>(label).data, libraryId);

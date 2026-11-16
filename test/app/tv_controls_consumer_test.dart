@@ -95,12 +95,12 @@ void main() {
     );
     await tester.pumpWidget(fixture.build());
     await tester.pumpAndSettle();
-    for (final key in ['guide-library-picker', 'guide-hours']) {
+    for (final key in ['guide-channel-filter', 'guide-hours']) {
       final picker = find.byKey(Key(key));
       final baseSurface = LineupTheme.of(tester.element(picker))
           .elevatedSurface;
       final trigger = tester.widget<InkWell>(
-        key == 'guide-library-picker'
+        key == 'guide-channel-filter'
             ? picker
             : find.descendant(of: picker, matching: find.byType(InkWell)).first,
       );
@@ -128,6 +128,15 @@ void main() {
       await tester.sendKeyEvent(LogicalKeyboardKey.select);
       await tester.pumpAndSettle();
       expect(find.byType(LineupDropdownMenuRow), findsWidgets);
+      if (key == 'guide-channel-filter') {
+        final popupSurface = find.ancestor(
+          of: find.byType(LineupDropdownMenuRow).first,
+          matching: find.byWidgetPredicate(
+            (widget) => widget is Material && widget.type == MaterialType.card,
+          ),
+        );
+        expect(tester.widget<Material>(popupSurface).color, baseSurface);
+      }
       await tester.sendKeyEvent(LogicalKeyboardKey.escape);
       await tester.pumpAndSettle();
     }
