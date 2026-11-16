@@ -277,7 +277,7 @@ void main() {
     await tester.pumpWidget(fixture.build());
     await tester.pumpAndSettle();
     await openDestination(tester, 'Channels');
-    await tester.tap(find.text('Create a custom channel'));
+    await tester.tap(find.text('Add a custom channel'));
     await tester.pumpAndSettle();
 
     expect(find.text('Include watched items'), findsOneWidget);
@@ -322,7 +322,7 @@ void main() {
     await tester.pumpWidget(fixture.build());
     await tester.pumpAndSettle();
     await openDestination(tester, 'Channels');
-    await tester.tap(find.text('Create a custom channel'));
+    await tester.tap(find.text('Add a custom channel'));
     await tester.pumpAndSettle();
     await tester.enterText(find.byType(TextFormField).first, 'Movies');
 
@@ -346,23 +346,23 @@ void main() {
     await tester.pump();
     await tester.pump();
     await openDestination(tester, 'Channels');
-    await tester.tap(find.text('Create a custom channel'));
+    await tester.tap(find.text('Add a custom channel'));
     await tester.pumpAndSettle();
     await tester.enterText(find.byKey(const Key('studio-name')), 'Unsaved');
     await tester.pump();
 
-    await tester.ensureVisible(find.text('Open Generate lineup'));
-    await tester.tap(find.text('Open Generate lineup'));
+    await tester.ensureVisible(find.text('Open Update lineup…'));
+    await tester.tap(find.text('Open Update lineup…'));
     await tester.pumpAndSettle();
-    expect(find.text('Open Generate lineup?'), findsOneWidget);
+    expect(find.text('Open Update lineup?'), findsOneWidget);
     await tester.tap(find.text('Keep editing'));
     await tester.pumpAndSettle();
     expect(controller.setupEntries, 0);
     expect(find.text('Create custom channel'), findsOneWidget);
 
-    await tester.ensureVisible(find.text('Open Generate lineup'));
+    await tester.ensureVisible(find.text('Open Update lineup…'));
     final recovery = tester.widget<TextButton>(
-      find.widgetWithText(TextButton, 'Open Generate lineup'),
+      find.widgetWithText(TextButton, 'Open Update lineup…'),
     );
     recovery.onPressed!();
     recovery.onPressed!();

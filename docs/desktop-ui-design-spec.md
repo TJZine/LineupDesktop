@@ -655,13 +655,16 @@ B's integrated narrower roster/editor is not selected. Synthetic comparison:
 preview is partial, not an approved replacement for its complete controls or
 unsaved-draft behavior.
 
-- Number/name/source/playback/type hierarchy, full wrapping names and quiet row
-  dividers. Search by name or number, All/Custom/Generated filters. Row activation
-  opens Studio; remove the redundant open icon. Preserve known issue explanations
-  and list search/filter/scroll/focus on return. No Needs attention filter or new
-  Watch action.
-- Add a custom channel is primary; Generate lineup is secondary for a populated
-  lineup. Empty state reverses that emphasis and avoids duplicate header actions.
+- UX assessment decision, 2026-11-13/14 (Q5, N17, D3, D9). The heading is
+  Manage channels. Preserve wrapping names and quiet row dividers. Use a
+  Custom tag after custom names and one ellipsized Source line for source type
+  and library. Use original person labels in source details when available.
+  Search by name or number or filter by favourites, source type or library.
+  Row activation opens Studio. Preserve known issue explanations and list
+  search, filter, scroll and focus on return.
+- Add a custom channel is primary and Update lineup… is secondary for a
+  populated lineup. Empty state reverses that emphasis and avoids duplicate
+  header actions. Its primary button says Generate lineup….
 - Approved bulk management: quiet Select control reveals checkboxes, selected
   count and Delete selected. Select all matching means current search/filter
   results. Confirmation gives the count and explains removal from the lineup.
@@ -695,8 +698,10 @@ Final selection refinements recorded for implementation:
 - Selection and reorder are separate modes. Keep unrelated mutation controls out
   of selection mode; preserve search/filter access. Repeated activation while a
   deletion is pending cannot launch a second deletion.
-- Generated-channel row menu includes Duplicate as custom, opening a draft while
-  retaining the original. Delete belongs in the secondary row menu.
+- The row menu lists Watch, Favourite or Remove from favourites, Edit or
+  Duplicate as custom, and Delete. Watch receives initial focus. Dismissal
+  returns focus to the row. Open the menu with the ellipsis, right-click,
+  Shift+F10 or the keyboard Menu key.
 - Rename/number and individual programming/playback editing stay in Studio.
   Generated selections are managed through Generate lineup. Deletion does not
   permanently exclude a generated source: later generation can recreate it.

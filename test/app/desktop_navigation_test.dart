@@ -136,9 +136,7 @@ void main() {
     await tester.pumpAndSettle();
     await _routeShortcut(tester, 1);
     _expectDestination('Channels');
-    final actions = find.byWidgetPredicate(
-      (widget) => widget.runtimeType.toString().startsWith('PopupMenuButton'),
-    );
+    final actions = find.byTooltip('Actions for One');
     await tester.ensureVisible(actions);
     await tester.tap(actions);
     await tester.pumpAndSettle();
@@ -191,7 +189,7 @@ void main() {
 
       for (final (key, destination) in routeChords) {
         await _routeShortcut(tester, 1);
-        await tester.tap(find.text('Create a custom channel'));
+        await tester.tap(find.text('Add a custom channel'));
         await tester.pumpAndSettle();
         final name = find.byKey(const Key('studio-name'));
         await tester.enterText(name, 'Retained draft');
@@ -658,7 +656,7 @@ void main() {
       await tester.pumpWidget(fixture.build());
       await tester.pumpAndSettle();
       await openDestination(tester, 'Channels');
-      await tester.tap(find.text('Create a custom channel'));
+      await tester.tap(find.text('Add a custom channel'));
       await tester.pumpAndSettle();
       await tester.enterText(
         find.byKey(const Key('studio-name')),
@@ -677,7 +675,7 @@ void main() {
       await tester.tap(find.text('Discard changes'));
       await tester.pumpAndSettle();
       expect(find.byKey(const Key('studio-name')), findsNothing);
-      expect(find.text('Create a custom channel'), findsOneWidget);
+      expect(find.text('Add a custom channel'), findsOneWidget);
     },
   );
 
@@ -993,7 +991,7 @@ void main() {
     await tester.pumpWidget(fixture.build());
     await tester.pumpAndSettle();
     await openDestination(tester, 'Channels');
-    await tester.tap(find.text('Create a custom channel'));
+    await tester.tap(find.text('Add a custom channel'));
     await tester.pumpAndSettle();
 
     final name = find.byKey(const Key('studio-name'));

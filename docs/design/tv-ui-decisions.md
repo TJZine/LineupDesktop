@@ -348,6 +348,20 @@ approved the TV, Movie and Video library icons. Measure the name column
 after that prefix. Guide and Mini Guide can use a spare line for the library
 tag, and support lines start at the name.
 
+### Manage channels and Studio
+
+UX assessment decision, 2026-11-13/14 (Q5, N17, N18, D3, D4, D9, D12).
+Select on a Manage channels row opens Studio. Right then Select on the ellipsis,
+or holding Select on the row, opens the row menu with Watch focused. Back closes
+it and restores row focus. The remote Menu button opens the Lineup menu. Use a
+one-line Source and Custom tag, with roughly nine directory rows at 1080p and
+1.3 text scale. Add a custom channel is primary and Update lineup… secondary
+for populated lineups. When empty, Generate lineup… is primary and Add a
+custom channel is secondary.
+
+New custom drafts begin with focus on the Programming source choice. Studio
+suggests a source name until the user edits it.
+
 ## 5. Review Channels: getting between the roster and the footer
 
 ### Recommendation R1

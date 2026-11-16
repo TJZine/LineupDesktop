@@ -1075,6 +1075,23 @@ Adaptive, grouped accessibility and physical Windows validation remain pending.
 Independent review is not specifically recommended.
 
 
+### Manage channels amendment — surfaces 16–19
+
+UX assessment decision, 2026-11-13/14 (Q5, N17, D3, D9). The directory is
+**Manage channels**. A Custom tag follows custom names and replaces the Type
+column. Source is one ellipsized line showing the type and, where known, the
+library. Person source details display the original inventory label where
+available. The filters are All channels, Favourites when populated, source
+types and libraries. In a populated lineup, **Add a custom channel** has
+primary emphasis and **Update lineup…** has secondary emphasis. In an empty
+lineup, **Generate lineup…** is primary and **Add a custom channel** is
+secondary.
+
+Rows open Studio. The row menu opens from the ellipsis, right-click, Shift+F10
+or the keyboard Menu key. Watch receives initial focus, followed by the
+favourite action, Edit or Duplicate as custom, and Delete. Dismissal restores
+row focus. Delete opens the approved surface 19 confirmation.
+
 ### Channel identity and Choose channels / Review channels
 
 UX assessment decision, 2026-11-13/14 (Q1b, Q1c, Q11, N12, N13/D10, D11,
@@ -1293,6 +1310,14 @@ Independent review is not specifically recommended for this presentation-only
 pass. No push, deployment or publishing is authorized. Future surface families
 start with a fresh Luna worker; reuse is limited to the same family.
 
+
+### Studio amendment — source labels and TV entry
+
+UX assessment decision, 2026-11-13/14 (N18, D9, D12). On TV, a new custom draft
+starts on the programming source choice. It suggests a name from the selected
+source until the user edits the name. Source details use original inventory
+labels for people where available, and the Mini-marathons availability message
+uses plural agreement.
 
 ## September 9, 2026 — Guide 25/26 polish proposal
 

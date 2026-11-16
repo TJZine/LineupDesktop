@@ -640,7 +640,7 @@ void main() {
   }
 
   testWidgets(
-    'saved startup to Generate lineup to Continue uses restored inventory without storage reset',
+    'saved startup to Update lineup to Continue uses restored inventory without storage reset',
     (tester) async {
       tester.view.physicalSize = const Size(1920, 1080);
       tester.view.devicePixelRatio = 1;
@@ -671,7 +671,7 @@ void main() {
       await tester.pumpAndSettle();
       expect(c.stage, SetupStage.ready);
       await openDestination(tester, 'Channels');
-      await tester.tap(find.text('Generate lineup'));
+      await tester.tap(find.text('Update lineup…'));
       await tester.pumpAndSettle();
       expect(find.text('Continue with 1 library'), findsOneWidget);
       await tester.tap(find.text('Continue with 1 library'));

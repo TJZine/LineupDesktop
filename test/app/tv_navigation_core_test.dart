@@ -889,7 +889,7 @@ void main() {
     await tester.pumpWidget(Focus(focusNode: outside, child: fixture.build()));
     await tester.pumpAndSettle();
     await openDestination(tester, 'Channels');
-    await tester.tap(find.text('Create a custom channel'));
+    await tester.tap(find.text('Add a custom channel'));
     await tester.pumpAndSettle();
     final name = find.byKey(const Key('studio-name'));
     await tester.enterText(name, 'Kept draft');
@@ -968,7 +968,7 @@ void main() {
       );
       await tester.pumpAndSettle();
       await openDestination(tester, 'Channels');
-      await tester.tap(find.text('Create a custom channel'));
+      await tester.tap(find.text('Add a custom channel'));
       await tester.pumpAndSettle();
       await tester.enterText(
         find.byKey(const Key('studio-name')),

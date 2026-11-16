@@ -1,10 +1,13 @@
 import 'dart:async';
 
+import 'package:flutter/gestures.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:lineup_desktop/platform/device_profile.dart';
 
 import '../channels/channel.dart';
+import '../channels/channel_builder.dart';
+import '../channels/channel_filter.dart';
 import '../playback/player_coordinator.dart';
 import '../ui/app_theme.dart';
 import '../ui/app_ui.dart';
@@ -14,11 +17,9 @@ import 'channel_studio_view.dart';
 import 'lineup_controller.dart';
 import 'navigation_shortcuts.dart';
 
-enum _DirectoryFilter { all, custom, generated }
-
 enum _DirectoryMode { normal, selection, reorder }
 
-enum _RowAction { duplicate, delete }
+enum _RowAction { watch, favourite, edit, duplicate, delete }
 
 class ChannelsView extends StatefulWidget {
   const ChannelsView({
@@ -52,7 +53,10 @@ class ChannelsViewState extends State<ChannelsView> {
   String? _returnFocusId;
   final _search = TextEditingController();
   final _searchFocus = FocusNode(debugLabel: 'Search channels');
-  _DirectoryFilter _filter = _DirectoryFilter.all;
+  ChannelFilterKey _filter = ChannelFilter.all;
+  List<Channel>? _filterLineup;
+  late ChannelFilter _channelFilter;
+  final _personLabels = StudioPersonLabels();
   _DirectoryMode _mode = _DirectoryMode.normal;
   final Set<String> _selectedIds = {};
   bool _showSelected = false;
@@ -236,9 +240,9 @@ class ChannelsViewState extends State<ChannelsView> {
           await showDialog<bool>(
             context: context,
             builder: (context) => AlertDialog(
-              title: const Text('Open Generate lineup?'),
+              title: const Text('Open Update lineup?'),
               content: const Text(
-                'Your unsaved Studio draft cannot be carried into Generate lineup. Existing custom channels remain protected while you review the proposed roster.',
+                'Your unsaved Studio draft cannot be carried into Update lineup. Existing custom channels remain protected while you review the proposed roster.',
               ),
               actions: [
                 TextButton(
@@ -341,6 +345,7 @@ class ChannelsViewState extends State<ChannelsView> {
     final liveIds = channels.map((channel) => channel.id).toSet();
     _selectedIds.removeWhere((id) => !liveIds.contains(id));
     final matching = _matchingChannels(channels);
+    final filter = _filterFor(channels);
     final visible = _showSelected
         ? channels
               .where((channel) => _selectedIds.contains(channel.id))
@@ -361,7 +366,7 @@ class ChannelsViewState extends State<ChannelsView> {
         ?.copyWith(fontSize: 18);
 
     final page = LineupPage(
-      title: 'Channels',
+      title: 'Manage channels',
       showTitle: false,
       topBar: LineupTopBar(
         menuKey: const Key('channels-app-menu'),
@@ -384,7 +389,7 @@ class ChannelsViewState extends State<ChannelsView> {
                           Text(
                             _mode == _DirectoryMode.reorder
                                 ? 'Reorder channels'
-                                : 'Channels',
+                                : 'Manage channels',
                             style: headingStyle,
                           ),
                           SizedBox(width: 12),
@@ -417,7 +422,7 @@ class ChannelsViewState extends State<ChannelsView> {
                             onPressed: _saving
                                 ? null
                                 : widget.controller.enterChannelSetup,
-                            child: const Text('Generate lineup'),
+                            child: const Text('Update lineup…'),
                           ),
                           FilledButton(
                             focusNode: _addFocus,
@@ -436,7 +441,7 @@ class ChannelsViewState extends State<ChannelsView> {
             SizedBox(height: 12),
           ],
           if (channels.isNotEmpty) ...[
-            _directoryControls(matching),
+            _directoryControls(matching, filter),
             SizedBox(height: 20),
             DefaultTextStyle.merge(
               style: Theme.of(context).textTheme.bodyMedium?.copyWith(
@@ -461,7 +466,6 @@ class ChannelsViewState extends State<ChannelsView> {
                       name: const Text('Channel'),
                       source: const Text('Source'),
                       playback: const Text('Playback'),
-                      type: const Text('Type'),
                       action: const SizedBox.shrink(),
                       heading: true,
                     ),
@@ -485,13 +489,13 @@ class ChannelsViewState extends State<ChannelsView> {
                               ? null
                               : widget.controller.enterChannelSetup,
                           icon: const Icon(Icons.auto_awesome_outlined),
-                          label: const Text('Generate lineup'),
+                          label: const Text('Generate lineup…'),
                         ),
                         OutlinedButton.icon(
                           focusNode: _addFocus,
                           onPressed: _saving ? null : openNew,
                           icon: const Icon(Icons.add),
-                          label: const Text('Create a custom channel'),
+                          label: const Text('Add a custom channel'),
                         ),
                       ],
                     ),
@@ -506,18 +510,15 @@ class ChannelsViewState extends State<ChannelsView> {
                         : 'No matching channels',
                     message: _showSelected
                         ? 'Return to results and select channels to inspect.'
-                        : 'Adjust the search or channel type.',
+                        : 'Adjust the search or channel filter.',
                   )
                 : ListView.separated(
                     key: const PageStorageKey('channels-directory'),
                     itemCount: visible.length,
                     separatorBuilder: (_, _) => const Divider(height: 1),
-                    itemBuilder: (context, index) {
+                    itemBuilder: (menuContext, index) {
                       final channel = visible[index];
                       _noteVisibleHealth(channel.id);
-                      final menuTheme = DeviceProfile.of(context).isTv
-                          ? Theme.of(context)
-                          : null;
                       // The selection-mode checkbox alone shows checked
                       // state; the row surface carries focus and hover only.
                       return LineupRowSurface(
@@ -544,9 +545,6 @@ class ChannelsViewState extends State<ChannelsView> {
                                   fontSize: 18,
                                   color: LineupTheme.of(context).secondaryText,
                                 );
-                            final ownership = channel.builderKey == null
-                                ? 'Custom'
-                                : 'Generated';
                             final rowFocus = _openFocus.putIfAbsent(
                               channel.id,
                               () =>
@@ -560,14 +558,18 @@ class ChannelsViewState extends State<ChannelsView> {
                                 message: _mode == _DirectoryMode.selection
                                     ? '${_selectedIds.contains(channel.id) ? 'Deselect' : 'Select'} ${channel.name}'
                                     : 'Open ${channel.name}',
-                                child: InkWell(
+                                child: _DirectoryRow(
+                                  menuContext: menuContext,
                                   focusNode: rowFocus,
-                                  onTap: _saving
-                                      ? null
-                                      : _mode == _DirectoryMode.selection
+                                  channel: channel,
+                                  enabled: !_saving,
+                                  showActions: _mode == _DirectoryMode.normal,
+                                  onActivate: _mode == _DirectoryMode.selection
                                       ? () => _toggleSelected(channel.id)
                                       : () => _open(channel),
-                                  child: _directoryColumns(
+                                  onAction: (action) =>
+                                      _applyRowAction(action, channel),
+                                  builder: (action) => _directoryColumns(
                                     leading: _mode == _DirectoryMode.selection
                                         ? Checkbox(
                                             semanticLabel:
@@ -620,12 +622,10 @@ class ChannelsViewState extends State<ChannelsView> {
                                           ),
                                       ],
                                     ),
-                                    source: Text(
-                                      channelSourceLabel(
-                                        channel.source,
-                                        widget.controller,
-                                      ),
-                                      style: rowSupportStyle,
+                                    custom: channel.builderKey == null,
+                                    source: _directorySource(
+                                      channel,
+                                      rowSupportStyle,
                                     ),
                                     playback: Text(
                                       channelRhythmLabel(
@@ -634,58 +634,7 @@ class ChannelsViewState extends State<ChannelsView> {
                                       ),
                                       style: rowSupportStyle,
                                     ),
-                                    type: Text(
-                                      ownership,
-                                      style: rowSupportStyle,
-                                    ),
-                                    action: _mode == _DirectoryMode.selection
-                                        ? const SizedBox.shrink()
-                                        : PopupMenuButton<_RowAction>(
-                                            enabled: !_saving,
-                                            tooltip:
-                                                'Actions for ${channel.name}',
-                                            padding: EdgeInsets.all(8),
-                                            iconSize: 24,
-                                            icon: Icon(
-                                              Icons.adaptive.more,
-                                              semanticLabel:
-                                                  'Actions for ${channel.name}',
-                                            ),
-                                            menuPadding: EdgeInsets.zero,
-                                            onSelected: (action) =>
-                                                switch (action) {
-                                                  _RowAction.duplicate =>
-                                                    _openDuplicate(channel),
-                                                  _RowAction.delete => _delete(
-                                                    channel,
-                                                  ),
-                                                },
-                                            itemBuilder: (_) => [
-                                              if (channel.builderKey != null)
-                                                PopupMenuItem(
-                                                  value: _RowAction.duplicate,
-                                                  height: 48,
-                                                  padding: EdgeInsets.zero,
-                                                  child: LineupDropdownMenuRow(
-                                                    menuTheme: menuTheme,
-                                                    selected: false,
-                                                    child: const Text(
-                                                      'Duplicate as custom',
-                                                    ),
-                                                  ),
-                                                ),
-                                              PopupMenuItem(
-                                                value: _RowAction.delete,
-                                                height: 48,
-                                                padding: EdgeInsets.zero,
-                                                child: LineupDropdownMenuRow(
-                                                  menuTheme: menuTheme,
-                                                  selected: false,
-                                                  child: Text('Delete…'),
-                                                ),
-                                              ),
-                                            ],
-                                          ),
+                                    action: action,
                                   ),
                                 ),
                               ),
@@ -715,22 +664,134 @@ class ChannelsViewState extends State<ChannelsView> {
       [...widget.controller.channels]
         ..sort((left, right) => left.number.compareTo(right.number));
 
+  ChannelFilter _filterFor(List<Channel> channels) {
+    final lineup = widget.controller.channels;
+    if (!identical(_filterLineup, lineup)) {
+      _filterLineup = lineup;
+      _channelFilter = ChannelFilter(channels);
+      if (!_channelFilter.entries.any((entry) => entry.key == _filter)) {
+        _filter = ChannelFilter.all;
+      }
+    }
+    return _channelFilter;
+  }
+
   List<Channel> _matchingChannels(List<Channel> channels) {
     final query = _search.text.trim().toLowerCase();
-    return channels
-        .where((channel) {
-          final ownershipMatches = switch (_filter) {
-            _DirectoryFilter.all => true,
-            _DirectoryFilter.custom => channel.builderKey == null,
-            _DirectoryFilter.generated => channel.builderKey != null,
-          };
-          return ownershipMatches &&
-              (query.isEmpty ||
-                  channel.name.toLowerCase().contains(query) ||
-                  channel.number.toString().contains(query));
-        })
+    return _filterFor(channels)
+        .channelsFor(_filter)
+        .where(
+          (channel) =>
+              query.isEmpty ||
+              channel.name.toLowerCase().contains(query) ||
+              channel.number.toString().contains(query),
+        )
         .toList(growable: false);
   }
+
+  Future<void> _applyRowAction(_RowAction action, Channel channel) async {
+    switch (action) {
+      case _RowAction.watch:
+        unawaited(widget.player.tune(channel.id));
+        widget.onOpenPlayer();
+      case _RowAction.favourite:
+        final index = _sortedChannels().indexWhere(
+          (row) => row.id == channel.id,
+        );
+        try {
+          await widget.controller.setFavorite(channel.id, !channel.favorite);
+          if (!mounted) return;
+          setState(() => _error = null);
+          if (channel.favorite) {
+            _restoreNavigationFocus(
+              preferredId: channel.id,
+              preferredIndex: index,
+            );
+          }
+        } catch (_) {
+          if (mounted) {
+            setState(() => _error = 'The favourite could not be saved.');
+          }
+        }
+      case _RowAction.edit:
+        _open(channel);
+      case _RowAction.duplicate:
+        _openDuplicate(channel);
+      case _RowAction.delete:
+        await _delete(channel);
+    }
+  }
+
+  Widget _directorySource(Channel channel, TextStyle? style) {
+    final source = channel.source;
+    final type = switch (channelSourceType(channel)) {
+      BuilderStrategy.collections => 'Collection',
+      BuilderStrategy.recentlyAdded => 'Recently added',
+      BuilderStrategy.genres => 'Genre',
+      BuilderStrategy.studios => 'Studio',
+      BuilderStrategy.actors => 'Actor',
+      BuilderStrategy.decades => 'Decade',
+      BuilderStrategy.directors => 'Director',
+      BuilderStrategy.playlists => 'Playlist',
+      null => _directorySourceType(source),
+    };
+    final savedLibraries = channel.sourceLibraries.values;
+    final sourceLibraryIds = channelSourceLibraryIds(source);
+    final libraryTitles = savedLibraries.isNotEmpty
+        ? savedLibraries
+        : widget.controller.libraries
+              .where((library) => sourceLibraryIds.contains(library.id))
+              .map((library) => library.title);
+    final libraries = libraryTitles.toSet().join(', ');
+    final text = Text(
+      libraries.isEmpty ? type : '$type · $libraries',
+      maxLines: 1,
+      softWrap: false,
+      overflow: TextOverflow.ellipsis,
+      style: style,
+    );
+    final people = _directorySourcePeople(source).toSet();
+    return people.isEmpty
+        ? text
+        : Tooltip(message: people.join(', '), child: text);
+  }
+
+  Iterable<String> _directorySourcePeople(ContentSource source) sync* {
+    if (source case MixedSource(:final sources)) {
+      for (final child in sources) {
+        yield* _directorySourcePeople(child);
+      }
+    } else if (source case LibrarySource(:final libraryId, :final filters)) {
+      for (final filter in [LibraryFilter.actor, LibraryFilter.director]) {
+        for (final value in filters[filter] ?? const <String>[]) {
+          yield _personLabels.label(
+            widget.controller,
+            libraryId,
+            filter,
+            value,
+          );
+        }
+      }
+    }
+  }
+
+  String _directorySourceType(ContentSource source) => switch (source) {
+    LibrarySource(:final filters, :final order) =>
+      order == LibraryOrder.addedDescending && filters.isEmpty
+          ? 'Recently added'
+          : switch (filters.keys.singleOrNull) {
+              LibraryFilter.collection => 'Collection',
+              LibraryFilter.genre => 'Genre',
+              LibraryFilter.studio => 'Studio',
+              LibraryFilter.actor => 'Actor',
+              LibraryFilter.director => 'Director',
+              LibraryFilter.decade => 'Decade',
+              null => filters.isEmpty ? 'Library' : 'Filtered library',
+            },
+    PlaylistSource() => 'Playlist',
+    ManualSource() => 'Hand-picked',
+    MixedSource() => 'Mixed sources',
+  };
 
   List<Channel> _visibleChannels() {
     final channels = _sortedChannels();
@@ -844,21 +905,22 @@ class ChannelsViewState extends State<ChannelsView> {
     ChannelIdentity? identity,
     required Widget source,
     required Widget playback,
-    required Widget type,
+    bool custom = false,
     required Widget action,
     Widget? leading,
     bool heading = false,
   }) {
     final textScale = MediaQuery.textScalerOf(context).scale(1);
     final numberWidth = 52 * textScale;
+    final tv = DeviceProfile.of(context).isTv;
     return ConstrainedBox(
       constraints: heading
           ? const BoxConstraints()
-          : BoxConstraints(minHeight: _directorySize(80, 68)),
+          : BoxConstraints(minHeight: tv ? 72 : _directorySize(80, 68)),
       child: Padding(
         padding: EdgeInsets.symmetric(
           horizontal: 12,
-          vertical: (heading ? 8 : 10),
+          vertical: heading || tv ? 8 : 10,
         ),
         child: LayoutBuilder(
           builder: (context, constraints) {
@@ -878,7 +940,10 @@ class ChannelsViewState extends State<ChannelsView> {
                 if (identity == null) ...[
                   SizedBox(width: numberWidth, child: number),
                   SizedBox(width: 16),
-                  Expanded(flex: 4, child: name),
+                  SizedBox(
+                    width: identityWidth - numberWidth - 16,
+                    child: name,
+                  ),
                 ] else
                   SizedBox(
                     width: identityWidth,
@@ -886,7 +951,15 @@ class ChannelsViewState extends State<ChannelsView> {
                       mainAxisSize: MainAxisSize.min,
                       crossAxisAlignment: CrossAxisAlignment.start,
                       children: [
-                        identity,
+                        if (custom)
+                          _DirectoryCustomIdentity(
+                            name: identity.channel.name,
+                            nameStyle: identity.nameStyle,
+                            supportStyle: identity.supportStyle,
+                            identity: identity,
+                          )
+                        else
+                          identity,
                         Padding(
                           padding: EdgeInsetsDirectional.only(
                             start: identity.nameIndent(context),
@@ -897,11 +970,9 @@ class ChannelsViewState extends State<ChannelsView> {
                     ),
                   ),
                 SizedBox(width: 16),
-                Expanded(flex: 2, child: source),
+                Expanded(flex: 3, child: source),
                 SizedBox(width: 16),
                 Expanded(flex: 2, child: playback),
-                SizedBox(width: 16),
-                Expanded(child: type),
                 SizedBox(width: 16),
                 SizedBox(width: 44, child: action),
               ],
@@ -986,31 +1057,67 @@ class ChannelsViewState extends State<ChannelsView> {
         TextStyle(fontSize: 18);
   }
 
-  Widget _directoryToolbar() {
+  Widget _directoryToolbar(ChannelFilter filter) {
     final textScale = MediaQuery.textScalerOf(context).scale(1);
-    final filters = ConstrainedBox(
-      constraints: BoxConstraints(
-        minHeight: LineupLayout.isCompactWidth(MediaQuery.sizeOf(context).width)
-            ? 0
-            : 48,
-      ),
-      child: LineupSegmentedControl<_DirectoryFilter>(
-        segments: const [
-          ButtonSegment(value: _DirectoryFilter.all, label: Text('All')),
-          ButtonSegment(value: _DirectoryFilter.custom, label: Text('Custom')),
-          ButtonSegment(
-            value: _DirectoryFilter.generated,
-            label: Text('Generated'),
+    final entries = filter.entries;
+    final tv = DeviceProfile.of(context).isTv;
+    final roles = LineupTheme.of(context);
+    final menuTheme = tv ? Theme.of(context) : null;
+    final filters = SizedBox(
+      width: 180 * textScale.clamp(1, 1.5),
+      child: LineupDropdownBox(
+        compact: true,
+        enabled: !_saving,
+        child: Builder(
+          builder: (context) => DropdownButton<ChannelFilterKey>(
+            key: const Key('channels-filter'),
+            value: _filter,
+            isExpanded: true,
+            style: tv
+                ? _channelBodyStyle(context)
+                      .copyWith(color: LineupTheme.of(context).primaryText)
+                : null,
+            iconEnabledColor: tv ? LineupTheme.of(context).secondaryText : null,
+            selectedItemBuilder: (_) => [
+              for (final entry in entries)
+                Align(
+                  alignment: AlignmentDirectional.centerStart,
+                  child: Text(
+                    entry.label,
+                    maxLines: 1,
+                    overflow: TextOverflow.ellipsis,
+                  ),
+                ),
+            ],
+            underline: const SizedBox.shrink(),
+            dropdownColor: roles.elevatedSurface,
+            borderRadius: BorderRadius.circular(roles.panelRadius),
+            items: lineupMenuItems(
+              [
+                for (final entry in entries)
+                  DropdownMenuItem(
+                    value: entry.key,
+                    child: Text(
+                      entry.label,
+                      maxLines: 1,
+                      overflow: TextOverflow.ellipsis,
+                    ),
+                  ),
+              ],
+              _filter,
+              menuTheme: menuTheme,
+            ),
+            onChanged: _saving
+                ? null
+                : (value) {
+                    if (value == null) return;
+                    setState(() {
+                      _filter = value;
+                      _showSelected = false;
+                    });
+                  },
           ),
-        ],
-        selected: {_filter},
-        showSelectedIcon: false,
-        onSelectionChanged: _saving
-            ? null
-            : (value) => setState(() {
-                _filter = value.single;
-                _showSelected = false;
-              }),
+        ),
       ),
     );
     final actions = [
@@ -1089,7 +1196,7 @@ class ChannelsViewState extends State<ChannelsView> {
     );
   }
 
-  Widget _directoryControls(List<Channel> matching) {
+  Widget _directoryControls(List<Channel> matching, ChannelFilter filter) {
     if (_mode == _DirectoryMode.reorder) {
       final changed = !_sameOrder(
         _reorderBase.map((channel) => channel.id),
@@ -1128,7 +1235,7 @@ class ChannelsViewState extends State<ChannelsView> {
           if (_showSelected)
             Text('Selected channels', style: _channelBodyStyle(context))
           else
-            _directoryToolbar(),
+            _directoryToolbar(filter),
           if (_mode == _DirectoryMode.selection) ...[
             SizedBox(height: 8),
             LayoutBuilder(
@@ -1383,11 +1490,14 @@ class ChannelsViewState extends State<ChannelsView> {
                 fontFamilyFallback: const ['Arial'],
               ),
             ),
-            name: Text(channel.name, style: rowNameStyle, softWrap: true),
-            source: Text(
-              channelSourceLabel(channel.source, widget.controller),
-              style: rowSupportStyle,
-            ),
+            name: channel.builderKey == null
+                ? _DirectoryCustomIdentity(
+                    name: channel.name,
+                    nameStyle: rowNameStyle,
+                    supportStyle: rowSupportStyle,
+                  )
+                : Text(channel.name, style: rowNameStyle, softWrap: true),
+            source: _directorySource(channel, rowSupportStyle),
             playback: Text(
               channelRhythmLabel(channel.playbackMode, channel.blockSize),
               style: rowSupportStyle,
@@ -1700,6 +1810,306 @@ class _MoveChannelDialogState extends State<_MoveChannelDialog> {
     );
     return dialog;
   }
+}
+
+/// Gives the optional tag space only when the full identity already fits.
+class _DirectoryCustomIdentity extends StatelessWidget {
+  const _DirectoryCustomIdentity({
+    required this.name,
+    required this.nameStyle,
+    required this.supportStyle,
+    this.identity,
+  });
+
+  final String name;
+  final TextStyle? nameStyle;
+  final TextStyle? supportStyle;
+  final ChannelIdentity? identity;
+
+  @override
+  Widget build(BuildContext context) {
+    const gap = 8.0;
+    final baseStyle = DefaultTextStyle.of(context).style;
+    final support = baseStyle.merge(supportStyle);
+    final tagStyle = support.copyWith(
+      fontSize: 14,
+      fontWeight: FontWeight.w600,
+    );
+    final labelStyle = baseStyle.merge(nameStyle);
+    final textScaler = MediaQuery.textScalerOf(context);
+    double measure(String value, TextStyle style) => TextPainter.computeWidth(
+      text: TextSpan(text: value, style: style),
+      textDirection: Directionality.of(context),
+      textScaler: textScaler,
+      locale: Localizations.maybeLocaleOf(context),
+    );
+    final label = identity ?? Text(name, style: nameStyle, softWrap: true);
+    return LayoutBuilder(
+      builder: (context, constraints) {
+        final prefix = identity?.nameIndent(context) ?? 0;
+        final libraryTag = identity?.libraryTag;
+        final libraryWidth = libraryTag == null
+            ? 0.0
+            : measure('· $libraryTag', support) +
+                  textScaler.scale(labelStyle.fontSize ?? 14) * .25;
+        final requiredWidth =
+            prefix +
+            measure(name, labelStyle) +
+            libraryWidth +
+            gap +
+            measure('Custom', tagStyle);
+        if (requiredWidth > constraints.maxWidth) return label;
+        return Row(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Flexible(child: label),
+            const SizedBox(width: gap),
+            Text('Custom', style: tagStyle),
+          ],
+        );
+      },
+    );
+  }
+}
+
+class _DirectoryRow extends StatefulWidget {
+  const _DirectoryRow({
+    required this.menuContext,
+    required this.focusNode,
+    required this.channel,
+    required this.enabled,
+    required this.showActions,
+    required this.onActivate,
+    required this.onAction,
+    required this.builder,
+  });
+
+  final BuildContext menuContext;
+  final FocusNode focusNode;
+  final Channel channel;
+  final bool enabled;
+  final bool showActions;
+  final VoidCallback onActivate;
+  final Future<void> Function(_RowAction) onAction;
+  final Widget Function(Widget action) builder;
+
+  @override
+  State<_DirectoryRow> createState() => _DirectoryRowState();
+}
+
+class _DirectoryRowState extends State<_DirectoryRow> {
+  final _actionKey = GlobalKey();
+  final _actionFocus = FocusNode(debugLabel: 'Channel actions');
+  Timer? _selectHold;
+  LogicalKeyboardKey? _heldKey;
+  bool _menuOpen = false;
+
+  @override
+  void dispose() {
+    _selectHold?.cancel();
+    _actionFocus.dispose();
+    super.dispose();
+  }
+
+  void _rowFocusChanged(bool focused) {
+    if (focused) return;
+    _selectHold?.cancel();
+    _selectHold = null;
+    _heldKey = null;
+  }
+
+  KeyEventResult _key(FocusNode _, KeyEvent event) {
+    if (!widget.enabled || !widget.showActions) {
+      return KeyEventResult.ignored;
+    }
+    final tv = DeviceProfile.of(context).isTv;
+    final key = event.logicalKey;
+    final select =
+        key == LogicalKeyboardKey.select || key == LogicalKeyboardKey.enter;
+    if (tv && _actionFocus.hasPrimaryFocus) {
+      if (select) {
+        if (event is KeyDownEvent) unawaited(_openMenu());
+        return KeyEventResult.handled;
+      }
+      if (event is KeyDownEvent && key == LogicalKeyboardKey.arrowLeft) {
+        widget.focusNode.requestFocus();
+        return KeyEventResult.handled;
+      }
+      return KeyEventResult.ignored;
+    }
+    if (!widget.focusNode.hasPrimaryFocus) return KeyEventResult.ignored;
+    if (!tv) {
+      if (event is KeyDownEvent &&
+          (key == LogicalKeyboardKey.contextMenu ||
+              (key == LogicalKeyboardKey.f10 &&
+                  HardwareKeyboard.instance.isShiftPressed))) {
+        unawaited(_openMenu());
+        return KeyEventResult.handled;
+      }
+      return KeyEventResult.ignored;
+    }
+    if (event is KeyDownEvent && key == LogicalKeyboardKey.arrowRight) {
+      _actionFocus.requestFocus();
+      return KeyEventResult.handled;
+    }
+    if (!select) return KeyEventResult.ignored;
+    if (event is KeyDownEvent && _heldKey == null) {
+      _heldKey = key;
+      _selectHold = Timer(kLongPressTimeout, () {
+        _selectHold = null;
+        if (widget.focusNode.hasPrimaryFocus) unawaited(_openMenu());
+      });
+    } else if (event is KeyUpEvent && key == _heldKey) {
+      final shortPress = _selectHold?.isActive == true;
+      _selectHold?.cancel();
+      _selectHold = null;
+      _heldKey = null;
+      if (shortPress) widget.onActivate();
+    }
+    return KeyEventResult.handled;
+  }
+
+  Future<void> _openMenu() async {
+    if (!widget.enabled || !widget.showActions || _menuOpen) return;
+    final anchor = _actionKey.currentContext?.findRenderObject() as RenderBox?;
+    final navigator = Navigator.of(context);
+    final overlay = navigator.overlay!.context.findRenderObject()! as RenderBox;
+    if (anchor == null || !anchor.attached) return;
+    final topLeft = anchor.localToGlobal(Offset.zero, ancestor: overlay);
+    final channel = widget.channel;
+    final onAction = widget.onAction;
+    _menuOpen = true;
+    final action = await showMenu<_RowAction>(
+      // Capture the list theme above the row's temporary TV focus ink.
+      context: widget.menuContext,
+      requestFocus: true,
+      position: RelativeRect.fromSize(topLeft & anchor.size, overlay.size),
+      menuPadding: EdgeInsets.zero,
+      constraints: const BoxConstraints(minWidth: 224, maxWidth: 320),
+      items: [
+        const _DirectoryMenuItem(_RowAction.watch, 'Watch', autofocus: true),
+        _DirectoryMenuItem(
+          _RowAction.favourite,
+          channel.favorite ? 'Remove from favourites' : 'Favourite',
+        ),
+        if (channel.builderKey == null)
+          const _DirectoryMenuItem(_RowAction.edit, 'Edit')
+        else
+          const _DirectoryMenuItem(_RowAction.duplicate, 'Duplicate as custom'),
+        const _DirectoryMenuItem(_RowAction.delete, 'Delete…'),
+      ],
+    );
+    _menuOpen = false;
+    if (!mounted || ModalRoute.of(context)?.isCurrent == false) return;
+    widget.focusNode.requestFocus();
+    if (action != null && widget.enabled && widget.showActions) {
+      await onAction(action);
+    }
+  }
+
+  @override
+  Widget build(BuildContext context) => Focus(
+    canRequestFocus: false,
+    onKeyEvent: _key,
+    child: InkWell(
+      focusNode: widget.focusNode,
+      onFocusChange: _rowFocusChanged,
+      onTap: widget.enabled ? widget.onActivate : null,
+      onSecondaryTap:
+          widget.enabled &&
+              widget.showActions &&
+              !DeviceProfile.of(context).isTv
+          ? _openMenu
+          : null,
+      child: widget.builder(
+        widget.showActions
+            ? IconButton(
+                key: _actionKey,
+                focusNode: _actionFocus,
+                tooltip: 'Actions for ${widget.channel.name}',
+                onPressed: widget.enabled ? _openMenu : null,
+                padding: const EdgeInsets.all(8),
+                icon: Icon(
+                  Icons.more_vert,
+                  size: 24,
+                  semanticLabel: 'Actions for ${widget.channel.name}',
+                ),
+              )
+            : const SizedBox.shrink(),
+      ),
+    ),
+  );
+}
+
+class _DirectoryMenuItem extends PopupMenuItem<_RowAction> {
+  const _DirectoryMenuItem(
+    _RowAction action,
+    this.label, {
+    this.autofocus = false,
+  }) : super(value: action, height: 48, child: null);
+
+  final String label;
+  final bool autofocus;
+
+  @override
+  PopupMenuItemState<_RowAction, _DirectoryMenuItem> createState() =>
+      _DirectoryMenuItemState();
+}
+
+class _DirectoryMenuItemState
+    extends PopupMenuItemState<_RowAction, _DirectoryMenuItem> {
+  KeyEventResult _key(FocusNode _, KeyEvent event) {
+    final key = event.logicalKey;
+    final select =
+        key == LogicalKeyboardKey.select || key == LogicalKeyboardKey.enter;
+    if (key != LogicalKeyboardKey.goBack &&
+        key != LogicalKeyboardKey.escape &&
+        !select) {
+      return KeyEventResult.ignored;
+    }
+    if (event is KeyDownEvent) {
+      if (select) {
+        if (widget.enabled) handleTap();
+      } else {
+        Navigator.pop(context);
+      }
+    }
+    return KeyEventResult.handled;
+  }
+
+  @override
+  Widget build(BuildContext context) => Focus(
+    canRequestFocus: false,
+    onKeyEvent: _key,
+    child: MergeSemantics(
+      child: buildSemantics(
+        child: InkWell(
+          autofocus: widget.enabled && widget.autofocus,
+          canRequestFocus: widget.enabled,
+          onTap: widget.enabled ? handleTap : null,
+          child: ConstrainedBox(
+            constraints: BoxConstraints(minHeight: widget.height),
+            child: Center(
+              child: LineupDropdownMenuRow(
+                selected: false,
+                child: SizedBox(
+                  width: double.infinity,
+                  child: Builder(
+                    builder: (context) => Text(
+                      widget.label,
+                      style: LineupTypography.control.copyWith(
+                        color: LineupTheme.of(context).primaryText,
+                      ),
+                    ),
+                  ),
+                ),
+              ),
+            ),
+          ),
+        ),
+      ),
+    ),
+  );
 }
 
 class _ChannelDeletionDialog extends StatefulWidget {

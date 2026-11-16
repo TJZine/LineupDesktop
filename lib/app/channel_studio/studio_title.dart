@@ -16,6 +16,7 @@ class _StudioTitle extends StatefulWidget {
     required this.canSave,
     required this.hasPendingChoice,
     required this.pendingHint,
+    required this.autofocusBack,
     required this.onLeave,
     required this.onDuplicate,
     required this.onTune,
@@ -37,6 +38,7 @@ class _StudioTitle extends StatefulWidget {
   final bool canSave;
   final bool hasPendingChoice;
   final String pendingHint;
+  final bool autofocusBack;
   final Future<void> Function() onLeave;
   final VoidCallback onDuplicate;
   final VoidCallback onTune;
@@ -92,7 +94,7 @@ class _StudioTitleState extends State<_StudioTitle> {
       order: const NumericFocusOrder(0),
       child: LineupInlineLink(
         focusNode: _backFocus,
-        autofocus: true,
+        autofocus: widget.autofocusBack,
         onPressed: widget.busy ? null : () => unawaited(widget.onLeave()),
         child: const Text('‹ Channels'),
       ),
