@@ -20,6 +20,8 @@ import 'package:lineup_desktop/app/lineup_shell.dart';
 import 'package:lineup_desktop/channels/channel.dart';
 import 'package:lineup_desktop/channels/scheduler.dart';
 import 'package:lineup_desktop/guide/guide_controller.dart';
+import 'package:lineup_desktop/guide/guide_playback_placeholder.dart';
+import 'package:lineup_desktop/ui/channel_identity.dart';
 import 'package:lineup_desktop/playback/native_player.dart';
 import 'package:lineup_desktop/playback/native_video_surface.dart';
 import 'package:lineup_desktop/playback/player_coordinator.dart';
@@ -579,7 +581,12 @@ void main() {
             expect(top, lessThan(restingTop));
           }
         }
-        expect(tester.getSemantics(tag).label, 'Channel 7, Channel');
+        expect(
+          find.bySemanticsLabel(
+            tv ? 'Channel 7, Channel' : 'Channel 7, Channel. Open Mini Guide',
+          ),
+          findsOneWidget,
+        );
         fixture.player.closeOverlay();
         await tester.pump();
         for (var frame = 0; frame <= 4; frame++) {
@@ -932,7 +939,7 @@ void main() {
       fixture.player.showOsd();
       fixture.player.showTracks(PlayerTrackType.audio);
       await tester.pumpAndSettle();
-      expect(find.byKey(const Key('playback-options-rail')), findsOneWidget);
+      expect(find.byKey(const Key('player-track-popover')), findsOneWidget);
       await _r2Capture(
         tester,
         captureKey,
@@ -1444,7 +1451,7 @@ void main() {
       expect(
         Focus.of(
           tester.element(
-            find.text(failure == 'error' ? 'Retry' : 'Browse channels'),
+            find.text(failure == 'error' ? 'Try again' : 'Browse channels'),
           ),
         ).hasFocus,
         isTrue,
@@ -1613,6 +1620,10 @@ void main() {
 
         bool focused(String label) =>
             Focus.of(tester.element(find.text(label))).hasFocus;
+        final failed = state == PlayerState.error;
+        final browse = failed ? 'Choose another channel' : 'Browse channels';
+        const details = 'Details';
+        var openedDiagnostics = false;
         try {
           if (state == PlayerState.error) {
             await fixture.player.tune('channel');
@@ -1629,46 +1640,52 @@ void main() {
                 controller: fixture.player,
                 focusNode: root,
                 openGuide: () => closed = true,
+                onOpenDiagnostics: () => openedDiagnostics = true,
               ),
             ),
           );
           await tester.pumpAndSettle();
-          expect(
-            focused(state == PlayerState.error ? 'Retry' : 'Browse channels'),
-            isTrue,
-          );
+          expect(focused(failed ? 'Try again' : browse), isTrue);
           if (state == PlayerState.error) {
             await key(LogicalKeyboardKey.arrowRight);
           }
-          expect(focused('Browse channels'), isTrue);
+          expect(focused(browse), isTrue);
           for (var i = 0; i < 3; i++) {
             fixture.lineup.notifyListeners();
             await tester.pumpAndSettle();
             expect(
-              focused('Browse channels'),
+              focused(browse),
               isTrue,
               reason: 'Rebuilds must not restart autofocus',
             );
           }
           await key(LogicalKeyboardKey.arrowRight);
-          expect(focused('Close'), isTrue);
+          expect(focused(failed ? details : 'Close'), isTrue);
+          if (failed) {
+            expect(find.text('Close'), findsNothing);
+            await key(LogicalKeyboardKey.select);
+            expect(openedDiagnostics, isTrue);
+          }
           await key(LogicalKeyboardKey.arrowLeft);
-          expect(focused('Browse channels'), isTrue);
+          expect(focused(browse), isTrue);
           await key(LogicalKeyboardKey.select);
           expect(fixture.player.overlay, PlayerOverlay.miniGuide);
           expect(
             tester.semantics.simulatedAccessibilityTraversal().any(
               (node) =>
-                  node.getSemanticsData().label == 'Browse channels' &&
+                  node.getSemanticsData().label == browse &&
                   node.getSemanticsData().hasAction(SemanticsAction.tap),
             ),
             isFalse,
           );
+          if (failed) {
+            expect(find.text("Couldn't start playback"), findsNothing);
+          }
           await key(LogicalKeyboardKey.goBack);
-          expect(
-            focused(state == PlayerState.error ? 'Retry' : 'Browse channels'),
-            isTrue,
-          );
+          if (failed) {
+            expect(find.text("Couldn't start playback"), findsOneWidget);
+          }
+          expect(focused(failed ? 'Try again' : browse), isTrue);
           if (state == PlayerState.error) {
             final loads = fixture.native.loadCalls;
             fixture.native.failLoad = false;
@@ -4199,6 +4216,205 @@ void main() {
     },
   );
 
+  testWidgets('Back clears the error overlay before leaving Player', (
+    tester,
+  ) async {
+    final fixture = _Fixture(PlayerState.playing, failLoad: true);
+    addTearDown(fixture.dispose);
+    await fixture.player.loadInitialMedia(Uri.parse('lineup-test://failure'));
+    var guideOpened = false;
+    await tester.pumpWidget(
+      MaterialApp(
+        builder: _playerDesktopCanvasBuilder,
+        home: PlayerView(
+          controller: fixture.player,
+          openGuide: () => guideOpened = true,
+        ),
+      ),
+    );
+    await tester.pumpAndSettle();
+
+    await tester.sendKeyEvent(LogicalKeyboardKey.escape);
+    await tester.pumpAndSettle();
+    expect(guideOpened, isFalse);
+    expect(fixture.player.overlay, PlayerOverlay.none);
+    expect(find.text("Couldn't start playback"), findsOneWidget);
+
+    await tester.sendKeyEvent(LogicalKeyboardKey.escape);
+    await tester.pumpAndSettle();
+    expect(guideOpened, isTrue);
+    expect(fixture.player.overlay, PlayerOverlay.fullGuide);
+    await tester.pumpWidget(const SizedBox.shrink());
+  });
+
+  testWidgets(
+    'network failure after observed playback says Playback stopped even at zero',
+    (tester) async {
+      final fixture = _Fixture(PlayerState.idle, channelCount: 2);
+      await tester.pumpWidget(
+        MaterialApp(
+          builder: _playerDesktopCanvasBuilder,
+          home: PlayerView(controller: fixture.player, openGuide: () {}),
+        ),
+      );
+      expect(await fixture.player.tune('channel'), isTrue);
+      fixture.native.emitState(PlayerState.playing, at: Duration.zero);
+      await tester.pumpAndSettle();
+      expect(fixture.player.hasStartedPlayback, isTrue);
+
+      fixture.native.emitState(
+        PlayerState.error,
+        at: Duration.zero,
+        failureCode: 'network_error',
+      );
+      await tester.pumpAndSettle();
+      expect(
+        fixture.player.failureCause,
+        PlaybackFailureCause.serverUnreachable,
+      );
+      expect(find.text('Playback stopped'), findsOneWidget);
+      expect(find.text("Couldn't start playback"), findsNothing);
+      expect(find.text("Lineup can't reach your Plex server."), findsOneWidget);
+
+      expect(await fixture.player.tune('channel-1'), isTrue);
+      fixture.native.emitState(PlayerState.playing);
+      await tester.pumpAndSettle();
+      expect(fixture.player.failureCause, isNull);
+      expect(fixture.player.error, isNull);
+      await tester.pumpWidget(const SizedBox.shrink());
+      fixture.dispose();
+    },
+  );
+
+  testWidgets(
+    'Guide slot shows typed causes and preserves message-only status',
+    (tester) async {
+      for (final (cause, message, visible) in [
+        (
+          PlaybackFailureCause.serverUnreachable,
+          'Unused fallback',
+          "Lineup can't reach your Plex server.",
+        ),
+        (PlaybackFailureCause.unknown, 'Unused fallback', null),
+        (null, PlaybackFailureCause.unknown.message, null),
+        (
+          null,
+          'Playback could not be stopped.',
+          'Playback could not be stopped.',
+        ),
+        (
+          null,
+          'Playback is unavailable on this platform.',
+          'Playback is unavailable on this platform.',
+        ),
+      ]) {
+        var retries = 0;
+        var advances = 0;
+        await tester.pumpWidget(
+          MaterialApp(
+            home: GuidePlaybackPlaceholder(
+              unavailable: true,
+              reduceMotion: true,
+              message: message,
+              failureCause: cause,
+              onRetry: () => retries++,
+              onNextChannel: () => advances++,
+            ),
+          ),
+        );
+        expect(find.text('Playback unavailable'), findsOneWidget);
+        if (visible != null) {
+          expect(find.text(visible), findsOneWidget);
+          expect(find.bySemanticsLabel(visible), findsOneWidget);
+        } else {
+          expect(find.text(message), findsNothing);
+          expect(find.bySemanticsLabel(message), findsNothing);
+        }
+        await tester.tap(find.text('Retry'));
+        await tester.tap(find.text('Next channel'));
+        expect(retries, 1);
+        expect(advances, 1);
+      }
+    },
+    semanticsEnabled: true,
+  );
+
+  testWidgets(
+    'Guide failure slot offers Retry and Next channel independently',
+    (tester) async {
+      var retried = false;
+      var advanced = false;
+      await tester.pumpWidget(
+        MaterialApp(
+          theme: LineupTheme.forName(LineupThemeName.emberSteel),
+          home: GuidePlaybackPlaceholder(
+            unavailable: true,
+            reduceMotion: true,
+            message: "This video's audio can't play on this device.",
+            onRetry: () => retried = true,
+            onNextChannel: () => advanced = true,
+          ),
+        ),
+      );
+      expect(
+        find.text("This video's audio can't play on this device."),
+        findsOneWidget,
+      );
+      final retry = find.text('Retry');
+      final next = find.text('Next channel');
+      expect(tester.getCenter(next).dy, tester.getCenter(retry).dy);
+      await tester.tap(next);
+      expect(advanced, isTrue);
+      expect(retried, isFalse);
+      await tester.tap(retry);
+      expect(retried, isTrue);
+    },
+  );
+
+  testWidgets('channel entry places the digits over the matched identity', (
+    tester,
+  ) async {
+    final fixture = _Fixture(PlayerState.playing);
+    addTearDown(fixture.dispose);
+    await tester.pumpWidget(
+      MaterialApp(
+        builder: _playerDesktopCanvasBuilder,
+        home: PlayerView(controller: fixture.player, openGuide: () {}),
+      ),
+    );
+    fixture.player.appendChannelDigit(
+      '${fixture.lineup.channels.first.number}',
+    );
+    await tester.pumpAndSettle();
+    final chip = find.byKey(const Key('channel-number-buffer'));
+    final digits = find.descendant(
+      of: chip,
+      matching: find.byWidgetPredicate(
+        (widget) => widget is Text && widget.style?.fontSize == 48,
+      ),
+    );
+    final identity = find.descendant(
+      of: chip,
+      matching: find.byType(ChannelIdentity),
+    );
+    expect(digits, findsOneWidget);
+    expect(tester.widget<ChannelIdentity>(identity).nameStyle?.fontSize, 20);
+    expect(
+      tester.getCenter(digits).dx,
+      tester.getCenter(find.byType(PlayerView)).dx,
+    );
+    expect(
+      tester.getBottomLeft(digits).dy,
+      lessThanOrEqualTo(tester.getTopLeft(identity).dy),
+    );
+    expect(
+      find.descendant(of: identity, matching: find.text('•')),
+      findsOneWidget,
+    );
+    fixture.player.closeOverlay();
+    await tester.pumpWidget(const SizedBox.shrink());
+  });
+
   testWidgets('Guide-sized player surface keeps load failures reachable', (
     tester,
   ) async {
@@ -4216,10 +4432,7 @@ void main() {
       ),
     );
 
-    expect(
-      find.text('Playback could not start. Retry or choose another channel.'),
-      findsOneWidget,
-    );
+    expect(find.text('Playback could not start.'), findsOneWidget);
     expect(find.textContaining('synthetic load failure'), findsNothing);
 
     await tester.pumpWidget(const SizedBox.shrink());
@@ -4741,6 +4954,263 @@ void main() {
     }
   }, semanticsEnabled: true);
 
+  testWidgets(
+    'desktop Guide action preserves the title status and timing stack across viewports',
+    (tester) async {
+      tester.view.devicePixelRatio = 1;
+      addTearDown(tester.view.resetPhysicalSize);
+      addTearDown(tester.view.resetDevicePixelRatio);
+      final fixture = _Fixture(
+        PlayerState.paused,
+        richProgram: true,
+        tracks: const [
+          PlayerTrack(
+            id: 1,
+            type: PlayerTrackType.audio,
+            selected: true,
+            language: 'en',
+            title: 'Synthetic choice 1',
+          ),
+          PlayerTrack(
+            id: 1,
+            type: PlayerTrackType.subtitle,
+            selected: true,
+            language: 'en',
+            title: 'Synthetic choice 1',
+          ),
+        ],
+      );
+      await fixture.player.tune('channel');
+      fixture.native.emitState(PlayerState.paused);
+      for (final size in const [
+        Size(1280, 720),
+        Size(1512, 945),
+        Size(1920, 1080),
+        Size(2560, 1080),
+      ]) {
+        tester.view.physicalSize = size;
+        await tester.pumpWidget(
+          MaterialApp(
+            builder: _playerDesktopCanvasBuilder,
+            home: PlayerView(
+              controller: fixture.player,
+              openGuide: () {},
+              openMenu: (_, _) {},
+            ),
+          ),
+        );
+        await tester.pumpAndSettle();
+        await tester.runAsync(clearLogoDecodesSettled);
+        await tester.pumpAndSettle();
+
+        final art = _drawnRect(
+          tester,
+          find.byKey(const Key('player-osd-logo')),
+        );
+        final status = _drawnRect(
+          tester,
+          find.byKey(const Key('player-osd-status')),
+        );
+        final timing = _drawnRect(
+          tester,
+          find.byKey(const Key('player-osd-timing')),
+        );
+        final scale = LineupCanvas.scaleFor(size);
+        expect(status.top, closeTo(art.bottom + 8 * scale, 1), reason: '$size');
+        expect(
+          timing.top,
+          closeTo(status.bottom + 10 * scale, 1),
+          reason: '$size',
+        );
+        expect(timing.left, closeTo(art.left, 1), reason: '$size');
+        expect(
+          find.byKey(const Key('player-osd-guide')).hitTestable(),
+          findsOneWidget,
+        );
+        expect(find.byTooltip('Full screen').hitTestable(), findsOneWidget);
+      }
+      await tester.pumpWidget(const SizedBox.shrink());
+      fixture.dispose();
+    },
+  );
+
+  testWidgets(
+    'desktop OSD Guide and live channel badge open their destinations',
+    (tester) async {
+      final fixture = _Fixture(
+        PlayerState.playing,
+        channelCount: 3,
+        overlayTimeout: const Duration(seconds: 2),
+      );
+      tester.view.physicalSize = const Size(1280, 720);
+      tester.view.devicePixelRatio = 1;
+      addTearDown(tester.view.resetPhysicalSize);
+      addTearDown(tester.view.resetDevicePixelRatio);
+      var guideOpened = false;
+      await tester.pumpWidget(
+        MaterialApp(
+          builder: _playerDesktopCanvasBuilder,
+          home: PlayerView(
+            controller: fixture.player,
+            openGuide: () => guideOpened = true,
+          ),
+        ),
+      );
+      fixture.player.showOsd();
+      await tester.pumpAndSettle();
+
+      final guide = find.byKey(const Key('player-osd-guide'));
+      final subtitles = find.byKey(const Key('player-osd-subtitles'));
+      expect(
+        tester.getCenter(guide).dx,
+        lessThan(tester.getCenter(subtitles).dx),
+      );
+      final badge = find.byKey(const Key('player-osd-channel-bug'));
+      final identity = find.descendant(
+        of: badge,
+        matching: find.byType(ChannelIdentity),
+      );
+      final semantics = tester.getSemantics(
+        find.bySemanticsLabel('Channel 7, Channel. Open Mini Guide'),
+      );
+      expect(semantics.getSemanticsData().flagsCollection.isButton, isTrue);
+      expect(
+        semantics.getSemanticsData().hasAction(SemanticsAction.tap),
+        isTrue,
+      );
+      final down = find.byTooltip('Channel down');
+      final up = find.byTooltip('Channel up');
+      expect(down, findsNothing);
+      final pointer = await tester.createGesture(kind: PointerDeviceKind.mouse);
+      await pointer.addPointer();
+      await pointer.moveTo(tester.getCenter(identity));
+      await tester.pumpAndSettle();
+      final pill = find.byKey(const Key('player-channel-step-pill'));
+      final badgeBox = find
+          .ancestor(of: identity, matching: find.byType(InkWell))
+          .first;
+      expect(
+        _drawnRect(tester, pill).height,
+        closeTo(_drawnRect(tester, badgeBox).height, .1),
+      );
+      expect(
+        _drawnRect(tester, pill).center.dy,
+        closeTo(_drawnRect(tester, badgeBox).center.dy, .1),
+      );
+      fixture.player.closeOverlay();
+      await tester.pump();
+      fixture.player.showOsd();
+      await tester.pumpAndSettle();
+      expect(pill, findsNothing);
+      await pointer.moveTo(tester.getCenter(identity) + const Offset(1, 0));
+      await tester.pumpAndSettle();
+      expect(up, findsOneWidget);
+      expect(down, findsOneWidget);
+      expect(
+        Focus.of(
+          tester.element(
+            find.descendant(
+              of: down,
+              matching: find.byIcon(Icons.keyboard_arrow_down),
+            ),
+          ),
+        ).canRequestFocus,
+        isFalse,
+      );
+      await tester.tap(down);
+      await tester.pumpAndSettle();
+      expect(fixture.player.currentChannel?.number, 8);
+      await pointer.moveTo(const Offset(15, 15));
+      await tester.pumpAndSettle();
+      expect(down, findsNothing);
+
+      fixture.player.showOsd();
+      await tester.pumpAndSettle();
+      await tester.tap(identity);
+      await tester.pumpAndSettle();
+      expect(fixture.player.overlay, PlayerOverlay.miniGuide);
+
+      fixture.player.showOsd();
+      await tester.pumpAndSettle();
+      // Tab navigation reaches the real badge, without its pointer-only steppers.
+      for (
+        var i = 0;
+        i < 20 && !Focus.of(tester.element(identity)).hasFocus;
+        i++
+      ) {
+        await tester.sendKeyEvent(LogicalKeyboardKey.tab);
+        await tester.pump();
+      }
+      expect(Focus.of(tester.element(identity)).hasFocus, isTrue);
+      await tester.pump(const Duration(seconds: 3));
+      expect(fixture.player.overlay, PlayerOverlay.osd);
+      fixture.player.closeOverlay();
+      await tester.pump();
+      fixture.player.showOsd();
+      await tester.pumpAndSettle();
+      expect(Focus.of(tester.element(identity)).hasFocus, isFalse);
+      expect(
+        tester.widget<InkWell>(badgeBox).customBorder,
+        isA<StadiumBorder>().having(
+          (shape) => shape.side.width,
+          'resting border width',
+          1,
+        ),
+      );
+      for (
+        var i = 0;
+        i < 20 && !Focus.of(tester.element(identity)).hasFocus;
+        i++
+      ) {
+        await tester.sendKeyEvent(LogicalKeyboardKey.tab);
+        await tester.pump();
+      }
+      await tester.sendKeyEvent(LogicalKeyboardKey.enter);
+      await tester.pumpAndSettle();
+      expect(fixture.player.overlay, PlayerOverlay.miniGuide);
+
+      fixture.player.showOsd();
+      await tester.pumpAndSettle();
+      await tester.tap(guide);
+      await tester.pumpAndSettle();
+      expect(guideOpened, isTrue);
+      expect(fixture.player.overlay, PlayerOverlay.fullGuide);
+      await pointer.removePointer();
+      await tester.pumpWidget(const SizedBox.shrink());
+      fixture.dispose();
+    },
+    semanticsEnabled: true,
+  );
+
+  testWidgets(
+    'desktop program block shows Now Playing through pointer and semantics',
+    (tester) async {
+      final fixture = _Fixture(PlayerState.playing, richProgram: true);
+      expect(await fixture.player.tune('channel'), isTrue);
+      await tester.pumpWidget(
+        MaterialApp(
+          builder: _playerDesktopCanvasBuilder,
+          home: PlayerView(controller: fixture.player, openGuide: () {}),
+        ),
+      );
+      await tester.pumpAndSettle();
+      final action = find.bySemanticsLabel('Show program details');
+      expect(
+        tester
+            .getSemantics(action)
+            .getSemanticsData()
+            .hasAction(SemanticsAction.tap),
+        isTrue,
+      );
+      await tester.tap(find.byKey(const Key('player-osd-identity')));
+      await tester.pumpAndSettle();
+      expect(fixture.player.overlay, PlayerOverlay.nowPlaying);
+      await tester.pumpWidget(const SizedBox.shrink());
+      fixture.dispose();
+    },
+    semanticsEnabled: true,
+  );
+
   testWidgets('OSD uses stateful labeled track and sleep actions', (
     tester,
   ) async {
@@ -4853,7 +5323,7 @@ void main() {
         ),
         (
           () => fixture.player.showTracks(PlayerTrackType.audio),
-          find.byKey(const Key('playback-options-fade')),
+          find.byKey(const Key('player-track-popover')),
         ),
         (
           fixture.player.showSleepTimer,
@@ -7129,7 +7599,7 @@ void main() {
   });
 
   testWidgets(
-    '1280 track drawers keep wrapped rows clear of the fixed footer',
+    '1280 track pickers keep wrapped rows clear of the fixed footer',
     (tester) async {
       const audioTracks = [
         PlayerTrack(
@@ -7260,7 +7730,13 @@ void main() {
 
         final rail = _drawnRect(
           tester,
-          find.byKey(const Key('playback-options-rail')),
+          find.byKey(
+            Key(
+              scenario.type == PlayerTrackType.audio
+                  ? 'player-track-popover'
+                  : 'playback-options-rail',
+            ),
+          ),
         );
         final list = _drawnRect(
           tester,
@@ -7268,7 +7744,10 @@ void main() {
         );
         final footer = _drawnRect(
           tester,
-          find.byKey(const Key('playback-options-footer')),
+          find.descendant(
+            of: find.byKey(const Key('playback-options-footer')),
+            matching: find.byType(Text),
+          ),
         );
         expect(rail.contains(footer.topLeft), isTrue);
         expect(
@@ -7361,8 +7840,8 @@ void main() {
     final semantics = tester.ensureSemantics();
     final fixture = _Fixture(
       PlayerState.playing,
-      tracks: const [
-        PlayerTrack(
+      tracks: [
+        const PlayerTrack(
           id: 1,
           type: PlayerTrackType.audio,
           selected: true,
@@ -7370,6 +7849,8 @@ void main() {
           language: 'English',
           codec: 'eac3',
         ),
+        for (var id = 2; id <= 7; id++)
+          PlayerTrack(id: id, type: PlayerTrackType.audio, selected: false),
       ],
     );
     addTearDown(() async {
@@ -7548,8 +8029,10 @@ void main() {
   ) async {
     final fixture = _Fixture(
       PlayerState.playing,
-      tracks: const [
-        PlayerTrack(id: 1, type: PlayerTrackType.audio, selected: true),
+      tracks: [
+        const PlayerTrack(id: 1, type: PlayerTrackType.audio, selected: true),
+        for (var id = 2; id <= 7; id++)
+          PlayerTrack(id: id, type: PlayerTrackType.audio, selected: false),
       ],
     );
     await tester.pumpWidget(
@@ -7602,8 +8085,10 @@ void main() {
   testWidgets('Reduce Motion settles track rails in one pump', (tester) async {
     final fixture = _Fixture(
       PlayerState.playing,
-      tracks: const [
-        PlayerTrack(id: 1, type: PlayerTrackType.audio, selected: true),
+      tracks: [
+        const PlayerTrack(id: 1, type: PlayerTrackType.audio, selected: true),
+        for (var id = 2; id <= 7; id++)
+          PlayerTrack(id: id, type: PlayerTrackType.audio, selected: false),
       ],
     );
     await tester.pumpWidget(
@@ -7644,6 +8129,188 @@ void main() {
     fixture.dispose();
   });
 
+  for (final (type, choices, isTv) in [
+    (PlayerTrackType.audio, 6, false),
+    (PlayerTrackType.audio, 7, false),
+    (PlayerTrackType.subtitle, 6, true),
+    (PlayerTrackType.subtitle, 7, true),
+  ]) {
+    testWidgets(
+      '${type.name} uses the right picker for $choices choices on ${isTv ? 'TV' : 'desktop'}',
+      (tester) async {
+        final count = choices - (type == PlayerTrackType.subtitle ? 1 : 0);
+        final fixture = _Fixture(
+          PlayerState.playing,
+          tracks: [
+            for (var id = 1; id <= count; id++)
+              PlayerTrack(id: id, type: type, selected: id == 2),
+          ],
+        );
+        final size = isTv ? const Size(1920, 1080) : const Size(1280, 720);
+        tester.view.physicalSize = size;
+        tester.view.devicePixelRatio = 1;
+        addTearDown(tester.view.resetPhysicalSize);
+        addTearDown(tester.view.resetDevicePixelRatio);
+        fixture.player.showOsd();
+        final material = MaterialApp(
+          theme: LineupTheme.forName(
+            LineupThemeName.emberSteel,
+            formFactor: profileFor(isTv).formFactor,
+          ),
+          builder: _playerCanvasBuilderFor(isTv),
+          home: PlayerView(controller: fixture.player, openGuide: () {}),
+        );
+        await tester.pumpWidget(material);
+        await tester.pumpAndSettle();
+        final control = find.byKey(
+          Key(
+            type == PlayerTrackType.subtitle
+                ? 'player-osd-subtitles'
+                : 'player-osd-audio',
+          ),
+        );
+        final controlRect = _drawnRect(tester, control);
+        if (isTv) {
+          tester.widget<TextButton>(control).focusNode!.requestFocus();
+          await tester.pump();
+          await tester.sendKeyEvent(LogicalKeyboardKey.select);
+        } else {
+          await tester.tap(control);
+        }
+        await tester.pumpAndSettle();
+        final short = choices <= 6;
+        final popup = find.byKey(const Key('player-track-popover'));
+        final rail = find.byKey(const Key('playback-options-rail'));
+        expect(popup, short ? findsOneWidget : findsNothing);
+        expect(rail, short ? findsNothing : findsOneWidget);
+        if (short) {
+          final rect = _drawnRect(tester, popup);
+          expect(rect.right, closeTo(controlRect.right, 1));
+          expect(rect.bottom, lessThan(controlRect.top));
+        }
+        final selected = find.byKey(Key('playback-track-${type.name}-2'));
+        expect(
+          Focus.of(
+            tester.element(
+              find
+                  .descendant(of: selected, matching: find.byType(InkWell))
+                  .first,
+            ),
+          ).hasFocus,
+          isTrue,
+        );
+        await tester.sendKeyEvent(LogicalKeyboardKey.escape);
+        await tester.pumpAndSettle();
+        expect(fixture.player.overlay, PlayerOverlay.osd);
+        if (isTv) {
+          expect(
+            tester.widget<TextButton>(control).focusNode!.hasPrimaryFocus,
+            isTrue,
+          );
+        }
+        await tester.pumpWidget(const SizedBox.shrink());
+        fixture.dispose();
+      },
+    );
+  }
+
+  testWidgets(
+    'desktop track picker fits the hint, keeps its mode and restores keyboard focus',
+    (tester) async {
+      tester.view.physicalSize = const Size(1280, 720);
+      tester.view.devicePixelRatio = 1;
+      addTearDown(tester.view.resetPhysicalSize);
+      addTearDown(tester.view.resetDevicePixelRatio);
+      const words =
+          'Restored broadcast with descriptive commentary for the original international cut';
+      final singleWord = List.filled(16, 'unbroken').join();
+
+      List<PlayerTrack> tracks(int count) => [
+        for (var id = 1; id <= count; id++)
+          PlayerTrack(
+            id: id,
+            type: PlayerTrackType.audio,
+            selected: id == 1,
+            title: switch (id) {
+              1 => words,
+              2 => singleWord,
+              _ => null,
+            },
+          ),
+      ];
+      final fixture = _Fixture(PlayerState.playing, tracks: tracks(2));
+      fixture.player.showOsd();
+      await tester.pumpWidget(
+        MaterialApp(
+          builder: _playerDesktopCanvasBuilder,
+          home: PlayerView(controller: fixture.player, openGuide: () {}),
+        ),
+      );
+      await tester.pumpAndSettle();
+      final anchor = find.byKey(const Key('player-osd-audio'));
+      final button = tester.widget<TextButton>(anchor).focusNode!;
+      button.requestFocus();
+      await tester.pump();
+      await tester.sendKeyEvent(LogicalKeyboardKey.enter);
+      await tester.pumpAndSettle();
+
+      final popup = find.byKey(const Key('player-track-popover'));
+      final panel = find.byKey(const Key('playback-options-rail'));
+      expect(tester.getSize(popup).width, greaterThan(354));
+      expect(_drawnRect(tester, popup).width, closeTo(1280 * .4, 1));
+      final hint = find.descendant(
+        of: find.byKey(const Key('playback-options-footer')),
+        matching: find.byType(Text),
+      );
+      final hintParagraph = tester.renderObject<RenderParagraph>(hint);
+      expect(
+        hintParagraph.getBoxesForSelection(
+          TextSelection(
+            baseOffset: 0,
+            extentOffset: tester.widget<Text>(hint).data!.length,
+          ),
+        ),
+        hasLength(1),
+      );
+      final word = find.text(words);
+      final paragraph = tester.renderObject<RenderParagraph>(word);
+      final first = words.indexOf('international');
+      final wordBoxes = paragraph.getBoxesForSelection(
+        TextSelection(
+          baseOffset: first,
+          extentOffset: first + 'international'.length,
+        ),
+      );
+      expect(wordBoxes, hasLength(1));
+      final oversized = find.descendant(
+        of: find.byKey(const Key('playback-track-audio-2')),
+        matching: find.byType(Text),
+      );
+      expect(tester.widget<Text>(oversized).data, endsWith('…'));
+      expect(TooltipVisibility.of(tester.element(anchor)), isFalse);
+
+      fixture.native.emitTracks(tracks(9));
+      await tester.pumpAndSettle();
+      expect(popup, findsOneWidget);
+      expect(panel, findsNothing);
+
+      await tester.sendKeyEvent(LogicalKeyboardKey.escape);
+      await tester.pumpAndSettle();
+      expect(button.hasPrimaryFocus, isTrue);
+      expect(TooltipVisibility.of(tester.element(anchor)), isTrue);
+      await tester.sendKeyEvent(LogicalKeyboardKey.enter);
+      await tester.pumpAndSettle();
+      expect(panel, findsOneWidget);
+      fixture.native.emitTracks(tracks(2));
+      await tester.pumpAndSettle();
+      expect(panel, findsOneWidget);
+      expect(popup, findsNothing);
+
+      await tester.pumpWidget(const SizedBox.shrink());
+      fixture.dispose();
+    },
+  );
+
   testWidgets('audio requires a track and empty subtitles explains Off', (
     tester,
   ) async {
@@ -7662,7 +8329,7 @@ void main() {
     await tester.sendKeyEvent(LogicalKeyboardKey.keyC);
     await tester.pump();
     expect(fixture.player.overlay, PlayerOverlay.subtitleTracks);
-    expect(find.byKey(const Key('playback-options-rail')), findsOneWidget);
+    expect(find.byKey(const Key('player-track-popover')), findsOneWidget);
     expect(find.text('No subtitle tracks available'), findsOneWidget);
     expect(find.text('Off'), findsOneWidget);
 
@@ -7721,6 +8388,92 @@ void main() {
         tester.widget<Text>(find.text(manyWords)).overflow,
         TextOverflow.clip,
       );
+    },
+  );
+
+  testWidgets(
+    'Mini Guide separates episode titles and keyboard focus from Watching',
+    (tester) async {
+      DateTime clock() => DateTime(2026, 1, 15, 3, 45);
+      final fixture = _Fixture(
+        PlayerState.playing,
+        channelCount: 2,
+        shortPrograms: true,
+        guideClock: clock,
+        playerClock: clock,
+        richItemOverride: const ChannelItem(
+          id: 'episode',
+          title: 'The Lost Frequency',
+          showTitle: 'Signal Station',
+          duration: Duration(hours: 1),
+        ),
+      );
+      tester.view.physicalSize = const Size(1280, 720);
+      tester.view.devicePixelRatio = 1;
+      addTearDown(tester.view.resetPhysicalSize);
+      addTearDown(tester.view.resetDevicePixelRatio);
+      expect(await fixture.player.tune('channel'), isTrue);
+      await tester.pumpWidget(
+        MaterialApp(
+          theme: LineupTheme.forName(LineupThemeName.emberSteel),
+          builder: _playerDesktopCanvasBuilder,
+          home: PlayerView(controller: fixture.player, openGuide: () {}),
+        ),
+      );
+      fixture.player.showMiniGuide();
+      await tester.pumpAndSettle();
+      await tester.sendKeyEvent(LogicalKeyboardKey.arrowDown);
+      await tester.pumpAndSettle();
+
+      Finder row(String id) => find.byKey(Key('mini-guide-row-$id'));
+      Finder inRow(String id, Finder child) =>
+          find.descendant(of: row(id), matching: child);
+      expect(inRow('channel', find.text('Signal Station')), findsOneWidget);
+      expect(
+        inRow('channel', find.text('The Lost Frequency · 3:15–4:15 AM')),
+        findsOneWidget,
+      );
+      expect(inRow('channel-1', find.text('Program 1')), findsOneWidget);
+      expect(inRow('channel-1', find.text('3:15 AM–4:15 AM')), findsOneWidget);
+      expect(inRow('channel', find.text('Watching')), findsOneWidget);
+      expect(inRow('channel-1', find.text('Watching')), findsNothing);
+
+      LineupRowSurface surface(String id) => tester.widget(
+        find
+            .ancestor(of: row(id), matching: find.byType(LineupRowSurface))
+            .first,
+      );
+      expect(surface('channel').selected, isTrue);
+      expect(surface('channel').focused, isFalse);
+      expect(surface('channel-1').selected, isFalse);
+      expect(surface('channel-1').focused, isTrue);
+      final roles = LineupTheme.of(tester.element(row('channel-1')));
+      expect(
+        find.ancestor(
+          of: row('channel-1'),
+          matching: find.byWidgetPredicate(
+            (widget) =>
+                widget is Container &&
+                (widget.foregroundDecoration as BoxDecoration?)?.border ==
+                    Border.all(
+                      color: roles.focusBorder,
+                      width: roles.focusBorderWidth,
+                    ),
+          ),
+        ),
+        findsOneWidget,
+      );
+      final announcement = tester
+          .widget<Semantics>(row('channel'))
+          .properties
+          .label!;
+      expect(announcement, contains('The Lost Frequency · 3:15–4:15 AM'));
+      await tester.tap(row('channel-1'));
+      await tester.pumpAndSettle();
+      expect(fixture.player.miniGuideChannelId, 'channel-1');
+      expect(surface('channel-1').selected, isTrue);
+      await tester.pumpWidget(const SizedBox.shrink());
+      fixture.dispose();
     },
   );
 
@@ -7819,7 +8572,10 @@ void main() {
     );
     expect(find.text('TV-14'), findsOneWidget);
     expect(find.byKey(const Key('player-osd-channel-bug')), findsOneWidget);
-    expect(find.bySemanticsLabel('Channel 7, Channel'), findsOneWidget);
+    expect(
+      find.bySemanticsLabel('Channel 7, Channel. Open Mini Guide'),
+      findsOneWidget,
+    );
     expect(find.bySemanticsLabel('7 • Channel'), findsNothing);
     expect(find.text('H.264'), findsOneWidget);
     expect(
@@ -8224,6 +8980,66 @@ void main() {
 
     await tester.pumpWidget(const SizedBox.shrink());
     fixture.dispose();
+  });
+
+  testWidgets('film Now Playing replaces duplicate text only with usable art', (
+    tester,
+  ) async {
+    tester.view.physicalSize = const Size(1920, 1080);
+    tester.view.devicePixelRatio = 1;
+    addTearDown(tester.view.resetPhysicalSize);
+    addTearDown(tester.view.resetDevicePixelRatio);
+    Rect? fallbackWithoutBytes;
+    for (final (bytes, hasLogo) in [
+      (null, false),
+      (_fixtureLogoArtwork, true),
+      (Uint8List.fromList([1, 2, 3]), false),
+    ]) {
+      final fixture = _Fixture(
+        PlayerState.playing,
+        artworkBytes: bytes,
+        failArtwork: bytes == null,
+        richItemOverride: ChannelItem(
+          id: 'synthetic-film',
+          title: 'A Synthetic Film with a Deliberately Long Title for Testing',
+          duration: const Duration(hours: 1),
+          mediaKind: ChannelMediaKind.movie,
+          clearLogo: Uri.parse('/library/metadata/film/clearLogo'),
+        ),
+      );
+      await tester.pumpWidget(
+        MaterialApp(
+          builder: _playerDesktopCanvasBuilder,
+          home: PlayerView(controller: fixture.player, openGuide: () {}),
+        ),
+      );
+      fixture.player.showNowPlaying();
+      await tester.pumpAndSettle();
+      await tester.runAsync(clearLogoDecodesSettled);
+      await tester.pumpAndSettle();
+
+      expect(
+        find.byKey(const Key('player-now-playing-logo')),
+        hasLogo ? findsOneWidget : findsNothing,
+      );
+      expect(
+        find.byKey(const Key('player-now-playing-title')),
+        hasLogo ? findsNothing : findsOneWidget,
+      );
+      if (!hasLogo) {
+        final rect = _drawnRect(
+          tester,
+          find.byKey(const Key('player-now-playing-title')),
+        );
+        if (bytes == null) {
+          fallbackWithoutBytes = rect;
+        } else {
+          expect(rect, fallbackWithoutBytes);
+        }
+      }
+      await tester.pumpWidget(const SizedBox.shrink());
+      fixture.dispose();
+    }
   });
 
   testWidgets('Now Playing keeps series identity when logo is unusable', (
@@ -9403,14 +10219,18 @@ class _Native implements NativePlayer {
   bool emitControlEvents = false;
   int? lastLoadGeneration;
 
-  void emitState(PlayerState state, {Duration? at}) {
+  void emitState(
+    PlayerState state, {
+    Duration? at,
+    String failureCode = 'synthetic',
+  }) {
     _events.add(
       PlayerEvent(
         status: PlayerStatus(
           state: state,
           message: state.name,
           recoverable: true,
-          failureCode: state == PlayerState.error ? 'synthetic' : null,
+          failureCode: state == PlayerState.error ? failureCode : null,
         ),
         position: at ?? position,
         duration: duration,
@@ -9602,8 +10422,11 @@ Future<void> _showReachableTooltip(WidgetTester tester, String message) async {
     ),
     isEmpty,
   );
-  final tooltip = find.byWidgetPredicate(
-    (widget) => widget is Tooltip && widget.message == message,
+  final tooltip = find.byElementPredicate(
+    (element) =>
+        element.widget is Tooltip &&
+        (element.widget as Tooltip).message == message &&
+        TooltipVisibility.of(element),
   );
   expect(tooltip, findsOneWidget);
   expect(tester.state<TooltipState>(tooltip).ensureTooltipVisible(), isTrue);

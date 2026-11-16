@@ -2723,6 +2723,10 @@ void main() {
           expect(fixture.coordinator.overlay, PlayerOverlay.error);
           expect(fixture.coordinator.canRetry, isTrue);
           expect(fixture.coordinator.status.failureCode, 'premature_end');
+          expect(
+            fixture.coordinator.failureCause,
+            PlaybackFailureCause.prematureEnd,
+          );
         }
       },
     );
@@ -3919,6 +3923,100 @@ void main() {
     },
   );
 
+  for (final (code, httpStatus, cause) in [
+    ('audio_decode_error', null, PlaybackFailureCause.unsupportedAudio),
+    ('network_error', null, PlaybackFailureCause.serverUnreachable),
+    ('http_error', 403, PlaybackFailureCause.authorization),
+  ]) {
+    test(
+      'pending native load preserves the terminal $code cause after stop',
+      () async {
+        const channel = MethodChannel('lineup/native_player');
+        final messenger =
+            TestDefaultBinaryMessengerBinding.instance.defaultBinaryMessenger;
+        final initialLoad = Completer<int>();
+        final replacementLoad = Completer<int>();
+        final stop = Completer<int>();
+        var stopCalls = 0;
+        messenger.setMockMethodCallHandler(channel, (call) async {
+          if (call.method == 'load') {
+            final load = initialLoad.isCompleted
+                ? replacementLoad
+                : initialLoad;
+            load.complete(call.arguments['loadId'] as int);
+          } else if (call.method == 'stop') {
+            stopCalls++;
+            if (!stop.isCompleted) {
+              stop.complete(call.arguments['stopId'] as int);
+            }
+          }
+          return null;
+        });
+        addTearDown(() => messenger.setMockMethodCallHandler(channel, null));
+        final lineup = _TestLineup(recoverAuthorization: httpStatus != null)
+          ..diagnostics.enabled = true;
+        final guide = GuideController(
+          lineup: lineup,
+          loadSchedule: (channel) async => _schedule(channel),
+        );
+        final player = MethodChannelNativePlayer();
+        await player.initialize();
+        final coordinator = PlayerCoordinator(
+          player: player,
+          lineup: lineup,
+          guide: guide,
+        );
+        addTearDown(lineup.dispose);
+        addTearDown(guide.dispose);
+        addTearDown(player.dispose);
+        addTearDown(coordinator.dispose);
+
+        final tune = coordinator.tune('channel-b');
+        var loadId = await initialLoad.future;
+        if (httpStatus != null) {
+          await _nativeEvent({
+            'type': 'state',
+            'loadId': loadId,
+            'state': 'error',
+            'failureCode': 'http_error',
+            'httpStatus': 401,
+          });
+          loadId = await replacementLoad.future;
+          expect(lineup.recoveryCalls, 1);
+          expect(coordinator.error, isNull);
+        }
+        await _nativeEvent({
+          'type': 'state',
+          'loadId': loadId,
+          'state': 'error',
+          'failureCode': code,
+          'httpStatus': ?httpStatus,
+        });
+        expect(coordinator.failureCause, cause);
+        expect(coordinator.error, cause.message);
+        await _nativeEvent({
+          'type': 'stopResult',
+          'stopId': await stop.future,
+          'success': true,
+        });
+
+        expect(await tune, isFalse);
+        expect(coordinator.failureCause, cause);
+        expect(coordinator.error, cause.message);
+        expect(coordinator.overlay, PlayerOverlay.error);
+        expect(coordinator.canRetry, isTrue);
+        expect(coordinator.hasPlaybackIntent, isFalse);
+        expect(lineup.currentChannelId, 'channel-0');
+        expect(stopCalls, 1);
+        expect(lineup.recoveryCalls, httpStatus == null ? 0 : 1);
+
+        lineup.changeContentScope();
+        expect(coordinator.failureCause, isNull);
+        expect(coordinator.error, isNull);
+      },
+    );
+  }
+
   for (final failure in ['timeout', 'command_error', 'private-native-code']) {
     test(
       'native $failure retains cleanup through failed stop and logout',
@@ -4235,7 +4333,7 @@ void main() {
     addTearDown(coordinator.dispose);
 
     expect(await coordinator.tune('channel-b'), isFalse);
-    expect(coordinator.error, 'The current program could not be loaded.');
+    expect(coordinator.error, 'Playback could not start.');
   });
 
   test('native stop failure reports replacement tune failure', () async {
@@ -4281,6 +4379,61 @@ void main() {
     expect(coordinator.overlay, PlayerOverlay.error);
   });
 
+  for (final (category, cause) in [
+    ('offline', PlaybackFailureCause.serverUnreachable),
+    ('network-unavailable', PlaybackFailureCause.serverUnreachable),
+    ('server-unreachable', PlaybackFailureCause.serverUnreachable),
+    ('network-timeout', PlaybackFailureCause.serverTimeout),
+    ('auth-invalid', PlaybackFailureCause.authorization),
+    ('unsupported', PlaybackFailureCause.unsupportedVideo),
+    ('audio_decode_error', PlaybackFailureCause.unsupportedAudio),
+    ('synthetic-private-code', PlaybackFailureCause.unknown),
+  ]) {
+    test(
+      'safe playback cause for $category from request and native event',
+      () async {
+        final lineup = _FailingPersistenceLineup(
+          failure: PlexException(category, 'Synthetic upstream error details'),
+        );
+        lineup.diagnostics.enabled = true;
+        final guide = GuideController(
+          lineup: lineup,
+          loadSchedule: (channel) async => _schedule(channel),
+        );
+        final player = _Player();
+        final coordinator = PlayerCoordinator(
+          player: player,
+          lineup: lineup,
+          guide: guide,
+        );
+        addTearDown(player.dispose);
+        addTearDown(lineup.dispose);
+        addTearDown(guide.dispose);
+        addTearDown(coordinator.dispose);
+
+        expect(await coordinator.tune('channel-b'), isFalse);
+        expect(coordinator.failureCause, cause);
+        expect(coordinator.error, cause.message);
+        expect(
+          lineup.diagnostics.entries.last.context['code'],
+          category == 'synthetic-private-code' ? 'unexpected' : category,
+        );
+
+        await coordinator.loadInitialMedia(Uri.parse('lineup-test://media'));
+        player.emit(
+          PlayerStatus(
+            state: PlayerState.error,
+            message: 'Synthetic raw native message',
+            failureCode: category,
+          ),
+        );
+        await pumpEventQueue();
+        expect(coordinator.failureCause, cause);
+        expect(coordinator.error, cause.message);
+      },
+    );
+  }
+
   for (final failure in <Object>[
     const FileSystemException('Synthetic save IO failure.'),
     const LineupScopeSuperseded(),
@@ -4322,8 +4475,8 @@ void main() {
         expect(
           coordinator.error,
           failure is PlexException
-              ? failure.message
-              : 'Playback could not start. Retry or choose another channel.',
+              ? 'Plex needs you to sign in again.'
+              : 'Playback could not start.',
         );
         expect(lineup.currentChannelId, 'channel-0');
         expect(player.stops, 1);
@@ -4487,10 +4640,7 @@ void main() {
           }
           expect(f.coordinator.tuning, isFalse);
           expect(f.coordinator.overlay, PlayerOverlay.error);
-          expect(
-            f.coordinator.error,
-            'Playback could not start. Retry or choose another channel.',
-          );
+          expect(f.coordinator.error, 'Playback could not start.');
           expect(player.stops, 1);
           expect(
             f.lineup.diagnostics.entries.last.context['code'],
@@ -7431,25 +7581,23 @@ void main() {
     expect(player.stops, 1);
     expect(coordinator.canRetry, isTrue);
     expect(coordinator.overlay, PlayerOverlay.error);
-    expect(
-      coordinator.error,
-      'Playback could not start. Retry or choose another channel.',
-    );
+    expect(coordinator.error, 'Playback could not start.');
   });
 
-  for (final domainFailure in [false, true]) {
+  for (final (category, cause) in [
+    (null, 'Playback could not start.'),
+    ('authorization-unavailable', 'Plex needs you to sign in again.'),
+    ('server-unreachable', "Lineup can't reach your Plex server."),
+  ]) {
     test(
-      'failed authorization recovery is terminal (domain=$domainFailure)',
+      'failed authorization recovery is terminal (category=$category)',
       () async {
         final lineup = _TestLineup(
           recoverAuthorization: true,
           failAuthorizationRecovery: true,
-          authorizationRecoveryFailure: domainFailure
-              ? const PlexException(
-                  'authorization-unavailable',
-                  'Plex server authorization is unavailable.',
-                )
-              : null,
+          authorizationRecoveryFailure: category == null
+              ? null
+              : PlexException(category, 'Synthetic recovery failure.'),
         )..diagnostics.enabled = true;
         final guide = GuideController(
           lineup: lineup,
@@ -7481,16 +7629,11 @@ void main() {
         expect(player.stops, 1);
         expect(coordinator.canRetry, isTrue);
         expect(coordinator.overlay, PlayerOverlay.error);
-        expect(
-          coordinator.error,
-          domainFailure
-              ? 'Plex server authorization is unavailable.'
-              : 'Playback could not start. Retry or choose another channel.',
-        );
-        if (domainFailure) {
+        expect(coordinator.error, cause);
+        if (category != null) {
           expect(
             _supportReport(lineup, coordinator),
-            contains('code=authorization-unavailable'),
+            contains('code=$category'),
           );
         }
       },
@@ -7846,10 +7989,7 @@ void main() {
     await coordinator.loadInitialMedia(media);
 
     expect(player.loads, [media]);
-    expect(
-      coordinator.error,
-      'Playback could not start. Retry or choose another channel.',
-    );
+    expect(coordinator.error, 'Playback could not start.');
     expect(coordinator.error, isNot(contains('load failed after dispatch')));
     expect(coordinator.overlay, PlayerOverlay.error);
   });
@@ -9401,10 +9541,7 @@ void main() {
     expect(player.stops, 1);
     expect(coordinator.canRetry, isTrue);
     expect(coordinator.overlay, PlayerOverlay.error);
-    expect(
-      coordinator.error,
-      'Playback could not start. Retry or choose another channel.',
-    );
+    expect(coordinator.error, 'Playback could not start.');
   });
 
   test('part transition failure stops and settles playback', () async {

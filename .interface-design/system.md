@@ -124,7 +124,11 @@ Preserve:
 
 - The bottom OSD's safe-area insets, title/status hierarchy, five standard
   actions and optional DVR controls, timing row, full-width progress lane,
-  channel bug, keyboard focus, and auto-hide behavior. The channel bug enters
+  channel badge, keyboard focus, and auto-hide behavior. UX assessment decision,
+  2026-11-13/14: on desktop, a labelled Guide control precedes the five standard
+  actions. The controls adapt to the available width while preserving the
+  title, status and timing stack. The channel badge opens the Mini Guide and
+  reveals aligned channel step controls only on pointer hover. The channel badge enters
   on its own with a fade and small drop (fade only with Reduce Motion), and
   shows with the OSD and for about 4 s after a channel change.
 - Now Playing expands the same bottom panel upward and shares its actions,
@@ -132,8 +136,18 @@ Preserve:
   artwork, single metadata line, format chips, three-line synopsis, and at most
   four cast members with roles in one row. Runtime decoder/dimension facts
   belong in Diagnostics.
+- UX assessment decision, 2026-11-13/14: Subtitles, Audio, and Sleep use an
+  anchored popover for up to six choices (including Subtitle Off). Track lists
+  with seven or more choices use the side panel. Fit the choice labels and
+  key hint up to the width cap, and keep the chosen presentation while the
+  picker is open. Closing returns keyboard focus to its invoking action.
+- UX assessment decision, 2026-11-13/14: channel entry uses the overlay
+  material at the top center, with 48 px digits above a matched 20 px channel
+  identity. The Mini Guide paints a standard desktop focus border separately
+  from Watching and keeps the existing TV fill.
 - The shared themed overlay material, per-level transparency and feather only
   beyond text; preserve spacing, scalable controls and Reduce Motion behavior.
+- On desktop, clicking the program block opens Now Playing.
 - `I` or `Down` expands Now Playing; `I`, `Enter`, Close or Back/Esc collapses it
   to the OSD. Preserve artwork currentness and text/portrait fallbacks.
 
