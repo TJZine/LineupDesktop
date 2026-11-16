@@ -950,7 +950,7 @@ class _GuideViewState extends State<GuideView>
   }
 
   List<FocusNode> _toolbarFocusOrder() => _empty
-      ? [_menuFocus, _setupFocus]
+      ? [_menuFocus]
       : [
           _channelFilterFocus,
           if (widget.controller.channelFilterKey != ChannelFilter.all)

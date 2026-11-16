@@ -550,7 +550,7 @@ void main() {
     f.controller.dispose();
   });
 
-  androidTest('first TV completion primary opens Guide without saving', (
+  androidTest('first TV completion Select opens Guide without saving', (
     tester,
   ) async {
     final f = await _setup();
@@ -570,8 +570,11 @@ void main() {
     await tester.pumpAndSettle();
 
     final saves = f.store.calls;
-    expect(find.text('Open guide'), findsOneWidget);
-    await tester.tap(find.text('Open guide'));
+    final openGuide = tester.widget<FilledButton>(
+      find.widgetWithText(FilledButton, 'Open guide'),
+    );
+    expect(openGuide.focusNode?.hasPrimaryFocus, isTrue);
+    await tester.sendKeyEvent(LogicalKeyboardKey.select);
     await tester.pumpAndSettle();
     expect(f.controller.stage, SetupStage.ready);
     expect(find.byType(GuideView), findsOneWidget);

@@ -6626,9 +6626,9 @@ void main() {
     );
 
     const selectedLabel =
-        'Select Audio track: English · Original theatrical mix; Stereo; AAC.';
+        'Select Audio track: English, Original theatrical mix, Stereo, AAC.';
     const alternateLabel =
-        'Select Audio track: Español; Latinoamérica; 5.1 surround; '
+        'Select Audio track: Español, Latinoamérica, 5.1 surround, '
         'Dolby Digital Plus.';
     final selectedFinder = find.bySemanticsLabel(selectedLabel);
     final alternateFinder = find.bySemanticsLabel(alternateLabel);
@@ -6714,10 +6714,10 @@ void main() {
       await tester.pump();
 
       const confirmedLabel =
-          'Select Subtitle track: English · Festival edition; subtitles for '
-          'deaf and hard-of-hearing viewers; SRT (text).';
+          'Select Subtitle track: English, Festival edition, subtitles for '
+          'deaf and hard-of-hearing viewers, SRT (text).';
       const requestedLabel =
-          'Select Subtitle track: English · marked as forced; PGS (image).';
+          'Select Subtitle track: English, marked as forced, PGS (image).';
       final requestedNode = tester.getSemantics(
         find.bySemanticsLabel(requestedLabel),
       );
@@ -7183,7 +7183,7 @@ void main() {
     expect(find.text('Dolby TrueHD'), findsOneWidget);
     expect(
       find.bySemanticsLabel(
-        'Select Audio track: English · $longTitle; Dolby TrueHD.',
+        'Select Audio track: English, $longTitle, Dolby TrueHD.',
       ),
       findsOneWidget,
     );

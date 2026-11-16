@@ -1,3 +1,4 @@
+import 'dart:convert';
 import 'dart:io';
 import 'dart:ui' as ui;
 
@@ -83,8 +84,15 @@ void main() {
   testWidgets('bundled Arimo font loads and styles the LINEUP wordmark', (
     tester,
   ) async {
-    final font = await rootBundle.load('assets/fonts/arimo/Arimo-Regular.ttf');
-    await (FontLoader('Arimo')..addFont(Future.value(font))).load();
+    final manifest = jsonDecode(
+      await rootBundle.loadString('FontManifest.json'),
+    ) as List<dynamic>;
+    final family = manifest.cast<Map<String, dynamic>>().singleWhere(
+      (entry) => entry['family'] == 'Arimo',
+    );
+    expect(family['fonts'], [
+      {'asset': 'assets/fonts/arimo/Arimo-Regular.ttf'},
+    ]);
 
     final fixture = UiFixture(
       scenario: const LineupScenario(stage: SetupStage.ready),

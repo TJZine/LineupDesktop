@@ -65,6 +65,9 @@ void main() {
       find.byKey(const Key('guide-app-menu')),
     );
     expect(menu.focusNode?.hasPrimaryFocus, isTrue);
+    await tester.sendKeyEvent(LogicalKeyboardKey.arrowRight);
+    await tester.pumpAndSettle();
+    expect(menu.focusNode?.hasPrimaryFocus, isTrue);
     await tester.sendKeyEvent(LogicalKeyboardKey.arrowDown);
     await tester.pumpAndSettle();
     expect(action.focusNode?.hasPrimaryFocus, isTrue);
@@ -75,6 +78,68 @@ void main() {
     await tester.pumpAndSettle();
     expect(find.text('No channels yet'), findsOneWidget);
     expect(action.focusNode?.hasPrimaryFocus, isTrue);
+  });
+
+  testWidgets(
+    'populated Guide keeps its controls for a search with no matches',
+    (tester) async {
+      final fixture = await _pumpShell(tester, tv: true);
+      final search = find.byKey(const Key('guide-channel-search'));
+      await tester.enterText(search, 'Absent channel');
+      await tester.pumpAndSettle();
+
+      expect(fixture.controller.channels, isNotEmpty);
+      expect(find.textContaining('No matching channels'), findsWidgets);
+      expect(search, findsOneWidget);
+      expect(find.byKey(const Key('guide-control-content')), findsOneWidget);
+      expect(find.byKey(const Key('guide-hours')), findsOneWidget);
+      expect(find.text('No channels yet'), findsNothing);
+      expect(find.text('Set up channels'), findsNothing);
+    },
+  );
+
+  testWidgets('TV Menu closes to Player when the recovery slate clears', (
+    tester,
+  ) async {
+    final fixture = await _pumpShell(tester, tv: true);
+    await tester.sendKeyEvent(LogicalKeyboardKey.select);
+    await tester.pump();
+    expect(fixture.player.loads, hasLength(1));
+    _fail(fixture, known: true);
+    await tester.pumpAndSettle();
+
+    final action = find.widgetWithText(
+      OutlinedButton,
+      'Choose another channel',
+    );
+    await tester.sendKeyEvent(LogicalKeyboardKey.arrowRight);
+    await tester.pumpAndSettle();
+    expect(
+      Focus.of(tester.element(find.text('Choose another channel'))).hasFocus,
+      isTrue,
+    );
+    await tester.sendKeyEvent(LogicalKeyboardKey.contextMenu);
+    await tester.pumpAndSettle();
+    expect(find.text('Manage channels'), findsOneWidget);
+
+    final recoveringPlayer = tester.widget<PlayerView>(find.byType(PlayerView));
+    await recoveringPlayer.controller.retry();
+    await tester.pump();
+    expect(fixture.player.loads, hasLength(2));
+    fixture.player.emit(
+      const PlayerStatus(state: PlayerState.playing, message: 'Playing'),
+      eventGeneration: fixture.player.generation,
+    );
+    await tester.pumpAndSettle();
+    expect(action, findsNothing);
+    expect(find.text('Manage channels'), findsOneWidget);
+
+    await tester.sendKeyEvent(LogicalKeyboardKey.contextMenu);
+    await tester.pumpAndSettle();
+    expect(find.text('Manage channels'), findsNothing);
+    final player = tester.widget<PlayerView>(find.byType(PlayerView));
+    expect(player.focusNode?.hasPrimaryFocus, isTrue);
+    expect(tester.takeException(), isNull);
   });
 
   testWidgets('TV Menu round trip restores the focused recovery action', (

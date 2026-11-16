@@ -228,13 +228,18 @@ void main() {
         _track(
           type: PlayerTrackType.subtitle,
           language: 'en',
-          title: 'Festival edition',
+          title: 'Festival · edition',
           hearingImpaired: true,
           forced: true,
           codec: 'subrip',
         ),
       );
-      expect(display.primaryText, 'English · Festival edition');
+      expect(display.primaryText, 'English · Festival · edition');
+      expect(
+        display.semanticsText,
+        'Select Subtitle track: English, Festival · edition, subtitles for '
+        'deaf and hard-of-hearing viewers, marked as forced, SRT (text).',
+      );
       expect(display.secondaryFacts, ['SDH', 'Forced', 'SRT (text)']);
       expect(
         display.semanticsText,
@@ -253,7 +258,7 @@ void main() {
         _track(type: PlayerTrackType.subtitle, language: 'en', forced: true),
       );
       expect(display.primaryText, 'English · Forced');
-      expect(display.semanticsText, contains('English · marked as forced'));
+      expect(display.semanticsText, contains('English, marked as forced'));
       expect(display.semanticsText, isNot(contains('foreign-language')));
     });
 
@@ -320,7 +325,7 @@ void main() {
           expect(display.tooltipText, 'Audio track: Audio track 1; 1 channel');
           expect(
             display.semanticsText,
-            'Select Audio track: Audio track 1; 1 channel.',
+            'Select Audio track: Audio track 1, 1 channel.',
           );
         }
       });
@@ -481,7 +486,7 @@ void main() {
       );
       expect(
         display.semanticsText,
-        'Select Audio track: English · Original; Track 8; AAC.',
+        'Select Audio track: English, Original, Track 8, AAC.',
       );
     });
 
@@ -555,7 +560,7 @@ void main() {
     expect(display.tooltipText, 'Audio track: English · Original; AAC');
     expect(
       display.semanticsText,
-      'Select Audio track: English · Original; AAC.',
+      'Select Audio track: English, Original, AAC.',
     );
   });
 }

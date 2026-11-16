@@ -181,7 +181,11 @@ PlayerTrackDisplay _display(
     titleDiffers: titleDiffers,
   );
   final description = _description(base.primaryText, secondaryFacts);
-  final semanticsDescription = _semanticsDescription(base, secondaryFacts);
+  final semanticsDescription = _semanticsDescription(
+    facts.language,
+    base,
+    secondaryFacts,
+  );
   final typeName = _typeName(track.type);
   return PlayerTrackDisplay(
     primaryText: base.primaryText,
@@ -335,26 +339,26 @@ String _description(String primary, List<String> secondaryFacts) {
   return '$primary; ${secondaryFacts.join('; ')}';
 }
 
-String _semanticsDescription(_BaseDisplay base, List<String> secondaryFacts) {
-  final primary = switch (base.primaryPurpose) {
-    'SDH' => base.primaryText.replaceFirst(
-      'SDH',
-      'subtitles for deaf and hard-of-hearing viewers',
-    ),
-    'Forced' => base.primaryText.replaceFirst('Forced', 'marked as forced'),
-    _ => base.primaryText,
-  };
-  final secondary = secondaryFacts
-      .map(
-        (fact) => switch (fact) {
-          'SDH' => 'subtitles for deaf and hard-of-hearing viewers',
-          'Forced' => 'marked as forced',
-          _ => fact,
-        },
-      )
-      .join('; ');
-  return secondary.isEmpty ? primary : '$primary; $secondary';
+String _semanticsDescription(
+  String? language,
+  _BaseDisplay base,
+  List<String> secondaryFacts,
+) {
+  final purpose = base.primaryPurpose;
+  final qualifier =
+      base.titleText ?? (purpose == null ? null : _spokenFact(purpose));
+  return [
+    if (language == null) base.primaryText else language,
+    if (language != null && qualifier != null) qualifier,
+    ...secondaryFacts.map(_spokenFact),
+  ].join(', ');
 }
+
+String _spokenFact(String fact) => switch (fact) {
+  'SDH' => 'subtitles for deaf and hard-of-hearing viewers',
+  'Forced' => 'marked as forced',
+  _ => fact,
+};
 
 ({String? language, String? region}) _regionalLanguage(String? value) {
   final full = _language(value);

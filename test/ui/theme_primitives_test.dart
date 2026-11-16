@@ -17,6 +17,44 @@ import '../support/device_profile_test_support.dart';
 void main() {
   setUpAll(loadPinnedTestFonts);
 
+  testWidgets('empty state renders one 24 px title, message and action', (
+    tester,
+  ) async {
+    var activations = 0;
+    await tester.pumpWidget(
+      MaterialApp(
+        theme: LineupTheme.forName(LineupThemeName.emberSteel),
+        home: Scaffold(
+          body: LineupEmptyState(
+            title: 'Nothing scheduled',
+            message: 'Choose a library to start.',
+            action: FilledButton(
+              onPressed: () => activations++,
+              child: const Text('Choose a library'),
+            ),
+          ),
+        ),
+      ),
+    );
+    final title = find.text('Nothing scheduled');
+    final message = find.text('Choose a library to start.');
+    final action = find.widgetWithText(FilledButton, 'Choose a library');
+    expect(title, findsOneWidget);
+    expect(tester.widget<Text>(title).style?.fontSize, 24);
+    expect(message, findsOneWidget);
+    expect(find.byType(FilledButton), findsOneWidget);
+    expect(
+      tester.getTopLeft(title).dy,
+      lessThan(tester.getTopLeft(message).dy),
+    );
+    expect(
+      tester.getTopLeft(message).dy,
+      lessThan(tester.getTopLeft(action).dy),
+    );
+    await tester.tap(action);
+    expect(activations, 1);
+  });
+
   for (final platform in [
     TargetPlatform.windows,
     TargetPlatform.macOS,
