@@ -1082,8 +1082,10 @@ UX assessment decision, 2026-11-13/14 (Q5, N17, D3, D9). The directory is
 column. Source is one ellipsized line showing the type and, where known, the
 library. Person source details display the original inventory label where
 available. The filters are All channels, Favourites when populated, source
-types and libraries. **Add a custom channel** has primary emphasis and
-**Update lineup…** has secondary emphasis.
+types and libraries. In a populated lineup, **Add a custom channel** has
+primary emphasis and **Update lineup…** has secondary emphasis. In an empty
+lineup, **Generate lineup…** is primary and **Add a custom channel** is
+secondary.
 
 Rows open Studio. The row menu opens from the ellipsis, right-click, Shift+F10
 or the keyboard Menu key. Watch receives initial focus, followed by the

@@ -1,4 +1,5 @@
 import 'dart:async';
+import 'dart:ui' show Tristate;
 
 import 'package:flutter/foundation.dart'
     show TargetPlatform, debugDefaultTargetPlatformOverride;
@@ -1036,20 +1037,33 @@ void main() {
             ),
           ],
           channels: [
-            _channel(
-              'actor',
-              1,
-              'Marisol de la Cruz',
-              generated: true,
-              source: const LibrarySource(
-                libraryId: 'movies',
-                libraryType: PlexLibraryType.movie,
-                filters: {
-                  LibraryFilter.actor: ['marisol de la cruz'],
-                },
-              ),
-              sourceLibraries: const {'movies': 'Movies'},
-            ).copyWith(favorite: true),
+            Channel.fromJson(
+              _channel(
+                'actor',
+                1,
+                'Marisol de la Cruz',
+                generated: true,
+                source: const MixedSource(
+                  sources: [
+                    LibrarySource(
+                      libraryId: 'movies',
+                      libraryType: PlexLibraryType.movie,
+                      filters: {
+                        LibraryFilter.actor: ['marisol de la cruz'],
+                      },
+                    ),
+                    LibrarySource(
+                      libraryId: 'movies',
+                      libraryType: PlexLibraryType.movie,
+                      filters: {
+                        LibraryFilter.genre: ['Drama'],
+                      },
+                    ),
+                  ],
+                ),
+                sourceLibraries: const {'movies': 'Movies'},
+              ).copyWith(favorite: true).toJson(),
+            ),
             _channel('custom', 2, 'Custom station'),
           ],
         ),
@@ -1063,8 +1077,13 @@ void main() {
       expect(text.maxLines, 1);
       expect(text.overflow, TextOverflow.ellipsis);
       expect(find.byTooltip('Marisol de la Cruz'), findsOneWidget);
+      expect(find.byTooltip('marisol de la cruz'), findsNothing);
       expect(find.textContaining('includes watched'), findsNothing);
       final filter = find.byKey(const Key('channels-filter'));
+      expect(
+        find.ancestor(of: filter, matching: find.byType(LineupDropdownBox)),
+        findsOneWidget,
+      );
       final choices = tester.widget<DropdownButton<ChannelFilterKey>>(filter);
       expect(choices.items!.map((item) => item.value), [
         ChannelFilter.all,
@@ -1144,6 +1163,11 @@ void main() {
             FocusManager.instance.primaryFocus?.debugLabel,
             'Channel actions',
           );
+          await tester.sendKeyEvent(LogicalKeyboardKey.arrowLeft);
+          await tester.pump();
+          expect(rowFocus.hasPrimaryFocus, isTrue);
+          await tester.sendKeyEvent(LogicalKeyboardKey.arrowRight);
+          await tester.pump();
           await tester.sendKeyEvent(LogicalKeyboardKey.select);
           await checkMenuAndBack();
           await tester.sendKeyDownEvent(LogicalKeyboardKey.select);
@@ -1168,6 +1192,177 @@ void main() {
       },
     );
   }
+
+  for (final last in [false, true]) {
+    testWidgets(
+      'TV removal restores the right row after the favourite commits (last: $last)',
+      (tester) async {
+        final controller = _RecordingDirectoryController(
+          scenario: LineupScenario(
+            stage: SetupStage.ready,
+            channels: [
+              _channel('first', 1, 'First').copyWith(favorite: !last),
+              _channel('regular', 2, 'Regular'),
+              _channel('target', 3, 'Target').copyWith(favorite: true),
+              _channel('nearest', 4, 'Nearest').copyWith(favorite: !last),
+            ],
+          ),
+        );
+        await tester.pumpWidget(
+          UiFixture(controller: controller, profile: tvProfile).build(),
+        );
+        await tester.pumpAndSettle();
+        await openDestination(tester, 'Channels');
+        final filter = find.byKey(const Key('channels-filter'));
+        await tester.tap(filter);
+        await tester.pumpAndSettle();
+        await tester.tap(find.text('Favourites').last);
+        await tester.pumpAndSettle();
+
+        Future<void> remove() async {
+          await tester.tap(find.byTooltip('Actions for Target'));
+          await tester.pumpAndSettle();
+          await tester.tap(find.text('Remove from favourites'));
+          await tester.pumpAndSettle();
+        }
+
+        controller.favoriteFailure = true;
+        await remove();
+        expect(find.text('The favourite could not be saved.'), findsOneWidget);
+        controller.pendingFavorite = Completer<void>();
+        await remove();
+        expect(
+          controller.channels
+              .firstWhere((channel) => channel.id == 'target')
+              .favorite,
+          isTrue,
+        );
+        Focus.of(tester.element(find.text('Favourites'))).requestFocus();
+        await tester.pump();
+
+        controller.pendingFavorite!.complete();
+        await tester.pumpAndSettle();
+        expect(find.text('The favourite could not be saved.'), findsNothing);
+        expect(
+          tester.widget<DropdownButton<ChannelFilterKey>>(filter).value,
+          last ? ChannelFilter.all : ChannelFilter.favourites,
+        );
+        expect(
+          FocusManager.instance.primaryFocus?.debugLabel,
+          last ? 'Open Target' : 'Open Nearest',
+        );
+      },
+    );
+  }
+
+  testWidgets(
+    'menu items expose enabled button semantics and open Edit or Duplicate',
+    (tester) async {
+      await tester.pumpWidget(
+        UiFixture(
+          scenario: LineupScenario(
+            stage: SetupStage.ready,
+            channels: [
+              _channel('custom', 1, 'Custom station'),
+              _channel('gen', 2, 'Generated station', generated: true),
+            ],
+          ),
+        ).build(),
+      );
+      await tester.pumpAndSettle();
+      await openDestination(tester, 'Channels');
+
+      Future<void> choose(String channel, String label) async {
+        await tester.tap(find.byTooltip('Actions for $channel'));
+        await tester.pumpAndSettle();
+        for (final item in ['Watch', 'Favourite', label, 'Delete…']) {
+          final data = tester.getSemantics(find.text(item)).getSemanticsData();
+          expect(data.role, SemanticsRole.menuItem);
+          expect(data.flagsCollection.isButton, isTrue);
+          expect(data.flagsCollection.isEnabled, Tristate.isTrue);
+          expect(data.hasAction(SemanticsAction.tap), isTrue);
+        }
+        await tester.tap(find.text(label));
+        await tester.pumpAndSettle();
+      }
+
+      await choose('Custom station', 'Edit');
+      expect(find.text('Edit custom channel'), findsOneWidget);
+      await tester.tap(find.text('‹ Channels'));
+      await tester.pumpAndSettle();
+      await choose('Generated station', 'Duplicate as custom');
+      expect(
+        tester
+            .widget<TextFormField>(find.byKey(const Key('studio-name')))
+            .controller!
+            .text,
+        'Generated station copy',
+      );
+      expect(find.text('Save channel'), findsOneWidget);
+    },
+    semanticsEnabled: true,
+  );
+
+  testWidgets(
+    'both directories drop the Custom tag before crowding a wide name',
+    (tester) async {
+      tester.view
+        ..physicalSize = const Size(1280, 1080)
+        ..devicePixelRatio = 1;
+      tester.platformDispatcher.textScaleFactorTestValue = 1.5;
+      addTearDown(tester.view.reset);
+      addTearDown(tester.platformDispatcher.clearTextScaleFactorTestValue);
+      final long = 'Supercalifragilistic' * 6;
+      await tester.pumpWidget(
+        UiFixture(
+          scenario: LineupScenario(
+            stage: SetupStage.ready,
+            channels: [
+              _channel('short', 10, 'Short'),
+              _channel('long', 1000, long),
+            ],
+          ),
+        ).build(),
+      );
+      await tester.pumpAndSettle();
+      await openDestination(tester, 'Channels');
+
+      void expectTags(String prefix, double numberWidth) {
+        final shortRow = find.byKey(ValueKey('$prefix-short'));
+        final longRow = find.byKey(ValueKey('$prefix-long'));
+        final shortName = find.descendant(
+          of: shortRow,
+          matching: find.text('Short'),
+        );
+        final shortTag = find.descendant(
+          of: shortRow,
+          matching: find.text('Custom'),
+        );
+        expect(tester.getTopLeft(shortTag).dy, tester.getTopLeft(shortName).dy);
+        expect(
+          tester.getTopLeft(shortTag).dx,
+          greaterThanOrEqualTo(tester.getTopRight(shortName).dx),
+        );
+        expect(
+          find.descendant(of: longRow, matching: find.text('Custom')),
+          findsNothing,
+        );
+        expect(
+          tester
+              .getSize(
+                find.descendant(of: longRow, matching: find.text('1000')),
+              )
+              .width,
+          numberWidth,
+        );
+      }
+
+      expectTags('channel-row', 52 * 1.5);
+      await tester.tap(find.text('Reorder channels'));
+      await tester.pumpAndSettle();
+      expectTags('reorder', 76 * 1.5);
+    },
+  );
 
   testWidgets('Watch opens Player and tunes the row channel', (tester) async {
     final controller = _DirectoryWatchController(
@@ -1650,10 +1845,16 @@ void main() {
           await tester.tap(find.text('‹ Channels'));
           await tester.pumpAndSettle();
         } else {
-          expect(find.text('Update lineup…'), findsOneWidget);
-          expect(find.text('Add a custom channel'), findsOneWidget);
           expect(
-            Focus.of(tester.element(find.text('Update lineup…'))).hasFocus,
+            find.widgetWithText(FilledButton, 'Generate lineup…'),
+            findsOneWidget,
+          );
+          expect(
+            find.widgetWithText(OutlinedButton, 'Add a custom channel'),
+            findsOneWidget,
+          );
+          expect(
+            Focus.of(tester.element(find.text('Generate lineup…'))).hasFocus,
             isTrue,
           );
         }
@@ -1714,6 +1915,19 @@ class _RecordingDirectoryController extends FixtureController {
   _RecordingDirectoryController({super.scenario});
 
   Completer<void>? pendingDelete;
+  Completer<void>? pendingFavorite;
+  bool favoriteFailure = false;
+
+  @override
+  Future<void> setFavorite(String channelId, bool favorite) async {
+    if (favoriteFailure) {
+      favoriteFailure = false;
+      throw StateError('synthetic favourite failure');
+    }
+    await pendingFavorite?.future;
+    await super.setFavorite(channelId, favorite);
+  }
+
   Completer<void>? pendingReorder;
   Object? deleteFailure;
   Object? reorderFailure;

@@ -10,7 +10,6 @@ class _StudioProgramming extends StatefulWidget {
     required this.channels,
     required this.name,
     required this.sourceLabel,
-    required this.focusSourceOnEntry,
     required this.sourceExplanation,
     required this.programmingError,
     required this.inventoryStatus,
@@ -29,7 +28,6 @@ class _StudioProgramming extends StatefulWidget {
   final List<Channel> channels;
   final String name;
   final String sourceLabel;
-  final bool focusSourceOnEntry;
   final String? sourceExplanation;
   final String? programmingError;
   final Widget inventoryStatus;
@@ -58,14 +56,13 @@ class _StudioProgrammingState extends State<_StudioProgramming> {
     super.initState();
     _picker = _FilterPickerController(onOpening: _retainProgrammingHeight);
     _picker.addListener(_pickerChanged);
-    if (widget.focusSourceOnEntry) {
-      WidgetsBinding.instance.addPostFrameCallback((_) {
-        final sourceContext = _sourceFocusKey.currentContext;
-        if (sourceContext != null &&
-            ModalRoute.of(sourceContext)?.isCurrent != false) {
-          Focus.of(sourceContext).requestFocus();
-        }
-      });
+  }
+
+  void focusSourceChoice() {
+    final sourceContext = _sourceFocusKey.currentContext;
+    if (sourceContext != null &&
+        ModalRoute.of(sourceContext)?.isCurrent != false) {
+      Focus.of(sourceContext).requestFocus();
     }
   }
 
@@ -130,11 +127,9 @@ class _StudioProgrammingState extends State<_StudioProgramming> {
     return false;
   }
 
-  Widget _sourceLabel(StudioSourceChoice choice, String label) => Text(
+  Widget _sourceChoiceLabel(StudioSourceChoice choice, String label) => Text(
     label,
-    key: widget.focusSourceOnEntry && choice == _session.sourceChoice
-        ? _sourceFocusKey
-        : null,
+    key: choice == _session.sourceChoice ? _sourceFocusKey : null,
   );
 
   void _selectSource(StudioSourceChoice? choice) {
@@ -220,21 +215,21 @@ class _StudioProgrammingState extends State<_StudioProgramming> {
                     segments: [
                       ButtonSegment(
                         value: StudioSourceChoice.library,
-                        label: _sourceLabel(
+                        label: _sourceChoiceLabel(
                           StudioSourceChoice.library,
                           'Library',
                         ),
                       ),
                       ButtonSegment(
                         value: StudioSourceChoice.playlist,
-                        label: _sourceLabel(
+                        label: _sourceChoiceLabel(
                           StudioSourceChoice.playlist,
                           'Plex playlist',
                         ),
                       ),
                       ButtonSegment(
                         value: StudioSourceChoice.handPicked,
-                        label: _sourceLabel(
+                        label: _sourceChoiceLabel(
                           StudioSourceChoice.handPicked,
                           'Hand-picked',
                         ),

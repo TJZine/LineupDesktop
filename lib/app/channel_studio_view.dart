@@ -131,6 +131,7 @@ class ChannelStudioViewState extends State<ChannelStudioView> {
   bool _suggestionsEnabled = false;
   bool _nameEdited = false;
   bool _initialPresentation = true;
+  bool _isTv = false;
   int _sourceRevision = 0;
   _StudioPendingChoice? _pendingProgrammingChoice;
   bool _saving = false;
@@ -177,7 +178,6 @@ class ChannelStudioViewState extends State<ChannelStudioView> {
       clock: _clock,
     );
     _verification.addListener(_verificationChanged);
-    _updateVerification();
   }
 
   void _loadInitial() {
@@ -220,13 +220,19 @@ class ChannelStudioViewState extends State<ChannelStudioView> {
     super.didChangeDependencies();
     if (!_initialPresentation) return;
     _initialPresentation = false;
+    _isTv = DeviceProfile.of(context).isTv;
     _suggestionsEnabled =
-        widget.mode == ChannelStudioMode.createCustom &&
-        DeviceProfile.of(context).isTv;
-    if (_suggestionsEnabled && _session.source is LibrarySource) {
-      _suggestName();
-      _session.acceptBaseline(_draftSignature);
+        widget.mode == ChannelStudioMode.createCustom && _isTv;
+    if (_suggestionsEnabled) {
+      if (_session.source is LibrarySource) {
+        _suggestName();
+        _session.acceptBaseline(_draftSignature);
+      }
+      WidgetsBinding.instance.addPostFrameCallback((_) {
+        _programmingKey.currentState?.focusSourceChoice();
+      });
     }
+    _updateVerification();
   }
 
   void _suggestName() {
@@ -273,8 +279,12 @@ class ChannelStudioViewState extends State<ChannelStudioView> {
 
   void _nameChanged() => _changed(() => _nameEdited = true);
 
-  String _describeSource(ContentSource source) =>
-      _sourceLabel(source, widget.controller, _personLabels);
+  String _describeSource(ContentSource source) => _sourceLabel(
+    source,
+    widget.controller,
+    _personLabels,
+    separator: _isTv ? ' · ' : ' • ',
+  );
 
   @override
   void didUpdateWidget(ChannelStudioView oldWidget) {
@@ -536,7 +546,6 @@ class ChannelStudioViewState extends State<ChannelStudioView> {
                             channels: widget.controller.channels,
                             name: _name.text,
                             sourceLabel: _describeSource(_displaySource),
-                            focusSourceOnEntry: _suggestionsEnabled,
                             sourceExplanation: sourceExplanation,
                             programmingError: programmingError,
                             inventoryStatus: _StudioInventoryStatus(
@@ -1151,14 +1160,12 @@ class ChannelStudioViewState extends State<ChannelStudioView> {
   }
 }
 
-String channelSourceLabel(ContentSource source, LineupController controller) =>
-    _sourceLabel(source, controller, StudioPersonLabels());
-
 String _sourceLabel(
   ContentSource source,
   LineupController controller,
-  StudioPersonLabels people,
-) => switch (source) {
+  StudioPersonLabels people, {
+  required String separator,
+}) => switch (source) {
   LibrarySource(
     :final libraryId,
     :final includeWatched,
@@ -1171,12 +1178,12 @@ String _sourceLabel(
         '${_facetLabel(filter.key.name)}: ${filter.value.map((value) => people.label(controller, libraryId, filter.key, value)).join(', ')}',
       if (order == LibraryOrder.addedDescending) 'Newest first',
       includeWatched ? 'includes watched' : 'unwatched only',
-    ].join(' · '),
+    ].join(separator),
   ManualSource(:final items) => '${items.length} hand-picked programs',
   PlaylistSource(:final playlistId) =>
     'Playlist: ${controller.availablePlaylists.where((playlist) => playlist.id == playlistId).firstOrNull?.title ?? playlistId}',
   MixedSource(:final sources, :final interleave) =>
-    '${sources.length}-source mix · ${interleave ? 'interleaved' : 'in sequence'}',
+    '${sources.length}-source mix$separator${interleave ? 'interleaved' : 'in sequence'}',
 };
 
 LibraryFilter _libraryFilter(String key) =>

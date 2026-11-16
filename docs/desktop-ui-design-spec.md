@@ -658,10 +658,11 @@ unsaved-draft behavior.
   Custom tag after custom names and one ellipsized Source line for source type
   and library. Use original person labels in source details when available.
   Search by name or number or filter by favourites, source type or library.
-  Row activation opens Studio. Preserve list search, filter, scroll and focus
-  on return.
-- Add a custom channel is the primary action. Use Update lineup… as the
-  secondary action.
+  Row activation opens Studio. Preserve known issue explanations and list
+  search, filter, scroll and focus on return.
+- Add a custom channel is primary and Update lineup… is secondary for a
+  populated lineup. Empty state reverses that emphasis and avoids duplicate
+  header actions. Its primary button says Generate lineup….
 - Approved bulk management: quiet Select control reveals checkboxes, selected
   count and Delete selected. Select all matching means current search/filter
   results. Confirmation gives the count and explains removal from the lineup.

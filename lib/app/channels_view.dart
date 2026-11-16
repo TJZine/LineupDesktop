@@ -2,11 +2,11 @@ import 'dart:async';
 
 import 'package:flutter/gestures.dart';
 import 'package:flutter/material.dart';
-import 'package:flutter/semantics.dart';
 import 'package:flutter/services.dart';
 import 'package:lineup_desktop/platform/device_profile.dart';
 
 import '../channels/channel.dart';
+import '../channels/channel_builder.dart';
 import '../channels/channel_filter.dart';
 import '../playback/player_coordinator.dart';
 import '../ui/app_theme.dart';
@@ -240,9 +240,9 @@ class ChannelsViewState extends State<ChannelsView> {
           await showDialog<bool>(
             context: context,
             builder: (context) => AlertDialog(
-              title: const Text('Open Generate lineup?'),
+              title: const Text('Open Update lineup?'),
               content: const Text(
-                'Your unsaved Studio draft cannot be carried into Generate lineup. Existing custom channels remain protected while you review the proposed roster.',
+                'Your unsaved Studio draft cannot be carried into Update lineup. Existing custom channels remain protected while you review the proposed roster.',
               ),
               actions: [
                 TextButton(
@@ -483,15 +483,15 @@ class ChannelsViewState extends State<ChannelsView> {
                       runSpacing: 8,
                       alignment: WrapAlignment.center,
                       children: [
-                        OutlinedButton.icon(
+                        FilledButton.icon(
                           focusNode: widget.focusNode,
                           onPressed: _saving
                               ? null
                               : widget.controller.enterChannelSetup,
                           icon: const Icon(Icons.auto_awesome_outlined),
-                          label: const Text('Update lineup…'),
+                          label: const Text('Generate lineup…'),
                         ),
-                        FilledButton.icon(
+                        OutlinedButton.icon(
                           focusNode: _addFocus,
                           onPressed: _saving ? null : openNew,
                           icon: const Icon(Icons.add),
@@ -695,11 +695,18 @@ class ChannelsViewState extends State<ChannelsView> {
         unawaited(widget.player.tune(channel.id));
         widget.onOpenPlayer();
       case _RowAction.favourite:
+        final index = _sortedChannels().indexWhere(
+          (row) => row.id == channel.id,
+        );
         try {
           await widget.controller.setFavorite(channel.id, !channel.favorite);
-          if (mounted &&
-              !_visibleChannels().any((row) => row.id == channel.id)) {
-            _restoreNavigationFocus();
+          if (!mounted) return;
+          setState(() => _error = null);
+          if (channel.favorite) {
+            _restoreNavigationFocus(
+              preferredId: channel.id,
+              preferredIndex: index,
+            );
           }
         } catch (_) {
           if (mounted) {
@@ -717,22 +724,16 @@ class ChannelsViewState extends State<ChannelsView> {
 
   Widget _directorySource(Channel channel, TextStyle? style) {
     final source = channel.source;
-    final type = switch (source) {
-      LibrarySource(:final filters, :final order) =>
-        order == LibraryOrder.addedDescending && filters.isEmpty
-            ? 'Recently added'
-            : switch (filters.keys.singleOrNull) {
-                LibraryFilter.collection => 'Collection',
-                LibraryFilter.genre => 'Genre',
-                LibraryFilter.studio => 'Studio',
-                LibraryFilter.actor => 'Actor',
-                LibraryFilter.director => 'Director',
-                LibraryFilter.decade => 'Decade',
-                null => filters.isEmpty ? 'Library' : 'Filtered library',
-              },
-      PlaylistSource() => 'Playlist',
-      ManualSource() => 'Hand-picked',
-      MixedSource() => 'Mixed sources',
+    final type = switch (channelSourceType(channel)) {
+      BuilderStrategy.collections => 'Collection',
+      BuilderStrategy.recentlyAdded => 'Recently added',
+      BuilderStrategy.genres => 'Genre',
+      BuilderStrategy.studios => 'Studio',
+      BuilderStrategy.actors => 'Actor',
+      BuilderStrategy.decades => 'Decade',
+      BuilderStrategy.directors => 'Director',
+      BuilderStrategy.playlists => 'Playlist',
+      null => _directorySourceType(source),
     };
     final savedLibraries = channel.sourceLibraries.values;
     final sourceLibraryIds = channelSourceLibraryIds(source);
@@ -742,29 +743,55 @@ class ChannelsViewState extends State<ChannelsView> {
               .where((library) => sourceLibraryIds.contains(library.id))
               .map((library) => library.title);
     final libraries = libraryTitles.toSet().join(', ');
-    final label = libraries.isEmpty ? type : '$type · $libraries';
     final text = Text(
-      label,
+      libraries.isEmpty ? type : '$type · $libraries',
       maxLines: 1,
       softWrap: false,
       overflow: TextOverflow.ellipsis,
       style: style,
     );
-    if (source is! LibrarySource) return text;
-    final people = [
-      for (final filter in [LibraryFilter.actor, LibraryFilter.director])
-        for (final value in source.filters[filter] ?? const <String>[])
-          _personLabels.label(
-            widget.controller,
-            source.libraryId,
-            filter,
-            value,
-          ),
-    ];
+    final people = _directorySourcePeople(source).toSet();
     return people.isEmpty
         ? text
         : Tooltip(message: people.join(', '), child: text);
   }
+
+  Iterable<String> _directorySourcePeople(ContentSource source) sync* {
+    if (source case MixedSource(:final sources)) {
+      for (final child in sources) {
+        yield* _directorySourcePeople(child);
+      }
+    } else if (source case LibrarySource(:final libraryId, :final filters)) {
+      for (final filter in [LibraryFilter.actor, LibraryFilter.director]) {
+        for (final value in filters[filter] ?? const <String>[]) {
+          yield _personLabels.label(
+            widget.controller,
+            libraryId,
+            filter,
+            value,
+          );
+        }
+      }
+    }
+  }
+
+  String _directorySourceType(ContentSource source) => switch (source) {
+    LibrarySource(:final filters, :final order) =>
+      order == LibraryOrder.addedDescending && filters.isEmpty
+          ? 'Recently added'
+          : switch (filters.keys.singleOrNull) {
+              LibraryFilter.collection => 'Collection',
+              LibraryFilter.genre => 'Genre',
+              LibraryFilter.studio => 'Studio',
+              LibraryFilter.actor => 'Actor',
+              LibraryFilter.director => 'Director',
+              LibraryFilter.decade => 'Decade',
+              null => filters.isEmpty ? 'Library' : 'Filtered library',
+            },
+    PlaylistSource() => 'Playlist',
+    ManualSource() => 'Hand-picked',
+    MixedSource() => 'Mixed sources',
+  };
 
   List<Channel> _visibleChannels() {
     final channels = _sortedChannels();
@@ -925,18 +952,11 @@ class ChannelsViewState extends State<ChannelsView> {
                       crossAxisAlignment: CrossAxisAlignment.start,
                       children: [
                         if (custom)
-                          Row(
-                            children: [
-                              Flexible(child: identity),
-                              const SizedBox(width: 8),
-                              Text(
-                                'Custom',
-                                style: identity.supportStyle?.copyWith(
-                                  fontSize: 14,
-                                  fontWeight: FontWeight.w600,
-                                ),
-                              ),
-                            ],
+                          _DirectoryCustomIdentity(
+                            name: identity.channel.name,
+                            nameStyle: identity.nameStyle,
+                            supportStyle: identity.supportStyle,
+                            identity: identity,
                           )
                         else
                           identity,
@@ -1040,52 +1060,64 @@ class ChannelsViewState extends State<ChannelsView> {
   Widget _directoryToolbar(ChannelFilter filter) {
     final textScale = MediaQuery.textScalerOf(context).scale(1);
     final entries = filter.entries;
+    final tv = DeviceProfile.of(context).isTv;
+    final roles = LineupTheme.of(context);
+    final menuTheme = tv ? Theme.of(context) : null;
     final filters = SizedBox(
       width: 180 * textScale.clamp(1, 1.5),
-      child: DropdownButton<ChannelFilterKey>(
-        key: const Key('channels-filter'),
-        value: _filter,
-        isExpanded: true,
-        selectedItemBuilder: (_) => [
-          for (final entry in entries)
-            Align(
-              alignment: AlignmentDirectional.centerStart,
-              child: Text(
-                entry.label,
-                maxLines: 1,
-                overflow: TextOverflow.ellipsis,
-              ),
-            ),
-        ],
-        underline: const SizedBox.shrink(),
-        dropdownColor: LineupTheme.of(context).elevatedSurface,
-        borderRadius: BorderRadius.circular(
-          LineupTheme.of(context).panelRadius,
-        ),
-        items: lineupMenuItems(
-          [
-            for (final entry in entries)
-              DropdownMenuItem(
-                value: entry.key,
-                child: Text(
-                  entry.label,
-                  maxLines: 1,
-                  overflow: TextOverflow.ellipsis,
+      child: LineupDropdownBox(
+        compact: true,
+        enabled: !_saving,
+        child: Builder(
+          builder: (context) => DropdownButton<ChannelFilterKey>(
+            key: const Key('channels-filter'),
+            value: _filter,
+            isExpanded: true,
+            style: tv
+                ? _channelBodyStyle(context)
+                      .copyWith(color: LineupTheme.of(context).primaryText)
+                : null,
+            iconEnabledColor: tv ? LineupTheme.of(context).secondaryText : null,
+            selectedItemBuilder: (_) => [
+              for (final entry in entries)
+                Align(
+                  alignment: AlignmentDirectional.centerStart,
+                  child: Text(
+                    entry.label,
+                    maxLines: 1,
+                    overflow: TextOverflow.ellipsis,
+                  ),
                 ),
-              ),
-          ],
-          _filter,
-          menuTheme: DeviceProfile.of(context).isTv ? Theme.of(context) : null,
+            ],
+            underline: const SizedBox.shrink(),
+            dropdownColor: roles.elevatedSurface,
+            borderRadius: BorderRadius.circular(roles.panelRadius),
+            items: lineupMenuItems(
+              [
+                for (final entry in entries)
+                  DropdownMenuItem(
+                    value: entry.key,
+                    child: Text(
+                      entry.label,
+                      maxLines: 1,
+                      overflow: TextOverflow.ellipsis,
+                    ),
+                  ),
+              ],
+              _filter,
+              menuTheme: menuTheme,
+            ),
+            onChanged: _saving
+                ? null
+                : (value) {
+                    if (value == null) return;
+                    setState(() {
+                      _filter = value;
+                      _showSelected = false;
+                    });
+                  },
+          ),
         ),
-        onChanged: _saving
-            ? null
-            : (value) {
-                if (value == null) return;
-                setState(() {
-                  _filter = value;
-                  _showSelected = false;
-                });
-              },
       ),
     );
     final actions = [
@@ -1458,18 +1490,13 @@ class ChannelsViewState extends State<ChannelsView> {
                 fontFamilyFallback: const ['Arial'],
               ),
             ),
-            name: Wrap(
-              spacing: 8,
-              crossAxisAlignment: WrapCrossAlignment.center,
-              children: [
-                Text(channel.name, style: rowNameStyle, softWrap: true),
-                if (channel.builderKey == null)
-                  Text(
-                    'Custom',
-                    style: rowSupportStyle?.copyWith(fontSize: 14),
-                  ),
-              ],
-            ),
+            name: channel.builderKey == null
+                ? _DirectoryCustomIdentity(
+                    name: channel.name,
+                    nameStyle: rowNameStyle,
+                    supportStyle: rowSupportStyle,
+                  )
+                : Text(channel.name, style: rowNameStyle, softWrap: true),
             source: _directorySource(channel, rowSupportStyle),
             playback: Text(
               channelRhythmLabel(channel.playbackMode, channel.blockSize),
@@ -1785,6 +1812,66 @@ class _MoveChannelDialogState extends State<_MoveChannelDialog> {
   }
 }
 
+/// Gives the optional tag space only when the full identity already fits.
+class _DirectoryCustomIdentity extends StatelessWidget {
+  const _DirectoryCustomIdentity({
+    required this.name,
+    required this.nameStyle,
+    required this.supportStyle,
+    this.identity,
+  });
+
+  final String name;
+  final TextStyle? nameStyle;
+  final TextStyle? supportStyle;
+  final ChannelIdentity? identity;
+
+  @override
+  Widget build(BuildContext context) {
+    const gap = 8.0;
+    final baseStyle = DefaultTextStyle.of(context).style;
+    final support = baseStyle.merge(supportStyle);
+    final tagStyle = support.copyWith(
+      fontSize: 14,
+      fontWeight: FontWeight.w600,
+    );
+    final labelStyle = baseStyle.merge(nameStyle);
+    final textScaler = MediaQuery.textScalerOf(context);
+    double measure(String value, TextStyle style) => TextPainter.computeWidth(
+      text: TextSpan(text: value, style: style),
+      textDirection: Directionality.of(context),
+      textScaler: textScaler,
+      locale: Localizations.maybeLocaleOf(context),
+    );
+    final label = identity ?? Text(name, style: nameStyle, softWrap: true);
+    return LayoutBuilder(
+      builder: (context, constraints) {
+        final prefix = identity?.nameIndent(context) ?? 0;
+        final libraryTag = identity?.libraryTag;
+        final libraryWidth = libraryTag == null
+            ? 0.0
+            : measure('· $libraryTag', support) +
+                  textScaler.scale(labelStyle.fontSize ?? 14) * .25;
+        final requiredWidth =
+            prefix +
+            measure(name, labelStyle) +
+            libraryWidth +
+            gap +
+            measure('Custom', tagStyle);
+        if (requiredWidth > constraints.maxWidth) return label;
+        return Row(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Flexible(child: label),
+            const SizedBox(width: gap),
+            Text('Custom', style: tagStyle),
+          ],
+        );
+      },
+    );
+  }
+}
+
 class _DirectoryRow extends StatefulWidget {
   const _DirectoryRow({
     required this.menuContext,
@@ -1982,7 +2069,7 @@ class _DirectoryMenuItemState
     }
     if (event is KeyDownEvent) {
       if (select) {
-        handleTap();
+        if (widget.enabled) handleTap();
       } else {
         Navigator.pop(context);
       }
@@ -1994,23 +2081,25 @@ class _DirectoryMenuItemState
   Widget build(BuildContext context) => Focus(
     canRequestFocus: false,
     onKeyEvent: _key,
-    child: Semantics(
-      role: SemanticsRole.menuItem,
-      child: InkWell(
-        autofocus: widget.autofocus,
-        onTap: handleTap,
-        child: ConstrainedBox(
-          constraints: BoxConstraints(minHeight: widget.height),
-          child: Center(
-            child: LineupDropdownMenuRow(
-              selected: false,
-              child: SizedBox(
-                width: double.infinity,
-                child: Builder(
-                  builder: (context) => Text(
-                    widget.label,
-                    style: LineupTypography.control.copyWith(
-                      color: LineupTheme.of(context).primaryText,
+    child: MergeSemantics(
+      child: buildSemantics(
+        child: InkWell(
+          autofocus: widget.enabled && widget.autofocus,
+          canRequestFocus: widget.enabled,
+          onTap: widget.enabled ? handleTap : null,
+          child: ConstrainedBox(
+            constraints: BoxConstraints(minHeight: widget.height),
+            child: Center(
+              child: LineupDropdownMenuRow(
+                selected: false,
+                child: SizedBox(
+                  width: double.infinity,
+                  child: Builder(
+                    builder: (context) => Text(
+                      widget.label,
+                      style: LineupTypography.control.copyWith(
+                        color: LineupTheme.of(context).primaryText,
+                      ),
                     ),
                   ),
                 ),

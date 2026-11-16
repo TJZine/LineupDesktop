@@ -97,7 +97,8 @@ least 16 px of TV focus padding.
 UX assessment decision, 2026-11-13/14 (Q5, N17, N18). Use a quiet Custom tag
 beside the name and a single Source line for the type and library. At TV 1080p
 and 1.3 text scale, the directory aims for about nine visible rows. Add a custom
-channel is the filled action. In Studio on TV, focus the programming source
+channel is the filled action for populated lineups. Generate lineup… fills
+that role when the lineup is empty. In Studio on TV, focus the programming source
 choice at entry for a new custom draft.
 
 ## Guide

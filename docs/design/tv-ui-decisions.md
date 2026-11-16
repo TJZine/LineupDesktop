@@ -330,7 +330,9 @@ Select on a Manage channels row opens Studio. Right then Select on the ellipsis,
 or holding Select on the row, opens the row menu with Watch focused. Back closes
 it and restores row focus. The remote Menu button opens the Lineup menu. Use a
 one-line Source and Custom tag, with roughly nine directory rows at 1080p and
-1.3 text scale. Add a custom channel is primary and Update lineup… secondary.
+1.3 text scale. Add a custom channel is primary and Update lineup… secondary
+for populated lineups. When empty, Generate lineup… is primary and Add a
+custom channel is secondary.
 
 New custom drafts begin with focus on the Programming source choice. Studio
 suggests a source name until the user edits it.

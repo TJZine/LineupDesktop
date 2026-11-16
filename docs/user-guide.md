@@ -568,7 +568,8 @@ for a custom channel or **Duplicate as custom** for a generated channel, and
 the keyboard Menu key. On TV, press Right from the row and then Select, or hold
 Select on the row. Back closes the row menu and returns focus to the channel.
 
-**Update lineup…** opens the bulk workflow. It proposes generator-owned channels,
+**Update lineup…** opens the bulk workflow. In an empty lineup, choose
+**Generate lineup…**. The workflow proposes generator-owned channels,
 then lets you replace generated channels, add generated channels, or refresh
 matching generated channels after review. All three modes preserve every custom
 channel. Refresh preserves a matching generated channel's name, schedule anchor,
