@@ -8214,6 +8214,103 @@ void main() {
   testWidgets(
     'focused horizontal Mini Guide scrolls only titles with fitting words',
     (tester) async {
+  testWidgets(
+    'desktop track picker fits the hint, keeps its mode and restores keyboard focus',
+    (tester) async {
+      tester.view.physicalSize = const Size(1280, 720);
+      tester.view.devicePixelRatio = 1;
+      addTearDown(tester.view.resetPhysicalSize);
+      addTearDown(tester.view.resetDevicePixelRatio);
+      const words =
+          'Restored broadcast with descriptive commentary for the original international cut';
+      final singleWord = List.filled(16, 'unbroken').join();
+
+      List<PlayerTrack> tracks(int count) => [
+        for (var id = 1; id <= count; id++)
+          PlayerTrack(
+            id: id,
+            type: PlayerTrackType.audio,
+            selected: id == 1,
+            title: switch (id) {
+              1 => words,
+              2 => singleWord,
+              _ => null,
+            },
+          ),
+      ];
+      final fixture = _Fixture(PlayerState.playing, tracks: tracks(2));
+      fixture.player.showOsd();
+      await tester.pumpWidget(
+        MaterialApp(
+          builder: _playerDesktopCanvasBuilder,
+          home: PlayerView(controller: fixture.player, openGuide: () {}),
+        ),
+      );
+      await tester.pumpAndSettle();
+      final anchor = find.byKey(const Key('player-osd-audio'));
+      final button = tester.widget<TextButton>(anchor).focusNode!;
+      button.requestFocus();
+      await tester.pump();
+      await tester.sendKeyEvent(LogicalKeyboardKey.enter);
+      await tester.pumpAndSettle();
+
+      final popup = find.byKey(const Key('player-track-popover'));
+      final panel = find.byKey(const Key('playback-options-rail'));
+      expect(tester.getSize(popup).width, greaterThan(354));
+      expect(_drawnRect(tester, popup).width, closeTo(1280 * .4, 1));
+      final hint = find.descendant(
+        of: find.byKey(const Key('playback-options-footer')),
+        matching: find.byType(Text),
+      );
+      final hintParagraph = tester.renderObject<RenderParagraph>(hint);
+      expect(
+        hintParagraph.getBoxesForSelection(
+          TextSelection(
+            baseOffset: 0,
+            extentOffset: tester.widget<Text>(hint).data!.length,
+          ),
+        ),
+        hasLength(1),
+      );
+      final word = find.text(words);
+      final paragraph = tester.renderObject<RenderParagraph>(word);
+      final first = words.indexOf('international');
+      final wordBoxes = paragraph.getBoxesForSelection(
+        TextSelection(
+          baseOffset: first,
+          extentOffset: first + 'international'.length,
+        ),
+      );
+      expect(wordBoxes, hasLength(1));
+      final oversized = find.descendant(
+        of: find.byKey(const Key('playback-track-audio-2')),
+        matching: find.byType(Text),
+      );
+      expect(tester.widget<Text>(oversized).data, endsWith('…'));
+      expect(TooltipVisibility.of(tester.element(anchor)), isFalse);
+
+      fixture.native.emitTracks(tracks(9));
+      await tester.pumpAndSettle();
+      expect(popup, findsOneWidget);
+      expect(panel, findsNothing);
+
+      await tester.sendKeyEvent(LogicalKeyboardKey.escape);
+      await tester.pumpAndSettle();
+      expect(button.hasPrimaryFocus, isTrue);
+      expect(TooltipVisibility.of(tester.element(anchor)), isTrue);
+      await tester.sendKeyEvent(LogicalKeyboardKey.enter);
+      await tester.pumpAndSettle();
+      expect(panel, findsOneWidget);
+      fixture.native.emitTracks(tracks(2));
+      await tester.pumpAndSettle();
+      expect(panel, findsOneWidget);
+      expect(popup, findsNothing);
+
+      await tester.pumpWidget(const SizedBox.shrink());
+      fixture.dispose();
+    },
+  );
+
       const oneWord = 'ExtraordinarilyLongUnbrokenChannelName';
       const manyWords =
           'Independent Productions From Across the World and Beyond';
@@ -10287,8 +10384,11 @@ Future<void> _showReachableTooltip(WidgetTester tester, String message) async {
     ),
     isEmpty,
   );
-  final tooltip = find.byWidgetPredicate(
-    (widget) => widget is Tooltip && widget.message == message,
+  final tooltip = find.byElementPredicate(
+    (element) =>
+        element.widget is Tooltip &&
+        (element.widget as Tooltip).message == message &&
+        TooltipVisibility.of(element),
   );
   expect(tooltip, findsOneWidget);
   expect(tester.state<TooltipState>(tooltip).ensureTooltipVisible(), isTrue);

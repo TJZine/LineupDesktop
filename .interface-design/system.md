@@ -138,8 +138,9 @@ Preserve:
   belong in Diagnostics.
 - UX assessment decision, 2026-11-13/14: Subtitles, Audio, and Sleep use an
   anchored popover for up to six choices (including Subtitle Off). Track lists
-  with seven or more choices use the side panel. TV keeps selected-choice
-  focus and returns to the invoking action.
+  with seven or more choices use the side panel. Fit the choice labels and
+  key hint up to the width cap, and keep the chosen presentation while the
+  picker is open. Closing returns keyboard focus to its invoking action.
 - UX assessment decision, 2026-11-13/14: channel entry uses the overlay
   material at the top center, with 48 px digits above a matched 20 px channel
   identity. The Mini Guide paints a standard desktop focus border separately

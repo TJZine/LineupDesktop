@@ -102,6 +102,7 @@ class PlayerViewState extends State<PlayerView> with WidgetsBindingObserver {
   FocusNode get _sleepFocus => _controls[_PlayerControl.sleep]!;
   _PlayerControl _lastAction = _PlayerControl.subtitles;
   PlayerOverlay? _trackOrigin;
+  bool _trackPopoverOpen = false;
   bool get _isTv => DeviceProfile.of(context).isTv;
   var _pickerAnchors = _newPickerAnchors();
 
@@ -121,6 +122,9 @@ class PlayerViewState extends State<PlayerView> with WidgetsBindingObserver {
   void initState() {
     super.initState();
     _renderedOverlay = widget.controller.overlay;
+    if (_trackOverlayType(_renderedOverlay) case final type?) {
+      _trackPopoverOpen = _usesTrackPopover(type, widget.controller.tracks);
+    }
     _bottomPanelGeneration = widget.controller.overlayPresentationGeneration;
     WidgetsBinding.instance.addObserver(this);
     widget.controller.addListener(_changed);
@@ -154,11 +158,11 @@ class PlayerViewState extends State<PlayerView> with WidgetsBindingObserver {
     HardwareKeyboard.instance.removeHandler(_trackKeyboardInput);
     _subtitleAvoidance.dispose();
     _internalRootFocus.dispose();
+    _overlayFocus.dispose();
     for (final node in _controls.values) {
       node.dispose();
     }
     super.dispose();
-    _overlayFocus.dispose();
   }
 
   @override
@@ -274,7 +278,6 @@ class PlayerViewState extends State<PlayerView> with WidgetsBindingObserver {
         _lastPosition != widget.controller.position &&
         _lastBottomPanelFacts == bottomPanelFacts &&
         listEquals(_lastTracks, widget.controller.tracks);
-    final previousTracks = _lastTracks;
     _lastHiddenFacts = hiddenFacts;
     _lastBottomPanelFacts = bottomPanelFacts;
     _lastPosition = widget.controller.position;
@@ -318,12 +321,12 @@ class PlayerViewState extends State<PlayerView> with WidgetsBindingObserver {
     }
     final wasBottom = _isBottomPanel(_renderedOverlay);
     final isBottom = _isBottomPanel(nextOverlay);
-    final wasPopover =
-        previousTrackType != null &&
-        _usesTrackPopover(previousTrackType, previousTracks);
+    final wasPopover = _trackPopoverOpen;
     final isPopover =
         nextTrackType != null &&
-        _usesTrackPopover(nextTrackType, widget.controller.tracks);
+        (nextTrackType == previousTrackType
+            ? wasPopover
+            : _usesTrackPopover(nextTrackType, widget.controller.tracks));
     if (wasBottom &&
         !isBottom &&
         _canOwnFocus &&
@@ -359,6 +362,7 @@ class PlayerViewState extends State<PlayerView> with WidgetsBindingObserver {
       _trackOrigin = null;
     }
     setState(() {
+      _trackPopoverOpen = isPopover;
       if (!(wasBottom || wasPopover) && (isBottom || isPopover)) {
         _bottomPanelGeneration =
             widget.controller.overlayPresentationGeneration;
@@ -800,10 +804,7 @@ class PlayerViewState extends State<PlayerView> with WidgetsBindingObserver {
     final presentationGeneration = controller.overlayPresentationGeneration;
     final bottomPanel = _isBottomPanel(overlay);
     final trackType = _trackOverlayType(overlay);
-    final trackPopover =
-        trackType != null && _usesTrackPopover(trackType, controller.tracks)
-        ? trackType
-        : null;
+    final trackPopover = _trackPopoverOpen ? trackType : null;
     final showsBottomPanel = bottomPanel || trackPopover != null;
     final presentationKey = ValueKey((
       showsBottomPanel ? PlayerOverlay.osd : overlay,
@@ -1433,7 +1434,7 @@ class _Osd extends StatelessWidget {
           key: const Key('player-osd-subtitles'),
           focusNode: controls[_PlayerControl.subtitles],
           label: subtitlesLabel,
-          tooltip: trackPopover == null ? subtitlesDescription : null,
+          tooltip: subtitlesDescription,
           semanticLabel: subtitlesDescription,
           icon: Icons.subtitles_outlined,
           onPressed: subtitlesAvailable
@@ -1451,7 +1452,7 @@ class _Osd extends StatelessWidget {
           key: const Key('player-osd-audio'),
           focusNode: controls[_PlayerControl.audio],
           label: audioLabel,
-          tooltip: trackPopover == null ? audioDescription : null,
+          tooltip: audioDescription,
           semanticLabel: audioDescription,
           icon: Icons.audiotrack,
           onPressed: audioAvailable
@@ -1679,7 +1680,10 @@ class _Osd extends StatelessWidget {
         excluding: pickerOpen,
         child: ExcludeFocus(
           excluding: pickerOpen,
-          child: Align(alignment: Alignment.bottomCenter, child: child),
+          child: TooltipVisibility(
+            visible: !pickerOpen && TooltipVisibility.of(context),
+            child: Align(alignment: Alignment.bottomCenter, child: child),
+          ),
         ),
       ),
     );
@@ -1838,6 +1842,11 @@ class _Osd extends StatelessWidget {
             key: const Key('player-safe-dvr-target'),
             left: safe.left,
             right: safe.right,
+          preferredWidth: type != null
+              ? _trackPopoverWidth(context, controller, displays, type)
+              : sleepOpen
+              ? _sleepPopoverWidth(context, sleepLabel)
+              : 0,
             // Slider's invisible 48cu semantics target extends 4cu beyond
             // this 40cu portal. Keep that target above the bottom safe edge.
             bottom: safe.bottom + (kMinInteractiveDimension - 40) / 2,
@@ -2077,15 +2086,6 @@ class _ChannelBugState extends State<_ChannelBug> {
     );
     final label = ChannelIdentity.label(channel, libraryTag: libraryTag);
     final interactive = widget.interactive;
-    final border = interactive && LineupFocusScope.visible(context, _focused);
-    final shape = StadiumBorder(
-      side: BorderSide(
-        color: border ? roles.focusBorder : roles.subtleBorder,
-        width: border ? roles.focusBorderWidth : 1,
-      ),
-    );
-    final identity = Container(
-      constraints: BoxConstraints(maxWidth: size.width * .65),
   @override
   void didUpdateWidget(_ChannelBug oldWidget) {
     super.didUpdateWidget(oldWidget);
@@ -2095,6 +2095,15 @@ class _ChannelBugState extends State<_ChannelBug> {
     }
   }
 
+    final border = interactive && LineupFocusScope.visible(context, _focused);
+    final shape = StadiumBorder(
+      side: BorderSide(
+        color: border ? roles.focusBorder : roles.subtleBorder,
+        width: border ? roles.focusBorderWidth : 1,
+      ),
+    );
+    final identity = Container(
+      constraints: BoxConstraints(maxWidth: size.width * .65),
       padding: const EdgeInsets.symmetric(
         horizontal: 12,
         vertical: verticalPadding,
@@ -2117,15 +2126,6 @@ class _ChannelBugState extends State<_ChannelBug> {
       child: DecoratedBox(
         decoration: BoxDecoration(
           color: _overlayColor(context, widget.controller),
-          borderRadius: BorderRadius.circular(999),
-          border: Border.fromBorderSide(shape.side),
-        ),
-        child: interactive
-            ? Material(
-                type: MaterialType.transparency,
-                child: CallbackShortcuts(
-                  bindings: {
-                    const SingleActivator(LogicalKeyboardKey.enter):
     final labelStyle = Theme.of(context).textTheme.labelLarge?.copyWith(
       color: roles.primaryText,
       fontSize: size.width >= 1920 && size.height >= 900 ? 16 : 14,
@@ -2135,6 +2135,15 @@ class _ChannelBugState extends State<_ChannelBug> {
     final badgeHeight =
         _textSize(context, channel.name, labelStyle).height +
         2 * verticalPadding;
+          borderRadius: BorderRadius.circular(999),
+          border: Border.fromBorderSide(shape.side),
+        ),
+        child: interactive
+            ? Material(
+                type: MaterialType.transparency,
+                child: CallbackShortcuts(
+                  bindings: {
+                    const SingleActivator(LogicalKeyboardKey.enter):
                         _openMiniGuide,
                     const SingleActivator(LogicalKeyboardKey.numpadEnter):
                         _openMiniGuide,
@@ -2211,6 +2220,7 @@ class _ChannelBugState extends State<_ChannelBug> {
                       ),
                     ],
                   ),
+                key: const Key('player-channel-step-pill'),
                 ),
               ),
             ),
@@ -2220,7 +2230,6 @@ class _ChannelBugState extends State<_ChannelBug> {
         ],
       ),
     );
-                key: const Key('player-channel-step-pill'),
   }
 }
 
@@ -3778,6 +3787,7 @@ class _PlayerPickerLayout extends StatelessWidget {
             ),
           ),
         ),
+    required this.preferredWidth,
     ],
   );
 }
@@ -3785,6 +3795,7 @@ class _PlayerPickerLayout extends StatelessWidget {
 class _PickerAnchorHandle {
   _RenderPickerAnchor? attachedBox;
 }
+  final double preferredWidth;
 
 class _PickerAnchor extends SingleChildRenderObjectWidget {
   const _PickerAnchor({required this.handle, required super.child});
@@ -3792,6 +3803,7 @@ class _PickerAnchor extends SingleChildRenderObjectWidget {
   final _PickerAnchorHandle handle;
 
   @override
+      preferredWidth: preferredWidth,
   _RenderPickerAnchor createRenderObject(BuildContext context) =>
       _RenderPickerAnchor(handle);
 
@@ -3846,7 +3858,11 @@ class _RenderPickerAnchor extends RenderProxyBox {
 enum _PickerSlot { panel, popover }
 
 class _PlayerPickerPlacement extends MultiChildLayoutDelegate {
-  _PlayerPickerPlacement({required this.anchor, required this.insets});
+  _PlayerPickerPlacement({
+    required this.anchor,
+    required this.insets,
+    required this.preferredWidth,
+  });
 
   final _PickerAnchorHandle? anchor;
   final EdgeInsets insets;
@@ -3872,7 +3888,7 @@ class _PlayerPickerPlacement extends MultiChildLayoutDelegate {
           );
     const gap = 8.0;
     final width = math.min(
-      354.0,
+      preferredWidth,
       math.max(0.0, size.width - insets.horizontal),
     );
     final right = rect.right.clamp(
@@ -3884,6 +3900,7 @@ class _PlayerPickerPlacement extends MultiChildLayoutDelegate {
       _PickerSlot.popover,
       BoxConstraints.tightFor(width: width)
           .copyWith(maxHeight: bottom - insets.top),
+  final double preferredWidth;
     );
     positionChild(
       _PickerSlot.popover,
@@ -3932,15 +3949,114 @@ class _SleepTimerPicker extends StatelessWidget {
     final theme = Theme.of(context);
     final selected = controller.sleepDuration;
     final remaining = controller.sleepRemaining;
-    final choices = <(String, Duration?)>[
-      ('Off', null),
-      ('30 minutes', const Duration(minutes: 30)),
-      ('1 hour', const Duration(hours: 1)),
-      ('90 minutes', const Duration(minutes: 90)),
-    ];
     // A newly opened TV picker must take focus from its invoking action.
     // Its selected preset can autofocus within this fresh scope; without it,
     // the already-focused OSD scope keeps the arrow keys on the action row.
+const _pickerPadding = 12.0;
+const _trackRowPadding = 12.0;
+const _trackTrailingWidth = 30.0;
+
+String _trackPickerHint(BuildContext context) => DeviceProfile.of(context).isTv
+    ? 'Up/Down Browse · Select Choose · Back Close'
+    : 'Up/Down Browse · Enter Select · Esc Close';
+
+double _popoverWidth(BuildContext context, double contentWidth) {
+  final maxWidth = DeviceProfile.of(context).isTv
+      ? 720.0
+      : MediaQuery.sizeOf(context).width * .40;
+  return math.min(maxWidth, math.max(354.0, contentWidth));
+}
+
+double _trackPopoverWidth(
+  BuildContext context,
+  PlayerCoordinator controller,
+  PlayerTrackDisplayProjection displays,
+  PlayerTrackType type,
+) {
+  final theme = Theme.of(context).textTheme;
+  final titleStyle = theme.bodyLarge?.copyWith(fontWeight: FontWeight.w500);
+  // Keep the same horizontal padding and leading reserve as the track tiles,
+  // including room for the trailing selection glyph and its title gap.
+  const rowExtras =
+      2 * (_pickerPadding + _trackRowPadding) + _trackTrailingWidth + 22;
+  var width =
+      _textWidth(context, _trackPickerHint(context), theme.bodySmall) +
+      2 * _pickerPadding;
+  for (final track in controller.tracks) {
+    if (track.type != type) continue;
+    final display = displays.displayFor(track);
+    width = math.max(
+      width,
+      math.max(
+            _textWidth(context, display.primaryText, titleStyle),
+            _textWidth(
+              context,
+              display.secondaryFacts.join(' • '),
+              theme.bodyMedium,
+            ),
+          ) +
+          rowExtras,
+    );
+  }
+  return _popoverWidth(context, width.ceilToDouble());
+}
+
+const _sleepChoices = <(String, Duration?)>[
+  ('Off', null),
+  ('30 minutes', Duration(minutes: 30)),
+  ('1 hour', Duration(hours: 1)),
+  ('90 minutes', Duration(minutes: 90)),
+];
+
+double _sleepPopoverWidth(BuildContext context, String state) {
+  final theme = Theme.of(context);
+  var width =
+      _textWidth(context, state, theme.textTheme.bodySmall) +
+      2 * _pickerPadding;
+  for (final (label, _) in _sleepChoices) {
+    width = math.max(
+      width,
+      _textWidth(context, label, theme.listTileTheme.titleTextStyle) +
+          2 * (_pickerPadding + 16) +
+          36,
+    );
+  }
+  return _popoverWidth(context, width.ceilToDouble());
+}
+
+/// Flutter can break an overwide word in the middle. Ellipsize just that word
+/// and let the surrounding words wrap at the normal boundaries.
+Widget _pickerChoiceText(String label, TextStyle? style) => LayoutBuilder(
+  builder: (context, constraints) {
+    String fitWord(String word) {
+      if (_textWidth(context, word, style) <= constraints.maxWidth) return word;
+      final units = word.characters;
+      var lower = 0;
+      var upper = units.length;
+      while (lower < upper) {
+        final middle = (lower + upper + 1) ~/ 2;
+        if (_textWidth(context, '${units.take(middle)}…', style) <=
+            constraints.maxWidth) {
+          lower = middle;
+        } else {
+          upper = middle - 1;
+        }
+      }
+      return '${units.take(lower)}…';
+    }
+
+    final fitted = _textWidth(context, label, style) <= constraints.maxWidth
+        ? label
+        : label.split(' ').map(fitWord).join(' ');
+    return Text(
+      fitted,
+      style: style,
+      maxLines: 3,
+      overflow: TextOverflow.ellipsis,
+    );
+  },
+);
+
     Widget pickerFocus(Widget child) => DeviceProfile.of(context).isTv
         ? FocusScope(autofocus: true, child: child)
         : child;
@@ -3993,7 +4109,7 @@ class _SleepTimerPicker extends StatelessWidget {
                         color: supportingText,
                       ),
                     ),
-                  for (final choice in choices)
+                  for (final choice in _sleepChoices)
                     LineupRowSurface(
                       selected: choice.$2 == selected,
                       child: ListTile(
@@ -4105,7 +4221,10 @@ class _TracksState extends State<_Tracks> {
         return FocusScope(
           node: _focusScope,
           autofocus: true,
-          child: Padding(padding: const EdgeInsets.all(12), child: child),
+          child: Padding(
+            padding: const EdgeInsets.all(_pickerPadding),
+            child: child,
+          ),
         );
       }
       return _PlaybackDrawer(
@@ -4229,68 +4348,49 @@ class _TracksState extends State<_Tracks> {
                                   );
                                 }
 
-                                final titleWidget = fillFocus
-                                    ? Builder(
-                                        builder: (context) {
-                                          final rowRoles = LineupTheme.of(
-                                            context,
-                                          );
-                                          return Text(
-                                            title,
-                                            maxLines: 3,
-                                            overflow: TextOverflow.ellipsis,
-                                            softWrap: true,
-                                            style: textTheme.bodyLarge
-                                                ?.copyWith(
-                                                  color: rowRoles.primaryText,
-                                                  fontWeight: FontWeight.w500,
-                                                ),
-                                          );
-                                        },
-                                      )
+                                Widget choiceText(
+                                  String text,
+                                  TextStyle? style,
+                                ) => widget.inPopover
+                                    ? _pickerChoiceText(text, style)
                                     : Text(
-                                        title,
+                                        text,
                                         maxLines: 3,
                                         overflow: TextOverflow.ellipsis,
-                                        softWrap: true,
-                                        style: textTheme.bodyLarge?.copyWith(
-                                          color: roles.primaryText,
-                                          fontWeight: FontWeight.w500,
-                                        ),
+                                        style: style,
                                       );
-                                final Widget? subtitleWidget = metadata.isEmpty
-                                    ? null
-                                    : fillFocus
+
+                                Widget choiceLabel(
+                                  String text,
+                                  TextStyle? Function(LineupThemeRoles) style,
+                                ) => fillFocus
                                     ? Builder(
-                                        builder: (context) {
-                                          final rowRoles = LineupTheme.of(
-                                            context,
-                                          );
-                                          final rowSupportingText = Color.lerp(
-                                            rowRoles.secondaryText,
-                                            rowRoles.primaryText,
-                                            0.65,
-                                          )!;
-                                          return Text(
-                                            metadataText,
-                                            maxLines: 3,
-                                            overflow: TextOverflow.ellipsis,
-                                            softWrap: true,
-                                            style: textTheme.bodyMedium
-                                                ?.copyWith(
-                                                  color: rowSupportingText,
-                                                ),
-                                          );
-                                        },
-                                      )
-                                    : Text(
-                                        metadataText,
-                                        maxLines: 3,
-                                        overflow: TextOverflow.ellipsis,
-                                        softWrap: true,
-                                        style: textTheme.bodyMedium?.copyWith(
-                                          color: supportingText,
+                                        builder: (context) => choiceText(
+                                          text,
+                                          style(LineupTheme.of(context)),
                                         ),
+                                      )
+                                    : choiceText(text, style(roles));
+
+                                final titleWidget = choiceLabel(
+                                  title,
+                                  (roles) => textTheme.bodyLarge?.copyWith(
+                                    color: roles.primaryText,
+                                    fontWeight: FontWeight.w500,
+                                  ),
+                                );
+                                final subtitleWidget = metadata.isEmpty
+                                    ? null
+                                    : choiceLabel(
+                                        metadataText,
+                                        (roles) =>
+                                            textTheme.bodyMedium?.copyWith(
+                                              color: Color.lerp(
+                                                roles.secondaryText,
+                                                roles.primaryText,
+                                                .65,
+                                              ),
+                                            ),
                                       );
                                 final Widget trailingWidget = fillFocus
                                     ? Builder(
@@ -4359,7 +4459,7 @@ class _TracksState extends State<_Tracks> {
                                             minTileHeight: null,
                                             contentPadding:
                                                 EdgeInsets.symmetric(
-                                                  horizontal: 12,
+                                                  horizontal: _trackRowPadding,
                                                   vertical: 8,
                                                 ),
                                             title: titleWidget,
@@ -4398,9 +4498,7 @@ class _TracksState extends State<_Tracks> {
             key: const Key('playback-options-footer'),
             padding: EdgeInsets.only(top: widget.inPopover ? 8 : 20),
             child: Text(
-              DeviceProfile.of(context).isTv
-                  ? 'Up/Down Browse · Select Choose · Back Close'
-                  : 'Up/Down Browse · Enter Select · Esc Close',
+              _trackPickerHint(context),
               style: textTheme.bodySmall?.copyWith(color: supportingText),
             ),
           ),
@@ -4786,7 +4884,7 @@ Widget _trackTrailing({
   required bool selected,
   required Color progressFill,
 }) => SizedBox(
-  width: 30,
+  width: _trackTrailingWidth,
   child: Center(
     child: pending
         ? SizedBox.square(
