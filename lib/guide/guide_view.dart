@@ -881,6 +881,14 @@ class _GuideViewState extends State<GuideView>
       widget.onClose(invoker.context ?? context, invoker);
       return KeyEventResult.handled;
     }
+    if (_empty &&
+        DeviceProfile.of(context).isTv &&
+        _setupFocus.hasPrimaryFocus &&
+        key == LogicalKeyboardKey.arrowUp &&
+        _menuFocus.context?.mounted == true) {
+      _menuFocus.requestFocus();
+      return KeyEventResult.handled;
+    }
     if (!node.hasPrimaryFocus) return KeyEventResult.ignored;
     return _gridKey(node, event);
   }
@@ -1027,9 +1035,12 @@ class _GuideViewState extends State<GuideView>
           enabled: DeviceProfile.of(context).isTv,
         ) ??
         event.logicalKey;
-    final gridFocus = widget.focusNode ?? _guideFocus;
     if (key == LogicalKeyboardKey.arrowDown) {
-      gridFocus.requestFocus();
+      if (_empty && widget.onSetUpChannels == null) {
+        return KeyEventResult.ignored;
+      }
+      final target = _empty ? _setupFocus : widget.focusNode ?? _guideFocus;
+      target.requestFocus();
       return KeyEventResult.handled;
     }
     if (key != LogicalKeyboardKey.arrowLeft &&

@@ -59,9 +59,22 @@ void main() {
     await tester.sendKeyEvent(LogicalKeyboardKey.contextMenu);
     await tester.pumpAndSettle();
     expect(action.focusNode?.hasPrimaryFocus, isTrue);
+    await tester.sendKeyEvent(LogicalKeyboardKey.arrowUp);
+    await tester.pumpAndSettle();
+    final menu = tester.widget<TextButton>(
+      find.byKey(const Key('guide-app-menu')),
+    );
+    expect(menu.focusNode?.hasPrimaryFocus, isTrue);
+    await tester.sendKeyEvent(LogicalKeyboardKey.arrowDown);
+    await tester.pumpAndSettle();
+    expect(action.focusNode?.hasPrimaryFocus, isTrue);
     await tester.sendKeyEvent(LogicalKeyboardKey.select);
     await tester.pumpAndSettle();
     expect(fixture.controller.stage, SetupStage.channelSetup);
+    await tester.binding.handlePopRoute();
+    await tester.pumpAndSettle();
+    expect(find.text('No channels yet'), findsOneWidget);
+    expect(action.focusNode?.hasPrimaryFocus, isTrue);
   });
 
   testWidgets('TV Menu round trip restores the focused recovery action', (
