@@ -2661,6 +2661,83 @@ void main() {
     expect(lineup.artworkLoads, 1);
   });
 
+  for (final tv in [false, true]) {
+    testWidgets('Guide episode size and tight-cell priority (TV: $tv)', (
+      tester,
+    ) async {
+      tester.view
+        ..physicalSize = const Size(1920, 1080)
+        ..devicePixelRatio = 1;
+      addTearDown(tester.view.reset);
+      final now = DateTime.utc(2026, 11, 15, 17, 18);
+      final lineup = _Lineup(1);
+      addTearDown(lineup.dispose);
+      lineup.fixtureActor.replaceChannels([
+        Channel(
+          id: 'episode-channel',
+          number: 1,
+          name: 'Synthetic channel',
+          source: const ManualSource([
+            ChannelItem(
+              id: 'room',
+              title: 'Episode title',
+              showTitle: 'The Signal Room',
+              duration: Duration(minutes: 70),
+              seasonNumber: 3,
+              episodeNumber: 1,
+            ),
+            ChannelItem(
+              id: 'shift',
+              title: 'A Short Episode',
+              showTitle: 'The Signal Room',
+              duration: Duration(minutes: 8),
+              seasonNumber: 3,
+              episodeNumber: 2,
+            ),
+          ]),
+          playbackMode: PlaybackMode.sequential,
+          anchor: now,
+          shuffleSeed: 1,
+        ),
+      ]);
+      final guide = GuideController(
+        lineup: lineup,
+        clock: () => now,
+        loadSchedule: (channel) async => _schedule(channel),
+      );
+      addTearDown(guide.dispose);
+      await tester.pumpWidget(
+        MaterialApp(
+          theme: LineupTheme.forName(
+            LineupThemeName.emberSteel,
+            formFactor: profileFor(tv).formFactor,
+          ),
+          builder: _guideCanvasBuilderFor(tv),
+          home: GuideView(
+            controller: guide,
+            onClose: (_, _) {},
+            onTune: (_) async {},
+          ),
+        ),
+      );
+      await tester.pumpAndSettle();
+
+      final schedule = find.byKey(const Key('guide-schedule-list'));
+      final visibleCodes = tester.widgetList<Text>(
+        find.descendant(of: schedule, matching: find.text('S03E01')),
+      );
+      expect(visibleCodes, isNotEmpty);
+      expect(
+        visibleCodes.map((text) => text.style?.fontSize),
+        everyElement(tv ? 20 : 14),
+      );
+      expect(
+        find.descendant(of: schedule, matching: find.text('S03E02')),
+        findsNothing,
+      );
+    });
+  }
+
   testWidgets('Guide omits incomplete episode coordinates', (tester) async {
     final lineup = _Lineup(1);
     addTearDown(lineup.dispose);

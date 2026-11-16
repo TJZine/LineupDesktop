@@ -16,6 +16,43 @@ nor the idle picture prompt. The empty Manage channels directory focuses
 action. Studio inventory and Diagnostics recent events also use the shared
 empty state. The Diagnostics idle playback summary stays inline.
 
+UX assessment decision, 2026-11-13/14 (N14, maintainer visual gate).
+Meaning-bearing text has a 20 px floor at 1920×1080 and 1.0 text scale, with
+measured exceptions where the existing geometry cannot accommodate it at 1.0
+or 1.3. The measured fits include Guide episode codes, the setup action and
+the Mini Guide clock, hint and header actions,
+the full Player reader hints, Settings rail, detail selectors and account and
+support actions,
+selected Manage channels, Libraries, setup completion, Studio and onboarding
+actions, and Diagnostics
+copy action, recording status, event row text and footer notices. The settled
+Studio sweep also found room for the schedule loading label and selected
+actions, filter results and match count.
+PIN Back and Cancel, scan and restore actions, the setup applying count,
+Lineup menu destinations, and Licenses navigation and index rows fit.
+The episode code still yields to the title in tight cells.
+
+Profile names and badges retain their sizes because larger sizes ellipsize
+names or move profile rows. Guide toolbar context and Mini Guide column
+headings retain their sizes because larger sizes truncate the context sooner
+or move the schedule rows. The short track popover uses its original hint
+size because increasing it enlarges the anchored popover at both scales.
+Configure and Review keep their footer label sizes because larger text
+disrupts remote focus in their tight 1.3 layouts.
+The residual trials also retain the original scan progress text, copy feedback,
+long Menu account and tuned details, Subtitle values and options, and Studio
+schedule and draft comparison roles where larger type wraps or moves controls.
+The settled Studio column also retains the unavailable-program notice size
+because the raised text adds a line.
+
+Actions and selectors in the same row use the floor together when it fits.
+The Manage channels header, the Libraries footer, and the Studio header
+actions fit at 20 px. The Guide schedule controls, Manage channels filter
+toolbar and reorder footer, server-picker footer, Studio selection toolbar
+and Studio Move dialog footer keep their prior sizes where enlargement moves
+adjacent controls or schedule rows.
+The Package G evidence records the applied and measured held roles by surface.
+
 Use • for channel number and name, and · between metadata items. Use the
 bundled [Arimo Regular](../licenses-and-rebuilding.md#arimo-wordmark) for LINEUP.
 On an active Player recovery slate, closing the Lineup menu returns remote

@@ -3170,6 +3170,7 @@ class _MiniGuide extends StatelessWidget {
     final channels = controller.miniGuideChannels;
     final roles = LineupTheme.of(context);
     final size = MediaQuery.sizeOf(context);
+    final isTv = DeviceProfile.of(context).isTv;
     final horizontal =
         size.height >= 720 && !LineupLayout.isCompactWidth(size.width);
     final textScale = MediaQuery.textScalerOf(context).scale(1);
@@ -3183,7 +3184,7 @@ class _MiniGuide extends StatelessWidget {
     final contentInset = (horizontal
         ? (large ? 48.0 : 32.0)
         : roles.overlaySafeArea);
-    final contentPadding = DeviceProfile.of(context).isTv
+    final contentPadding = isTv
         ? LineupCanvas.contentInsets(
             context,
             minimum: EdgeInsets.fromLTRB(contentInset, 12, contentInset, 16),
@@ -3192,15 +3193,16 @@ class _MiniGuide extends StatelessWidget {
     final rowInset = (large ? 18.0 : 12.0);
     const fadeTail = 55.0;
     final theme = Theme.of(context);
+    final actionLabelStyle = LineupTypography.tvLabelStyle(context);
     return DefaultTextStyle(
       style: theme.textTheme.bodyMedium!,
       child: Builder(
         builder: (context) => Align(
           alignment: Alignment.topCenter,
           child: SafeArea(
-            top: !DeviceProfile.of(context).isTv,
-            left: !DeviceProfile.of(context).isTv,
-            right: !DeviceProfile.of(context).isTv,
+            top: !isTv,
+            left: !isTv,
+            right: !isTv,
             bottom: false,
             child: CustomPaint(
               painter: _MiniGuideFadePainter(
@@ -3267,7 +3269,9 @@ class _MiniGuide extends StatelessWidget {
                                       _time(context, controller.guide.now),
                                       style: TextStyle(
                                         color: roles.secondaryText,
-                                        fontSize: 18,
+                                        fontSize: isTv
+                                            ? LineupTypography.tvTextFloor
+                                            : 18,
                                         fontWeight: FontWeight.w400,
                                       ),
                                     ),
@@ -3284,7 +3288,10 @@ class _MiniGuide extends StatelessWidget {
                                       child: Row(
                                         mainAxisSize: MainAxisSize.min,
                                         children: [
-                                          const Text('Full Guide'),
+                                          Text(
+                                            'Full Guide',
+                                            style: actionLabelStyle,
+                                          ),
                                           SizedBox(width: 8),
                                           ExcludeSemantics(
                                             child: Icon(
@@ -3300,7 +3307,10 @@ class _MiniGuide extends StatelessWidget {
                                       child: Row(
                                         mainAxisSize: MainAxisSize.min,
                                         children: [
-                                          const Text('Close'),
+                                          Text(
+                                            'Close',
+                                            style: actionLabelStyle,
+                                          ),
                                           SizedBox(width: 8),
                                           ExcludeSemantics(
                                             child: Icon(Icons.close, size: 16),
@@ -3380,12 +3390,14 @@ class _MiniGuide extends StatelessWidget {
                               runSpacing: 4,
                               children: [
                                 Text(
-                                  DeviceProfile.of(context).isTv
+                                  isTv
                                       ? 'Up/Down Browse · Select Tune · Back Close'
                                       : 'Up / Down · Browse · Enter Tune · Esc Close',
                                   style: TextStyle(
                                     color: roles.secondaryText,
-                                    fontSize: 18,
+                                    fontSize: isTv
+                                        ? LineupTypography.tvTextFloor
+                                        : 18,
                                   ),
                                 ),
                                 Row(
@@ -4599,7 +4611,12 @@ class _TracksState extends State<_Tracks> {
             padding: EdgeInsets.only(top: widget.inPopover ? 8 : 20),
             child: Text(
               _trackPickerHint(context),
-              style: textTheme.bodySmall?.copyWith(color: supportingText),
+              style: textTheme.bodySmall?.copyWith(
+                color: supportingText,
+                fontSize: !widget.inPopover && DeviceProfile.of(context).isTv
+                    ? LineupTypography.tvTextFloor
+                    : null,
+              ),
             ),
           ),
         ],
@@ -4704,7 +4721,9 @@ class _NowPlayingInfoState extends State<_NowPlayingInfo> {
                     key: const Key('player-more-info-close'),
                     focusNode: _close,
                     onPressed: widget.controller.closeOverlay,
-                    child: const _OverlayCloseLabel(),
+                    child: _OverlayCloseLabel(
+                      style: LineupTypography.tvLabelStyle(context),
+                    ),
                   ),
                 ],
               ),
@@ -4897,8 +4916,12 @@ class _NowPlayingInfoState extends State<_NowPlayingInfo> {
                 child: Text(
                   'Up/Down Scroll · Back Close',
                   key: const Key('player-more-info-hint'),
-                  style: Theme.of(context).textTheme.bodySmall
-                      ?.copyWith(color: LineupTheme.of(context).secondaryText),
+                  style: Theme.of(context).textTheme.bodySmall?.copyWith(
+                    color: LineupTheme.of(context).secondaryText,
+                    fontSize: DeviceProfile.of(context).isTv
+                        ? LineupTypography.tvTextFloor
+                        : null,
+                  ),
                 ),
               ),
             ],
@@ -5568,19 +5591,21 @@ class _OverlayTextTheme extends StatelessWidget {
 }
 
 class _OverlayCloseLabel extends StatelessWidget {
-  const _OverlayCloseLabel();
+  const _OverlayCloseLabel({this.style});
+
+  final TextStyle? style;
 
   static const label = 'Close';
   static const gap = 6.0;
   static const iconSize = 16.0;
 
   @override
-  Widget build(BuildContext context) => const Row(
+  Widget build(BuildContext context) => Row(
     mainAxisSize: MainAxisSize.min,
     children: [
-      Text(label),
-      SizedBox(width: gap),
-      ExcludeSemantics(child: Icon(Icons.close, size: iconSize)),
+      Text(label, style: style),
+      const SizedBox(width: gap),
+      const ExcludeSemantics(child: Icon(Icons.close, size: iconSize)),
     ],
   );
 }

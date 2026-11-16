@@ -131,7 +131,9 @@ class _SetupResultStepState extends State<SetupResultStep> {
               Text(
                 '${_firstSetup ? 'Creating' : 'Updating'} ${review.plan.channels.length} ${review.plan.channels.length == 1 ? 'channel' : 'channels'}',
                 textAlign: TextAlign.center,
-                style: detailStyle,
+                style: detailStyle.merge(
+                  LineupTypography.tvLabelStyle(context),
+                ),
               ),
             ] else if (_failed) ...[
               Text(
@@ -177,6 +179,7 @@ class _SetupResultStepState extends State<SetupResultStep> {
                         : widget.onViewLineup,
                     child: Text(
                       _failed ? 'Back to review' : primaryActionLabel,
+                      style: LineupTypography.tvLabelStyle(context),
                     ),
                   ),
                 ),
@@ -184,7 +187,10 @@ class _SetupResultStepState extends State<SetupResultStep> {
                   const SizedBox(height: 12),
                   TextButton(
                     onPressed: widget.onAddCustom,
-                    child: const Text('Add a custom channel'),
+                    child: Text(
+                      'Add a custom channel',
+                      style: LineupTypography.tvLabelStyle(context),
+                    ),
                   ),
                 ],
               ],

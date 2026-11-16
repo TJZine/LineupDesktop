@@ -986,9 +986,21 @@ class _MoveProgramDialogState extends State<_MoveProgramDialog> {
               ),
             ),
             LineupSegmentedControl<bool>(
-              segments: const [
-                ButtonSegment(value: false, label: Text('Before')),
-                ButtonSegment(value: true, label: Text('After')),
+              segments: [
+                ButtonSegment(
+                  value: false,
+                  label: Text(
+                    'Before',
+                    style: LineupTypography.tvLabelStyle(context),
+                  ),
+                ),
+                ButtonSegment(
+                  value: true,
+                  label: Text(
+                    'After',
+                    style: LineupTypography.tvLabelStyle(context),
+                  ),
+                ),
               ],
               selected: {_after},
               onSelectionChanged: (value) =>

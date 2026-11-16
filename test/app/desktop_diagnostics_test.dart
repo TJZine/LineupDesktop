@@ -48,6 +48,36 @@ void main() {
     );
   }
 
+  for (final tv in [false, true]) {
+    testWidgets('Diagnostics notices use the reading size (TV: $tv)', (
+      tester,
+    ) async {
+      tester.view
+        ..physicalSize = const Size(1920, 1080)
+        ..devicePixelRatio = 1;
+      addTearDown(tester.view.reset);
+      tester.platformDispatcher.textScaleFactorTestValue = 1.3;
+      addTearDown(tester.platformDispatcher.clearTextScaleFactorTestValue);
+      final controller = FixtureController();
+      addTearDown(controller.dispose);
+      await show(tester, controller, isTv: tv);
+      await tester.pumpAndSettle();
+
+      for (final label in [
+        'This session only · Up to 250 recent events retained',
+        'Reports exclude credentials, URLs and private paths. Review before sharing.',
+      ]) {
+        final notice = find.text(label);
+        await tester.scrollUntilVisible(
+          notice,
+          240,
+          scrollable: find.byType(Scrollable).first,
+        );
+        expect(tester.widget<Text>(notice).style?.fontSize, tv ? 20 : 14);
+      }
+    });
+  }
+
   for (final large in [false, true]) {
     testWidgets(
       'TV technical header uses actual focus ink and header-only frame (large $large)',

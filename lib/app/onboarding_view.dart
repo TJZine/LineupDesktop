@@ -484,7 +484,12 @@ class UpstreamOnboardingViewState extends State<UpstreamOnboardingView>
                                 child: TextButton(
                                   focusNode: _settingsFocus,
                                   onPressed: widget.onOpenSettings,
-                                  child: const Text('Settings'),
+                                  child: Text(
+                                    'Settings',
+                                    style: LineupTypography.tvLabelStyle(
+                                      context,
+                                    ),
+                                  ),
                                 ),
                               ),
                         menuKey: const ValueKey('onboarding-app-menu'),
@@ -569,7 +574,10 @@ class UpstreamOnboardingViewState extends State<UpstreamOnboardingView>
               autofocus: enabled,
               onPressed: enabled ? widget.controller.startLinking : null,
               icon: const Icon(Icons.link),
-              label: const Text('Sign in to Plex'),
+              label: Text(
+                'Sign in to Plex',
+                style: LineupTypography.tvLabelStyle(context),
+              ),
             ),
             _onboardingFeedback(const ValueKey('welcome-feedback-slot')),
           ],
@@ -770,7 +778,10 @@ class UpstreamOnboardingViewState extends State<UpstreamOnboardingView>
               focusNode: isTv ? _linkActionFocus : null,
               onPressed: _openingBrowser ? null : _openBrowser,
               icon: const Icon(Icons.open_in_browser),
-              label: Text(isTv ? 'Open on this TV' : 'Open browser'),
+              label: Text(
+                isTv ? 'Open on this TV' : 'Open browser',
+                style: LineupTypography.tvLabelStyle(context),
+              ),
             ),
           )
         : FilledButton(
@@ -956,7 +967,10 @@ class UpstreamOnboardingViewState extends State<UpstreamOnboardingView>
                     onPressed: controller.busy
                         ? null
                         : controller.cancelLinking,
-                    child: const Text('Cancel'),
+                    child: Text(
+                      'Cancel',
+                      style: LineupTypography.tvLabelStyle(context),
+                    ),
                   ),
               ],
             ),
@@ -1075,7 +1089,10 @@ class UpstreamOnboardingViewState extends State<UpstreamOnboardingView>
         SizedBox(height: 28),
         TextButton(
           onPressed: _actionsBusy ? null : widget.onLogout,
-          child: const Text('Sign out'),
+          child: Text(
+            'Sign out',
+            style: LineupTypography.tvLabelStyle(context),
+          ),
         ),
         if (widget.controller.profileSelectionCanCancel) ...[
           SizedBox(height: 12),
@@ -1915,13 +1932,23 @@ class _ServerCard extends StatelessWidget {
                 autofocus: autofocus && onPressed != null,
                 focusNode: focusNode,
                 onPressed: onPressed,
-                child: ExcludeSemantics(child: Text(buttonLabel)),
+                child: ExcludeSemantics(
+                  child: Text(
+                    buttonLabel,
+                    style: LineupTypography.tvLabelStyle(context),
+                  ),
+                ),
               )
             : OutlinedButton(
                 autofocus: autofocus && onPressed != null,
                 focusNode: focusNode,
                 onPressed: onPressed,
-                child: ExcludeSemantics(child: Text(buttonLabel)),
+                child: ExcludeSemantics(
+                  child: Text(
+                    buttonLabel,
+                    style: LineupTypography.tvLabelStyle(context),
+                  ),
+                ),
               ),
       ),
     );
@@ -2167,6 +2194,7 @@ class _ProfilePinStepState extends State<_ProfilePinStep> {
                                 widget.profileOriginIsReady
                             ? '‹ Settings · Account'
                             : '‹ Profiles',
+                        style: LineupTypography.tvLabelStyle(context),
                       ),
                     ),
                   ),
@@ -2295,7 +2323,10 @@ class _ProfilePinStepState extends State<_ProfilePinStep> {
                   SizedBox(height: 20),
                   TextButton(
                     onPressed: _submitting ? null : handleBack,
-                    child: const Text('Cancel'),
+                    child: Text(
+                      'Cancel',
+                      style: LineupTypography.tvLabelStyle(context),
+                    ),
                   ),
                 ],
               ),

@@ -83,6 +83,16 @@ Studio offers **Update lineup…** when programming is unavailable. Diagnostics
 uses the shared component for the recent-events area and keeps its idle
 playback summary inline.
 
+## TV typography floor
+
+UX assessment decision, 2026-11-13/14 (N14). The floor for meaning-bearing
+TV text is 20 px on the 1920×1080 design canvas at 1.0 text scale. Verify the
+existing layout at 1.0 and 1.3. Preserve a smaller size where a 20 px trial
+demonstrates wrapping, clipping, overlap, truncation, or movement of existing
+rows or controls. Buttons and selectors in the same action row use the floor
+together when it fits. Retain the group's prior sizes when the shared increase
+exceeds that layout. The Guide's episode code yields to the title in tight cells.
+
 ## First-run setup
 
 UX assessment decision, 2026-11-13/14. A sole reachable server opens

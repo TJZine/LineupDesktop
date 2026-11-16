@@ -47,7 +47,10 @@ class _StudioInventoryStatus extends StatelessWidget {
           ),
           LineupInlineLink(
             onPressed: saving ? null : onGenerate,
-            child: const Text('Retry the lineup update'),
+            child: Text(
+              'Retry the lineup update',
+              style: LineupTypography.tvLabelStyle(context),
+            ),
           ),
         ],
       );

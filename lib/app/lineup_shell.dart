@@ -1224,7 +1224,7 @@ class _LineupShellState extends State<LineupShell> {
         selected: selected,
         autofocus: autofocus,
         onPressed: select,
-        child: Text(label),
+        child: Text(label, style: LineupTypography.tvLabelStyle(context)),
       ),
     );
   }

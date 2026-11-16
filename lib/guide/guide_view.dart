@@ -1355,7 +1355,10 @@ class _GuideViewState extends State<GuideView>
                         focusNode: _setupFocus,
                         autofocus: isTv,
                         onPressed: widget.onSetUpChannels,
-                        child: const Text('Set up channels'),
+                        child: Text(
+                          'Set up channels',
+                          style: LineupTypography.tvLabelStyle(context),
+                        ),
                       ),
                     ),
                   );
@@ -3679,7 +3682,9 @@ class _ProgramCellContent extends StatelessWidget {
             .copyWith(color: focused ? roles.focusedText : roles.mutedText);
         final tagStyle = Theme.of(context).textTheme.labelSmall?.copyWith(
           height: 1.1,
-          fontSize: 14,
+          fontSize: DeviceProfile.of(context).isTv
+              ? LineupTypography.tvTextFloor
+              : 14,
           color: focused ? roles.focusedText : null,
           fontWeight: FontWeight.w500,
           letterSpacing: 0.2,

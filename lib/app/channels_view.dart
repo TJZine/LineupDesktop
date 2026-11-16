@@ -362,6 +362,7 @@ class ChannelsViewState extends State<ChannelsView> {
       fontSize: _directorySize(28, 24),
       color: LineupTheme.of(context).secondaryText,
     );
+    final actionLabelStyle = LineupTypography.tvLabelStyle(context);
     final bodyStyle = Theme.of(context).textTheme.bodyMedium
         ?.copyWith(fontSize: 18);
 
@@ -422,12 +423,18 @@ class ChannelsViewState extends State<ChannelsView> {
                             onPressed: _saving
                                 ? null
                                 : widget.controller.enterChannelSetup,
-                            child: const Text('Update lineup…'),
+                            child: Text(
+                              'Update lineup…',
+                              style: actionLabelStyle,
+                            ),
                           ),
                           FilledButton(
                             focusNode: _addFocus,
                             onPressed: _saving ? null : openNew,
-                            child: const Text('Add a custom channel'),
+                            child: Text(
+                              'Add a custom channel',
+                              style: actionLabelStyle,
+                            ),
                           ),
                         ],
                       ),
@@ -493,7 +500,10 @@ class ChannelsViewState extends State<ChannelsView> {
                                     ? null
                                     : widget.controller.enterChannelSetup,
                                 icon: const Icon(Icons.auto_awesome_outlined),
-                                label: const Text('Generate lineup…'),
+                                label: Text(
+                                  'Generate lineup…',
+                                  style: actionLabelStyle,
+                                ),
                               ),
                             ),
                             const SizedBox(height: 8),
@@ -501,7 +511,10 @@ class ChannelsViewState extends State<ChannelsView> {
                               focusNode: _addFocus,
                               onPressed: _saving ? null : openNew,
                               icon: const Icon(Icons.add),
-                              label: const Text('Add a custom channel'),
+                              label: Text(
+                                'Add a custom channel',
+                                style: actionLabelStyle,
+                              ),
                             ),
                           ],
                         ),
@@ -1847,7 +1860,7 @@ class _MoveChannelDialogState extends State<_MoveChannelDialog> {
       actions: [
         TextButton(
           onPressed: () => Navigator.pop(context),
-          child: const Text('Cancel'),
+          child: Text('Cancel', style: LineupTypography.tvLabelStyle(context)),
         ),
       ],
     );

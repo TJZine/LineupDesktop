@@ -1122,7 +1122,8 @@ void main() {
           expect(fixture.player.overlay.name, 'programInfo');
           expect(find.byKey(const Key('player-osd-surface')), findsNothing);
           expect(find.byKey(const Key('player-osd-channel-bug')), findsNothing);
-          expect(find.text('Up/Down Scroll · Back Close'), findsOneWidget);
+          final hint = find.text('Up/Down Scroll · Back Close');
+          expect(tester.widget<Text>(hint).style?.fontSize, 20);
           final reader = find.byKey(const Key('player-more-info-reading'));
           expect(Focus.of(tester.element(reader)).hasPrimaryFocus, isTrue);
           final decoration =
@@ -7438,29 +7439,42 @@ void main() {
             ),
           );
           await tester.pumpAndSettle();
-          expect(
-            find.text(
-              isTv
-                  ? 'Up/Down Browse · Select Tune · Back Close'
-                  : 'Up / Down · Browse · Enter Tune · Esc Close',
-            ),
-            findsOneWidget,
+          final hint = find.text(
+            isTv
+                ? 'Up/Down Browse · Select Tune · Back Close'
+                : 'Up / Down · Browse · Enter Tune · Esc Close',
           );
+          expect(tester.widget<Text>(hint).style?.fontSize, isTv ? 20 : 18);
 
           fixture.player.closeOverlay();
           fixture.player.showOsd();
           fixture.player.showTracks(PlayerTrackType.audio);
           await tester.pumpAndSettle();
-          expect(
-            find.descendant(
-              of: find.byKey(const Key('playback-options-footer')),
-              matching: find.text(
-                isTv
-                    ? 'Up/Down Browse · Select Choose · Back Close'
-                    : 'Up/Down Browse · Enter Select · Esc Close',
-              ),
+          final trackHint = find.descendant(
+            of: find.byKey(const Key('playback-options-footer')),
+            matching: find.text(
+              isTv
+                  ? 'Up/Down Browse · Select Choose · Back Close'
+                  : 'Up/Down Browse · Enter Select · Esc Close',
             ),
-            findsOneWidget,
+          );
+          expect(tester.widget<Text>(trackHint).style?.fontSize, 18);
+          fixture.player.closeOverlay();
+          fixture.native.emitTracks([
+            for (var id = 1; id <= 8; id++)
+              PlayerTrack(
+                id: id,
+                type: PlayerTrackType.audio,
+                selected: id == 1,
+                title: 'Synthetic track $id',
+              ),
+          ]);
+          await tester.pump();
+          fixture.player.showTracks(PlayerTrackType.audio);
+          await tester.pumpAndSettle();
+          expect(
+            tester.widget<Text>(trackHint).style?.fontSize,
+            isTv ? 20 : 18,
           );
         } finally {
           fixture.dispose();
