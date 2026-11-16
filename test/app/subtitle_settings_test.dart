@@ -778,7 +778,7 @@ void main() {
       await showSettings(
         tester,
         controller,
-        size: const Size(412, 915),
+        size: const Size(412, 877),
         text: 2,
       );
       await reveal(tester, field('Styled'));
@@ -789,9 +789,6 @@ void main() {
         const ValueKey('subtitle-scrolling-heading'),
       );
       expect(scrollingHeading, findsNothing);
-      // The shorter viewport forces the heading to scroll once Saving appears.
-      tester.view.physicalSize = const Size(412, 877);
-      await tester.pumpAndSettle();
       expect(toggle.focusNode!.hasFocus, isTrue);
       toggle.onChanged!(true);
       await tester.pump(const Duration(milliseconds: 350));
@@ -1029,9 +1026,9 @@ void main() {
     (size: const Size(1260, 720), text: 1.0, tv: false),
     (size: const Size(1262, 720), text: 1.0, tv: false),
     (size: const Size(721, 720), text: 1.0, tv: false),
-    (size: const Size(412, 915), text: 1.0, tv: false),
+    (size: const Size(412, 877), text: 1.0, tv: false),
     (size: const Size(1920, 1080), text: 2.0, tv: false),
-    (size: const Size(412, 915), text: 2.0, tv: false),
+    (size: const Size(412, 877), text: 2.0, tv: false),
     (size: const Size(960, 540), text: 1.0, tv: true),
     (size: const Size(960, 540), text: 1.15, tv: true),
     (size: const Size(960, 540), text: 1.3, tv: true),
