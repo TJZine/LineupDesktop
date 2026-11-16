@@ -1,3 +1,4 @@
+import 'dart:convert';
 import 'dart:io';
 import 'dart:ui' as ui;
 
@@ -80,6 +81,30 @@ void main() {
     await tester.pumpAndSettle();
   }
 
+  testWidgets('bundled Arimo font loads and styles the LINEUP wordmark', (
+    tester,
+  ) async {
+    final manifest = jsonDecode(
+      await rootBundle.loadString('FontManifest.json'),
+    ) as List<dynamic>;
+    final family = manifest.cast<Map<String, dynamic>>().singleWhere(
+      (entry) => entry['family'] == 'Arimo',
+    );
+    expect(family['fonts'], [
+      {'asset': 'assets/fonts/arimo/Arimo-Regular.ttf'},
+    ]);
+
+    final fixture = UiFixture(
+      scenario: const LineupScenario(stage: SetupStage.ready),
+    );
+    addTearDown(fixture.controller.dispose);
+    await tester.pumpWidget(fixture.build());
+    await tester.pumpAndSettle();
+    final wordmark = tester.widget<Text>(find.text('LINEUP').first);
+    expect(wordmark.style?.fontFamily, 'Arimo');
+    expect(wordmark.style?.fontWeight, FontWeight.w400);
+  });
+
   macTest(
     'ready shell pops each level, restores Support and preserves store/player',
     (tester) async {
@@ -157,6 +182,10 @@ void main() {
       await tap(tester, 'Fonts and engine notices');
       expect(find.text('Instrument Sans'), findsOneWidget);
       expect(find.text('Inter'), findsOneWidget);
+      await tap(tester, 'Arimo');
+      expect(find.textContaining('Version 2.0, January 2004'), findsOneWidget);
+      await escape(tester);
+      expect(find.text('Arimo'), findsOneWidget);
       expect(tester.takeException(), isNull);
       await escape(tester);
       expect(find.byType(LicensesView), findsNothing);

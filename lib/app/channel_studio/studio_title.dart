@@ -161,6 +161,7 @@ class _StudioTitleState extends State<_StudioTitle> {
       : child;
 
   Widget _studioActions({required bool persisted, required bool saved}) {
+    final actionLabelStyle = LineupTypography.tvLabelStyle(context);
     final recovering = widget.conflict || widget.baseDeleted;
     final showSave =
         !recovering &&
@@ -177,7 +178,7 @@ class _StudioTitleState extends State<_StudioTitle> {
             order: const NumericFocusOrder(4),
             child: OutlinedButton(
               onPressed: widget.busy ? null : widget.onDuplicate,
-              child: const Text('Duplicate as custom'),
+              child: Text('Duplicate as custom', style: actionLabelStyle),
             ),
           ),
         if (persisted && !recovering)
@@ -191,13 +192,13 @@ class _StudioTitleState extends State<_StudioTitle> {
                           ? null
                           : widget.onTune,
                       icon: const Icon(Icons.play_arrow),
-                      label: const Text('Tune in'),
+                      label: Text('Tune in', style: actionLabelStyle),
                     )
                   : OutlinedButton.icon(
                       key: const Key('studio-tune'),
                       onPressed: canSave ? widget.onSaveAndTune : null,
                       icon: const Icon(Icons.play_arrow),
-                      label: const Text('Tune in'),
+                      label: Text('Tune in', style: actionLabelStyle),
                     ),
             ),
           ),
@@ -216,6 +217,7 @@ class _StudioTitleState extends State<_StudioTitle> {
                           ChannelStudioMode.inspectGenerated => 'Save identity',
                           _ => 'Save channel',
                         },
+                  style: actionLabelStyle,
                 ),
               ),
             ),

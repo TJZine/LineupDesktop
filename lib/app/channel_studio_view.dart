@@ -280,12 +280,8 @@ class ChannelStudioViewState extends State<ChannelStudioView> {
 
   void _nameChanged() => _changed(() => _nameEdited = true);
 
-  String _describeSource(ContentSource source) => _sourceLabel(
-    source,
-    widget.controller,
-    _personLabels,
-    separator: _isTv ? ' · ' : ' • ',
-  );
+  String _describeSource(ContentSource source) =>
+      _sourceLabel(source, widget.controller, _personLabels);
 
   @override
   void didUpdateWidget(ChannelStudioView oldWidget) {
@@ -1176,9 +1172,8 @@ class ChannelStudioViewState extends State<ChannelStudioView> {
 String _sourceLabel(
   ContentSource source,
   LineupController controller,
-  StudioPersonLabels people, {
-  required String separator,
-}) => switch (source) {
+  StudioPersonLabels people,
+) => switch (source) {
   LibrarySource(
     :final libraryId,
     :final includeWatched,
@@ -1191,12 +1186,12 @@ String _sourceLabel(
         '${_facetLabel(filter.key.name)}: ${filter.value.map((value) => people.label(controller, libraryId, filter.key, value)).join(', ')}',
       if (order == LibraryOrder.addedDescending) 'Newest first',
       includeWatched ? 'includes watched' : 'unwatched only',
-    ].join(separator),
+    ].join(' · '),
   ManualSource(:final items) => '${items.length} hand-picked programs',
   PlaylistSource(:final playlistId) =>
     'Playlist: ${controller.availablePlaylists.where((playlist) => playlist.id == playlistId).firstOrNull?.title ?? playlistId}',
   MixedSource(:final sources, :final interleave) =>
-    '${sources.length}-source mix$separator${interleave ? 'interleaved' : 'in sequence'}',
+    '${sources.length}-source mix · ${interleave ? 'interleaved' : 'in sequence'}',
 };
 
 LibraryFilter _libraryFilter(String key) =>

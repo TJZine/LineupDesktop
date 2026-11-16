@@ -38,6 +38,7 @@ flutter:
     - assets/branding/lineup-wordmark.png
     - assets/fonts/instrumentsans/OFL.txt
     - assets/fonts/inter/OFL.txt
+    - assets/fonts/arimo/LICENSE.txt
     - assets/fonts/subtitles/monoSans/
     - assets/fonts/subtitles/serif/
     - assets/fonts/subtitles/monoSerif/
@@ -46,6 +47,9 @@ flutter:
     - assets/fonts/subtitles/smallCaps/
     - assets/licenses/
   fonts:
+    - family: Arimo
+      fonts:
+        - asset: assets/fonts/arimo/Arimo-Regular.ttf
     - family: Instrument Sans
       fonts:
         - asset: assets/fonts/instrumentsans/InstrumentSans[wdth,wght].ttf

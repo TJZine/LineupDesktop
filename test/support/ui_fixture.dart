@@ -14,6 +14,23 @@ import 'device_profile_test_support.dart';
 export 'test_doubles.dart';
 export 'device_profile_test_support.dart';
 
+/// A schedule for tests that need the populated Guide controls.
+Channel syntheticGuideChannel() => Channel(
+  id: 'synthetic-guide',
+  number: 7,
+  name: 'Synthetic channel',
+  source: const ManualSource([
+    ChannelItem(
+      id: 'synthetic-program',
+      title: 'Synthetic program',
+      duration: Duration(hours: 3),
+    ),
+  ]),
+  playbackMode: PlaybackMode.sequential,
+  anchor: DateTime.utc(2026, 1, 15),
+  shuffleSeed: 1,
+);
+
 /// Deterministic UI states for widget tests. This file is not imported by the
 /// production composition root.
 class UiFixture {

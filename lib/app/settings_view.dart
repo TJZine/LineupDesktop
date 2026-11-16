@@ -271,7 +271,10 @@ class _SettingsViewState extends State<SettingsView> {
       if (widget.onBack != null)
         LineupInlineLink(
           onPressed: widget.onBack,
-          child: Text(widget.backLabel),
+          child: Text(
+            widget.backLabel,
+            style: LineupTypography.tvLabelStyle(context),
+          ),
         ),
       Text(
         'Settings',
@@ -448,7 +451,10 @@ class _SettingsViewState extends State<SettingsView> {
                   });
                 }
               },
-              child: Text(_categoryLabel(category)),
+              child: Text(
+                _categoryLabel(category),
+                style: LineupTypography.tvLabelStyle(context),
+              ),
             ),
           ),
         ),
@@ -695,7 +701,10 @@ class _SettingsViewState extends State<SettingsView> {
                       ? null
                       : widget.onSwitchProfile ??
                             widget.controller.showProfiles,
-                  child: const Text('Switch profile'),
+                  child: Text(
+                    'Switch profile',
+                    style: LineupTypography.tvLabelStyle(context),
+                  ),
                 ),
                 first: true,
               ),
@@ -730,7 +739,10 @@ class _SettingsViewState extends State<SettingsView> {
                   onPressed: widget.authorizationTransitionPending
                       ? null
                       : widget.onSwitchServer ?? widget.controller.showServers,
-                  child: const Text('Switch server'),
+                  child: Text(
+                    'Switch server',
+                    style: LineupTypography.tvLabelStyle(context),
+                  ),
                 ),
               ),
               SizedBox(height: 24),
@@ -747,7 +759,10 @@ class _SettingsViewState extends State<SettingsView> {
                           widget.onSignOut == null
                       ? null
                       : () => unawaited(widget.onSignOut!()),
-                  child: const Text('Sign out of Plex'),
+                  child: Text(
+                    'Sign out of Plex',
+                    style: LineupTypography.tvLabelStyle(context),
+                  ),
                 ),
               ),
             ],
@@ -773,7 +788,10 @@ class _SettingsViewState extends State<SettingsView> {
                 ),
                 control: OutlinedButton(
                   onPressed: widget.onOpenDiagnostics,
-                  child: const Text('Open Diagnostics'),
+                  child: Text(
+                    'Open Diagnostics',
+                    style: LineupTypography.tvLabelStyle(context),
+                  ),
                 ),
               ),
               if (defaultTargetPlatform == TargetPlatform.macOS || isTv)
@@ -786,7 +804,10 @@ class _SettingsViewState extends State<SettingsView> {
                   control: OutlinedButton(
                     focusNode: widget.openLicensesFocus,
                     onPressed: widget.onOpenLicenses,
-                    child: const Text('Open Licenses'),
+                    child: Text(
+                      'Open Licenses',
+                      style: LineupTypography.tvLabelStyle(context),
+                    ),
                   ),
                 ),
             ],
@@ -1302,7 +1323,11 @@ class _Dropdown<T> extends StatelessWidget {
               isExpanded: true,
               itemHeight: null,
               icon: const Icon(Icons.arrow_drop_down, size: 20),
-              style: theme.textTheme.bodyLarge?.copyWith(fontSize: 18),
+              style: theme.textTheme.bodyLarge?.copyWith(
+                fontSize: DeviceProfile.of(context).isTv
+                    ? LineupTypography.tvTextFloor
+                    : 18,
+              ),
               decoration: InputDecoration(),
               items: items,
               selectedItemChildren: choiceDescription == null

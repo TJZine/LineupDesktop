@@ -43,6 +43,7 @@ Future<void> loadPinnedTestFonts() async {
     await loader.load();
   }
   for (final entry in {
+    'Arimo': 'arimo/Arimo-Regular.ttf',
     'Instrument Sans': 'instrumentsans/InstrumentSans[wdth,wght].ttf',
     'Inter': 'inter/Inter[opsz,wght].ttf',
   }.entries) {

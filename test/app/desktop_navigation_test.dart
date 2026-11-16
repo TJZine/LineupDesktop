@@ -219,7 +219,10 @@ void main() {
     final fixture = UiFixture(
       player: FixturePlayer()
         ..emit(const PlayerStatus(state: PlayerState.ready, message: 'Ready')),
-      scenario: LineupScenario(stage: SetupStage.ready),
+      scenario: LineupScenario(
+        stage: SetupStage.ready,
+        channels: [syntheticGuideChannel()],
+      ),
     );
     await tester.pumpWidget(fixture.build());
     await tester.pumpAndSettle();
@@ -568,7 +571,10 @@ void main() {
         ..emit(const PlayerStatus(state: PlayerState.ready, message: 'Ready'));
       final fixture = UiFixture(
         player: nativePlayer,
-        scenario: LineupScenario(stage: SetupStage.ready),
+        scenario: LineupScenario(
+          stage: SetupStage.ready,
+          channels: [syntheticGuideChannel()],
+        ),
       );
       await tester.pumpWidget(fixture.build());
       await tester.pumpAndSettle();

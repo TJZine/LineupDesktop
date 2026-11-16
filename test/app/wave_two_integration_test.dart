@@ -21,6 +21,167 @@ import '../support/ui_fixture.dart';
 final _now = DateTime.utc(2026, 11, 15, 16, 7);
 
 void main() {
+  testWidgets('empty TV Guide has one setup block and starts on its action', (
+    tester,
+  ) async {
+    tester.view
+      ..physicalSize = const Size(1920, 1080)
+      ..devicePixelRatio = 1;
+    addTearDown(tester.view.reset);
+    final fixture = UiFixture(
+      profile: profileFor(true),
+      scenario: const LineupScenario(
+        stage: SetupStage.ready,
+        channels: [],
+        settings: LineupSettings(reduceMotion: true),
+      ),
+    );
+    addTearDown(fixture.controller.dispose);
+    await tester.pumpWidget(fixture.build());
+    await tester.pumpAndSettle();
+
+    expect(find.text('No channels yet'), findsOneWidget);
+    expect(
+      find.text('Set up your channels to start watching.'),
+      findsOneWidget,
+    );
+    expect(find.text('Choose a channel to watch'), findsNothing);
+    expect(find.byKey(const Key('guide-control-content')), findsNothing);
+    expect(find.byKey(const Key('guide-current-date-time')), findsNothing);
+    expect(find.byKey(const Key('guide-information-area')), findsNothing);
+    final action = tester.widget<FilledButton>(
+      find.widgetWithText(FilledButton, 'Set up channels'),
+    );
+    expect(action.focusNode?.hasPrimaryFocus, isTrue);
+    await tester.sendKeyEvent(LogicalKeyboardKey.contextMenu);
+    await tester.pumpAndSettle();
+    expect(find.text('Manage channels'), findsOneWidget);
+    await tester.sendKeyEvent(LogicalKeyboardKey.contextMenu);
+    await tester.pumpAndSettle();
+    expect(action.focusNode?.hasPrimaryFocus, isTrue);
+    await tester.sendKeyEvent(LogicalKeyboardKey.arrowUp);
+    await tester.pumpAndSettle();
+    final menu = tester.widget<TextButton>(
+      find.byKey(const Key('guide-app-menu')),
+    );
+    expect(menu.focusNode?.hasPrimaryFocus, isTrue);
+    await tester.sendKeyEvent(LogicalKeyboardKey.arrowRight);
+    await tester.pumpAndSettle();
+    expect(menu.focusNode?.hasPrimaryFocus, isTrue);
+    await tester.sendKeyEvent(LogicalKeyboardKey.arrowDown);
+    await tester.pumpAndSettle();
+    expect(action.focusNode?.hasPrimaryFocus, isTrue);
+    await tester.sendKeyEvent(LogicalKeyboardKey.select);
+    await tester.pumpAndSettle();
+    expect(fixture.controller.stage, SetupStage.channelSetup);
+    await tester.binding.handlePopRoute();
+    await tester.pumpAndSettle();
+    expect(find.text('No channels yet'), findsOneWidget);
+    expect(action.focusNode?.hasPrimaryFocus, isTrue);
+  });
+
+  testWidgets(
+    'populated Guide keeps its controls for a search with no matches',
+    (tester) async {
+      final fixture = await _pumpShell(tester, tv: true);
+      final search = find.byKey(const Key('guide-channel-search'));
+      await tester.enterText(search, 'Absent channel');
+      await tester.pumpAndSettle();
+
+      expect(fixture.controller.channels, isNotEmpty);
+      expect(find.textContaining('No matching channels'), findsWidgets);
+      expect(search, findsOneWidget);
+      expect(find.byKey(const Key('guide-control-content')), findsOneWidget);
+      expect(find.byKey(const Key('guide-hours')), findsOneWidget);
+      expect(find.text('No channels yet'), findsNothing);
+      expect(find.text('Set up channels'), findsNothing);
+    },
+  );
+
+  testWidgets('TV Menu closes to Player when the recovery slate clears', (
+    tester,
+  ) async {
+    final fixture = await _pumpShell(tester, tv: true);
+    await tester.sendKeyEvent(LogicalKeyboardKey.select);
+    await tester.pump();
+    expect(fixture.player.loads, hasLength(1));
+    _fail(fixture, known: true);
+    await tester.pumpAndSettle();
+
+    final action = find.widgetWithText(
+      OutlinedButton,
+      'Choose another channel',
+    );
+    await tester.sendKeyEvent(LogicalKeyboardKey.arrowRight);
+    await tester.pumpAndSettle();
+    expect(
+      Focus.of(tester.element(find.text('Choose another channel'))).hasFocus,
+      isTrue,
+    );
+    await tester.sendKeyEvent(LogicalKeyboardKey.contextMenu);
+    await tester.pumpAndSettle();
+    expect(find.text('Manage channels'), findsOneWidget);
+
+    final recoveringPlayer = tester.widget<PlayerView>(find.byType(PlayerView));
+    await recoveringPlayer.controller.retry();
+    await tester.pump();
+    expect(fixture.player.loads, hasLength(2));
+    fixture.player.emit(
+      const PlayerStatus(state: PlayerState.playing, message: 'Playing'),
+      eventGeneration: fixture.player.generation,
+    );
+    await tester.pumpAndSettle();
+    expect(action, findsNothing);
+    expect(find.text('Manage channels'), findsOneWidget);
+
+    await tester.sendKeyEvent(LogicalKeyboardKey.contextMenu);
+    await tester.pumpAndSettle();
+    expect(find.text('Manage channels'), findsNothing);
+    final player = tester.widget<PlayerView>(find.byType(PlayerView));
+    expect(player.focusNode?.hasPrimaryFocus, isTrue);
+    expect(tester.takeException(), isNull);
+  });
+
+  testWidgets('TV Menu round trip restores the focused recovery action', (
+    tester,
+  ) async {
+    final fixture = await _pumpShell(tester, tv: true);
+    await tester.sendKeyEvent(LogicalKeyboardKey.select);
+    await tester.pump();
+    expect(fixture.player.loads, hasLength(1));
+    _fail(fixture, known: true);
+    await tester.pumpAndSettle();
+
+    OutlinedButton? focusedAction() => FocusManager
+        .instance
+        .primaryFocus
+        ?.context
+        ?.findAncestorWidgetOfExactType<OutlinedButton>();
+    final choose = tester.widget<OutlinedButton>(
+      find.widgetWithText(OutlinedButton, 'Choose another channel'),
+    );
+    await tester.sendKeyEvent(LogicalKeyboardKey.arrowRight);
+    await tester.pumpAndSettle();
+    expect(focusedAction(), same(choose));
+    await tester.sendKeyEvent(LogicalKeyboardKey.contextMenu);
+    await tester.pumpAndSettle();
+    expect(find.text('Manage channels'), findsOneWidget);
+    await tester.sendKeyEvent(LogicalKeyboardKey.contextMenu);
+    await tester.pumpAndSettle();
+    expect(find.text('Manage channels'), findsNothing);
+    expect(
+      focusedAction(),
+      same(
+        tester.widget(
+          find.widgetWithText(OutlinedButton, 'Choose another channel'),
+        ),
+      ),
+    );
+    await tester.sendKeyEvent(LogicalKeyboardKey.select);
+    await tester.pumpAndSettle();
+    expect(find.text('Mini Guide'), findsOneWidget);
+  });
+
   for (final tv in [false, true]) {
     testWidgets(
       'Diagnostics Details and Support keep their origins (TV: $tv)',

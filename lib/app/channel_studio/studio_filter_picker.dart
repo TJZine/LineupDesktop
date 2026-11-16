@@ -145,6 +145,7 @@ class _StudioFilterPickerState extends State<_StudioFilterPicker> {
         _activeAvailableFilterValues.contains(value)
             ? (_activeFilterLabels[value] ?? value)
             : '$value (unavailable — retained)',
+        style: LineupTypography.tvLabelStyle(context),
       ),
       onChanged: (checked) => setState(() {
         checked == true
@@ -217,7 +218,8 @@ class _StudioFilterPickerState extends State<_StudioFilterPicker> {
                     ),
                   Text(
                     '$count matching programs',
-                    style: _studioSupportStyle(context),
+                    style: _studioSupportStyle(context)
+                        .merge(LineupTypography.tvLabelStyle(context)),
                   ),
                 ],
               ),

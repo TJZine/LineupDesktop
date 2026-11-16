@@ -73,7 +73,7 @@ class LineupTopBar extends StatelessWidget {
                   Text(
                     'LINEUP',
                     style: TextStyle(
-                      fontFamily: 'Arial',
+                      fontFamily: 'Arimo',
                       fontSize: 22,
                       fontWeight: FontWeight.w400,
                       letterSpacing: 3,
@@ -310,60 +310,64 @@ class LineupSection extends StatelessWidget {
 
 class LineupEmptyState extends StatelessWidget {
   const LineupEmptyState({
-    required this.icon,
+    this.icon,
     required this.title,
     required this.message,
     this.action,
     super.key,
   });
-  final IconData icon;
+  final IconData? icon;
   final String title;
   final String message;
   final Widget? action;
 
   @override
-  Widget build(BuildContext context) => LayoutBuilder(
-    builder: (context, constraints) {
-      return SingleChildScrollView(
-        child: ConstrainedBox(
-          constraints: BoxConstraints(
-            minHeight: constraints.maxHeight.isFinite
-                ? constraints.maxHeight
-                : 0,
-          ),
-          child: Center(
-            child: Card(
-              child: Padding(
-                padding: EdgeInsets.all(32),
-                child: Column(
-                  mainAxisSize: MainAxisSize.min,
-                  children: [
-                    Icon(
-                      icon,
-                      size: 48,
-                      color: Theme.of(context).colorScheme.primary,
-                    ),
-                    SizedBox(height: 16),
-                    Semantics(
-                      header: true,
-                      child: Text(
-                        title,
-                        textAlign: TextAlign.center,
-                        style: Theme.of(context).textTheme.headlineSmall,
-                      ),
-                    ),
-                    SizedBox(height: 8),
-                    Text(message, textAlign: TextAlign.center),
-                    if (action != null) ...[SizedBox(height: 24), action!],
-                  ],
+  Widget build(BuildContext context) {
+    final theme = Theme.of(context);
+    final block = Center(
+      child: Card(
+        child: Padding(
+          padding: const EdgeInsets.all(32),
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              if (icon != null) ...[
+                Icon(icon, size: 48, color: theme.colorScheme.primary),
+                const SizedBox(height: 16),
+              ],
+              Semantics(
+                header: true,
+                child: Text(
+                  title,
+                  textAlign: TextAlign.center,
+                  style: theme.textTheme.titleLarge?.copyWith(fontSize: 24),
                 ),
               ),
-            ),
+              const SizedBox(height: 8),
+              Text(
+                message,
+                textAlign: TextAlign.center,
+                style: theme.textTheme.bodyMedium?.copyWith(
+                  color: LineupTheme.of(context).secondaryText,
+                ),
+              ),
+              if (action != null) ...[const SizedBox(height: 24), action!],
+            ],
           ),
         ),
-      );
-    },
-  );
+      ),
+    );
+    return LayoutBuilder(
+      builder: (context, constraints) => constraints.hasBoundedHeight
+          ? SingleChildScrollView(
+              child: ConstrainedBox(
+                constraints: BoxConstraints(minHeight: constraints.maxHeight),
+                child: block,
+              ),
+            )
+          : block,
+    );
+  }
 }
 
 Future<bool> confirmDestructiveAction(

@@ -362,6 +362,7 @@ class ChannelsViewState extends State<ChannelsView> {
       fontSize: _directorySize(28, 24),
       color: LineupTheme.of(context).secondaryText,
     );
+    final actionLabelStyle = LineupTypography.tvLabelStyle(context);
     final bodyStyle = Theme.of(context).textTheme.bodyMedium
         ?.copyWith(fontSize: 18);
 
@@ -422,12 +423,18 @@ class ChannelsViewState extends State<ChannelsView> {
                             onPressed: _saving
                                 ? null
                                 : widget.controller.enterChannelSetup,
-                            child: const Text('Update lineup…'),
+                            child: Text(
+                              'Update lineup…',
+                              style: actionLabelStyle,
+                            ),
                           ),
                           FilledButton(
                             focusNode: _addFocus,
                             onPressed: _saving ? null : openNew,
-                            child: const Text('Add a custom channel'),
+                            child: Text(
+                              'Add a custom channel',
+                              style: actionLabelStyle,
+                            ),
                           ),
                         ],
                       ),
@@ -474,30 +481,44 @@ class ChannelsViewState extends State<ChannelsView> {
           ],
           Expanded(
             child: channels.isEmpty
-                ? LineupEmptyState(
-                    icon: Icons.view_list,
-                    title: 'Build your first channel',
-                    message: 'Generate a lineup from Plex or create one custom channel.',
-                    action: Wrap(
-                      spacing: 8,
-                      runSpacing: 8,
-                      alignment: WrapAlignment.center,
-                      children: [
-                        FilledButton.icon(
-                          focusNode: widget.focusNode,
-                          onPressed: _saving
-                              ? null
-                              : widget.controller.enterChannelSetup,
-                          icon: const Icon(Icons.auto_awesome_outlined),
-                          label: const Text('Generate lineup…'),
+                ? LayoutBuilder(
+                    builder: (context, constraints) => SingleChildScrollView(
+                      child: ConstrainedBox(
+                        constraints: BoxConstraints(
+                          minHeight: constraints.maxHeight,
                         ),
-                        OutlinedButton.icon(
-                          focusNode: _addFocus,
-                          onPressed: _saving ? null : openNew,
-                          icon: const Icon(Icons.add),
-                          label: const Text('Add a custom channel'),
+                        child: Column(
+                          mainAxisAlignment: MainAxisAlignment.center,
+                          children: [
+                            LineupEmptyState(
+                              icon: Icons.view_list,
+                              title: 'Build your first channel',
+                              message: 'Generate a lineup from Plex or create one custom channel.',
+                              action: FilledButton.icon(
+                                focusNode: widget.focusNode,
+                                onPressed: _saving
+                                    ? null
+                                    : widget.controller.enterChannelSetup,
+                                icon: const Icon(Icons.auto_awesome_outlined),
+                                label: Text(
+                                  'Generate lineup…',
+                                  style: actionLabelStyle,
+                                ),
+                              ),
+                            ),
+                            const SizedBox(height: 8),
+                            OutlinedButton.icon(
+                              focusNode: _addFocus,
+                              onPressed: _saving ? null : openNew,
+                              icon: const Icon(Icons.add),
+                              label: Text(
+                                'Add a custom channel',
+                                style: actionLabelStyle,
+                              ),
+                            ),
+                          ],
                         ),
-                      ],
+                      ),
                     ),
                   )
                 : _mode == _DirectoryMode.reorder
@@ -1839,7 +1860,7 @@ class _MoveChannelDialogState extends State<_MoveChannelDialog> {
       actions: [
         TextButton(
           onPressed: () => Navigator.pop(context),
-          child: const Text('Cancel'),
+          child: Text('Cancel', style: LineupTypography.tvLabelStyle(context)),
         ),
       ],
     );

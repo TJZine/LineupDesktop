@@ -78,6 +78,7 @@ class _LineupShellState extends State<LineupShell> {
   );
   final _channelsKey = GlobalKey<ChannelsViewState>();
   final _guideFocus = FocusNode(debugLabel: 'Guide');
+  final _guideSetupFocus = FocusNode(debugLabel: 'Guide set up channels');
   final _channelsFocus = FocusNode(debugLabel: 'Channels');
   final _settingsFocus = FocusNode(debugLabel: 'Settings');
   final _diagnosticsFocus = FocusNode(debugLabel: 'Diagnostics');
@@ -238,6 +239,7 @@ class _LineupShellState extends State<LineupShell> {
     _player.dispose();
     _guide.dispose();
     _guideFocus.dispose();
+    _guideSetupFocus.dispose();
     _channelsFocus.dispose();
     _settingsFocus.dispose();
     _diagnosticsFocus.dispose();
@@ -564,7 +566,10 @@ class _LineupShellState extends State<LineupShell> {
       return;
     }
     final target = switch (_destination) {
-      ShellDestination.guide => _guideFocus,
+      ShellDestination.guide =>
+        widget.profile.isTv && _guideSetupFocus.parent != null
+            ? _guideSetupFocus
+            : _guideFocus,
       ShellDestination.channels => _channelsFocus,
       ShellDestination.settings => _settingsFocus,
       ShellDestination.diagnostics => _diagnosticsFocus,
@@ -1219,7 +1224,7 @@ class _LineupShellState extends State<LineupShell> {
         selected: selected,
         autofocus: autofocus,
         onPressed: select,
-        child: Text(label),
+        child: Text(label, style: LineupTypography.tvLabelStyle(context)),
       ),
     );
   }
@@ -1385,6 +1390,7 @@ class _LineupShellState extends State<LineupShell> {
       controller: _guide,
       watchingChannelId: _player.watchingChannelId,
       focusNode: _guideFocus,
+      setupFocusNode: _guideSetupFocus,
       onClose: _closeGuide,
       onBack: widget.profile.isTv ? _handleTvBack : null,
       onOpenMenu: _openAppMenu,

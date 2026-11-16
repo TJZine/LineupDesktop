@@ -8,3 +8,5 @@ android/gradlew text eol=lf
 android/gradlew.bat text eol=lf
 android/gradle/wrapper/gradle-wrapper.jar binary
 android/gradle/wrapper/gradle-wrapper.properties text eol=lf
+# Preserve the exact notice bytes from the pinned upstream font.
+assets/fonts/arimo/LICENSE.txt -text

@@ -179,8 +179,11 @@ class SetupLibraryStep extends StatelessWidget {
     final roles = LineupTheme.of(context);
     final bodyStyle = Theme.of(context).textTheme.bodyMedium!
         .copyWith(color: roles.secondaryText, fontSize: 18, height: 1.4);
-    final actionStyle = Theme.of(context).textTheme.labelLarge!
-        .copyWith(fontSize: 18);
+    final actionStyle = Theme.of(context).textTheme.labelLarge!.copyWith(
+      fontSize: DeviceProfile.of(context).isTv
+          ? LineupTypography.tvTextFloor
+          : 18,
+    );
     Widget actionLabel(String label) => Builder(
       builder: (context) => Text(
         label,
@@ -233,13 +236,19 @@ class SetupLibraryStep extends StatelessWidget {
           OutlinedButton(
             key: const ValueKey('scan-again-libraries'),
             onPressed: data.busy ? null : () => onScan(advanceWhenReady: false),
-            child: const Text('Scan again'),
+            child: Text(
+              'Scan again',
+              style: LineupTypography.tvLabelStyle(context),
+            ),
           ),
         if (canRetry && canContinue)
           OutlinedButton(
             key: const ValueKey('retry-failed-libraries'),
             onPressed: data.busy ? null : () => onScan(retryFailedOnly: true),
-            child: Text(retryLabel),
+            child: Text(
+              retryLabel,
+              style: LineupTypography.tvLabelStyle(context),
+            ),
           ),
       ],
       trailing: !hasLibraries
@@ -252,7 +261,10 @@ class SetupLibraryStep extends StatelessWidget {
                 if (onRequestLogout != null)
                   TextButton(
                     onPressed: data.busy ? null : onRequestLogout,
-                    child: const Text('Sign out'),
+                    child: Text(
+                      'Sign out',
+                      style: LineupTypography.tvLabelStyle(context),
+                    ),
                   ),
                 FilledButton(
                   key: const ValueKey('setup-switch-server'),
@@ -267,7 +279,10 @@ class SetupLibraryStep extends StatelessWidget {
                       !data.busy &&
                       data.canSwitchServer,
                   onPressed: data.canSwitchServer ? onSwitchServer : null,
-                  child: const Text('Switch server'),
+                  child: Text(
+                    'Switch server',
+                    style: LineupTypography.tvLabelStyle(context),
+                  ),
                 ),
               ],
             )
@@ -283,6 +298,7 @@ class SetupLibraryStep extends StatelessWidget {
               onPressed: data.busy ? null : () => onCommit(ready),
               child: Text(
                 'Continue with ${ready.length} ${ready.length == 1 ? 'library' : 'libraries'}',
+                style: LineupTypography.tvLabelStyle(context),
               ),
             )
           : canRetry
@@ -291,14 +307,20 @@ class SetupLibraryStep extends StatelessWidget {
               onPressed: selectedLibraryIds.isEmpty || data.busy
                   ? null
                   : () => onScan(retryFailedOnly: true),
-              child: Text(retryLabel),
+              child: Text(
+                retryLabel,
+                style: LineupTypography.tvLabelStyle(context),
+              ),
             )
           : FilledButton(
               key: const ValueKey('scan-selected-libraries'),
               onPressed: selectedLibraryIds.isEmpty || data.busy
                   ? null
                   : onScan,
-              child: Text(_settled ? 'Scan again' : 'Scan selected libraries'),
+              child: Text(
+                _settled ? 'Scan again' : 'Scan selected libraries',
+                style: LineupTypography.tvLabelStyle(context),
+              ),
             ),
     );
     final body = LayoutBuilder(

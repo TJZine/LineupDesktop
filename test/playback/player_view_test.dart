@@ -1122,7 +1122,8 @@ void main() {
           expect(fixture.player.overlay.name, 'programInfo');
           expect(find.byKey(const Key('player-osd-surface')), findsNothing);
           expect(find.byKey(const Key('player-osd-channel-bug')), findsNothing);
-          expect(find.text('Up/Down Scroll · Back Close'), findsOneWidget);
+          final hint = find.text('Up/Down Scroll · Back Close');
+          expect(tester.widget<Text>(hint).style?.fontSize, 20);
           final reader = find.byKey(const Key('player-more-info-reading'));
           expect(Focus.of(tester.element(reader)).hasPrimaryFocus, isTrue);
           final decoration =
@@ -4951,7 +4952,7 @@ void main() {
               ),
               alwaysUse24HourFormat: false,
             );
-        expect(next.data, contains('Up next • $localizedStart •'));
+        expect(next.data, contains('Up next · $localizedStart ·'));
         expect(next.maxLines, 1);
         expect(next.overflow, TextOverflow.ellipsis);
         final timeline = _drawnRect(
@@ -5325,8 +5326,8 @@ void main() {
     );
     await tester.pump();
 
-    expect(find.text('Subtitles • Off'), findsOneWidget);
-    expect(find.text('Audio • English stereo'), findsOneWidget);
+    expect(find.text('Subtitles · Off'), findsOneWidget);
+    expect(find.text('Audio · English stereo'), findsOneWidget);
     expect(find.text('Sleep'), findsOneWidget);
     expect(find.byKey(const Key('player-osd-subtitles')), findsOneWidget);
     expect(find.byKey(const Key('player-osd-audio')), findsOneWidget);
@@ -5501,12 +5502,12 @@ void main() {
       (
         const Duration(minutes: 2),
         const Duration(minutes: 1),
-        '01:00 / 01:00 • 0m left',
+        '01:00 / 01:00 · 0m left',
       ),
       (
         const Duration(seconds: -1),
         const Duration(minutes: 1),
-        '00:00 / 01:00 • 1m left',
+        '00:00 / 01:00 · 1m left',
       ),
       (const Duration(seconds: 10), Duration.zero, '00:10 / 00:00'),
     ]) {
@@ -6554,7 +6555,7 @@ void main() {
 
     expect(find.text('English'), findsOneWidget);
     expect(find.text('Dolby Digital Plus'), findsOneWidget);
-    expect(find.text('English • eac3'), findsNothing);
+    expect(find.text('English · eac3'), findsNothing);
     expect(find.text('Audio track 2'), findsOneWidget);
     expect(find.text('Audio track 3'), findsOneWidget);
     expect(
@@ -6574,7 +6575,7 @@ void main() {
         reason: 'track $id has no meaningful detail',
       );
     }
-    expect(find.text('English — Director commentary'), findsOneWidget);
+    expect(find.text('English · Director commentary'), findsOneWidget);
     expect(find.text('AAC'), findsOneWidget);
     expect(find.text('   '), findsNothing);
     expect(fixture.native.selectedTracks, isEmpty);
@@ -6617,18 +6618,18 @@ void main() {
     );
     await tester.pump();
 
-    expect(find.text('English — Original theatrical mix'), findsOneWidget);
-    expect(find.text('Stereo • AAC'), findsOneWidget);
+    expect(find.text('English · Original theatrical mix'), findsOneWidget);
+    expect(find.text('Stereo · AAC'), findsOneWidget);
     expect(find.text('Español'), findsOneWidget);
     expect(
-      find.text('Latinoamérica • 5.1 surround • Dolby Digital Plus'),
+      find.text('Latinoamérica · 5.1 surround · Dolby Digital Plus'),
       findsOneWidget,
     );
 
     const selectedLabel =
-        'Select Audio track: English — Original theatrical mix; Stereo; AAC.';
+        'Select Audio track: English, Original theatrical mix, Stereo, AAC.';
     const alternateLabel =
-        'Select Audio track: Español; Latinoamérica; 5.1 surround; '
+        'Select Audio track: Español, Latinoamérica, 5.1 surround, '
         'Dolby Digital Plus.';
     final selectedFinder = find.bySemanticsLabel(selectedLabel);
     final alternateFinder = find.bySemanticsLabel(alternateLabel);
@@ -6647,19 +6648,19 @@ void main() {
     expect(alternateSemantics.flagsCollection.isSelected, Tristate.isFalse);
     expect(alternateSemantics.hasAction(SemanticsAction.tap), isTrue);
     expect(
-      find.bySemanticsLabel('English — Original theatrical mix'),
+      find.bySemanticsLabel('English · Original theatrical mix'),
       findsNothing,
     );
     expect(find.bySemanticsLabel('Selected'), findsNothing);
     expect(find.bySemanticsLabel('Changing track'), findsNothing);
     expect(
       find.bySemanticsLabel(
-        'Audio track: English — Original theatrical mix; Stereo; AAC',
+        'Audio track: English · Original theatrical mix; Stereo; AAC',
       ),
       findsNothing,
     );
     for (final tooltip in [
-      'Audio track: English — Original theatrical mix; Stereo; AAC',
+      'Audio track: English · Original theatrical mix; Stereo; AAC',
       'Audio track: Español; Latinoamérica; 5.1 surround; Dolby Digital Plus',
     ]) {
       await _showReachableTooltip(tester, tooltip);
@@ -6714,10 +6715,10 @@ void main() {
       await tester.pump();
 
       const confirmedLabel =
-          'Select Subtitle track: English — Festival edition; subtitles for '
-          'deaf and hard-of-hearing viewers; SRT (text).';
+          'Select Subtitle track: English, Festival edition, subtitles for '
+          'deaf and hard-of-hearing viewers, SRT (text).';
       const requestedLabel =
-          'Select Subtitle track: English — marked as forced; PGS (image).';
+          'Select Subtitle track: English, marked as forced, PGS (image).';
       final requestedNode = tester.getSemantics(
         find.bySemanticsLabel(requestedLabel),
       );
@@ -6742,8 +6743,8 @@ void main() {
       );
 
       for (final tooltip in [
-        'Subtitle track: English — Festival edition; SDH; SRT (text)',
-        'Subtitle track: English — Forced; PGS (image)',
+        'Subtitle track: English · Festival edition; SDH; SRT (text)',
+        'Subtitle track: English · Forced; PGS (image)',
       ]) {
         await _showReachableTooltip(tester, tooltip);
         final reachable = tester.semantics.simulatedAccessibilityTraversal();
@@ -6888,7 +6889,7 @@ void main() {
       );
       await tester.pump();
 
-      expect(find.text('日本語 — 監督コメンタリー 🎬'), findsOneWidget);
+      expect(find.text('日本語 · 監督コメンタリー 🎬'), findsOneWidget);
       expect(find.text('ASS (styled text)'), findsOneWidget);
       expect(find.text('Klingon'), findsOneWidget);
       expect(
@@ -6902,7 +6903,7 @@ void main() {
       expect(find.text('Off'), findsOneWidget);
       expect(
         tester.getTopLeft(find.text('Off')).dy,
-        lessThan(tester.getTopLeft(find.text('日本語 — 監督コメンタリー 🎬')).dy),
+        lessThan(tester.getTopLeft(find.text('日本語 · 監督コメンタリー 🎬')).dy),
       );
       expect(fixture.native.selectedTracks, isEmpty);
 
@@ -6938,8 +6939,8 @@ void main() {
     );
     await tester.pump();
 
-    expect(find.text('Audio • Deutsch'), findsOneWidget);
-    expect(find.text('Subtitles • Off'), findsOneWidget);
+    expect(find.text('Audio · Deutsch'), findsOneWidget);
+    expect(find.text('Subtitles · Off'), findsOneWidget);
     expect(fixture.native.selectedTracks, isEmpty);
 
     fixture.player.showTracks(PlayerTrackType.audio);
@@ -6989,7 +6990,7 @@ void main() {
       ),
     );
     await tester.pump();
-    expect(find.text('Audio • English — Original'), findsOneWidget);
+    expect(find.text('Audio · English · Original'), findsOneWidget);
     fixture.native.emitTracks(const [
       PlayerTrack(
         id: 1,
@@ -7009,8 +7010,8 @@ void main() {
     await tester.pump();
     expect(fixture.player.tracks.singleWhere((track) => track.selected).id, 2);
     await tester.pump();
-    expect(find.text('Audio • English — Restored'), findsOneWidget);
-    expect(find.byTooltip('Audio track: English — Restored'), findsOneWidget);
+    expect(find.text('Audio · English · Restored'), findsOneWidget);
+    expect(find.byTooltip('Audio track: English · Restored'), findsOneWidget);
     expect(fixture.native.selectedTracks, isEmpty);
     await tester.pumpWidget(const SizedBox.shrink());
     fixture.dispose();
@@ -7088,10 +7089,10 @@ void main() {
       );
       await tester.pump();
 
-      expect(find.text('Audio • English'), findsOneWidget);
+      expect(find.text('Audio · English'), findsOneWidget);
       expect(find.textContaining('Dolby TrueHD'), findsNothing);
       const audioDescription =
-          'Audio track: English — Original theatrical mix; 5.1 surround; '
+          'Audio track: English · Original theatrical mix; 5.1 surround; '
           'Dolby TrueHD';
       expect(find.byTooltip(audioDescription), findsOneWidget);
       final audioFinder = find.bySemanticsLabel(audioDescription);
@@ -7103,7 +7104,7 @@ void main() {
       expect(audioSemantics.flagsCollection.isEnabled, Tristate.isTrue);
       expect(audioSemantics.hasAction(SemanticsAction.tap), isTrue);
 
-      expect(find.text('Subtitles • Off'), findsOneWidget);
+      expect(find.text('Subtitles · Off'), findsOneWidget);
       expect(find.byTooltip('Subtitle tracks: Off'), findsOneWidget);
       final subtitlesSemantics = tester
           .getSemantics(find.bySemanticsLabel('Subtitle tracks: Off'))
@@ -7153,7 +7154,7 @@ void main() {
       ),
     );
     await tester.pump();
-    final osdLabel = find.text('Audio • English — $longTitle');
+    final osdLabel = find.text('Audio · English · $longTitle');
     expect(osdLabel, findsOneWidget);
     final osdText = tester.widget<Text>(osdLabel);
     expect(osdText.maxLines, isNull);
@@ -7179,11 +7180,11 @@ void main() {
     await tester.pump();
     fixture.player.showTracks(PlayerTrackType.audio);
     await tester.pumpAndSettle();
-    expect(find.text('English — $longTitle'), findsOneWidget);
+    expect(find.text('English · $longTitle'), findsOneWidget);
     expect(find.text('Dolby TrueHD'), findsOneWidget);
     expect(
       find.bySemanticsLabel(
-        'Select Audio track: English — $longTitle; Dolby TrueHD.',
+        'Select Audio track: English, $longTitle, Dolby TrueHD.',
       ),
       findsOneWidget,
     );
@@ -7267,7 +7268,7 @@ void main() {
       await tester.sendKeyEvent(LogicalKeyboardKey.arrowDown);
       await tester.pump();
       expect(
-        Focus.of(tester.element(find.text('English — Alternate mix'))).hasFocus,
+        Focus.of(tester.element(find.text('English · Alternate mix'))).hasFocus,
         isTrue,
       );
 
@@ -7299,7 +7300,7 @@ void main() {
       await tester.pump();
 
       expect(
-        Focus.of(tester.element(find.text('English — Alternate mix restored')))
+        Focus.of(tester.element(find.text('English · Alternate mix restored')))
             .hasFocus,
         isTrue,
       );
@@ -7438,29 +7439,42 @@ void main() {
             ),
           );
           await tester.pumpAndSettle();
-          expect(
-            find.text(
-              isTv
-                  ? 'Up/Down Browse · Select Tune · Back Close'
-                  : 'Up / Down · Browse · Enter Tune · Esc Close',
-            ),
-            findsOneWidget,
+          final hint = find.text(
+            isTv
+                ? 'Up/Down Browse · Select Tune · Back Close'
+                : 'Up / Down · Browse · Enter Tune · Esc Close',
           );
+          expect(tester.widget<Text>(hint).style?.fontSize, isTv ? 20 : 18);
 
           fixture.player.closeOverlay();
           fixture.player.showOsd();
           fixture.player.showTracks(PlayerTrackType.audio);
           await tester.pumpAndSettle();
-          expect(
-            find.descendant(
-              of: find.byKey(const Key('playback-options-footer')),
-              matching: find.text(
-                isTv
-                    ? 'Up/Down Browse · Select Choose · Back Close'
-                    : 'Up/Down Browse · Enter Select · Esc Close',
-              ),
+          final trackHint = find.descendant(
+            of: find.byKey(const Key('playback-options-footer')),
+            matching: find.text(
+              isTv
+                  ? 'Up/Down Browse · Select Choose · Back Close'
+                  : 'Up/Down Browse · Enter Select · Esc Close',
             ),
-            findsOneWidget,
+          );
+          expect(tester.widget<Text>(trackHint).style?.fontSize, 18);
+          fixture.player.closeOverlay();
+          fixture.native.emitTracks([
+            for (var id = 1; id <= 8; id++)
+              PlayerTrack(
+                id: id,
+                type: PlayerTrackType.audio,
+                selected: id == 1,
+                title: 'Synthetic track $id',
+              ),
+          ]);
+          await tester.pump();
+          fixture.player.showTracks(PlayerTrackType.audio);
+          await tester.pumpAndSettle();
+          expect(
+            tester.widget<Text>(trackHint).style?.fontSize,
+            isTv ? 20 : 18,
           );
         } finally {
           fixture.dispose();
@@ -7855,8 +7869,8 @@ void main() {
           await tester.pump();
         }
         final prefix = scenario.type == PlayerTrackType.audio
-            ? 'English — Long shared archival presentation title ending in '
-            : 'English — Long shared restored subtitle presentation ending in ';
+            ? 'English · Long shared archival presentation title ending in '
+            : 'English · Long shared restored subtitle presentation ending in ';
         final theatrical = find.text('${prefix}theatrical');
         final commentary = find.text('${prefix}commentary');
         expect(theatrical, findsOneWidget);
@@ -7904,7 +7918,7 @@ void main() {
     );
     await tester.pumpAndSettle();
 
-    final selected = find.text('English — Subtitle track 24');
+    final selected = find.text('English · Subtitle track 24');
     final list = find.byKey(const Key('playback-options-list'));
     expect(Focus.of(tester.element(selected)).hasFocus, isTrue);
     expect(
@@ -8048,7 +8062,7 @@ void main() {
       expect(find.text('PLAYBACK OPTIONS'), findsNothing);
       expect(
         find.byTooltip(
-          'Audio track: English — '
+          'Audio track: English · '
           'A long descriptive English surround audio track label; '
           'Dolby Digital Plus',
         ),
@@ -8058,7 +8072,7 @@ void main() {
         tester
             .getSemantics(
               find.text(
-                'English — A long descriptive English surround audio track label',
+                'English · A long descriptive English surround audio track label',
               ),
             )
             .label,
@@ -8068,7 +8082,7 @@ void main() {
         tester
             .widget<Text>(
               find.text(
-                'English — A long descriptive English surround audio track label',
+                'English · A long descriptive English surround audio track label',
               ),
             )
             .style
@@ -8078,7 +8092,7 @@ void main() {
       final label = _drawnRect(
         tester,
         find.text(
-          'English — A long descriptive English surround audio track label',
+          'English · A long descriptive English surround audio track label',
         ),
       );
       expect(rail.overlaps(label), isTrue);
@@ -8093,7 +8107,7 @@ void main() {
         Focus.of(
           tester.element(
             find.text(
-              'English — A long descriptive English surround audio track label',
+              'English · A long descriptive English surround audio track label',
             ),
           ),
         ).hasFocus,
@@ -8934,7 +8948,7 @@ void main() {
       fixture.player.showNowPlaying();
       await tester.pumpAndSettle();
 
-      expect(find.text('30:00 / 1:00:00 • 30m left'), findsOneWidget);
+      expect(find.text('30:00 / 1:00:00 · 30m left'), findsOneWidget);
       expect(
         tester
             .widget<LinearProgressIndicator>(

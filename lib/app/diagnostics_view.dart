@@ -153,6 +153,12 @@ class _DiagnosticsViewState extends State<DiagnosticsView> {
 
   @override
   Widget build(BuildContext context) {
+    final noticeStyle = TextStyle(
+      color: LineupTheme.of(context).secondaryText,
+      fontSize: DeviceProfile.of(context).isTv
+          ? LineupTypography.tvTextFloor
+          : 14,
+    );
     final snapshot = _snapshot();
     final telemetry = snapshot.playback.receivedTelemetry;
     final currentEvents = widget.controller.diagnostics.entries;
@@ -187,17 +193,17 @@ class _DiagnosticsViewState extends State<DiagnosticsView> {
                         if (!snapshot.recordingEnabled)
                           SizedBox(
                             height: 180,
-                            child: _emptyEvents(
-                              'Diagnostic recording is off',
-                              'Enable recording in Settings > Support, then reproduce the issue.',
+                            child: LineupEmptyState(
+                              title: 'Diagnostic recording is off',
+                              message: 'Enable recording in Settings > Support, then reproduce the issue.',
                             ),
                           )
                         else if (_visibleEvents.isEmpty)
                           SizedBox(
                             height: 180,
-                            child: _emptyEvents(
-                              'No events recorded yet',
-                              'Reproduce the issue to collect support events.',
+                            child: LineupEmptyState(
+                              title: 'No events recorded yet',
+                              message: 'Reproduce the issue to collect support events.',
                             ),
                           )
                         else
@@ -205,18 +211,12 @@ class _DiagnosticsViewState extends State<DiagnosticsView> {
                         SizedBox(height: 12),
                         Text(
                           'This session only · Up to 250 recent events retained',
-                          style: TextStyle(
-                            color: LineupTheme.of(context).secondaryText,
-                            fontSize: 14,
-                          ),
+                          style: noticeStyle,
                         ),
                         SizedBox(height: 8),
                         Text(
                           'Reports exclude credentials, URLs and private paths. Review before sharing.',
-                          style: TextStyle(
-                            color: LineupTheme.of(context).secondaryText,
-                            fontSize: 14,
-                          ),
+                          style: noticeStyle,
                         ),
                         SizedBox(height: 16),
                       ],
@@ -239,7 +239,14 @@ class _DiagnosticsViewState extends State<DiagnosticsView> {
         FilledButton(
           focusNode: widget.focusNode,
           onPressed: _copying ? null : _copy,
-          child: Text('Copy redacted report', style: TextStyle(fontSize: 18)),
+          child: Text(
+            'Copy redacted report',
+            style: TextStyle(
+              fontSize: DeviceProfile.of(context).isTv
+                  ? LineupTypography.tvTextFloor
+                  : 18,
+            ),
+          ),
         ),
         ConstrainedBox(
           constraints: BoxConstraints(
@@ -720,7 +727,12 @@ class _DiagnosticsViewState extends State<DiagnosticsView> {
         SizedBox(width: 8),
         Text(
           'Recording ${snapshot.recordingEnabled ? 'on' : 'off'}',
-          style: TextStyle(color: roles.secondaryText, fontSize: 14),
+          style: TextStyle(
+            color: roles.secondaryText,
+            fontSize: DeviceProfile.of(context).isTv
+                ? LineupTypography.tvTextFloor
+                : 14,
+          ),
         ),
       ],
     );
@@ -759,24 +771,6 @@ class _DiagnosticsViewState extends State<DiagnosticsView> {
     );
   }
 
-  Widget _emptyEvents(String title, String message) => Center(
-    child: Column(
-      mainAxisSize: MainAxisSize.min,
-      children: [
-        Text(
-          title,
-          style: TextStyle(fontSize: 20, fontWeight: FontWeight.w500),
-        ),
-        SizedBox(height: 8),
-        Text(
-          message,
-          textAlign: TextAlign.center,
-          style: TextStyle(fontSize: 18),
-        ),
-      ],
-    ),
-  );
-
   String _eventTime(DateTime time) {
     final local = time.toLocal();
     return [
@@ -804,25 +798,28 @@ class _DiagnosticsViewState extends State<DiagnosticsView> {
           title: ExcludeSemantics(
             child: LayoutBuilder(
               builder: (context, constraints) {
+                final isTv = DeviceProfile.of(context).isTv;
                 final eventScale = 1.0 * _effectiveTextScale(context);
                 final double gap = 16 * eventScale;
                 final time = Text(
                   _eventTime(event.time),
                   style: TextStyle(
                     color: LineupTheme.of(context).secondaryText,
-                    fontSize: 14,
+                    fontSize: isTv ? LineupTypography.tvTextFloor : 14,
                   ),
                 );
                 final area = Text(
                   _eventAreaLabel(event.area),
                   style: TextStyle(
                     color: LineupTheme.of(context).secondaryText,
-                    fontSize: 14,
+                    fontSize: isTv ? LineupTypography.tvTextFloor : 14,
                   ),
                 );
                 final message = Text(
                   event.message,
-                  style: TextStyle(fontSize: 18),
+                  style: TextStyle(
+                    fontSize: isTv ? LineupTypography.tvTextFloor : 18,
+                  ),
                 );
                 if (constraints.maxWidth < 520 * eventScale) {
                   return Column(
