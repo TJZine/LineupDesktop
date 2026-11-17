@@ -130,8 +130,11 @@ When no server appears:
 Channel Setup has three stages:
 
 1. **Choose libraries** to build channels from, then scan their media. On TV,
-   focus starts on the first library when the list is available. You can cancel
-   a running scan, retry only failed libraries, or continue with the ready subset.
+   focus starts on the first library before scanning, then moves to Continue
+   when usable libraries are ready. Unusable rows are dimmed, unchecked and
+   disabled; their saved selection is preserved. You can cancel a running scan,
+   retry a failed row, scan again, or continue with the selected ready subset.
+   UI audit 2 decision, 2026-11-16.
    Before you advance, **Back to profiles** returns to the profile picker,
    where selecting a protected profile again requires its PIN.
    **Back to sign-in** ends the linked session and returns to Plex sign-in.
@@ -184,8 +187,9 @@ identities, schedule anchors, and favourites. **Replace generated channels**
 replaces generated programming while keeping custom channels. **Add as new
 channels** keeps all existing numbers and applies Channel order to the new
 channels only. The saved preference applies to the next generation.
-Review shows current/final counts and unchanged, updated, added, and removed
-entries; search by name or number and filter the change categories. Removals
+Review shows now/after totals and added, removed, updated and unchanged
+counts. Nonempty change categories appear as tabs, with Added first; search
+by name or number within the selected tab. UI audit 2 decision, 2026-11-16. Removals
 require confirmation. A changed lineup invalidates the review and requires a
 fresh explicit apply. Saving is atomic: failure preserves the previous lineup
 and review choices. An unchanged plan offers **View lineup** without saving.
@@ -217,14 +221,14 @@ When playback is active, Settings keeps the same Player surface behind it.
 
 ## Subtitle appearance
 
-Open **Settings → Subtitles** to change the global subtitle style. The preview
-uses sample text at its actual playback size, independent of the application's
-text size. It stays visible while the controls scroll. On narrow screens or
-with large application text, its crop shrinks to leave room for the focused
-control; the subtitle text itself is not scaled down. If the complete focused
-control and save feedback still cannot fit after the preview disappears, the
-Subtitles heading and helper scroll with the controls. The global Settings
-header and category navigation stay fixed.
+Open **Settings → Subtitles** to change the global subtitle style. The generated preview
+is a complete 16:9 picture with sample subtitles scaled proportionally to that picture,
+independently of the application's text size. On wide detail panes it sits beside the
+controls; on narrower panes it appears above them in the scroll view. Text, Edges,
+Background and Window are on the **Customise** page, with the preview on both pages.
+Back returns to the main page with focus on **Customise**. This preview change does not
+alter playback subtitle sizing. UI audit 2 decision, 2026-11-16; proportional preview
+clarified by the delegated Astra review.
 
 Choose **Standard**, **Drop shadow**, **Classic box**, **High contrast**, or
 **Light**, then adjust Size (50%–300%), Position, text color and opacity, Font,
@@ -316,9 +320,12 @@ tooltip and accessible label are **Return to live**. When the current time is
 visible, it is simply **Now**.
 
 The Guide uses a detailed two-hour window by default, with three- and
-four-hour options. Its standard layout targets five channel rows;
-the rows reflow when the window or text scale requires more room. There is no
-configurable past window or row-density preference.
+four-hour options. TV shows up to six channel rows when its measured text floor
+fits, and five otherwise; desktop keeps its responsive row allocation. The
+controls share the header when they fit and return to the wrapping layout in
+narrow windows or at larger text sizes. Search channels opens the search field
+in the merged header. There is no configurable past window or row-density
+preference. UI audit 2 decision, 2026-11-16.
 
 Focused program cells reveal long titles with a slow ticker; unfocused cells
 remain stable and ellipsized. Reduce Motion disables the ticker. The program
@@ -417,14 +424,15 @@ and hardware-decoder facts appear in Diagnostics.
 Track panels show the selection confirmed by native playback. A requested
 change remains marked pending until that confirmation arrives; a failed change
 keeps the prior confirmed selection and shows an inline error.
-Language labels use their self-names. A regional qualifier appears in the
-primary label when it distinguishes same-language tracks of that type with
-different supplied regions; otherwise the region remains a secondary drawer
-fact. The OSD uses the same primary-label policy.
+Language labels use English names. A regional qualifier appears in the primary label
+when it distinguishes same-language tracks of that type with different supplied regions;
+otherwise complete tooltip and accessibility facts retain it. Subtitle rows show
+supporting facts only when needed to distinguish equal first lines. The OSD uses the
+same primary-label policy. UI audit 2 decision, 2026-11-16.
 
 Press `I` or `Down` to expand the bottom OSD into persistent Now Playing
 details without leaving playback. The expanded panel shares the OSD actions,
-Up Next, timing and full-width progress lane. It shows the loaded
+Up Next, timing and an inset progress row (UI audit 2 decision, 2026-11-16). It shows the loaded
 program's title, one line of episode/runtime/year/genre facts, format chips,
 poster, official title artwork, and a synopsis clamped to three lines.
 When **Prefer official title artwork** is enabled, an available Plex clear logo
@@ -445,8 +453,9 @@ use the side panel; Subtitle Off counts as a choice.
 
 The Mini Guide displays nearby channels without leaving Player. Episodes show
 the series name first, followed by episode and time. Select a channel to tune
-it. When you enter a channel number, the digits appear at the top center with
-any matching channel below. In Now Playing, visible film title art takes the
+it. When you enter a channel number, the digits appear at the top center with the
+matching channel, current program and time left below (UI audit 2 decision, 2026-11-16).
+In Now Playing, visible film title art takes the
 place of duplicate title text.
 
 When one Plex item contains sequential media parts, Lineup continues through
@@ -572,8 +581,11 @@ custom channel** goes to Studio; desktop keeps its existing View lineup action.
 Up from the Guide's first channel row enters the nearest toolbar control; Down
 returns to the selected grid cell. Move to the channel filter and press Select
 to open it. Select applies the highlighted entry; Back or Right closes the list
-without applying it. Left at the live time edge continues to focus the channel
-rail.
+without applying it. In the merged header, Up from the channel filter enters
+the picture's available recovery actions. Left/Right moves between those
+actions, Up returns to the filter and Down returns to the remembered grid
+selection. Left at the live time edge continues to focus the channel rail.
+UI audit 2 decision, 2026-11-16.
 
 Player action keys reset the OSD timeout; auto-hide returns focus to video.
 Closing a track picker or sleep picker returns to its invoking action. A
@@ -591,8 +603,13 @@ accepted for remote-only operation in this beta.
 ## Manage channels
 
 Select a channel to open it in Studio. Search by name or number, or filter by
-favourites, source type or library. The Source column identifies the programming
-type and library. Studio shows whether watched items are included.
+favourites, source type or library. Channel order shows the programming type
+and library in Source. Choose Grouped by source to browse collapsible source
+groups with the current program and time left; Custom starts open. The view
+choice lasts for the session. Search and filters apply inside groups, Select
+supports Delete selected, and Reorder channels returns to Channel order.
+Outlined Custom tags and filled stars identify custom channels and favourites.
+Studio shows whether watched items are included. UI audit 2 decision, 2026-11-16.
 
 Open **⋮** for **Watch**, **Favourite** or **Remove from favourites**, **Edit**
 for a custom channel or **Duplicate as custom** for a generated channel, and
@@ -608,8 +625,9 @@ after review. All three modes preserve every custom channel. Refresh preserves a
 shuffle identity, and favourite status while updating its programming recipe.
 Changing **Channel order** can renumber generated channels. **Replace all**
 keeps favourites for matching generated channels and may reset their schedule
-anchors. **Review channels** shows the proposed roster. Search by channel number or name, or filter by
-change category. If the plan removes channels, its confirmation stays visible
+anchors. **Review channels** shows the proposed roster. Choose a change-category
+tab, then search that tab by channel number or name (UI audit 2 decision,
+2026-11-16). If the plan removes channels, its confirmation stays visible
 while you inspect the roster. Completion offers **View lineup** and
 **Add a custom channel**.
 
@@ -672,13 +690,16 @@ Deletion requires confirmation and cannot be undone.
 
 | Category | Current controls |
 | --- | --- |
-| Appearance | A labeled palette chooser for Ember & Steel, Slate & Pine, Mint Noir, and Satellite Blue; three Player overlay-transparency choices; Guide information background (artwork colors, theme, or backdrop); and title artwork preference |
+| Appearance | Theme swatches for Ember & Steel, Slate & Pine, Mint Noir, and Satellite Blue; three Player overlay-transparency choices; Guide information background (artwork colors, theme, or backdrop); and title artwork preference |
 | Guide | Visible hours of 2, 3, or 4; whether to show channel sources; and whether to show the now-playing channel and program in Guide |
 | Playback | Player controls auto-hide after 2, 4, 6, 8, 10, or 15 seconds; optional Pause and seek controls; Match display HDR in fullscreen (default on) |
-| Subtitles | Change text subtitle appearance and preview it against the Player frame |
-| Accessibility | Reduce motion across management, Guide, and Player transitions; larger keyboard/controller focus indicators |
+| Subtitles | Style, Size and Position, Customise for text/edge/background/window options, styled-subtitle override, Reset, and a proportional picture preview |
+| Accessibility | Text size (Standard, Large, Larger); Reduce motion across management, Guide, and Player transitions; larger keyboard/controller focus indicators |
 | Account | Switch Plex Home profile, show the profile picker on startup, switch the Plex Media Server, and sign out of Plex |
 | Support | Enable or disable bounded redacted diagnostic recording and open Diagnostics |
+
+Text size multiplies the platform text scale by 1.0, 1.15 or 1.3, up to a maximum of
+2.0. Larger text can show fewer Guide rows. UI audit 2 decision, 2026-11-16.
 
 On TV, pausing on a section in the Settings rail opens that section. Press Right
 to move into its controls, or Select to open the section immediately. On desktop,
@@ -702,6 +723,12 @@ Support.
 
 When recent events are empty, Diagnostics explains whether recording is off or
 no events have been recorded yet. When playback is idle, the summary explains how to see playback details.
+
+While playing, four cards summarize Playback, Video, Picture and Plex. An unknown
+playback method has no supporting line. Picture describes the reported HDR/SDR signal,
+not verified physical display output. Technical details group Application, Video output,
+Media signal and platform-supported Display facts. UI audit 2 decision, 2026-11-16.
+
 **Technical details** includes the Plex connection route and latency when
 measured and shows display and media facts supported by the platform. Copied
 reports use the same platform display facts. Windows display state does not

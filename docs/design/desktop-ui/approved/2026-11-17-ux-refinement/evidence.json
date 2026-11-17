@@ -1,0 +1,391 @@
+{
+  "date": "2026-11-17",
+  "authority": "UI audit 2 decision, 2026-11-16; maintainer delegated visual/design judgments to Astra high on2026-11-17 and authorized local merges after approval.",
+  "status": "Accepted subset S/G/P/C/U/F; campaign incomplete because T is stopped, unaccepted and excluded.",
+  "evidence_location": "Local campaign evidence archive, r-<letter>/<capture path>; images are synthetic production-widget captures and are not embedded in Git.",
+  "limits": [
+    "No physical Fire TV or Windows acceptance.",
+    "Emulator fixtures do not establish real media, account, scan or persistence behavior.",
+    "Do not relabel reused captures as freshly rendered on later package heads."
+  ],
+  "packages": {
+    "S": {
+      "head": "479c400860a262dfc42cdec7c376f84162f2fea0",
+      "base": "cf1e073e11505ab5155e07f315ce65283c96c766",
+      "gated_commits": [],
+      "visual_verdict": "Approved by delegated Astra high, 2026-11-17",
+      "capture_provenance": "Rendered production source 68eeefef01ed86fb559c8dd3b531be8572f8371e; final head differs only in test placement. 27 synthetic images; corrected root captures DPR1 at 1920x1080, original accepted TV captures use DPR2 at 960x540 logical.",
+      "source_file_sha256": {
+        "lib/app/channel_setup/review_step.dart": "d5c9822200a9ce5d759b5c07a2ccf4ab5f23171d2f848ee383e0e19e73de3cd7",
+        "lib/app/channel_studio/studio_playlist.dart": "8e7fd8787be9d08f2ebcd1d94d3722a8b015716aeb312dafa23f1078f4d431b0",
+        "lib/app/lineup_app.dart": "b229504d9fc897892368d33155feab074b25a775a0950bbd0e9022618ba840af",
+        "lib/app/onboarding_view.dart": "ddf556909fac770d61fff55810e639dc364a6de6b7e73f8abb836586805211d9",
+        "lib/app/settings_view.dart": "be48c6a17b9503cce097e7232031ad42b95e50d9d8b1b13897e02e774f1d0451",
+        "lib/guide/guide_view.dart": "700105ebe28c042cb2a1a1abd25a6cce5e6e8b9a2cb4758995c5db523b88d694",
+        "lib/settings/lineup_settings.dart": "e665dfcca7b02199b5bd51f46444b708b2b3c750b94fde7379182bc42667a8d9",
+        "lib/ui/app_ui.dart": "05e9972c3e1cd6495a0a39357a09c0869d8758d79bc2b6a26769572ab0877503",
+        "lib/ui/channel_identity.dart": "79d29fc9182998003e0262d816ffe384cd22a2b5ceae9f4bd626860d04a8955d"
+      },
+      "input_manifest_snapshots": [
+        {
+          "path": "render-manifest.json",
+          "sha256": "4acd1f913971843fc31b6d1c7a77e6f4b5055257b61d3a67ecee01517a0833bf"
+        }
+      ],
+      "capture_sha256": {
+        "desktop-accessibility.png": "da68541a27f9b87cc182733d8dd9c9f2847b674575d95c22737d48293b5fba35",
+        "desktop-channel-entry.png": "bf46636496b657a727bd9e1bd848fa5a72fa02338355658c4e46e19ea2080c72",
+        "desktop-guide-standard.png": "61696b1ba8b1c57d89db560e6d61ef0b802229547d4e6ac128aeec56968c4cd4",
+        "desktop-guide-watching.png": "4a59e8911287106779e391140f4986694fb21c860d65f59b09c532c8136b4955",
+        "desktop-lineup-menu.png": "f815e3eb2596018eda40d9ee508ea8be1e5ec906e915f48a6ddafaaa5cacdb43",
+        "desktop-manage-channels.png": "8f9845fcc94b2e677c9489455ff291b27af69a7729f4a70ee5865c19d37789f2",
+        "desktop-mini-guide.png": "c5292ee6f6fc87b6ce5606e230f240dfd5ab25d6928f86b34c2856b2eb1f06b4",
+        "desktop-move-channel.png": "9ad14fe6ffd2908c8f8f67c6e6bdf15e198fe397b1303a7444b4d92fa7354441",
+        "desktop-player-badge.png": "31151591b700f39f9f46aecb9812c98bfcfd274aa19aabdf7327e4c84ccd5037",
+        "desktop-review-missing-source.png": "69650769b1e05baa23495c64546fd554867f26e917e1d7ea6aee527b25d739e5",
+        "desktop-review.png": "92ca5dcdff4e74c15e0c3d4dba9a7d704f996d96ab7994b9ac82ca444973048e",
+        "desktop-stopped-slate.png": "886bc3c648ec1766f3a56a9687226f4474aaeefeb5847f837f1b92b084a1a560",
+        "desktop-studio-playlist.png": "54ca5dc7f4bb8a4ed9f3b7141f315e71bbdd9354fc51b618d4af017987a3952d",
+        "tv-accessibility.png": "a47761719ee6b1e1cd38aa9db88e09cc54707684a6ff461b9e8816c6eaea97ae",
+        "tv-channel-entry.png": "bf46636496b657a727bd9e1bd848fa5a72fa02338355658c4e46e19ea2080c72",
+        "tv-guide-large.png": "10c1c0234e10838fe30ea80428faabba20fb4de8209637a871559ea31c0f1c7a",
+        "tv-guide-larger.png": "42f50f19cfaa4a09fa1278b2e68f2ab1269f23276b7a5568e8549a64085a41de",
+        "tv-guide-standard.png": "424df7432f4536133546b671ea3718c79ce8c3a25033e93d9203dbd013f84ebc",
+        "tv-guide-watching.png": "661d4d1d7248d187ee9b19c806aaa733fa74f8a2768d1596360c6ab565e7788d",
+        "tv-lineup-menu.png": "db71f7af51152b293464f9e614f6df72d679b7059d5bd95d380c005b3297474d",
+        "tv-manage-channels.png": "d2baf8ad2fea4a2feef1ebe347df5b59a4eef92537f2689eb25b7c1fa68fb131",
+        "tv-mini-guide.png": "b2e8f67a02581fecdb77a79cc28acddd617a9f1fce5aa37ed3297f0e02a0db2b",
+        "tv-move-channel.png": "42b9dfbeaf223ecf6a2cff250be17ed0b418b359221abcb766ad6ecee5afbcef",
+        "tv-player-badge.png": "d119e7c630c504835cf72f6dd64e0782cec10f0f16ec28fa5bee0490c8f768d9",
+        "tv-review.png": "d803b9ba1e56f6bef9372e8b714f4ede58e2388623596009ad22697ecf1d3954",
+        "tv-stopped-slate.png": "770dc7db906b798759c7c294785f618cee24438138da6158798e38156173142d",
+        "tv-studio-playlist.png": "180a1ccbfbd5840d626c18f3c8bbe82dd82707c03195f41539ea4e73f191e5b2"
+      }
+    },
+    "G": {
+      "head": "61f7e42686945fe7b345ae6527293ca0a4ae2570",
+      "base": "c7f35f897a064a8a2d9205a43ea23a9d5f08e51a",
+      "gated_commits": [
+        {
+          "head": "e363dcb6dd9f8b83c0973e9f60abd1a044b18f92",
+          "parent": "c7f35f897a064a8a2d9205a43ea23a9d5f08e51a"
+        }
+      ],
+      "visual_verdict": "Approved by delegated Astra high, 2026-11-17",
+      "capture_provenance": "Before pairs at Wave 2 base; after-header pairs at isolated G1; final renders at 1541ec014403d5dd07768d209e7c2c424db6a5c0. Final 61f desktop editing guard changes no captured appearance. Fallback 1.5 retains baseline lower-information clipping; 2.0 omits showcase under unchanged fallback, not a complete-fit claim.",
+      "source_file_sha256": {
+        "lib/guide/guide_view.dart": "0f3403562fab193d067ea6a5410f8b9cfd0b36843ef4830c8231d5c6a34c7ecc"
+      },
+      "input_manifest_snapshots": [
+        {
+          "path": "manifest.json",
+          "sha256": "9a15d69b718dad2fc106c913388eab3190b31c7eeece47f1e0a05a3bc66e44cf"
+        }
+      ],
+      "capture_sha256": {
+        "after-header/desktop-1920.png": "3ff1b41b7d51d42c9cf671e2f5cb338b7a5e16d94a183b7476b86d69e0abe841",
+        "after-header/tv-1920.png": "0e9e3a931a518312abcf0b961c056147603a0d5fef257128c7231af803d2f97c",
+        "after/desktop-1280-t100-tuned.png": "3e87cbd4796325c6c04b482740b216d5d082b39ba4977802fa91c3354fa54a95",
+        "after/desktop-1280-t150-fallback.png": "85cc767593cfc4f93a097ac3d73d86d484331f67b87b0e19ff2e71c0bada5ce4",
+        "after/desktop-1280-t200-fallback.png": "88089db39c06398e1bba45bfe1c0a90744eee3a4136c9c017c42dec4d3a57d58",
+        "after/desktop-1920-t100-tuned.png": "7b619e9bc299763408f3a12f93471596ea515dac83e7763f66490c71aef431c3",
+        "after/desktop-2560-t100-tuned.png": "cb7fa4733bdc5d700e93878ad3054db472134a3ee5ef26fe8c74817e8b887f8d",
+        "after/tv-1920-t100-browsing.png": "ceb58a12eac8705d1401989b1ac35722b7714abe489a085c65a005941c6297a6",
+        "after/tv-1920-t100-filter.png": "a05d5aa8f354f507c01d39fcc2766a987404b8844b6fbfc4a5cd960923ccd4e8",
+        "after/tv-1920-t100-search.png": "481cfcb04f87b16ebad47226b7a77844670472b147f40a98320bdf83bb9a747a",
+        "after/tv-1920-t100-tuned.png": "9a14e91a352dc6d11f2287722871656a7e734678708d531b81dde084e8acdb44",
+        "after/tv-1920-t130-browsing.png": "7626c3d16b6cb7092b7e865e263608117d300990b1031b1e0542ac1f600bda6e",
+        "after/tv-1920-t130-tuned.png": "f857a8549f0111e6e6a785e717c6ba16f30eb561aed8375d10dc4b3216754f6c",
+        "before/desktop-1920.png": "07c921787b6184763c93f9d229ff1e29921dd9b0309fa2bf164794aa13734c72",
+        "before/tv-1920.png": "25ca6edcc00f0501760a38025e4df0d067386461ddf26a0733ccd96066baf4d7"
+      }
+    },
+    "P": {
+      "head": "036ee167d86dddc661eaae0e47cbb6f6e2526b5b",
+      "base": "c7f35f897a064a8a2d9205a43ea23a9d5f08e51a",
+      "gated_commits": [
+        {
+          "head": "61549046d0dde3aae300f25347c7478c8bcde3dc",
+          "parent": "c7f35f897a064a8a2d9205a43ea23a9d5f08e51a"
+        }
+      ],
+      "visual_verdict": "Approved by delegated Astra high, 2026-11-17",
+      "capture_provenance": "Original 59-image set accepted at 08adf32dd18666b492d55e70a5e45e52c82f69f7. P-D4 pair source identities are retained separately. Its six reference PNGs are byte-identical to approved original references. Small-window lower details remain reachable by existing scrolling, not simultaneously visible.",
+      "source_file_sha256": {
+        "lib/playback/player_coordinator.dart": "ec3f5ae010bf0c1b66569f81169073eeef48540efa26415f8319e603ae2e8c37",
+        "lib/playback/player_track_label.dart": "87914f9e0d3fa1e80a7eac58d9c1162bbe4b18a32b30bec7ba2394bf966647fd",
+        "lib/playback/player_view.dart": "328f50a2ffcf142f21cedd50be4788904b22112a466ba0baea6ee95889a8a979"
+      },
+      "input_manifest_snapshots": [
+        {
+          "path": "manifest.json",
+          "sha256": "5eaf492bd2f84d63a4db9429c978aa2b51caf1187f134bd3589a44f3f1bb1442"
+        },
+        {
+          "path": "d4-manifest.json",
+          "sha256": "0457c4124e494700d51c5f91824b46fd902ecf96e0a5d2bf65b187f9580a7efd"
+        }
+      ],
+      "capture_sha256": {
+        "after/desktop-bright-audio.png": "acb813634c06496f131bf28dd3e4cdff9695aca0dd623a05c1bb347000f29a1c",
+        "after/desktop-bright-controls.png": "10717d4cf62ed0027271e3c420aaaa7a4bd56e0baa4d6a0f575059e88d241305",
+        "after/desktop-bright-mini-guide.png": "89655acc20ac411617a8f45a1b85a6a51fcdc4046bb24f08b05229189335354b",
+        "after/desktop-bright-now-playing.png": "061a0c6d60dabfa14a7e5c191a60ec941d8b15ef18c4f09eb88dee2c6c585da9",
+        "after/desktop-bright-number-entry.png": "895deb9413c0de43dbc050982935f4bf337ad40884b153155656303507c8d9fd",
+        "after/desktop-bright-sleep.png": "33b4bf24f28528724454c8ed245fc87695b4d5b19c1c3ebfe5586c1feb82cd8b",
+        "after/desktop-dark-audio.png": "15f2471910f892e1a12b631d9c988ca5f6539f038915e9deb505b53285580f87",
+        "after/desktop-dark-controls.png": "98a2dbde770ebc4039e66c812b2d76997934d6d6ab210aa914d00e604b15fc48",
+        "after/desktop-dark-mini-guide.png": "c5df8d9f097a9b4f79f3dfc7e5652617157ad7e643de27dd667ab128a2fd29f8",
+        "after/desktop-dark-now-playing.png": "d34e1997af8e3f15e87c811a786cb794f9e2a40e60582869922527dab7db195d",
+        "after/desktop-dark-number-entry.png": "fe6f830520d5dbbaa26362399a9d436044564accf792ed2dc031e27c8e26e2c3",
+        "after/desktop-dark-sleep.png": "a9f3b08dbac5f5d951023f4de7965c7702b44bc2ca8f80fd386c95ea7db2a8f0",
+        "after/desktop-letterbox-controls.png": "2115b1ea1cf68f07fae1c14436e0afe65acce5ed3c28f02caadd6e9f56b102a4",
+        "after/tv-bright-audio.png": "1af42c955ce849c5a8dc99bad2112f2cbf2b89fd5d798d496d3e4c4e90ebb373",
+        "after/tv-bright-controls.png": "1f7ebcbc4912dcc90e3a034e5c5a8ddfb7dfc39891630d77e1a0facef795d4d0",
+        "after/tv-bright-mini-guide.png": "d3e5ccc2dfe3abeaabbcbc74298f05c964ce14c82739134386c0ced497bcadfe",
+        "after/tv-bright-now-playing.png": "3c27d3798cf4aa9d35a624fe0da88ffaf1d17a2c93c716f69fd0068358c3276f",
+        "after/tv-bright-number-entry.png": "52595ac3bd0cc33e541d1e5466d4e290ce9cac5046c692ec27cd1bd81f3d21b2",
+        "after/tv-bright-sleep.png": "a66d76b27426340b4bde4f29094fc6aea53b0a2a723942ef5463115ce98c6a2b",
+        "after/tv-dark-audio.png": "41831a10255a02175624c3bf06c1cfbe4a07cde1cd32c17d86772b5a27b190bc",
+        "after/tv-dark-controls.png": "9b00124eebf8724d623e4e0c78eca6941243a1e83fa86b8768a9fac1523c7582",
+        "after/tv-dark-mini-guide.png": "5faa1ce07288956879f9dc5d2c0d9a6c38cf205a25ea23d6fe6d6fd528c1d7fe",
+        "after/tv-dark-now-playing.png": "f189c1fc3601d0f43be6631128616c91f2e3be216990e50b79a44c1af76f135c",
+        "after/tv-dark-number-entry.png": "2a21028da80a522d1b9938691a3f620675fa03a0fd4cd333228fc5bd688c9479",
+        "after/tv-dark-sleep.png": "f7544e19683368b3c2b5fff5f0aab1ba95b7a7aa241552b12f745b87ff45d51a",
+        "after/tv-large-bright-audio.png": "6233a27d6dca61ae726d2b99ccfee72fc81e9c1bfe1b7e8eda08a31d44f8327e",
+        "after/tv-large-bright-controls.png": "8884539a0c81bdcfd7bce6a582f6890dbf1cb1c0447d932173e849939811f5ba",
+        "after/tv-large-bright-mini-guide.png": "61ef8acfc426573f44855b7de1268c3178abde35bf942cb793ca3c87e8629de5",
+        "after/tv-large-bright-now-playing.png": "9b3243c20e2bba9cea10c3dc4c3795815c8f735d012622befcdf24549fbd4cd0",
+        "after/tv-large-bright-number-entry.png": "e675425510607cd3c021536b6d4d040f5ddaddbfbc153e94bc2861c72d0d73df",
+        "after/tv-large-bright-sleep.png": "417a05b4c2c12690506b7e88a30667f473a23e686e8702de550a5991bb143d0f",
+        "after/tv-large-dark-audio.png": "d2262a39ee3131fca135771c7d3bd665ba3a1534c245f2e2aabc8e1efff64a67",
+        "after/tv-large-dark-controls.png": "da296fa973920070751d4e8975991c8759086a3a644868c052e94201acb60e08",
+        "after/tv-large-dark-mini-guide.png": "d66b312f349e50684abaf52dd87c5b746c267225747ccef0ddcdc54cab1e99e8",
+        "after/tv-large-dark-now-playing.png": "44db6bb44ca87ba0aee8d54aa61fd38cefc7532cbd5563cf9957291a4d7ae56b",
+        "after/tv-large-dark-number-entry.png": "2a1bbc6ceb4a3c6df96a877063825a69cec6cf110cf1e66e6fb7a373f8187e8b",
+        "after/tv-large-dark-sleep.png": "8019658f732c57eb5f7008c76dea541975184e8e5461359fdcf7e706bf518fb5",
+        "after/tv-large-letterbox-controls.png": "330d3db16e9420270daa7e4c292423d655c6bfeb997a4edf92a6d277945a4732",
+        "after/tv-letterbox-controls.png": "ed33a3f8eacd60a361ae0d4a9044874fc05dfd979f161ef88b4579e409d5076c",
+        "before/now-playing-1280x720-bright.png": "ee43380e67f5bbfed1e1c7b33711b0189e2308ec1cf23641beea728bb40d60df",
+        "before/now-playing-1280x720-dark.png": "45400c64de16302cdb6a7a6f3ab3e3de556a0413a8becf6a1fe0256bf807679f",
+        "before/now-playing-1920x1080-bright.png": "c24f4cb5090a8f2c323ee0d0c415a21eb8e3ee75284558d42ed8581db017a66d",
+        "before/now-playing-1920x1080-dark.png": "f8560e4ef07b53c0fe4e80bb1cebe0f98cde36b82908596f0a488b455843df35",
+        "d4-after/small-large-bright-now-playing.png": "fee9276f040bdd2256617b6f21b1b7c79790540f9ae821d471af537447000abc",
+        "d4-after/small-large-dark-now-playing.png": "4e7c09c2b2f5dcabf7faf30cfd652d4cc1708ed692e3c056e877806056d30d5a",
+        "d4-after/small-standard-bright-now-playing.png": "eaa12d57c64e14aeb951002aa624d363769f369d3cb5cc434a1d30e3f066ed76",
+        "d4-after/small-standard-dark-now-playing.png": "68d113c2afc37a7a984add471b8fe1bdd75fe87fc8f4c3eebe96cb34b7dc9978",
+        "d4-before/small-large-bright-now-playing.png": "3f5ccb7afa1c755a090d0eadcb83f0ea41131620bfa37bfe14cfe7f94ef4a64d",
+        "d4-before/small-large-dark-now-playing.png": "ae041fce3067c35847dd1869c1ba6fa9e2e8214f8bfa6e8e15882bcb971624ca",
+        "d4-before/small-standard-bright-now-playing.png": "a7bedbea3d27eb84905f52e64ff9ab1c199128f5cca3d7ec5ec7fb6534df5379",
+        "d4-before/small-standard-dark-now-playing.png": "dbb926243c87baf36736abd47be2c590971421e64f000fec0a060092e52b9d32",
+        "d4-reference/desktop-bright-now-playing.png": "061a0c6d60dabfa14a7e5c191a60ec941d8b15ef18c4f09eb88dee2c6c585da9",
+        "d4-reference/desktop-dark-now-playing.png": "d34e1997af8e3f15e87c811a786cb794f9e2a40e60582869922527dab7db195d",
+        "d4-reference/tv-bright-now-playing.png": "3c27d3798cf4aa9d35a624fe0da88ffaf1d17a2c93c716f69fd0068358c3276f",
+        "d4-reference/tv-dark-now-playing.png": "f189c1fc3601d0f43be6631128616c91f2e3be216990e50b79a44c1af76f135c",
+        "d4-reference/tv-large-bright-now-playing.png": "9b3243c20e2bba9cea10c3dc4c3795815c8f735d012622befcdf24549fbd4cd0",
+        "d4-reference/tv-large-dark-now-playing.png": "44db6bb44ca87ba0aee8d54aa61fd38cefc7532cbd5563cf9957291a4d7ae56b",
+        "p2-after/now-playing-1280x720-bright.png": "86eeb7cc5805904c73665934a675d73b3fc5b43d1404941027daad811c4e2d68",
+        "p2-after/now-playing-1280x720-dark.png": "fe1533e971b4d92e14646d69dba334097aacc742ad7c8ef0ff6d8646f0f76939",
+        "p2-after/now-playing-1920x1080-bright.png": "6d7285f37f51c14cd3e08faa004aba8e5683781ece11c3b97d7ff00f8a7042ed",
+        "p2-after/now-playing-1920x1080-dark.png": "1586332c526d07e254012b47ad865c9e0267eb7fb945bec5e17bbcba8a347ea0",
+        "stress/desktop-bright-mini-guide.png": "f0fb89caeb159ffcccf68ffa30061ef10fba88d806228c85e48c1be40187feac",
+        "stress/desktop-bright-number-entry.png": "e04c4bf37e8baa1b6c760d75a30f3832cdb517943236436b099b21bca82dc579",
+        "stress/desktop-dark-mini-guide.png": "d6653e6a134c3455626eade815bee69c2d3128088990cf20a9523429f8139e0b",
+        "stress/desktop-dark-number-entry.png": "3abb70118984c94a279e345436255b79dec0b44ec45120b89d2d8a4b861b21cb",
+        "stress/tv-bright-mini-guide.png": "f15a542cde5cbbfd7ff73759b952891d67515c06bcad959fcf88227924f25677",
+        "stress/tv-bright-number-entry.png": "c6a2de26bdcc7aefbe7280504c671cfb5c036ff91f09d5f0488366ba23e71126",
+        "stress/tv-dark-mini-guide.png": "dda4743cadb410d341f5b3de91f626ec24827efdf9f99abf1063a28674a57570",
+        "stress/tv-dark-number-entry.png": "c35f82d9a19bb1d8d895ce4c9ab3b14c0f3f9e4097a89e1b9843c9e77fa396ff",
+        "stress/tv-large-bright-mini-guide.png": "adc33d8bddc3514176e4df87973998cdb225c361e0b079f81f3a65bae9d68e20",
+        "stress/tv-large-bright-number-entry.png": "b9acb01edd96991abf00b058eb842ce9a7f46a2325715690767bbbf850bc9be5",
+        "stress/tv-large-dark-mini-guide.png": "4d7e8f9f29e93d7c772c59e28ab5ed6b7e14d185348466efae68beefaa185326",
+        "stress/tv-large-dark-number-entry.png": "96a57a5c42fbd3c73bcd74590760e87520c48554c5e766ef82022d78120a68bd"
+      }
+    },
+    "C": {
+      "head": "692a77aa26783c25d612ccd15ef457a741d8fa48",
+      "base": "c7f35f897a064a8a2d9205a43ea23a9d5f08e51a",
+      "gated_commits": [
+        {
+          "head": "d52abf7c0b32a5f17b00edc91ea73b2dff572f4f",
+          "parent": "9b196701b474814b5abbe947fc997ed51a3838df"
+        }
+      ],
+      "visual_verdict": "Approved by delegated Astra high, 2026-11-17",
+      "capture_provenance": "C2 before pair is C1 source9b196701b474814b5abbe947fc997ed51a3838df. Original 30-image C-V3 set accepted at d52abf7c0b32a5f17b00edc91ea73b2dff572f4f. b4e semantics-only followup reused appearance. Final focused-count token repair at692a77aa26783c25d612ccd15ef457a741d8fa48 has two additional matched TV1.3 focus/unfocus images accepted by Astra C-V4; original artifacts retain their source identity.",
+      "source_file_sha256": {
+        "lib/app/channels_view.dart": "10dac58248a3a5d630a4512371a04ea7b4ccb38750f996c00885ea780ef8450b"
+      },
+      "input_manifest_snapshots": [
+        {
+          "path": "render-sha256.txt",
+          "sha256": "d2ab5c5d2b7fdf4774678b841d6156696114a89e4f8d23e4c57e3866d276ceba"
+        }
+      ],
+      "capture_sha256": {
+        "after-desktop-channel-order.png": "cf3fec73808c20045141419ecb11a71509651b245414bf942418d16c9bbbcc67",
+        "after-desktop-grouped.png": "8c3380150cc9fc3b1525dfaf6372b5a9a9ecfcce43b1da172bd1679876bf350f",
+        "after-desktop-view-menu.png": "74c5028095e6cab50130dc8a2348a5624ec1c131fe7141001a80d1cb4ae9ca10",
+        "after-large-desktop-channel-order.png": "e8093eddb49c25b28a6c80ad2f732a964112d6c33cf5dd08e312f99c2c355a42",
+        "after-large-desktop-grouped.png": "f1c6e533fa767f9f540a3f92b3705e6aa07479ae905add957073da127462172c",
+        "after-large-desktop-view-menu.png": "89441d059a1a26f353e3b55983f7657838e5081dbe9427ed4466c04eb7f496fb",
+        "after-large-tv-channel-order.png": "c778fa35e1449dad548338927ce9ec4614cf8184be917cabf323ce9b33badaae",
+        "after-large-tv-grouped.png": "f574c457c1459dfac9a20000b26bf7e3e28e75bb62754e6297ae3fabfebe8470",
+        "after-large-tv-view-menu.png": "fddaebc6859fc70a45d8ba28f5f5bb5724f81cba9b4d63dbb62be5459d55c5a0",
+        "after-tv-channel-order.png": "94eeec6cc89b5a0dcec8b53ce021e12eb9006ae03fc8e243b2f1237b94af103c",
+        "after-tv-grouped.png": "477584345eec6985afbd53c756719d1f6e138ac7c7b21298f24f10d1330dafa5",
+        "after-tv-view-menu.png": "b093810bb29a0e23dd285dd6f17dab348411d2e34adcac087c862c0598cd48b6",
+        "before-desktop-channel-order.png": "e5645b40e02983ec3fc066484495cb649a50d5f90e3e964806d8bc2b3c3c8c9d",
+        "before-tv-channel-order.png": "bb93c47ab9929a054707c848199c0e4e249fc5ed1f931b2f3eeea9c07e67b90d",
+        "count-ink-tv-1.3-focused.png": "7bb22b47ed5ad7da572365389b604b15bb79da9b36249d9f86646a8e5ae35aa1",
+        "count-ink-tv-1.3-unfocused.png": "092daa6c6369cc6d586e6341826f583024630904d6edbb5b514fa6898cde1853",
+        "fit-desktop-1.0-channel-order.png": "63eb8e4c8ebce8e2056e8d5ec2823c2113c50ced4d37d15fc05f051958cafa9a",
+        "fit-desktop-1.0-grouped.png": "bf088bd1fb8e2f682005e1c5e770d2c17ca534e4fd75fa0928c9f061b4af568c",
+        "fit-desktop-1.3-channel-order.png": "b3eb00849b2ca38abb7bc460c45a796142ee67c5e6a45c2ccf29f629f1c85031",
+        "fit-desktop-1.3-grouped.png": "677e064fe6aa2a105814acbb9e5bb8a955ac5c09288686bca7999c220535e9ab",
+        "fit-tv-1.0-channel-order.png": "94ec65efcdc977f4ed369dcfb833a2884482a478e5a780a58aa2a7c01acf4e7f",
+        "fit-tv-1.0-grouped.png": "f6722ef5866d6494ef34241f8059d23f9e334ac93f81011b3a4f50bcab3700c1",
+        "fit-tv-1.3-channel-order.png": "582bf6873e09f2f8eaa591661af2e26fa940a8ec91a38331a33b7c91c38b4279",
+        "fit-tv-1.3-grouped.png": "01bfc1be14ea9155b84d399e8401d2ba0a7610ae448109a92c4be8472ebc9e51",
+        "health-baseline-desktop-1.0.png": "6121644c2b2cec6f9b21651536f2e16fd79ccd140b2e62f277fec37de2460c58",
+        "health-baseline-desktop-1.3.png": "d9361a2350ea127d14427134dcd922e47c41fe257097571a6b49acb411818f2f",
+        "health-baseline-tv-1.0.png": "c64bb3f6ee268eed5fe49b7a2bc79063b345e5009ae5bb6490a7535194cd0745",
+        "health-baseline-tv-1.3.png": "26403ac6d5e7d4f61b5ea845484dd6745c5e38416c22897e5a716b93e381d4b4",
+        "health-candidate-desktop-1.0.png": "132c76ba423a378805d16a95eefdd2a564f23f2f3802c128d285e2bb890835c4",
+        "health-candidate-desktop-1.3.png": "c0514690807a811617b0c52d26011f03333069e21c5e9015e6cd8a7d4a41bf4b",
+        "health-candidate-tv-1.0.png": "980541a37b3feec044e4f6ebdcc3985b836a4b71c3bca32d06c64f5dc2f258f2",
+        "health-candidate-tv-1.3.png": "4665e60aeba4ee61871c7d258148f9cb65876c05a129a5dd7c0e69ef336724e4"
+      }
+    },
+    "U": {
+      "head": "b05ccc554d9860a6d8b7df4943d12c999b6d5deb",
+      "base": "c7f35f897a064a8a2d9205a43ea23a9d5f08e51a",
+      "gated_commits": [
+        {
+          "head": "10cc9807caddcb20863018efe9933567328b0d66",
+          "parent": "c7f35f897a064a8a2d9205a43ea23a9d5f08e51a"
+        },
+        {
+          "head": "ba1f9cbe450d19c5483b54af86af53517223faea",
+          "parent": "10cc9807caddcb20863018efe9933567328b0d66"
+        }
+      ],
+      "visual_verdict": "Approved by delegated Astra high, 2026-11-17",
+      "capture_provenance": "Final visual source a1eeb15882c6b6424ed75ec07be49d42195b75f1. Later focus traversal and first-entry tab corrections preserve captured layout, tokens and initial selection. 45 images include baseline and gated Welcome/Sign-in captures. Final two-Down path is a runtime observation, not pictured proof.",
+      "source_file_sha256": {
+        "lib/app/channel_setup/configure_step.dart": "1a5ac99a35f0535a74279721b2bc89d80efcc2f7b2e3496d2b6adbf4a495e1ee",
+        "lib/app/channel_setup/library_step.dart": "72edd8a7470f7cb223c8a82c49e7df84a6fea35379d4680bdf8ad48a4f10e8e7",
+        "lib/app/channel_setup/review_step.dart": "8b7f873534fd52b712db2436a8190df41cda311907c019b32706dca7ec3b0033",
+        "lib/app/channel_setup_view.dart": "d119afda16cd98bf8bfc012b7ede7df3a5b74e1c441de1e3cba4346325b5633c",
+        "lib/app/onboarding_view.dart": "4a6bbc07df6f4260dd75b1f21bef39fe06ad7c07ca9ddb3ca8ba2ea8162e3938"
+      },
+      "input_manifest_snapshots": [
+        {
+          "path": "png-sha256.txt",
+          "sha256": "d19abfc6bd7d9bd1938c653437240212955c845831ebc2652cac2e0c71a98508"
+        }
+      ],
+      "capture_sha256": {
+        "after-u1/desktop-welcome.png": "38f8839835307d631b52eaadeff40fb3a15af3d99403608ee3ee84e8ed9ea7a1",
+        "after-u1/tv-welcome.png": "a0a23a9f312a6fef4eadb60f60ae83eec15162c8a3663bebdc2c199fad906622",
+        "after/desktop-configure-1.0.png": "1f911968509650c02805a3b099e41c6601c04b98898c68e320ea802f8ca75a9f",
+        "after/desktop-expired-1.0.png": "6488a65fe374f3a0623aca0deda78e069a5a4e0059eb304578fe6962fca414f4",
+        "after/desktop-failed-1.0.png": "f72de8157b17b4a853cd51e56a60bc8376c3b2ca710e9698e59466018ef8fc1c",
+        "after/desktop-libraries-mixed-1.0.png": "dca389faf3cfd7d32f091e7fd21c40b7cbed6963038e5d742990ddcfe2a159e3",
+        "after/desktop-libraries-none-1.0.png": "240619575fb56b9edd71a31fb911340815288e764b97279b91b2b73d370bf526",
+        "after/desktop-near-1.0.png": "4df0d39b671dadcd68a2cb3a87d7223933fc11e5bb81d5d34735d2f5084306fc",
+        "after/desktop-review-1.0.png": "5347382804cf2c2322244e96bb88a65c4f5cf2faa6f516847b3793029b521aee",
+        "after/desktop-review-overview-1.0.png": "217be8f3b3e79ced28b6987f248346bae12c8759300cb0ac3a26d3627b34af79",
+        "after/desktop-servers-1.0.png": "3d65503ee26a9e53f0a1be06386683009ef3fcac81877dd2e2dc8df48f921b02",
+        "after/desktop-signin-1.0-stacked-device.png": "efd9644d1bc239614a14820aa48dd679faf8c4ce03f467702fb601a9777d6745",
+        "after/desktop-signin-1.0-stacked.png": "5fe8b6876da48645552cbe2e89c474c5a511e60ed41af60671a498b9aa3a473b",
+        "after/desktop-signin-1.0.png": "ab6435a9c9b427d30546906013e6720efdeeb95032dffcd937f1a42ddcf45ca8",
+        "after/desktop-welcome-1.0.png": "38f8839835307d631b52eaadeff40fb3a15af3d99403608ee3ee84e8ed9ea7a1",
+        "after/tv-configure-1.0.png": "60c619c6fa9fa0a60bea0497853092fc766cacb162fea0ccfe0b78c5736726d2",
+        "after/tv-configure-1.3.png": "e28ca736b488db0bd7e55aee9d07ba4a83116006159ead98fc388c3adf5c6df9",
+        "after/tv-expired-1.0.png": "51f3ec961bc21e9d3e1422bc766b4ec661d27934b1ac2230a74fcea04c614cdb",
+        "after/tv-expired-1.3-stacked-device.png": "7af039f091545f0f4e5f13da39ebeba3a4d1ede0117c0df8afcbd8eab5b126b9",
+        "after/tv-expired-1.3.png": "f9cf55677ec217803a158784cf2f1bad47d611a2417ca624b91a1d1d79c11fbc",
+        "after/tv-failed-1.0.png": "c0f518571a46131dd2375fc2a5312fb106b67f93969362fa115611a382053f37",
+        "after/tv-failed-1.3-stacked-device.png": "56bb0f6ad8af3ca354ee8285e891851b80d9ac9d6350a0ffabdd69cc2f179d0d",
+        "after/tv-failed-1.3.png": "25ae0e762bc9675461f4283f0eee2200e32af25e4895c4c6ec969f630c41e316",
+        "after/tv-libraries-mixed-1.0.png": "c9ebe1303629d5076dfe11eb3e4f4849e63c42e25faa85bfd261a79c07a51104",
+        "after/tv-libraries-mixed-1.3.png": "2431dbb84abee455ccce1deca1a7cf32422b2cee2a4e27bb478cc72d5ae7df31",
+        "after/tv-libraries-none-1.0.png": "52581e1a9c6cf083290bec7a2ce058a5b0d9ea3c19903a7f89a3b395167ca28c",
+        "after/tv-libraries-none-1.3.png": "546486422ec6a40dc14d2c9d142c3b0999648bee09f8ac74d8729045f5a6a0ce",
+        "after/tv-near-1.0.png": "9098736ccc9bad5a5a67e8fc8472c63d8b44522ffb60cbf43888dd784210a627",
+        "after/tv-near-1.3-stacked-device.png": "7fcb7c1039d7e3f78a172dab7f4232076a6e16a1ac39218fc6bbbae42104f3d7",
+        "after/tv-near-1.3.png": "4272fb09f035d0145687ff60fbde3d91ee75e89bb01047d7954e4898b941186b",
+        "after/tv-review-1.0.png": "55afc5ca26b894f6e4e462356eeda7db0e1323d45fbb10772c166ff2a7d35d90",
+        "after/tv-review-1.3.png": "593c54abf1663fc30d5996ba0d40adcf1220eac7485b6784baf6a057ee6bc4ad",
+        "after/tv-review-overview-1.0.png": "57bdd2d8134bd82cfcc4397ee050bb82e91992d8bdd958b482caa241e81638db",
+        "after/tv-review-overview-1.3.png": "c15605009e26457234166b565338e15da23bd609678192f4698b774451dcc3ff",
+        "after/tv-servers-1.0.png": "ad8d5fbc37dc506c240919e5701f479c7c92bb51ab2b9249a219ff8fae5c2904",
+        "after/tv-servers-1.3.png": "2cc2fe828e704f7c8f2716a17728d5206ee8c8abccc7a968af21e5107fe61693",
+        "after/tv-signin-1.0.png": "d84091caa30b0c0aa07afe177322244beb02fe2ac0f7142111096955c8b26271",
+        "after/tv-signin-1.3-stacked-device.png": "782ceb87686b62ce391d676b5c0dd5399eb64c5fbf32716124541c03bcf7a024",
+        "after/tv-signin-1.3.png": "4272fb09f035d0145687ff60fbde3d91ee75e89bb01047d7954e4898b941186b",
+        "after/tv-welcome-1.0.png": "a0a23a9f312a6fef4eadb60f60ae83eec15162c8a3663bebdc2c199fad906622",
+        "after/tv-welcome-1.3.png": "57a9e9e54637eec2ca91e54c28848b4183bf9ab85c4eae30f2e0864c56da5905",
+        "before/desktop-signin.png": "e7e7b910251a45a88de7d199748a2e78616c82ddec89c6b1019d12e485bd09fa",
+        "before/desktop-welcome.png": "ebb50937146d37ded3cc2fe11e66a7bb5b341ebfbfdaeb6f35db1075d9dc34d9",
+        "before/tv-signin.png": "a6f5a467229a51b7d64eb5ad95b8574470aace344ee65003fa83ca79f8eafccd",
+        "before/tv-welcome.png": "134ff1e83bd5153bfe1042ea14fe3bbb17e8e6f9dac107e8d59c63ff0f7fa675"
+      }
+    },
+    "F": {
+      "head": "26c377feaec07c6c9d16d765a47d73831541840e",
+      "base": "c7f35f897a064a8a2d9205a43ea23a9d5f08e51a",
+      "gated_commits": [
+        {
+          "head": "9b9e8605ae86db0f40db703e3044da97580d5a21",
+          "parent": "4bc741e7e2a4b86a4bab1c3ed074474e54325511"
+        },
+        {
+          "head": "6657881aaa16483d4b0c1fd9ee5c114d73afb7e7",
+          "parent": "9b9e8605ae86db0f40db703e3044da97580d5a21"
+        }
+      ],
+      "visual_verdict": "Approved by delegated Astra high, 2026-11-17",
+      "capture_provenance": "25-image set approved against final source26c377feaec07c6c9d16d765a47d73831541840e. Reuses unchanged ordinary subtitle/Diagnostics captures from initial presentation source a2a6a6e1363f38bc123e534df2f4d76245fa34d4; later focus-state captures cover swatch entry and device-style Bold entry. Baseline Appearance is F2 parent4bc741e7e2a4b86a4bab1c3ed074474e54325511; baseline Subtitles is Wave 2 base.",
+      "source_file_sha256": {
+        "lib/app/diagnostics_view.dart": "0939836aa91881eee1433de5922998a20f337c7820b7ab08febda34980386d74",
+        "lib/app/settings_subtitles.dart": "bcb66bb15cfc09b4bbcf133b7528e0cae235ced06d630c007f732dddeb71c309",
+        "lib/app/settings_view.dart": "583d86775c9d69231acbda765385793453e56cb53d02943d5281b480bbbc94b6"
+      },
+      "input_manifest_snapshots": [
+        {
+          "path": "manifest.json",
+          "sha256": "d8ffb4d33567e5b7de457c36c07c5f630cb2705e8a98e1d1be08d0c3c3ab6033"
+        }
+      ],
+      "capture_sha256": {
+        "after/desktop-appearance-1280x720.png": "6e31a75ea1da2b282b11f70f62aaad2ac5b268356785c49a53db9d15e27b0952",
+        "after/desktop-appearance-1512x945.png": "f0a233c73e444c016dc1b84191bf9538f1bfd9b42a036eaa53feff0a69f72202",
+        "after/desktop-appearance-mint-1280x720.png": "db4f9ef710787bfe836ed0dc0721d439f36f0bc4b43fa98efb1de4bf98204ae6",
+        "after/desktop-appearance-mint-1512x945.png": "ad18cbf0486ebc93db5ad9889a16625b40f6618c5f1a66a55611d9646b1a1a45",
+        "after/desktop-diagnostics-macOS-idle-1920x1080.png": "fe66ecbbc3c2846501bb23423a580dc86f24328b0562f33b6770d5dfa95cbc84",
+        "after/desktop-diagnostics-macOS-playing-1920x1080.png": "48af407e6b5d442e73389906edbcf33bc0f7ffd1dc3ce1f4943124119e5dd978",
+        "after/desktop-diagnostics-windows-idle-1920x1080.png": "0ebb7cb58f53dae89bf02c5a69a1c9ff4c1ea1237434666e786f606ca72534c9",
+        "after/desktop-diagnostics-windows-playing-1920x1080.png": "70dd8733f6ba2c0b84c562d5e73af8eefa8725be4377124e7170c6358af79a5e",
+        "after/desktop-subtitles-1280x720.png": "6c03273731a52fe2f5ad910cd403889eeef88d65968b246132f9b6a6c13fec2a",
+        "after/desktop-subtitles-1512x945.png": "8ae6f3ee0bc82ed75d2d691eb6386b9ed91f64fe7224456dba87d64ea2ed4bb3",
+        "after/desktop-subtitles-customise-1280x720.png": "94cd82ca557b0378ac23dd5ea7f22b6fd81a75ac6f228a525f32c7287a08f9ae",
+        "after/desktop-subtitles-customise-1512x945.png": "364a1ddb64fcfde7d6f43cceb40b29859716fdcb4895f257f2ab682717e647da",
+        "after/tv-appearance-1920x1080.png": "e8c7a06b911969f62ee93ca5919d971f1022bb63c1ecaf6232b7f36e10fd3c99",
+        "after/tv-appearance-entry-focus-1920x1080.png": "c44efd43ea1e6c77175410630532a50b3a4f3fd15360a7dc3038566fe22d8a15",
+        "after/tv-appearance-mint-1920x1080.png": "4416e1031b3b814da50480a129227925b9eb9e310669255910a14bfe74abbea5",
+        "after/tv-subtitles-1920x1080.png": "c2bbf0b81fc2a9d808365ba8f01f42089cf20fe4c00c0161ec6f2c73cdab6545",
+        "after/tv-subtitles-customise-1920x1080.png": "6a020fc7d80df957533e008ec4d38c482c9c1917c3447fcde15a3a052d687b4c",
+        "after/tv-subtitles-customise-device-style-1920x1080-t100.png": "64f73085ee480a6c59aef57bdf7c5b8645260308c7bd84a3db0dafb17cf37bb5",
+        "after/tv-subtitles-customise-device-style-1920x1080-t130.png": "30cedbb1f9d63d7b6e29a5552dc970a5d4c14e8d73b51fb2e1c4e0b5c8065047",
+        "before/desktop-appearance-1280x720.png": "870721c10be52fb300c98822aa1f2cb7ec9d25815a8e40208a7196aaf60484bd",
+        "before/desktop-appearance-1512x945.png": "e056621df260a5a4fe80dfcddbf4f57cda887e4335cf743c5d5c88ea48ffd4e8",
+        "before/desktop-subtitles-1280x720.png": "7b37f339cafe4b9fa24329d1ad19efd654054ef6e5cee5891506e70269e63268",
+        "before/desktop-subtitles-1512x945.png": "81b07db6c8d453a16f2d67eec8fad94dbd98c68d7796ef7390bdbab2759cd6ce",
+        "before/tv-appearance-1920x1080.png": "b12034d6f49750957ded3d56d02208028e98799b20b61bdb1fcc01cf2e060687",
+        "before/tv-subtitles-1920x1080.png": "84aa5f120d9faf2a7b9821e9a2ad16b3ec790230d9ae3521d964ea6a2cfa8442"
+      }
+    }
+  }
+}
