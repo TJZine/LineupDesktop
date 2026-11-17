@@ -2701,6 +2701,10 @@ void main() {
       await tester.tap(find.text('Select all'));
       await tester.pumpAndSettle();
       expect(find.text('0 of 2 selected'), findsOneWidget);
+      expect(
+        find.text('Choose the libraries to build channels from.'),
+        findsOneWidget,
+      );
       expect(tester.widget<Checkbox>(check).value, isFalse);
       expect(
         find.byKey(const ValueKey('continue-ready-libraries')),
@@ -2711,6 +2715,12 @@ void main() {
       await tester.pumpAndSettle();
       expect(find.text('2 of 2 selected'), findsOneWidget);
       expect(tester.widget<Checkbox>(check).value, isTrue);
+      expect(
+        find.text(
+          '1 of 3 libraries is ready. Continuing builds from Movies only.',
+        ),
+        findsOneWidget,
+      );
       await tester.tap(find.byKey(const ValueKey('retry-library-archive')));
       await tester.pumpAndSettle();
       expect(controller.rowRetryInventory, {'movies', 'shows', 'archive'});
@@ -2719,6 +2729,27 @@ void main() {
       expect(controller.committedIds, {'movies'});
     },
   );
+
+  testWidgets('failed libraries retain their recovery summary', (tester) async {
+    final controller = _SetupController()
+      ..retry = {for (final library in _libraries) library.id}
+      ..facts = {
+        for (final library in _libraries)
+          library.id: const LibraryScanFact(
+            status: LibraryScanStatus.transientFailure,
+          ),
+      }
+      ..fixtureActor.reportScan(status: LibraryScanStatus.transientFailure);
+    addTearDown(controller.dispose);
+    await _pump(tester, controller);
+    expect(find.text('0 of 0 selected'), findsOneWidget);
+    expect(
+      find.text(
+        'No libraries are ready. Retry failed scans or change your selection.',
+      ),
+      findsOneWidget,
+    );
+  });
 
   for (final required in [false, true]) {
     testWidgets(
@@ -2771,9 +2802,7 @@ void main() {
         expect(find.text('Scan again'), findsOneWidget);
         if (required) {
           expect(
-            find.text(
-              'No libraries are ready. Retry failed scans or change your selection.',
-            ),
+            find.text('Choose the libraries to build channels from.'),
             findsOneWidget,
           );
           expect(find.text("Won't be used"), findsNothing);
