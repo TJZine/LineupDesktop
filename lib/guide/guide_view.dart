@@ -61,6 +61,7 @@ class GuideLayoutPolicy {
     double tvInformationHeight = 0,
     double tvIdentityWidth = 0,
     Size tvPictureMinimum = Size.zero,
+    bool mergedBar = false,
   }) {
     final width = size.width.isFinite
         ? size.width.clamp(0.0, 10000.0).toDouble()
@@ -72,9 +73,12 @@ class GuideLayoutPolicy {
     final padding = horizontalPadding(size);
     const minimumRows = 5;
     final chromeHeight =
-        toolbarHeight(size, textScale: textScale) +
-        10 +
-        (tvControlsHeight ?? controlsHeight(size, textScale: textScale)) +
+        (mergedBar ? 72 : toolbarHeight(size, textScale: textScale)) +
+        (mergedBar
+            ? 10
+            : 10 +
+                  (tvControlsHeight ??
+                      controlsHeight(size, textScale: textScale))) +
         (timeHeaderHeight ?? 38 * textScale);
     final minimumRowHeight = math.max(58 * textScale, tvRowFloor);
     final available = math.max(0.0, height - chromeHeight);
@@ -87,9 +91,8 @@ class GuideLayoutPolicy {
       0.0,
       height -
           20 -
-          toolbarHeight(size, textScale: textScale) -
-          10 -
-          pictureControlsHeight -
+          (mergedBar ? 72 : toolbarHeight(size, textScale: textScale)) -
+          (mergedBar ? 10 : 10 + pictureControlsHeight) -
           (timeHeaderHeight ?? 38 * textScale),
     );
     const pictureRoundingAllowance = 0.005;
@@ -154,6 +157,11 @@ class GuideLayoutPolicy {
       );
     } else if (tvControlsHeight == null) {
       pictureHeight = math.min(_guideReferencePictureHeight, pictureAllocation);
+    }
+    if (tvControlsHeight != null) {
+      rowCount = ((available - showcaseHeight) / minimumRowHeight)
+          .floor()
+          .clamp(5, 6);
     }
     final rowHeight = math.max(
       minimumRowHeight,
@@ -422,6 +430,25 @@ class _GuideViewState extends State<GuideView>
   final _guideFocus = FocusNode(debugLabel: 'Guide grid');
   final _channelFilterFocus = FocusNode(debugLabel: 'Guide channel filter');
   final _searchFocus = FocusNode(debugLabel: 'Guide channel search');
+  final _searchButtonFocus = FocusNode(debugLabel: 'Guide search channels');
+  bool _searchExpanded = false;
+  bool _mergedBar = false;
+
+  void _openSearch() {
+    setState(() => _searchExpanded = true);
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (mounted) _searchFocus.requestFocus();
+    });
+  }
+
+  void _searchFocusChanged() {
+    if (!_searchFocus.hasFocus &&
+        _searchController.text.isEmpty &&
+        _searchExpanded) {
+      setState(() => _searchExpanded = false);
+    }
+  }
+
   // TooltipVisibility replaces each tooltip's child when the menu opens.
   // Keep these invokers alive so closing the menu can restore exact focus.
   final _closeFocus = FocusNode(debugLabel: 'Back to player');
@@ -436,6 +463,7 @@ class _GuideViewState extends State<GuideView>
   final _messengerKey = GlobalKey<ScaffoldMessengerState>();
   bool _filterNoticeScheduled = false;
   final _scheduleKey = GlobalKey(debugLabel: 'Guide schedule');
+  final _pictureKey = GlobalKey(debugLabel: 'Guide picture recovery');
   final _searchController = TextEditingController();
   late String _observedSearchQuery;
   late int _searchContentGeneration;
@@ -512,6 +540,7 @@ class _GuideViewState extends State<GuideView>
     _scheduleFilterFallbackNotice();
     _searchContentGeneration = widget.controller.lineup.contentGeneration;
     _searchController.addListener(_searchChanged);
+    _searchFocus.addListener(_searchFocusChanged);
     _activityPulse = AnimationController(
       vsync: this,
       duration: const Duration(milliseconds: 1800),
@@ -556,7 +585,9 @@ class _GuideViewState extends State<GuideView>
     _menuFocus.dispose();
     _guideFocus.dispose();
     _channelFilterFocus.dispose();
+    _searchFocus.removeListener(_searchFocusChanged);
     _searchFocus.dispose();
+    _searchButtonFocus.dispose();
     _closeFocus.dispose();
     _earlierFocus.dispose();
     _nowFocus.dispose();
@@ -589,7 +620,13 @@ class _GuideViewState extends State<GuideView>
 
   KeyEventResult _searchKey(FocusNode node, KeyEvent event) {
     if (event is! KeyDownEvent) return KeyEventResult.ignored;
-    if (event.logicalKey == LogicalKeyboardKey.escape) {
+    if (event.logicalKey == LogicalKeyboardKey.escape ||
+        (_mergedBar && event.logicalKey == LogicalKeyboardKey.goBack)) {
+      if (_mergedBar && _searchController.text.isEmpty) {
+        setState(() => _searchExpanded = false);
+        _searchButtonFocus.requestFocus();
+        return KeyEventResult.handled;
+      }
       if (_searchController.text.isNotEmpty) {
         _searchController.clear();
       } else {
@@ -838,7 +875,7 @@ class _GuideViewState extends State<GuideView>
         commandModifier(keyboard) &&
         !nativeFullscreenChord &&
         !_empty) {
-      _searchFocus.requestFocus();
+      _openSearch();
       return KeyEventResult.handled;
     }
     final isAndroidTvMenu =
@@ -952,16 +989,27 @@ class _GuideViewState extends State<GuideView>
   List<FocusNode> _toolbarFocusOrder() => _empty
       ? [_menuFocus]
       : [
+          if (_mergedBar) _menuFocus,
           _channelFilterFocus,
           if (widget.controller.channelFilterKey != ChannelFilter.all)
             _removeChannelFilterFocus,
-          _searchFocus,
-          if (_searchController.text.isNotEmpty) _clearSearchFocus,
-          _earlierFocus,
-          _nowFocus,
-          _laterFocus,
-          _hoursFocus,
-          _menuFocus,
+          if (!_mergedBar ||
+              _searchExpanded ||
+              _searchController.text.isNotEmpty) ...[
+            _searchFocus,
+            if (_searchController.text.isNotEmpty) _clearSearchFocus,
+          ],
+          if (!_mergedBar ||
+              !(_searchExpanded || _searchController.text.isNotEmpty)) ...[
+            _earlierFocus,
+            _nowFocus,
+            _laterFocus,
+            _hoursFocus,
+          ],
+          if (_mergedBar &&
+              !(_searchExpanded || _searchController.text.isNotEmpty))
+            _searchButtonFocus,
+          if (!_mergedBar) _menuFocus,
           if (_showBackToPlayer) _closeFocus,
         ];
 
@@ -1022,11 +1070,106 @@ class _GuideViewState extends State<GuideView>
     (nearest ?? _searchFocus).requestFocus();
   }
 
+  // Recovery is supplied by the shell. Discover only the existing typed
+  // placeholder's enabled action buttons; do not infer actions from copy or
+  // include arbitrary video-surface descendants in this TV wrap shortcut.
+  List<FocusNode> _pictureRecoveryActions() {
+    final actions = <FocusNode>[];
+    void findButtonFocus(Element element) {
+      final child = element.widget;
+      if (child is Focus) {
+        FocusNode? focus;
+        element.visitChildElements(
+          (child) => focus ??= Focus.maybeOf(child, createDependency: false),
+        );
+        if (focus?.canRequestFocus == true) {
+          final picture = _pictureKey.currentContext?.findRenderObject();
+          final action = focus!.context?.findRenderObject();
+          if (picture is RenderBox &&
+              action is RenderBox &&
+              picture.hasSize &&
+              action.hasSize &&
+              !action.size.isEmpty) {
+            final visible = picture.localToGlobal(Offset.zero) & picture.size;
+            final bounds = action.localToGlobal(Offset.zero) & action.size;
+            final shown = visible.intersect(bounds);
+            if (shown.width >= bounds.width - .1 &&
+                shown.height >= bounds.height - .1) {
+              actions.add(focus!);
+            }
+          }
+          return;
+        }
+      }
+      element.visitChildElements(findButtonFocus);
+    }
+
+    void findActions(Element element, GuidePlaybackPlaceholder placeholder) {
+      final child = element.widget;
+      if (child is TextButton &&
+          child.onPressed != null &&
+          (child.onPressed == placeholder.onRetry ||
+              child.onPressed == placeholder.onNextChannel)) {
+        element.visitChildElements(findButtonFocus);
+        return;
+      }
+      element.visitChildElements((child) => findActions(child, placeholder));
+    }
+
+    void findPlaceholder(Element element) {
+      final child = element.widget;
+      if (child is GuidePlaybackPlaceholder) {
+        if (child.unavailable) {
+          element.visitChildElements((element) => findActions(element, child));
+        }
+        return;
+      }
+      element.visitChildElements(findPlaceholder);
+    }
+
+    (_pictureKey.currentContext as Element?)?.visitChildElements(
+      findPlaceholder,
+    );
+    return actions;
+  }
+
+  KeyEventResult _pictureRecoveryKey(FocusNode node, KeyEvent event) {
+    if (!_mergedBar ||
+        !DeviceProfile.of(context).isTv ||
+        ModalRoute.of(context)?.isCurrent == false ||
+        (event is! KeyDownEvent && event is! KeyRepeatEvent)) {
+      return KeyEventResult.ignored;
+    }
+    final actions = _pictureRecoveryActions();
+    final index = actions.indexWhere((action) => action.hasPrimaryFocus);
+    if (index < 0) return KeyEventResult.ignored;
+    final key =
+        tvRemoteKeyAlias(event.logicalKey, enabled: true) ?? event.logicalKey;
+    if (key == LogicalKeyboardKey.arrowUp) {
+      _channelFilterFocus.requestFocus();
+    } else if (key == LogicalKeyboardKey.arrowDown) {
+      (widget.focusNode ?? _guideFocus).requestFocus();
+    } else if (key == LogicalKeyboardKey.arrowLeft ||
+        key == LogicalKeyboardKey.arrowRight) {
+      final next = (index + (key == LogicalKeyboardKey.arrowLeft ? -1 : 1))
+          .clamp(0, actions.length - 1);
+      actions[next].requestFocus();
+    } else {
+      return KeyEventResult.ignored;
+    }
+    return KeyEventResult.handled;
+  }
+
   KeyEventResult _toolbarKey(FocusNode node, KeyEvent event) {
-    if (!DeviceProfile.of(context).isTv) {
+    if (!DeviceProfile.of(context).isTv && !_mergedBar) {
       return KeyEventResult.ignored;
     }
     if (event is! KeyDownEvent && event is! KeyRepeatEvent) {
+      return KeyEventResult.ignored;
+    }
+    // Desktop's field owns its primary editing focus; TV has a separate
+    // navigation node, whose existing bar/IME handling stays below.
+    if (!DeviceProfile.of(context).isTv && _searchFocus.hasFocus) {
       return KeyEventResult.ignored;
     }
     final key =
@@ -1035,6 +1178,17 @@ class _GuideViewState extends State<GuideView>
           enabled: DeviceProfile.of(context).isTv,
         ) ??
         event.logicalKey;
+    if (key == LogicalKeyboardKey.arrowUp &&
+        _mergedBar &&
+        DeviceProfile.of(context).isTv &&
+        _channelFilterFocus.hasPrimaryFocus &&
+        ModalRoute.of(context)?.isCurrent != false) {
+      final actions = _pictureRecoveryActions();
+      if (actions.isNotEmpty) {
+        actions.first.requestFocus();
+        return KeyEventResult.handled;
+      }
+    }
     if (key == LogicalKeyboardKey.arrowDown) {
       if (_empty && widget.onSetUpChannels == null) {
         return KeyEventResult.ignored;
@@ -1068,7 +1222,8 @@ class _GuideViewState extends State<GuideView>
   bool get _showBackToPlayer =>
       !DeviceProfile.of(context).isTv && widget.watchingChannelId != null;
 
-  Widget _toolbar() => _Toolbar(
+  Widget _toolbar({Widget? controls}) => _Toolbar(
+    controls: controls,
     controller: widget.controller,
     clock: _presentationClock,
     showBackToPlayer: _showBackToPlayer,
@@ -1090,7 +1245,15 @@ class _GuideViewState extends State<GuideView>
       ]),
       builder: (context, _) => _GuideShowcase(
         controller: widget.controller,
-        picture: widget.pictureInPicture,
+        picture: widget.pictureInPicture == null
+            ? null
+            : Focus(
+                key: _pictureKey,
+                canRequestFocus: false,
+                skipTraversal: true,
+                onKeyEvent: _pictureRecoveryKey,
+                child: widget.pictureInPicture!,
+              ),
         showIdleArtwork: widget.showIdleArtwork,
         pictureWidth: policy.pictureWidth,
         compactLogo: policy.compactLogo,
@@ -1106,6 +1269,87 @@ class _GuideViewState extends State<GuideView>
   double _filterPickerWidth(GuideLayoutPolicy policy) =>
       policy.channelRailWidth - _guideEdgeContentInset * 2;
 
+  Widget _controls(GuideLayoutPolicy policy, {bool merged = false}) =>
+      _GuideControls(
+        key: const Key('guide-control-content'),
+        controller: widget.controller,
+        pickerWidth: _filterPickerWidth(policy),
+        searchController: _searchController,
+        channelFilterFocus: _channelFilterFocus,
+        searchFocus: _searchFocus,
+        earlierFocus: _earlierFocus,
+        nowFocus: _nowFocus,
+        laterFocus: _laterFocus,
+        hoursFocus: _hoursFocus,
+        clearSearchFocus: _clearSearchFocus,
+        removeChannelFilterFocus: _removeChannelFilterFocus,
+        onSearchKey: _searchKey,
+        onKeyEvent: _toolbarKey,
+        merged: merged,
+        searchExpanded: _searchExpanded || _searchController.text.isNotEmpty,
+        searchButtonFocus: _searchButtonFocus,
+        onOpenSearch: _openSearch,
+      );
+
+  bool _barFits(BuildContext context, double width, GuideLayoutPolicy policy) {
+    final scaler = MediaQuery.textScalerOf(context);
+    final direction = Directionality.of(context);
+    final theme = Theme.of(context);
+    double text(String value, TextStyle style) =>
+        _textWidth(value, style, scaler, direction);
+    final button = theme.textButtonTheme.style!;
+    final padding = button.padding!.resolve({})!.resolve(direction);
+    final minimum = button.minimumSize!.resolve({})!;
+    final metrics = _GuideControlsMetrics.resolve(
+      context,
+      widget.controller,
+      width,
+      _filterPickerWidth(policy),
+    );
+    final lockup =
+        30 +
+        14 +
+        text(
+          'LINEUP',
+          const TextStyle(fontFamily: 'Arimo', fontSize: 22, letterSpacing: 3),
+        ) +
+        (widget.onOpenMenu == null
+            ? 0
+            : 36 + (DeviceProfile.of(context).isTv ? 40 : 0));
+    final now = widget.controller.now.toLocal();
+    final localizations = MaterialLocalizations.of(context);
+    final date =
+        '${localizations.formatMediumDate(now)}  ·  ${localizations.formatTimeOfDay(TimeOfDay.fromDateTime(now))}';
+    final dateWidth = text(
+      date,
+      theme.textTheme.bodyMedium!.copyWith(fontSize: 18),
+    );
+    final closeWidth = _showBackToPlayer
+        ? 8 +
+              math.max(
+                minimum.width,
+                text('Back to player', button.textStyle!.resolve({})!) +
+                    padding.horizontal,
+              )
+        : 0;
+    final label = widget.controller.selectedChannelFilter;
+    final labelWidth = label.key == ChannelFilter.all
+        ? 0.0
+        : text(
+                label.label,
+                theme.textTheme.bodyMedium!.copyWith(fontSize: 16),
+              ) +
+              48 +
+              8;
+    final controlsWidth =
+        _filterPickerWidth(policy) +
+        8 +
+        labelWidth +
+        math.max(340.0, metrics.navigationWidth + 8 + 48);
+    return metrics.height <= 72 &&
+        lockup + 20 + controlsWidth + 24 + dateWidth + closeWidth + 24 <= width;
+  }
+
   Widget _schedule(GuideLayoutPolicy policy, List<Channel> channels) {
     final scroll = _scrollFor(policy.rowHeight);
     final sourceRowFloor = DeviceProfile.of(context).isTv
@@ -1120,27 +1364,13 @@ class _GuideViewState extends State<GuideView>
     return Column(
       key: _scheduleKey,
       children: [
-        Padding(
-          padding: const EdgeInsets.symmetric(
-            horizontal: _guideEdgeContentInset,
+        if (!_mergedBar)
+          Padding(
+            padding: const EdgeInsets.symmetric(
+              horizontal: _guideEdgeContentInset,
+            ),
+            child: _controls(policy),
           ),
-          child: _GuideControls(
-            key: const Key('guide-control-content'),
-            controller: widget.controller,
-            pickerWidth: _filterPickerWidth(policy),
-            searchController: _searchController,
-            channelFilterFocus: _channelFilterFocus,
-            searchFocus: _searchFocus,
-            earlierFocus: _earlierFocus,
-            nowFocus: _nowFocus,
-            laterFocus: _laterFocus,
-            hoursFocus: _hoursFocus,
-            clearSearchFocus: _clearSearchFocus,
-            removeChannelFilterFocus: _removeChannelFilterFocus,
-            onSearchKey: _searchKey,
-            onKeyEvent: _toolbarKey,
-          ),
-        ),
         Expanded(
           child: LayoutBuilder(
             builder: (context, constraints) {
@@ -1196,7 +1426,7 @@ class _GuideViewState extends State<GuideView>
                             policy.channelRailWidth +
                             _guideTimelineGutter +
                             timelineWidth * fraction,
-                        top: 0,
+                        top: policy.timeHeaderHeight / 2,
                         bottom: 0,
                         child: Semantics(
                           container: true,
@@ -1214,10 +1444,16 @@ class _GuideViewState extends State<GuideView>
                   ),
                   Column(
                     children: [
-                      _TimeHeader(
-                        controller: widget.controller,
-                        railWidth: policy.channelRailWidth,
-                        height: policy.timeHeaderHeight,
+                      ListenableBuilder(
+                        listenable: Listenable.merge([
+                          widget.controller.focus,
+                          _presentationClock,
+                        ]),
+                        builder: (context, _) => _TimeHeader(
+                          controller: widget.controller,
+                          railWidth: policy.channelRailWidth,
+                          height: policy.timeHeaderHeight,
+                        ),
                       ),
                       Expanded(
                         child: channels.isEmpty
@@ -1343,6 +1579,7 @@ class _GuideViewState extends State<GuideView>
               builder: (context, outer) {
                 final isTv = DeviceProfile.of(context).isTv;
                 if (_empty) {
+                  _mergedBar = false;
                   return _ClassicGuideSurface(
                     color: roles.deepBackground,
                     showcaseHeight: 0,
@@ -1418,6 +1655,27 @@ class _GuideViewState extends State<GuideView>
                     tvPictureMinimum: _tvSchema!.pictureMinimum,
                   );
                 }
+                _mergedBar = _barFits(context, outer.maxWidth, policy);
+                if (_mergedBar) {
+                  policy = GuideLayoutPolicy.forSize(
+                    outer.biggest,
+                    hasPicture: widget.pictureInPicture != null,
+                    numberColumnWidth: numberWidth,
+                    isTv: isTv,
+                    textScale: MediaQuery.textScalerOf(context).scale(1),
+                    timeHeaderHeight: policy.timeHeaderHeight,
+                    tvControlsHeight: isTv ? 0 : null,
+                    tvRowFloor: isTv ? _tvSchema!.rowFloor : 0,
+                    tvInformationHeight: isTv
+                        ? _tvSchema!.informationHeight
+                        : 0,
+                    tvIdentityWidth: isTv ? _tvSchema!.identityWidth : 0,
+                    tvPictureMinimum: isTv
+                        ? _tvSchema!.pictureMinimum
+                        : Size.zero,
+                    mergedBar: true,
+                  );
+                }
                 final schedule = _schedule(policy, channels);
                 final theme = Theme.of(context);
                 return DefaultTextStyle(
@@ -1425,7 +1683,11 @@ class _GuideViewState extends State<GuideView>
                   child: _ClassicGuideSurface(
                     color: roles.deepBackground,
                     showcaseHeight: policy.showcaseHeight,
-                    toolbar: _toolbar(),
+                    toolbar: _toolbar(
+                      controls: _mergedBar
+                          ? _controls(policy, merged: true)
+                          : null,
+                    ),
                     showcase: _showcase(policy),
                     body: schedule,
                   ),
@@ -1510,7 +1772,9 @@ class _Toolbar extends StatelessWidget {
     required this.menuFocus,
     required this.closeFocus,
     required this.onKeyEvent,
+    this.controls,
   });
+  final Widget? controls;
   final GuideController controller;
   final Listenable clock;
   final String? watchingChannelId;
@@ -1543,12 +1807,14 @@ class _Toolbar extends StatelessWidget {
       skipTraversal: true,
       onKeyEvent: onKeyEvent,
       child: LineupTopBar(
+        height: controls == null ? 80 : 72,
         inset: _guideEdgeContentInset,
         menuKey: const Key('guide-app-menu'),
         menuFocusNode: menuFocus,
         onOpenMenu: onOpenMenu,
         trailing: Row(
           children: [
+            ?controls,
             if (showPlaying) ...[
               SizedBox(width: 20.0),
               Expanded(
@@ -1624,7 +1890,8 @@ int debugGuideControlsMeasureCount = 0;
 /// Measured fixed controls and label text determine both wrapping and its
 /// vertical budget. Desktop retains its established layout policy.
 class _GuideControlsMetrics {
-  const _GuideControlsMetrics(this.wrap, this.height);
+  const _GuideControlsMetrics(this.wrap, this.height, this.navigationWidth);
+  final double navigationWidth;
   final bool wrap;
   final double height;
 
@@ -1770,6 +2037,7 @@ class _GuideControlsMetrics {
       wrap
           ? math.max(controlHeight, labelHeight) + navigationHeight
           : math.max(navigationHeight, labelHeight),
+      navigationWidth,
     );
   }
 }
@@ -1799,7 +2067,15 @@ class _GuideControls extends StatelessWidget {
     required this.removeChannelFilterFocus,
     required this.onSearchKey,
     required this.onKeyEvent,
+    this.merged = false,
+    this.searchExpanded = false,
+    this.searchButtonFocus,
+    this.onOpenSearch,
   });
+  final bool merged;
+  final bool searchExpanded;
+  final FocusNode? searchButtonFocus;
+  final VoidCallback? onOpenSearch;
 
   final GuideController controller;
   final double pickerWidth;
@@ -1940,7 +2216,7 @@ class _GuideControls extends StatelessWidget {
                 child: Text(
                   activeLabel,
                   key: const Key('guide-active-channel-filter-label'),
-                  maxLines: 2,
+                  maxLines: merged ? 1 : 2,
                   overflow: TextOverflow.ellipsis,
                   style: TextStyle(fontSize: 16, color: roles.mutedText),
                 ),
@@ -2168,6 +2444,37 @@ class _GuideControls extends StatelessWidget {
         ),
       ],
     );
+    if (merged) {
+      return Focus(
+        canRequestFocus: false,
+        skipTraversal: true,
+        onKeyEvent: onKeyEvent,
+        child: Row(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            picker,
+            const SizedBox(width: 8),
+            if (activeLabel != null) ...[label, const SizedBox(width: 8)],
+            if (searchExpanded)
+              search(340)
+            else ...[
+              navigation,
+              const SizedBox(width: 8),
+              IconButton(
+                key: const Key('guide-search-button'),
+                focusNode: searchButtonFocus,
+                tooltip: 'Search channels',
+                onPressed: onOpenSearch,
+                icon: const Icon(
+                  Icons.search,
+                  semanticLabel: 'Search channels',
+                ),
+              ),
+            ],
+          ],
+        ),
+      );
+    }
     return Focus(
       canRequestFocus: false,
       skipTraversal: true,
@@ -2864,69 +3171,138 @@ class _TimeHeader extends StatelessWidget {
                   1,
                   slots,
                 );
-                return Row(
+                final now = controller.now;
+                final fraction =
+                    now.difference(controller.windowStart).inMicroseconds /
+                    controller.windowEnd
+                        .difference(controller.windowStart)
+                        .inMicroseconds;
+                final showMarker = fraction >= 0 && fraction < 1;
+                final localNow = now.toLocal();
+                final markerLabel =
+                    '${localNow.hour % 12 == 0 ? 12 : localNow.hour % 12}:${localNow.minute.toString().padLeft(2, '0')}';
+                final style = DefaultTextStyle.of(context).style;
+                final markerStyle = style.copyWith(
+                  fontWeight: FontWeight.w600,
+                  color: LineupTheme.of(context).onFocus,
+                );
+                final markerWidth =
+                    _textWidth(
+                      markerLabel,
+                      markerStyle,
+                      MediaQuery.textScalerOf(context),
+                      Directionality.of(context),
+                    ) +
+                    16;
+                final markerLeft = width * fraction + 1 - markerWidth / 2;
+                return Stack(
+                  clipBehavior: Clip.none,
                   children: [
-                    for (var index = 0; index < slots; index++)
-                      Expanded(
-                        child: Container(
-                          alignment: Alignment.center,
-                          decoration: BoxDecoration(
-                            border: Border(
-                              left: BorderSide(
-                                color: LineupTheme.of(context).subtleBorder,
+                    Row(
+                      children: [
+                        for (var index = 0; index < slots; index++)
+                          Expanded(
+                            child: Container(
+                              alignment: Alignment.centerLeft,
+                              decoration: BoxDecoration(
+                                border: Border(
+                                  left: BorderSide(
+                                    color: LineupTheme.of(context).subtleBorder,
+                                  ),
+                                ),
                               ),
-                            ),
-                          ),
-                          child: index % stride == 0
-                              ? Padding(
-                                  padding: EdgeInsets.only(left: 12),
-                                  child: Align(
-                                    alignment: Alignment.centerLeft,
-                                    child: Builder(
+                              child: index % stride == 0
+                                  ? Builder(
                                       builder: (context) {
-                                        final tick = controller.windowStart.add(
-                                          Duration(minutes: 30 * index),
+                                        final tick = controller.windowStart
+                                            .add(Duration(minutes: 30 * index))
+                                            .toLocal();
+                                        final label = _time(context, tick);
+                                        final labelLeft =
+                                            index * slotWidth + 12;
+                                        final labelWidth = _textWidth(
+                                          label,
+                                          style,
+                                          MediaQuery.textScalerOf(context),
+                                          Directionality.of(context),
                                         );
-                                        final localTick = tick.toLocal();
-                                        final midnight =
-                                            localTick.hour == 0 &&
-                                            localTick.minute == 0;
-                                        return Column(
-                                          mainAxisAlignment:
-                                              MainAxisAlignment.center,
-                                          crossAxisAlignment:
-                                              CrossAxisAlignment.start,
-                                          children: [
-                                            Text(
-                                              _time(context, localTick),
-                                              overflow: TextOverflow.clip,
-                                              maxLines: 1,
-                                            ),
-                                            if (midnight)
+                                        if (showMarker &&
+                                            labelLeft <
+                                                markerLeft + markerWidth &&
+                                            labelLeft + labelWidth >
+                                                markerLeft) {
+                                          return const SizedBox.shrink();
+                                        }
+                                        return Padding(
+                                          padding: const EdgeInsets.only(
+                                            left: 12,
+                                          ),
+                                          child: Column(
+                                            mainAxisAlignment:
+                                                MainAxisAlignment.center,
+                                            crossAxisAlignment:
+                                                CrossAxisAlignment.start,
+                                            children: [
                                               Text(
-                                                MaterialLocalizations.of(
-                                                  context,
-                                                ).formatMediumDate(localTick),
-                                                key: const Key(
-                                                  'guide-midnight-date',
+                                                label,
+                                                key: ValueKey(
+                                                  'guide-time-label-$index',
                                                 ),
+                                                overflow: TextOverflow.clip,
                                                 maxLines: 1,
-                                                style: Theme.of(context)
-                                                    .textTheme
-                                                    .labelSmall
-                                                    ?.copyWith(
-                                                      color: LineupTheme.of(
-                                                        context,
-                                                      ).progressFill,
-                                                    ),
                                               ),
-                                          ],
+                                              if (tick.hour == 0 &&
+                                                  tick.minute == 0)
+                                                Text(
+                                                  MaterialLocalizations.of(
+                                                    context,
+                                                  ).formatMediumDate(tick),
+                                                  key: const Key(
+                                                    'guide-midnight-date',
+                                                  ),
+                                                  maxLines: 1,
+                                                  style: Theme.of(context)
+                                                      .textTheme
+                                                      .labelSmall
+                                                      ?.copyWith(
+                                                        color: LineupTheme.of(
+                                                          context,
+                                                        ).progressFill,
+                                                      ),
+                                                ),
+                                            ],
+                                          ),
                                         );
                                       },
-                                    ),
-                                  ),
-                                )
-                              : null,
+                                    )
+                                  : null,
+                            ),
+                          ),
+                      ],
+                    ),
+                    if (showMarker)
+                      Positioned(
+                        left: markerLeft,
+                        top: 0,
+                        bottom: 0,
+                        width: markerWidth,
+                        child: Center(
+                          child: Container(
+                            key: const Key('guide-now-marker'),
+                            padding: const EdgeInsets.symmetric(
+                              horizontal: 8,
+                              vertical: 2,
+                            ),
+                            decoration: BoxDecoration(
+                              color: LineupTheme.of(context).liveAccent,
+                              borderRadius: BorderRadius.circular(999),
+                            ),
+                            child: Text(
+                              markerLabel,
+                              maxLines: 1,
+                              style: markerStyle,
+                            ),
+                          ),
                         ),
                       ),
                   ],
@@ -3628,6 +4004,10 @@ class _ProgramCellState extends State<_ProgramCell> {
                         current: widget.current,
                         past: widget.past,
                         reduceMotion: widget.reduceMotion,
+                        backingColor: Color.alphaBlend(
+                          fill,
+                          roles.deepBackground,
+                        ),
                       ),
                     ),
                   ],
@@ -3648,8 +4028,10 @@ class _ProgramCellContent extends StatelessWidget {
     required this.current,
     required this.past,
     required this.reduceMotion,
+    required this.backingColor,
   });
 
+  final Color backingColor;
   final GuideProgram program;
   final bool focused;
   final bool current;
@@ -3667,7 +4049,7 @@ class _ProgramCellContent extends StatelessWidget {
         : null;
     return LayoutBuilder(
       builder: (context, constraints) {
-        final double gap = 12.0;
+        const gap = 8.0;
         final scaler = MediaQuery.textScalerOf(context);
         final direction = Directionality.of(context);
         final roles = LineupTheme.of(context);
@@ -3679,109 +4061,132 @@ class _ProgramCellContent extends StatelessWidget {
               : null,
         );
         final secondaryStyle = _GuideStyles.rowSecondary(context)
-            .copyWith(color: focused ? roles.focusedText : roles.mutedText);
-        final tagStyle = Theme.of(context).textTheme.labelSmall?.copyWith(
+            .copyWith(color: focused ? roles.focusMutedText : roles.mutedText);
+        final tagStyle = Theme.of(context).textTheme.labelSmall!.copyWith(
           height: 1.1,
           fontSize: DeviceProfile.of(context).isTv
               ? LineupTypography.tvTextFloor
               : 14,
-          color: focused ? roles.focusedText : null,
+          color: focused ? roles.focusSecondaryText : roles.secondaryText,
           fontWeight: FontWeight.w500,
           letterSpacing: 0.2,
         );
+        if (constraints.maxWidth <
+            _textWidth(
+              primaryTitle.characters.take(4).toString(),
+              titleStyle,
+              scaler,
+              direction,
+            )) {
+          return const SizedBox.shrink();
+        }
         final time =
             '${_time(context, program.scheduled.start)}–${_time(context, program.scheduled.end)}';
-        final liveWidth = current ? 7 + gap : 0.0;
-        final titleWidth = episodeCode == null
-            ? 0.0
-            : _textWidth(primaryTitle, titleStyle, scaler, direction);
+        final titleWidth = _textWidth(
+          primaryTitle,
+          titleStyle,
+          scaler,
+          direction,
+        );
         final tagWidth = episodeCode == null
             ? 0.0
             : _textWidth(episodeCode, tagStyle, scaler, direction);
         final showEpisode =
             episodeCode != null &&
-            titleWidth + tagWidth + liveWidth + gap <= constraints.maxWidth;
+            titleWidth + tagWidth + gap <= constraints.maxWidth;
         final subtitleWidth = episodeTitle == null
             ? 0.0
             : _textWidth(episodeTitle, secondaryStyle, scaler, direction);
-        final timeWidth = _textWidth(time, secondaryStyle, scaler, direction);
+        final timeStyle = secondaryStyle.copyWith(
+          fontFeatures: const [ui.FontFeature.tabularFigures()],
+        );
+        final timeWidth = _textWidth(time, timeStyle, scaler, direction);
+        final separatorWidth = _textWidth(
+          ' · ',
+          secondaryStyle,
+          scaler,
+          direction,
+        );
         final showTime = episodeTitle == null
             ? timeWidth <= constraints.maxWidth
-            : subtitleWidth + timeWidth + gap <= constraints.maxWidth;
+            : subtitleWidth + separatorWidth + timeWidth <=
+                  constraints.maxWidth;
         final showBottom =
             constraints.maxHeight >=
             _textHeight(titleStyle, scaler, direction) +
                 _textHeight(secondaryStyle, scaler, direction);
-        return ClipRect(
+        // The opaque backing extends six pixels either side of the visible
+        // line, masking both now-line layers without changing text alignment.
+        Widget backed(double width, Widget child) => Transform.translate(
+          offset: const Offset(-6, 0),
+          child: AnimatedContainer(
+            key: const Key('guide-cell-text-backing'),
+            duration: reduceMotion
+                ? Duration.zero
+                : const Duration(milliseconds: 90),
+            color: backingColor,
+            padding: const EdgeInsets.symmetric(horizontal: 6),
+            child: SizedBox(width: width, child: child),
+          ),
+        );
+        final firstWidth = math.min(
+          constraints.maxWidth,
+          titleWidth + (showEpisode ? gap + tagWidth : 0),
+        );
+        final secondWidth = math.min(
+          constraints.maxWidth,
+          episodeTitle == null
+              ? timeWidth
+              : subtitleWidth + (showTime ? separatorWidth + timeWidth : 0),
+        );
+        return OverflowBox(
+          alignment: Alignment.centerLeft,
+          minWidth: constraints.maxWidth + 12,
+          maxWidth: constraints.maxWidth + 12,
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.start,
             mainAxisAlignment: MainAxisAlignment.center,
             children: [
-              Row(
-                children: [
-                  if (current) ...[
-                    Container(
-                      key: const Key('guide-airing-dot'),
-                      width: 7,
-                      height: 7,
-                      decoration: BoxDecoration(
-                        color: LineupTheme.of(context).liveAccent,
-                        shape: BoxShape.circle,
-                      ),
-                    ),
-                    SizedBox(width: gap),
-                  ],
-                  Expanded(
-                    child: FocusedTicker(
-                      text: primaryTitle,
-                      focused: focused,
-                      reduceMotion: reduceMotion,
-                      style: titleStyle,
-                    ),
-                  ),
-                  if (showEpisode) ...[
-                    SizedBox(width: gap),
-                    Text(episodeCode, style: tagStyle),
-                  ],
-                ],
-              ),
-              if (showBottom && (episodeTitle != null || showTime))
+              backed(
+                firstWidth,
                 Row(
                   children: [
-                    if (episodeTitle != null)
-                      if (showTime)
-                        SizedBox(
-                          width: subtitleWidth,
-                          child: FocusedTicker(
-                            text: episodeTitle,
-                            focused: focused,
-                            reduceMotion: reduceMotion,
-                            style: secondaryStyle,
-                          ),
-                        )
-                      else
-                        Expanded(
-                          child: FocusedTicker(
-                            text: episodeTitle,
-                            focused: focused,
-                            reduceMotion: reduceMotion,
-                            style: secondaryStyle,
-                          ),
-                        ),
-                    if (episodeTitle != null && showTime)
-                      SizedBox(
-                        width: gap,
-                        child: Center(child: Text('·', style: secondaryStyle)),
+                    SizedBox(
+                      width: showEpisode ? titleWidth : firstWidth,
+                      child: FocusedTicker(
+                        text: primaryTitle,
+                        focused: focused,
+                        reduceMotion: reduceMotion,
+                        style: titleStyle,
                       ),
-                    if (showTime)
-                      Text(
-                        time,
-                        maxLines: 1,
-                        style: secondaryStyle.copyWith(
-                          fontFeatures: const [ui.FontFeature.tabularFigures()],
-                        ),
-                      ),
+                    ),
+                    if (showEpisode) ...[
+                      const SizedBox(width: gap),
+                      Text(episodeCode, style: tagStyle),
+                    ],
                   ],
+                ),
+              ),
+              if (showBottom && (episodeTitle != null || showTime))
+                backed(
+                  secondWidth,
+                  Row(
+                    children: [
+                      if (episodeTitle != null)
+                        SizedBox(
+                          width: showTime ? subtitleWidth : secondWidth,
+                          child: FocusedTicker(
+                            text: episodeTitle,
+                            focused: focused,
+                            reduceMotion: reduceMotion,
+                            style: secondaryStyle,
+                          ),
+                        ),
+                      if (episodeTitle != null && showTime)
+                        Text(' · ', style: secondaryStyle),
+                      if (showTime) Text(time, maxLines: 1, style: timeStyle),
+                    ],
+                  ),
                 ),
             ],
           ),
@@ -3927,7 +4332,7 @@ abstract final class _GuideStyles {
   static final metadata = LineupTypography.body.copyWith(height: 1.2);
   static TextStyle rowSecondary(BuildContext context) =>
       Theme.of(context).textTheme.bodySmall!
-          .copyWith(height: 1.1, fontSize: 18);
+          .copyWith(height: 1.1, fontSize: 19);
   static TextStyle badge(BuildContext context) => Theme.of(context)
       .textTheme
       .labelMedium!

@@ -504,7 +504,7 @@ void main() {
         expect(find.byType(GuideView), findsOneWidget);
       }
       expect(find.byType(PlayerView), findsNothing);
-      expect(find.byKey(const Key('guide-channel-search')), findsOneWidget);
+      expect(find.byKey(const Key('guide-search-button')), findsOneWidget);
       expect(backgrounds, 0);
       await back(tester);
       expect(backgrounds, 1);
@@ -853,6 +853,8 @@ void main() {
           Focus(focusNode: outside, child: fixture.build()),
         );
         await tester.pumpAndSettle();
+        await tester.tap(find.byKey(const Key('guide-search-button')));
+        await tester.pumpAndSettle();
         final search = find.byKey(const Key('guide-channel-search'));
         await tester.tap(search);
         await tester.sendKeyEvent(LogicalKeyboardKey.backspace);
@@ -865,7 +867,7 @@ void main() {
           physicalKey: PhysicalKeyboardKey.escape,
         );
         await tester.pumpAndSettle();
-        expect(find.byKey(const Key('guide-channel-search')), findsOneWidget);
+        expect(find.byKey(const Key('guide-search-button')), findsOneWidget);
         await tester.sendKeyRepeatEvent(
           key,
           physicalKey: PhysicalKeyboardKey.escape,
@@ -1423,7 +1425,7 @@ void main() {
       expect(backgrounds, 0);
       expect(f.store.calls, applySaves + 1);
       await back(tester);
-      expect(find.byKey(const Key('guide-channel-search')), findsOneWidget);
+      expect(find.byKey(const Key('guide-search-button')), findsOneWidget);
       expect(backgrounds, 1);
       await tester.pumpWidget(const SizedBox.shrink());
       f.controller.dispose();
