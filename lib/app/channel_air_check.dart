@@ -116,7 +116,12 @@ class _ChannelAirCheckState extends State<ChannelAirCheck> {
       // Keep the existing columns and let the outer editor scroll reveal one
       // usable, locally bounded viewport instead of crushing its fixed footer.
       final minimum = _minimumUsefulHeight;
-      final height = minimum != null && remaining >= minimum
+      final fixedHeight = padding + (footer == null ? 0 : footer + 8);
+      final height = footer != null && fixedHeight >= viewportHeight
+          // The footer alone fills the viewport. Keep room for the schedule
+          // and let the editor scroll to reveal the whole panel.
+          ? viewportHeight + footer + 8
+          : minimum != null && remaining >= minimum && remaining > fixedHeight
           ? remaining.clamp(0.0, viewportHeight)
           : viewportHeight;
       if (_panelHeight == null || (_panelHeight! - height).abs() > .1) {
@@ -272,117 +277,138 @@ class _ChannelAirCheckState extends State<ChannelAirCheck> {
           clipBehavior: Clip.antiAlias,
           child: Padding(
             padding: EdgeInsets.all(widget.compact ? 14 : 20),
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.stretch,
-              children: [
-                Expanded(
-                  child: CustomScrollView(
-                    key: const Key('air-check-schedule-list'),
-                    controller: _scheduleScroll,
-                    slivers: [
-                      SliverToBoxAdapter(
-                        child: Column(
-                          crossAxisAlignment: CrossAxisAlignment.stretch,
-                          children: [
-                            KeyedSubtree(
-                              key: _headerAnchor,
-                              child: Column(
-                                crossAxisAlignment: CrossAxisAlignment.stretch,
-                                children: [
-                                  _monitorHeader(now),
-                                  const SizedBox(height: 10),
-                                  if (preview != null) ...[
-                                    _facts(preview),
-                                    const SizedBox(height: 8),
-                                  ],
-                                ],
-                              ),
-                            ),
-                            if (preview == null && error == null)
+            child: LayoutBuilder(
+              builder: (context, constraints) => Column(
+                crossAxisAlignment: CrossAxisAlignment.stretch,
+                children: [
+                  Expanded(
+                    child: CustomScrollView(
+                      key: const Key('air-check-schedule-list'),
+                      controller: _scheduleScroll,
+                      slivers: [
+                        SliverToBoxAdapter(
+                          child: Column(
+                            crossAxisAlignment: CrossAxisAlignment.stretch,
+                            children: [
                               KeyedSubtree(
-                                key: _emptyAnchor,
-                                child: _emptyRibbon(
-                                  Semantics(
-                                    liveRegion: true,
-                                    label: 'Calculating schedule',
-                                    child: Text(
-                                      'Calculating schedule…',
-                                      key: const Key('air-check-loading'),
-                                      style: LineupTypography.tvLabelStyle(
-                                        context,
-                                      ),
-                                    ),
-                                  ),
-                                ),
-                              ),
-                            if (preview != null) ...[
-                              if (_hasNonCurrentSelection(preview, now))
-                                _selection(preview, now),
-                              const SizedBox(height: 8),
-                            ],
-                            if (_comparisonFailed ||
-                                (error != null &&
-                                    (!widget.sourceIssueExplained ||
-                                        _retryableError)))
-                              KeyedSubtree(
-                                key: _recoveryAnchor,
+                                key: _headerAnchor,
                                 child: Column(
                                   crossAxisAlignment:
                                       CrossAxisAlignment.stretch,
                                   children: [
-                                    if (_comparisonFailed)
-                                      _comparisonErrorView(),
-                                    if (error != null &&
-                                        (!widget.sourceIssueExplained ||
-                                            _retryableError))
-                                      _errorView(error),
+                                    _monitorHeader(now),
+                                    const SizedBox(height: 10),
+                                    if (preview != null) ...[
+                                      _facts(preview),
+                                      const SizedBox(height: 8),
+                                    ],
                                   ],
                                 ),
                               ),
-                            if (preview != null && preview.window.truncated)
-                              Text(
-                                'Preview truncated at ${_time(context, preview.window.lastProjectedEnd!)}; this is the last projected program end.',
-                                style: TextStyle(
-                                  color: LineupTheme.of(context).secondaryText,
+                              if (preview == null && error == null)
+                                KeyedSubtree(
+                                  key: _emptyAnchor,
+                                  child: _emptyRibbon(
+                                    Semantics(
+                                      liveRegion: true,
+                                      label: 'Calculating schedule',
+                                      child: Text(
+                                        'Calculating schedule…',
+                                        key: const Key('air-check-loading'),
+                                        style: LineupTypography.tvLabelStyle(
+                                          context,
+                                        ),
+                                      ),
+                                    ),
+                                  ),
                                 ),
-                              ),
-                            if (_unavailableCount(
-                                  widget.channel.source,
-                                  widget.playableById ??
-                                      widget.controller.playableInventory.byId,
-                                )
-                                case final count when count > 0)
-                              Text(
-                                '$count unavailable hand-picked ${count == 1 ? 'item is' : 'items are'} retained but off air until available or removed.',
-                                style: TextStyle(
-                                  color: LineupTheme.of(context).secondaryText,
+                              if (preview != null) ...[
+                                if (_hasNonCurrentSelection(preview, now))
+                                  _selection(preview, now),
+                                const SizedBox(height: 8),
+                              ],
+                              if (_comparisonFailed ||
+                                  (error != null &&
+                                      (!widget.sourceIssueExplained ||
+                                          _retryableError)))
+                                KeyedSubtree(
+                                  key: _recoveryAnchor,
+                                  child: Column(
+                                    crossAxisAlignment:
+                                        CrossAxisAlignment.stretch,
+                                    children: [
+                                      if (_comparisonFailed)
+                                        _comparisonErrorView(),
+                                      if (error != null &&
+                                          (!widget.sourceIssueExplained ||
+                                              _retryableError))
+                                        _errorView(error),
+                                    ],
+                                  ),
                                 ),
-                              ),
-                            if (widget.verification.changesOnNow)
-                              Text(
-                                'Saving these programming changes may change what is on now',
-                                key: const Key('air-check-on-now-warning'),
-                                style: TextStyle(
-                                  color: LineupTheme.of(context).secondaryText,
+                              if (preview != null && preview.window.truncated)
+                                Text(
+                                  'Preview truncated at ${_time(context, preview.window.lastProjectedEnd!)}; this is the last projected program end.',
+                                  style: TextStyle(
+                                    color: LineupTheme.of(context)
+                                        .secondaryText,
+                                  ),
                                 ),
-                              ),
-                          ],
+                              if (_unavailableCount(
+                                    widget.channel.source,
+                                    widget.playableById ??
+                                        widget
+                                            .controller
+                                            .playableInventory
+                                            .byId,
+                                  )
+                                  case final count when count > 0)
+                                Text(
+                                  '$count unavailable hand-picked ${count == 1 ? 'item is' : 'items are'} retained but off air until available or removed.',
+                                  style: TextStyle(
+                                    color: LineupTheme.of(context)
+                                        .secondaryText,
+                                  ),
+                                ),
+                              if (widget.verification.changesOnNow)
+                                Text(
+                                  'Saving these programming changes may change what is on now',
+                                  key: const Key('air-check-on-now-warning'),
+                                  style: TextStyle(
+                                    color: LineupTheme.of(context)
+                                        .secondaryText,
+                                  ),
+                                ),
+                            ],
+                          ),
+                        ),
+                        if (preview != null)
+                          SliverOpacity(
+                            key: const Key('air-check-schedule-content'),
+                            opacity: _stale ? .5 : 1,
+                            sliver: _verticalSchedule(preview, now),
+                          ),
+                      ],
+                    ),
+                  ),
+                  if (preview != null)
+                    ConstrainedBox(
+                      // Keep the footer reachable until the panel can use its
+                      // measured height, even if it wraps beyond the viewport.
+                      constraints: BoxConstraints(
+                        maxHeight: constraints.maxHeight,
+                      ),
+                      child: SingleChildScrollView(
+                        primary: false,
+                        padding: const EdgeInsets.only(top: 8),
+                        child: KeyedSubtree(
+                          key: _footerAnchor,
+                          child: _footer(preview),
                         ),
                       ),
-                      if (preview != null)
-                        SliverOpacity(
-                          key: const Key('air-check-schedule-content'),
-                          opacity: _stale ? .5 : 1,
-                          sliver: _verticalSchedule(preview, now),
-                        ),
-                    ],
-                  ),
-                ),
-                if (preview != null) ...[
-                  const SizedBox(height: 8),
-                  KeyedSubtree(key: _footerAnchor, child: _footer(preview)),
+                    ),
                 ],
-              ],
+              ),
             ),
           ),
         ),
