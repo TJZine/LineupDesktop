@@ -496,15 +496,8 @@ class _SettingsViewState extends State<SettingsView> {
               ..._settingControl<LineupThemeName>(
                 _SettingKey.theme,
                 (current, item) => current.copyWith(theme: item),
-                (onChanged) => _Dropdown<LineupThemeName>(
-                  'Theme',
-                  'Color and surface treatment throughout Lineup.',
-                  value.theme,
-                  LineupThemeName.values,
-                  (item) => item.label,
-                  onChanged,
-                  first: true,
-                ),
+                (onChanged) =>
+                    _ThemeSwatches(value: value.theme, onChanged: onChanged),
               ),
               ..._settingControl<GuideInfoBackgroundMode>(
                 _SettingKey.guideInfoBackgroundMode,
@@ -1132,6 +1125,200 @@ class _SettingsSection extends StatelessWidget {
         SizedBox(height: trailingGap),
         ...children,
       ],
+    );
+  }
+}
+
+class _ThemeSwatches extends StatefulWidget {
+  const _ThemeSwatches({required this.value, required this.onChanged});
+
+  final LineupThemeName value;
+  final ValueChanged<LineupThemeName>? onChanged;
+
+  @override
+  State<_ThemeSwatches> createState() => _ThemeSwatchesState();
+}
+
+class _ThemeSwatchesState extends State<_ThemeSwatches> {
+  final _focus = {
+    for (final theme in LineupThemeName.values)
+      theme: FocusNode(debugLabel: 'Theme ${theme.label}'),
+  };
+
+  @override
+  void dispose() {
+    for (final node in _focus.values) {
+      node.dispose();
+    }
+    super.dispose();
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final roles = LineupTheme.of(context);
+    final inset = DeviceProfile.of(context).isTv
+        ? _SettingsViewState._rowInset
+        : 0.0;
+    return Padding(
+      padding: EdgeInsets.fromLTRB(inset, 16, inset, 28),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Text(
+            'Theme',
+            style: Theme.of(context).textTheme.titleMedium
+                ?.copyWith(fontSize: 18),
+          ),
+          const SizedBox(height: 6),
+          Text(
+            'Color and surface treatment throughout Lineup.',
+            style: TextStyle(
+              color: roles.secondaryText,
+              fontSize: 18,
+              height: 1.5,
+            ),
+          ),
+          const SizedBox(height: 20),
+          LayoutBuilder(
+            builder: (context, constraints) {
+              const gap = 16.0;
+              final columns = constraints.maxWidth >= 232 * 4 + gap * 3 ? 4 : 2;
+              final width = math.min(
+                232.0,
+                (constraints.maxWidth - gap * (columns - 1)) / columns,
+              );
+              return Wrap(
+                key: const ValueKey('settings-field-Theme'),
+                spacing: gap,
+                runSpacing: 20,
+                children: [
+                  for (final theme in LineupThemeName.values)
+                    SizedBox(
+                      width: width,
+                      child: Builder(
+                        builder: (context) {
+                          final swatch = LineupTheme.forName(theme)
+                              .extension<LineupThemeRoles>()!;
+                          final selected = theme == widget.value;
+                          return Focus(
+                            canRequestFocus: false,
+                            onKeyEvent: (_, event) {
+                              if (!DeviceProfile.of(context).isTv ||
+                                  event is! KeyDownEvent)
+                                return KeyEventResult.ignored;
+                              final delta =
+                                  event.logicalKey ==
+                                      LogicalKeyboardKey.arrowRight
+                                  ? 1
+                                  : event.logicalKey ==
+                                        LogicalKeyboardKey.arrowLeft
+                                  ? -1
+                                  : 0;
+                              final index = theme.index + delta;
+                              if (delta == 0 ||
+                                  index < 0 ||
+                                  index >= LineupThemeName.values.length)
+                                return KeyEventResult.ignored;
+                              _focus[LineupThemeName.values[index]]!
+                                  .requestFocus();
+                              return KeyEventResult.handled;
+                            },
+                            child: OutlinedButton(
+                              focusNode: _focus[theme],
+                              key: ValueKey('settings-theme-${theme.name}'),
+                              onPressed: widget.onChanged == null
+                                  ? null
+                                  : () => widget.onChanged!(theme),
+                              style: OutlinedButton.styleFrom(
+                                padding: const EdgeInsets.all(4),
+                                side: BorderSide.none,
+                                shape: RoundedRectangleBorder(
+                                  borderRadius: BorderRadius.circular(
+                                    roles.panelRadius,
+                                  ),
+                                ),
+                              ),
+                              child: Column(
+                                crossAxisAlignment: CrossAxisAlignment.stretch,
+                                children: [
+                                  Container(
+                                    key: ValueKey(
+                                      'settings-theme-preview-${theme.name}',
+                                    ),
+                                    height: 132,
+                                    padding: const EdgeInsets.all(24),
+                                    decoration: BoxDecoration(
+                                      color: swatch.deepBackground,
+                                      borderRadius: BorderRadius.circular(
+                                        roles.panelRadius,
+                                      ),
+                                      border: Border.all(
+                                        color: selected
+                                            ? roles.progressFill
+                                            : roles.subtleBorder,
+                                        width: selected ? 3 : 1,
+                                      ),
+                                    ),
+                                    child: Column(
+                                      crossAxisAlignment:
+                                          CrossAxisAlignment.start,
+                                      children: [
+                                        Container(
+                                          width: 100,
+                                          height: 8,
+                                          color: swatch.primaryText,
+                                        ),
+                                        const SizedBox(height: 12),
+                                        Container(
+                                          width: 72,
+                                          height: 6,
+                                          color: swatch.primaryText.withValues(
+                                            alpha: .55,
+                                          ),
+                                        ),
+                                        const Spacer(),
+                                        Row(
+                                          children: [
+                                            Expanded(
+                                              child: Container(
+                                                height: 24,
+                                                color: swatch.elevatedSurface,
+                                              ),
+                                            ),
+                                            const SizedBox(width: 8),
+                                            Container(
+                                              width: 48,
+                                              height: 24,
+                                              color: swatch.progressFill,
+                                            ),
+                                          ],
+                                        ),
+                                      ],
+                                    ),
+                                  ),
+                                  const SizedBox(height: 10),
+                                  Text(
+                                    theme.label,
+                                    style: TextStyle(
+                                      fontSize: 18,
+                                      fontWeight: selected
+                                          ? FontWeight.w600
+                                          : FontWeight.w400,
+                                    ),
+                                  ),
+                                ],
+                              ),
+                            ),
+                          );
+                        },
+                      ),
+                    ),
+                ],
+              );
+            },
+          ),
+        ],
+      ),
     );
   }
 }

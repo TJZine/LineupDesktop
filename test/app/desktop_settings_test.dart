@@ -257,21 +257,19 @@ void main() {
     addTearDown(controller.dispose);
 
     await _showSettings(tester, controller);
-    final themeDropdown = find.byType(DropdownButton<LineupThemeName>);
-    await tester.ensureVisible(themeDropdown);
-    final theme = tester.widget<DropdownButton<LineupThemeName>>(themeDropdown);
-    expect(theme.value, LineupThemeName.emberSteel);
-    expect(theme.onChanged, isNotNull);
+    final themeButton = find.byKey(const ValueKey('settings-theme-emberSteel'));
+    await tester.ensureVisible(themeButton);
+    expect(tester.widget<OutlinedButton>(themeButton).onPressed, isNotNull);
     expect(
       tester
-          .getSemantics(themeDropdown)
+          .getSemantics(themeButton)
           .getSemanticsData()
           .hasAction(SemanticsAction.tap),
       isTrue,
     );
     expect(
-      tester.getSemantics(themeDropdown).getSemanticsData().label,
-      contains('Theme'),
+      tester.getSemantics(themeButton).getSemanticsData().label,
+      contains('Ember & Steel'),
     );
 
     for (final category in SettingsCategory.values.skip(1)) {
@@ -357,7 +355,9 @@ void main() {
     addTearDown(controller.dispose);
 
     await _showSettings(tester, controller);
-    final dropdown = find.byKey(const ValueKey('settings-field-Theme'));
+    final dropdown = find.byKey(
+      const ValueKey('settings-field-Guide information background'),
+    );
     await tester.ensureVisible(dropdown);
     final dropdownRight = tester.getRect(dropdown).right;
 
