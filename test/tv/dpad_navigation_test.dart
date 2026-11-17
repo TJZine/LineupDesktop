@@ -606,6 +606,10 @@ void main() {
     );
     await tester.pumpWidget(fixture.build());
     await tester.pumpAndSettle();
+    final searchButton = find.byKey(const Key('guide-search-button'));
+    tester.widget<IconButton>(searchButton).focusNode!.requestFocus();
+    await tester.pumpAndSettle();
+    await _keys(tester, [_select]);
     final field = find.byKey(const Key('guide-channel-search'));
     final activation = tester.widget<LineupTextFieldActivation>(
       find.ancestor(
@@ -613,22 +617,49 @@ void main() {
         matching: find.byType(LineupTextFieldActivation),
       ),
     );
-    // Grid-to-toolbar access is UX4. Establish toolbar focus, then prove actual
-    // arrow arrival/exit and activation using the production Guide controls.
-    activation.focusNode!.requestFocus();
-    await tester.pumpAndSettle();
-    await _keys(tester, [_left]);
-    expect(activation.focusNode!.hasPrimaryFocus, isFalse);
+    expect(activation.focusNode!.hasPrimaryFocus, isTrue);
+    expect(tester.testTextInput.isVisible, isFalse);
+    // Search is the final merged-bar control. Right stays inside the bar;
+    // Left returns to the filter and closes the empty field.
     await _keys(tester, [_right]);
     expect(activation.focusNode!.hasPrimaryFocus, isTrue);
+    expect(tester.testTextInput.isVisible, isFalse);
+    await _keys(tester, [_left]);
+    expect(field, findsNothing);
+    final filter = tester.widget<InkWell>(
+      find.byKey(const Key('guide-channel-filter')),
+    );
+    expect(filter.focusNode!.hasPrimaryFocus, isTrue);
+    for (
+      var step = 0;
+      step < 8 &&
+          !tester.widget<IconButton>(searchButton).focusNode!.hasPrimaryFocus;
+      step++
+    ) {
+      await _keys(tester, [_right]);
+    }
+    expect(
+      tester.widget<IconButton>(searchButton).focusNode!.hasPrimaryFocus,
+      isTrue,
+    );
+    expect(tester.testTextInput.isVisible, isFalse);
+    await _keys(tester, [_select]);
+    expect(field, findsOneWidget);
     expect(tester.testTextInput.isVisible, isFalse);
     await _keys(tester, [_select]);
     expect(tester.testTextInput.isVisible, isTrue);
     await _keys(tester, [_back]);
     expect(tester.testTextInput.isVisible, isFalse);
-    expect(activation.focusNode!.hasPrimaryFocus, isTrue);
-    await _keys(tester, [_right]);
-    expect(activation.focusNode!.hasPrimaryFocus, isFalse);
+    final reopened = tester.widget<LineupTextFieldActivation>(
+      find.ancestor(
+        of: field,
+        matching: find.byType(LineupTextFieldActivation),
+      ),
+    );
+    expect(reopened.focusNode!.hasPrimaryFocus, isTrue);
+    await _keys(tester, [_left]);
+    expect(field, findsNothing);
+    expect(filter.focusNode!.hasPrimaryFocus, isTrue);
   });
 }
 

@@ -4986,7 +4986,6 @@ void main() {
       lineup: lineup,
       loadSchedule: (channel) async => _schedule(channel),
     );
-    await _openGuideSearch(tester);
     final search = find.byKey(const Key('guide-channel-search'));
     var findReachedParent = false;
     Future<bool> searchFocusedAfterChord(
@@ -5018,6 +5017,7 @@ void main() {
       await tester.pumpAndSettle();
       final program = guide.currentProgram(lineup.channels.first.id)!;
       await tester.tap(find.byKey(ValueKey(program.id)));
+      await tester.pump(kDoubleTapTimeout);
       await tester.pumpAndSettle();
       if (search.evaluate().isNotEmpty) {
         expect(tester.widget<TextField>(search).focusNode!.hasFocus, isFalse);
@@ -5033,8 +5033,9 @@ void main() {
       if (withControl) {
         await tester.sendKeyUpEvent(LogicalKeyboardKey.controlLeft);
       }
-      await tester.pump();
-      return tester.widget<TextField>(search).focusNode!.hasFocus;
+      await tester.pumpAndSettle();
+      return search.evaluate().isNotEmpty &&
+          tester.widget<TextField>(search).focusNode!.hasFocus;
     }
 
     try {
@@ -5172,12 +5173,16 @@ void main() {
     expect(tunes, 0);
     expect(closes, 0);
 
+    if (find.byKey(const Key('guide-search-button')).evaluate().isNotEmpty) {
+      await tester.sendKeyEvent(LogicalKeyboardKey.arrowDown);
+      await tester.pumpAndSettle();
+    }
     await tester.sendKeyEvent(LogicalKeyboardKey.keyP);
     expect(guide.windowStart, isNot(browsedStart));
     await tester.sendKeyDownEvent(LogicalKeyboardKey.controlLeft);
     await tester.sendKeyEvent(LogicalKeyboardKey.keyF);
     await tester.sendKeyUpEvent(LogicalKeyboardKey.controlLeft);
-    await tester.pump();
+    await tester.pumpAndSettle();
     expect(tester.widget<TextField>(search).focusNode!.hasFocus, isTrue);
     await tester.sendKeyEvent(LogicalKeyboardKey.escape);
     await tester.pump();
@@ -5329,6 +5334,7 @@ void main() {
       ),
     );
     await tester.pumpAndSettle();
+    await _openGuideSearch(tester);
     await tester.enterText(
       find.byKey(const Key('guide-channel-search')),
       'Library',
@@ -5396,7 +5402,12 @@ void main() {
           ),
         );
         await tester.pumpAndSettle();
-        expect(find.byKey(const Key('guide-channel-search')), findsOneWidget);
+        final search = find.byKey(const Key('guide-channel-search'));
+        if (search.evaluate().isEmpty) {
+          expect(find.byKey(const Key('guide-search-button')), findsOneWidget);
+        } else {
+          expect(search, findsOneWidget);
+        }
         expect(find.byKey(const Key('guide-hours')), findsOneWidget);
         expect(tester.takeException(), isNull, reason: '$size');
       }
