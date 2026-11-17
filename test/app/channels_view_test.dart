@@ -54,7 +54,13 @@ void main() {
         );
         await tester.pumpAndSettle();
         await openDestination(tester, 'Channels');
+        expect(find.text('Your lineup, in channel order.'), findsOneWidget);
         await _chooseDirectoryView(tester, 'Grouped by source');
+        expect(
+          find.text('Your lineup, grouped by where each channel comes from.'),
+          findsOneWidget,
+        );
+        expect(find.text('Your lineup, in channel order.'), findsNothing);
         final header = find.byKey(const ValueKey('channel-group-custom'));
         final count = find.descendant(
           of: header,

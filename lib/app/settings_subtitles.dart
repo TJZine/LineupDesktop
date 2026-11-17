@@ -160,19 +160,27 @@ extension _SubtitleSettingsPage on _SettingsViewState {
         ),
       ],
       if (!_subtitleCustomising)
-        row(
-          _SettingKey.subtitleCustomise,
-          'Customise',
-          Semantics(
-            label: 'Customise',
-            child: TextButton(
+        Builder(
+          builder: (context) {
+            final tv = DeviceProfile.of(context).isTv;
+            final inset = tv ? _SettingsViewState._rowInset : 0.0;
+            return TextButton(
               key: const ValueKey('subtitle-field-subtitleCustomise'),
               focusNode: _subtitleNode(_SettingKey.subtitleCustomise),
               onPressed: _openSubtitleCustomise,
-              child: const Icon(Icons.chevron_right),
-            ),
-          ),
-          helper: 'Text, edges, background and window · 10 options',
+              style: TextButton.styleFrom(
+                minimumSize: const Size(0, 72),
+                padding: EdgeInsets.fromLTRB(tv ? inset - 3 : 0, 12, inset, 12),
+              ),
+              child: const Row(
+                children: [
+                  Expanded(child: _SubtitleCustomiseLabel()),
+                  SizedBox(width: 24),
+                  Icon(Icons.chevron_right),
+                ],
+              ),
+            );
+          },
         ),
       if (_subtitleCustomising) ...[
         const _SubtitleGroup('TEXT'),
@@ -417,6 +425,34 @@ extension _SubtitleSettingsPage on _SettingsViewState {
           ),
         ],
       ),
+    );
+  }
+}
+
+class _SubtitleCustomiseLabel extends StatelessWidget {
+  const _SubtitleCustomiseLabel();
+
+  @override
+  Widget build(BuildContext context) {
+    final roles = LineupTheme.of(context);
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      mainAxisSize: MainAxisSize.min,
+      children: [
+        Text(
+          'Customise',
+          style: LineupTypography.control.copyWith(height: 1.2),
+        ),
+        const SizedBox(height: 4),
+        Text(
+          'Text, edges, background and window · 10 options',
+          style: LineupTypography.body.copyWith(
+            fontSize: 16,
+            height: 1.4,
+            color: roles.secondaryText,
+          ),
+        ),
+      ],
     );
   }
 }

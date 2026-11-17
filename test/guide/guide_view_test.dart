@@ -5459,6 +5459,10 @@ void main() {
 
     final context = find.byKey(const Key('guide-now-playing-context'));
     expect(context, findsOneWidget);
+    final contextText = tester.widget<Text>(context);
+    expect(contextText.textAlign, TextAlign.right);
+    expect(contextText.maxLines, 1);
+    expect(contextText.overflow, TextOverflow.ellipsis);
     expect(tester.widget<Text>(context).data, contains('Channel 0'));
 
     guide.moveVertical(1);

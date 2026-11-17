@@ -70,7 +70,10 @@ void main() {
             expect(tester.widget<InkWell>(row).onTap, isNull);
           }
           expect(controller.commitCalls, 0);
-          expect(find.text('3 of 3 selected'), findsOneWidget);
+          expect(
+            find.text(unusable ? '1 of 1 selected' : '2 of 2 selected'),
+            findsOneWidget,
+          );
           expect(find.text("Won't be used"), findsNothing);
           if (status == LibraryScanStatus.transientFailure) {
             expect(
@@ -2649,7 +2652,7 @@ void main() {
       await tester.pumpAndSettle();
       expect(controller.rowRetryIds, {'archive'});
       expect(controller.rowRetryInventory, {'movies', 'archive'});
-      expect(find.text('2 of 3 selected'), findsOneWidget);
+      expect(find.text('1 of 2 selected'), findsOneWidget);
       expect(
         find.byKey(const ValueKey('continue-ready-libraries')),
         findsOneWidget,
@@ -2667,6 +2670,40 @@ void main() {
       await tester.pumpAndSettle();
       expect(controller.committedIds, {'movies'});
       expect(find.byKey(const ValueKey('configure-section-0')), findsOneWidget);
+    },
+  );
+
+  testWidgets(
+    'Select all toggles only usable libraries and scan keeps hidden selections',
+    (tester) async {
+      final controller = _SetupController(mixedScan: true);
+      addTearDown(controller.dispose);
+      await _pump(tester, controller);
+      await tester.tap(find.byKey(const ValueKey('scan-selected-libraries')));
+      await tester.pumpAndSettle();
+
+      final check = find.byKey(const ValueKey('select-all-libraries'));
+      expect(find.text('2 of 2 selected'), findsOneWidget);
+      expect(tester.widget<Checkbox>(check).value, isTrue);
+      await tester.tap(find.text('Select all'));
+      await tester.pumpAndSettle();
+      expect(find.text('0 of 2 selected'), findsOneWidget);
+      expect(tester.widget<Checkbox>(check).value, isFalse);
+      expect(
+        find.byKey(const ValueKey('continue-ready-libraries')),
+        findsNothing,
+      );
+
+      await tester.tap(find.text('Select all'));
+      await tester.pumpAndSettle();
+      expect(find.text('2 of 2 selected'), findsOneWidget);
+      expect(tester.widget<Checkbox>(check).value, isTrue);
+      await tester.tap(find.byKey(const ValueKey('retry-library-archive')));
+      await tester.pumpAndSettle();
+      expect(controller.rowRetryInventory, {'movies', 'shows', 'archive'});
+      await tester.tap(find.byKey(const ValueKey('continue-ready-libraries')));
+      await tester.pumpAndSettle();
+      expect(controller.committedIds, {'movies'});
     },
   );
 
@@ -2806,7 +2843,7 @@ void main() {
       find.byKey(const ValueKey('continue-ready-libraries')),
       findsNothing,
     );
-    expect(find.text('3 of 3 selected'), findsOneWidget);
+    expect(find.text('2 of 2 selected'), findsOneWidget);
     expect(find.textContaining('Cancelled', skipOffstage: false), findsWidgets);
     expect(
       find.byKey(const ValueKey('scan-selected-libraries')),

@@ -449,6 +449,8 @@ class ChannelsViewState extends State<ChannelsView> {
                       Text(
                         _mode == _DirectoryMode.reorder
                             ? 'Channels appear in number order. Reordering changes channel numbers.'
+                            : _view == _DirectoryView.groupedBySource
+                            ? 'Your lineup, grouped by where each channel comes from.'
                             : 'Your lineup, in channel order.',
                         style: bodyStyle?.copyWith(
                           color: LineupTheme.of(context).secondaryText,
