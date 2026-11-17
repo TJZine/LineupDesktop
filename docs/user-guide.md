@@ -647,7 +647,9 @@ identity**. Duplication creates a separate custom draft with a new identity and
 the lowest available channel number; it does not alter the generated source.
 
 Custom Studio programming uses **Library** with metadata filters or an
-explicitly ordered **Hand-picked** list. Existing playlist and mixed sources
+explicitly ordered **Hand-picked** list. Filter values apply as you choose them
+and stay when you close the picker; an open picker never blocks **Save** or **Tune
+in**. Existing playlist and mixed sources
 remain inspectable and preserved until deliberately replaced. Hand-picked programming has separate **Browse** and
 **Rundown** stages; matching and selected counts stay visible, and search and
 filter state is preserved when you switch between them. Search, local facets,
@@ -662,7 +664,12 @@ Mini-marathons uses blocks of 2 through 5 episodes and requires usable show
 grouping. **Air Check** uses the same content resolver and deterministic
 scheduler as Guide and Player to show what is on now, what follows, cycle and
 timing facts, why content was included, and actionable unavailable or invalid
-states. A new or duplicated channel, including **Save as new custom channel**,
+states. Studio shows one **Draft**, **Unsaved changes** or **Saved** tag beside
+the channel name. The schedule preview starts with **ON NOW**; selecting a later
+program opens its details with **Back to now** and **Read more**. The list scrolls
+inside the preview panel, and its footer shows how far the schedule reaches,
+**Show next 6 hours**, and whether the preview reflects your edits. Programs
+without artwork show a plain placeholder. A new or duplicated channel, including **Save as new custom channel**,
 gets a staggered start based on its schedule cycle and saves the same anchor
 that Air Check verified. If playable inventory changes before saving, Air Check
 verifies the new schedule first. Shuffled schedules

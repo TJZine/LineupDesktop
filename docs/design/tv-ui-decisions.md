@@ -479,6 +479,15 @@ custom channel is secondary.
 New custom drafts begin with focus on the Programming source choice. Studio
 suggests a source name until the user edits it.
 
+UI audit 2 decision, 2026-11-16. Studio shows one outlined Draft, Unsaved changes
+or Saved tag beside the channel name. Filter values apply as they are chosen and
+stay when the picker closes; an open picker never blocks Save or Tune in. The
+schedule preview starts with the ON NOW row and shows the detail block only for a
+later program the user selects. Its list scrolls inside a bounded panel whose
+footer stays visible; when too little height remains below the fields, the panel
+takes one viewport height and the page scrolls to it. Program rows show small
+artwork with a neutral placeholder.
+
 ## 5. Review Channels: getting between the roster and the footer
 
 ### Recommendation R1

@@ -148,6 +148,17 @@ channel is the filled action for populated lineups. Generate lineup… fills
 that role when the lineup is empty. In Studio on TV, focus the programming source
 choice at entry for a new custom draft.
 
+UI audit 2 decision, 2026-11-16. Studio shows one outlined Draft, Unsaved changes
+or Saved tag beside the channel name. Filter values apply as they are chosen and
+stay when the picker closes; an open picker never blocks Save or Tune in. The
+schedule preview starts with the ON NOW row and shows the detail block only for a
+later program the user selects. Its list scrolls inside a bounded panel whose
+footer stays visible; when too little height remains below the fields, the panel
+takes one viewport height and the page scrolls to it. Program rows load small
+sized artwork only for rows that are built, with a neutral placeholder. The
+footer note reads Updates as you edit, Matches the saved channel or Updating…, and
+is omitted while a failed check offers Retry.
+
 ## Guide
 
 - Preserve the existing dynamic information-background behavior.

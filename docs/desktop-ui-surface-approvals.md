@@ -45,11 +45,11 @@ may cover multiple listed states only when that scope is clear to the user.
 | surface-17 | Channel selection | Approved at 1080p | Behavior checks passed; adaptive/Windows pending | Candidate05/06; `d98e9761` |
 | surface-18 | Channel reorder | Approved at 1080p | Behavior checks passed; adaptive/Windows pending | Candidate05/06; `d98e9761` |
 | surface-19 | Delete confirmation | Approved at 1080p | Behavior checks passed; adaptive/Windows pending | Text-only final amendment; recapture waived; `aa25168f` |
-| surface-20 | Studio · hand-picked | Approved at 1080p | Behavior checks passed; adaptive/Windows pending | Candidate07; `8c0617c7` |
-| surface-21 | Studio · full authoring | Approved at 1080p | Behavior checks passed; adaptive/Windows pending | Candidate07; `8c0617c7` |
-| surface-22 | Studio · browse sources | Approved at 1080p | Behavior checks passed; adaptive/Windows pending | Candidate07; `8c0617c7` |
-| surface-23 | Studio · library programming | Approved at 1080p | Behavior checks passed; adaptive/Windows pending | Candidate07; `8c0617c7` |
-| surface-24 | Studio · filter picker | Approved at 1080p | Behavior checks passed; adaptive/Windows pending | Candidate07; `8c0617c7` |
+| surface-20 | Studio · hand-picked | Approved at 1080p | Portable behavior/layout passed; physical Windows/Fire TV pending | UI audit 2, delegated Astra approval, 2026-11-17; earlier Candidate07 `8c0617c7` |
+| surface-21 | Studio · full authoring | Approved at 1080p | Portable behavior/layout passed; physical Windows/Fire TV pending | UI audit 2, delegated Astra approval, 2026-11-17; earlier Candidate07 `8c0617c7` |
+| surface-22 | Studio · browse sources | Approved at 1080p | Portable behavior/layout passed; physical Windows/Fire TV pending | UI audit 2, delegated Astra approval, 2026-11-17; earlier Candidate07 `8c0617c7` |
+| surface-23 | Studio · library programming | Approved at 1080p | Portable behavior/layout passed; physical Windows/Fire TV pending | UI audit 2, delegated Astra approval, 2026-11-17; earlier Candidate07 `8c0617c7` |
+| surface-24 | Studio · filter picker | Approved at 1080p | Portable behavior/layout passed; physical Windows/Fire TV pending | UI audit 2, delegated Astra approval, 2026-11-17; earlier Candidate07 `8c0617c7` |
 | surface-25 | Guide · no playback | Approved at 1080p | Behavior checks passed; adaptive/accessibility/motion/Windows pending | September 12 candidate04; `e0834448` |
 | surface-26 | Guide · PiP | Approved at 1080p | Behavior checks passed; adaptive/accessibility/motion/Windows pending | September 12 candidate04; `e0834448` |
 | surface-27 | Mini Guide | Approved at 1080p | Behavior checks passed; adaptive/accessibility/moving footage/Windows pending | September12 candidate01; `90497d12` |
@@ -72,7 +72,7 @@ may cover multiple listed states only when that scope is clear to the user.
 | surface-44 | Diagnostics · technical details | Approved at 1080p | Behavior checks passed; adaptive/Windows pending | September12 conditional lock completed; `7193d52e` |
 | surface-45 | Diagnostics · events and details | Approved at 1080p | Behavior checks passed; adaptive/Windows pending | September12 conditional lock completed; `7193d52e` |
 
-## November 17, 2026 — accepted UX refinement subset
+## November 17, 2026 — accepted UX refinements
 
 Authority: UI audit 2 decision, 2026-11-16. On November 17 the maintainer explicitly
 required Astra as the visual judge and delegated Claude's package decisions to
@@ -80,15 +80,15 @@ Astra high. The maintainer then authorized “Allow local merges into ux/refine
 after Astra approval.” The approvals below are delegated Astra judgments, not
 new direct visual approvals from the maintainer.
 
-S, G, P, C, U and F have separate package reviews, final source gates and required
-emulator checks. T (Studio) remains stopped and unaccepted; this is a partial
-campaign integration, not full Wave 2 completion. Shared S changes affecting
-Studio do not approve T's unfinished refinement.
+Each package (S, G, P, C, T, U and F) had its own code review, visual review and
+whole-suite run; G, C, U and F also had Android TV emulator checks. Channel Studio
+(T) was accepted later the same day, after its preview-height correction. A
+follow-up package applied Claude's review of the merged work.
 
 The approved scope is shared identity/Text size/PIN treatment; Guide layout and
 cells; Player controls/details/Mini Guide/pickers/number entry; both Manage
-channels views; Welcome/Sign in/setup; and Settings/Diagnostics as described in
-the current amendments.
+channels views; Channel Studio; Welcome/Sign in/setup; and Settings/Diagnostics
+as described in the current amendments.
 
 Headless production-widget captures use synthetic media and establish no real
 native-media output. Emulator checks use credential-free fixtures and establish
@@ -1251,6 +1251,8 @@ unchanged.
   more available height. Preserve loading/stale/error and selection behavior.
 - Give filter picker B a clear heading, readable choices and stable Done/Cancel
   actions. Preserve pending choices, cancellation and focus restoration.
+  (Superseded by UI audit 2 decision, 2026-11-16: choices apply immediately and
+  stay when the picker closes; Done and Cancel are removed.)
 
 Worker assignment: existing `worker_luna` / GPT-5.6 Luna / xhigh, exclusive
 `lib/app/channel_studio_view.dart`; Astra owns schedule-preview presentation,
@@ -1302,6 +1304,8 @@ uses flat underlined view tabs, a persistent Media type label with All types,
 unified labeled Library/Collection/filter fields, a quieter watched-items control
 and a separated Matching programs section. Required validation explanations,
 filter pending-state/focus behavior and five-item sample remain unchanged.
+(UI audit 2 decision, 2026-11-16: filter values now apply immediately; focus
+restoration and the five-item sample remain.)
 Existing worker_luna / GPT-5.6 Luna / xhigh owns only the Studio view file for
 this bounded correction; root retains tests, capture and acceptance review.
 
