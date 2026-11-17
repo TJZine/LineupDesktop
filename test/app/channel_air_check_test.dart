@@ -60,7 +60,7 @@ void main() {
       final metadata = find.descendant(
         of: row,
         matching: find.byWidgetPredicate(
-          (w) => w is Text && (w.data?.startsWith('Today ·') ?? false),
+          (w) => w is Text && (w.data?.contains('–') ?? false),
         ),
       );
       expect(metadata, findsOneWidget);
@@ -84,9 +84,7 @@ void main() {
       expect(ink(live), tv ? const Color(0xFF090806) : base);
       expect(
         ink(metadata),
-        tv
-            ? LineupTheme.of(tester.element(metadata)).focusSecondaryText
-            : baseMeta,
+        tv ? LineupTheme.of(tester.element(metadata)).focusMutedText : baseMeta,
       );
       expect(tester.element(live), same(element));
       await tester.sendKeyEvent(LogicalKeyboardKey.arrowDown);
@@ -280,7 +278,7 @@ void main() {
           of: find.byKey(const Key('air-check-selection')),
           matching: find.text('One'),
         ),
-        findsOneWidget,
+        findsNothing,
       );
       now = DateTime.utc(2026, 1, 1, 0, 29, 59, 500);
       await tester.pump(const Duration(seconds: 30));
@@ -295,11 +293,15 @@ void main() {
           of: find.byKey(const Key('air-check-selection')),
           matching: find.text('Two'),
         ),
-        findsOneWidget,
+        findsNothing,
       );
       expect(
         find.bySemanticsLabel(RegExp(r'Channel 4 .*Two.*current')),
         findsOneWidget,
+      );
+      await _revealAirProgram(
+        tester,
+        find.bySemanticsLabel(RegExp(r'Channel 4 .*One.*upcoming')),
       );
       expect(
         find.bySemanticsLabel(RegExp(r'Channel 4 .*One.*upcoming')),
@@ -605,7 +607,9 @@ void main() {
     await tester.pumpAndSettle();
     expect(find.text('One'), findsWidgets);
     expect(find.text('Two'), findsWidgets);
+    await _revealAirProgram(tester, find.text('Three'));
     expect(find.text('Three'), findsWidgets);
+    await _scrollAirStart(tester);
     expect(
       find.bySemanticsLabel(RegExp(r'Channel 4 .*One.*current')),
       findsOneWidget,
@@ -679,6 +683,10 @@ void main() {
         ),
         findsOneWidget,
       );
+      await _revealAirProgram(
+        tester,
+        find.bySemanticsLabel(RegExp(r'Channel 4 .*One.*upcoming')),
+      );
       expect(
         find.bySemanticsLabel(RegExp(r'Channel 4 .*One.*upcoming')),
         findsWidgets,
@@ -715,6 +723,10 @@ void main() {
 
     await tester.pumpWidget(_airCheck(controller, channel, clock: () => now));
     await tester.pumpAndSettle();
+    await _revealAirProgram(
+      tester,
+      find.byKey(ValueKey('air-check-program-${future.id}')),
+    );
     await tester.tap(find.byKey(ValueKey('air-check-program-${future.id}')));
     await tester.pump();
     expect(
@@ -732,7 +744,7 @@ void main() {
         of: find.byKey(const Key('air-check-selection')),
         matching: find.text('Two'),
       ),
-      findsOneWidget,
+      findsNothing,
     );
   });
 
@@ -760,6 +772,10 @@ void main() {
 
     await tester.pumpWidget(_airCheck(controller, channel, clock: () => now));
     await tester.pumpAndSettle();
+    await _revealAirProgram(
+      tester,
+      find.byKey(ValueKey('air-check-program-${future.id}')),
+    );
     await tester.tap(find.byKey(ValueKey('air-check-program-${future.id}')));
     await tester.pump();
     expect(
@@ -809,10 +825,34 @@ void main() {
         of: find.byKey(const Key('air-check-selection')),
         matching: find.text('A'),
       ),
-      findsOneWidget,
+      findsNothing,
     );
+    final nextB = GuideProgram(
+      channelId: 'air-check',
+      scheduled: programAt(
+        DateTime.utc(2026, 1, 1, 0, 11),
+        channel.anchor,
+        buildSchedule(
+          (channel.source as ManualSource).items,
+          mode: channel.playbackMode,
+          seed: channel.shuffleSeed,
+          blockSize: 3,
+        ),
+      ),
+    );
+    final nextRow = find.byKey(ValueKey('air-check-program-${nextB.id}'));
+    await _revealAirProgram(tester, nextRow);
     final secondProgram = tester.getSemantics(
-      find.bySemanticsLabel(RegExp(r'Channel 4 .*B.*upcoming')),
+      find
+          .ancestor(
+            of: nextRow,
+            matching: find.byWidgetPredicate(
+              (widget) =>
+                  widget is Semantics &&
+                  (widget.properties.label?.contains('Channel 4') ?? false),
+            ),
+          )
+          .first,
     );
     secondProgram.owner!.performAction(secondProgram.id, SemanticsAction.tap);
     await tester.pump();
@@ -823,6 +863,7 @@ void main() {
       ),
       findsOneWidget,
     );
+    await _revealAirProgram(tester, nextRow);
     expect(
       find.bySemanticsLabel(RegExp(r'Channel 4 .*B.*upcoming')),
       findsWidgets,
@@ -928,7 +969,7 @@ void main() {
     await tester.pump(
       channelAirCheckDebounce + const Duration(milliseconds: 1),
     );
-    expect(find.text('Out of date'), findsOneWidget);
+    expect(find.text('Updating…'), findsOneWidget);
     expect(find.text('One'), findsWidgets);
     await tester.pumpWidget(_airCheck(controller, latest));
     await tester.pump(
@@ -962,7 +1003,7 @@ void main() {
         ),
       );
       await tester.pump();
-      expect(find.text('Out of date'), findsOneWidget);
+      expect(find.byKey(const Key('air-check-state-note')), findsNothing);
       expect(find.text('One'), findsWidgets);
 
       await tester.pumpWidget(_airCheck(controller, changed));
@@ -972,7 +1013,7 @@ void main() {
       controller.failNext(StateError('synthetic worker failure'));
       await tester.pump();
       await tester.pump();
-      expect(find.text('Out of date'), findsOneWidget);
+      expect(find.byKey(const Key('air-check-state-note')), findsNothing);
       expect(find.text('One'), findsWidgets);
       expect(find.textContaining('could not verify'), findsOneWidget);
     },
@@ -999,16 +1040,25 @@ void main() {
         ),
       );
       await tester.pump();
-      expect(find.text('Previous schedule · Original source'), findsOneWidget);
+      expect(find.byKey(const Key('air-check-retained-source')), findsNothing);
       final selectedFacts = find.descendant(
         of: find.byKey(const Key('air-check-selection')),
         matching: find.text('30m · Original source'),
       );
-      expect(selectedFacts, findsOneWidget);
+      expect(selectedFacts, findsNothing);
+      expect(
+        tester
+            .widget<ChannelAirCheck>(find.byType(ChannelAirCheck))
+            .verification
+            .result
+            .preview!
+            .sourceLabel,
+        'Original source',
+      );
       expect(find.textContaining('Replacement source'), findsNothing);
       expect(
         tester
-            .widget<Opacity>(
+            .widget<SliverOpacity>(
               find.byKey(const Key('air-check-schedule-content')),
             )
             .opacity,
@@ -1034,8 +1084,17 @@ void main() {
       );
       await tester.pump();
       expect(find.textContaining('Ch 4 · 1 playable'), findsOneWidget);
-      expect(find.text('Previous schedule · Original source'), findsOneWidget);
-      expect(selectedFacts, findsOneWidget);
+      expect(find.byKey(const Key('air-check-retained-source')), findsNothing);
+      expect(selectedFacts, findsNothing);
+      expect(
+        tester
+            .widget<ChannelAirCheck>(find.byType(ChannelAirCheck))
+            .verification
+            .result
+            .preview!
+            .sourceLabel,
+        'Original source',
+      );
       expect(find.textContaining('Replacement source'), findsNothing);
       expect(controller.requests, 1);
     },
@@ -1390,13 +1449,15 @@ void main() {
       await tester.pump();
       await tester.pump();
 
+      await _revealAirProgram(tester, find.text('Two'));
       expect(find.text('Two'), findsWidgets);
+      await _scrollAirStart(tester);
       expect(
         find.textContaining('could not compare this draft'),
         findsOneWidget,
       );
       expect(find.text('Retry comparison'), findsOneWidget);
-      expect(find.text('Out of date'), findsNothing);
+      expect(find.text('Updating…'), findsNothing);
       expect(validity, ChannelAirCheckValidity.unknown);
       expect(controller.requests, 2);
 
@@ -1523,7 +1584,7 @@ void main() {
           of: find.byKey(const Key('air-check-selection')),
           matching: find.text('Three'),
         ),
-        findsOneWidget,
+        findsNothing,
       );
       expect(
         find.byWidgetPredicate(
@@ -1534,6 +1595,33 @@ void main() {
       );
     },
   );
+}
+
+Future<void> _revealAirProgram(WidgetTester tester, Finder row) async {
+  final scrollable = find.descendant(
+    of: find.byKey(const Key('air-check-schedule-list')),
+    matching: find.byType(Scrollable),
+  );
+  for (var attempt = 0; row.evaluate().isEmpty && attempt < 30; attempt++) {
+    await tester.drag(scrollable, const Offset(0, -120));
+    await tester.pump();
+  }
+  expect(row, findsWidgets);
+  await tester.ensureVisible(row.first);
+  await tester.pump();
+}
+
+Future<void> _scrollAirStart(WidgetTester tester) async {
+  tester
+      .state<ScrollableState>(
+        find.descendant(
+          of: find.byKey(const Key('air-check-schedule-list')),
+          matching: find.byType(Scrollable),
+        ),
+      )
+      .position
+      .jumpTo(0);
+  await tester.pump();
 }
 
 Widget _airCheck(
@@ -1547,6 +1635,7 @@ Widget _airCheck(
   Channel? originalChannel,
   ValueChanged<ChannelAirCheckValidity>? onValidityChanged,
   bool always24 = false,
+  bool hasUnsavedChanges = true,
   bool isTv = false,
   ThemeData? theme,
 }) => MaterialApp(
@@ -1565,6 +1654,7 @@ Widget _airCheck(
         child: SizedBox(
           width: 520,
           child: _VerificationSurface(
+            hasUnsavedChanges: hasUnsavedChanges,
             key: key,
             controller: controller,
             channel: channel,
@@ -1588,6 +1678,7 @@ class _VerificationSurface extends StatefulWidget {
     required this.clock,
     required this.compact,
     required this.inclusionReason,
+    required this.hasUnsavedChanges,
     this.originalChannel,
     this.sourceIssue,
     this.onValidityChanged,
@@ -1599,6 +1690,7 @@ class _VerificationSurface extends StatefulWidget {
   final DateTime Function() clock;
   final bool compact;
   final String inclusionReason;
+  final bool hasUnsavedChanges;
   final String? sourceIssue;
   final ValueChanged<ChannelAirCheckValidity>? onValidityChanged;
   @override
@@ -1641,9 +1733,9 @@ class _VerificationSurfaceState extends State<_VerificationSurface> {
 
   @override
   Widget build(BuildContext context) => ChannelAirCheck(
+    hasUnsavedChanges: widget.hasUnsavedChanges,
     controller: widget.controller,
     channel: widget.channel,
-    originalChannel: widget.originalChannel,
     clock: widget.clock,
     compact: widget.compact,
     inclusionReason: widget.inclusionReason,

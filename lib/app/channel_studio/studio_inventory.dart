@@ -27,6 +27,7 @@ class _StudioInventoryStatus extends StatelessWidget {
           total == null
               ? 'Loading programming: $completedItems items loaded.'
               : 'Loading programming: $completedItems of $total items loaded.',
+          style: _studioSupportStyle(context),
         ),
       );
     }
@@ -43,6 +44,7 @@ class _StudioInventoryStatus extends StatelessWidget {
               status == LibraryScanStatus.cancelled
                   ? 'Library loading was cancelled. The last usable programming and this draft were preserved.'
                   : 'Library loading failed. The last usable programming and this draft were preserved.',
+              style: _studioSupportStyle(context),
             ),
           ),
           LineupInlineLink(

@@ -481,8 +481,8 @@ class ChannelStudioViewState extends State<ChannelStudioView> {
             onSaveAndTune: _confirmSaveAndTune,
             onSave: _save,
           ),
-          child: Builder(
-            builder: (context) => SingleChildScrollView(
+          child: LayoutBuilder(
+            builder: (context, viewportConstraints) => SingleChildScrollView(
               key: const Key('studio-scroll'),
               child: AbsorbPointer(
                 absorbing: _busy,
@@ -541,6 +541,7 @@ class ChannelStudioViewState extends State<ChannelStudioView> {
                       LayoutBuilder(
                         builder: (context, constraints) {
                           final programming = _StudioProgramming(
+                            controller: widget.controller,
                             key: _programmingKey,
                             draft: _session,
                             inventory: _playableInventory,
@@ -593,9 +594,11 @@ class ChannelStudioViewState extends State<ChannelStudioView> {
                             onUseNext: _useNextAvailable,
                           );
                           final preview = ChannelAirCheck(
+                            hasUnsavedChanges:
+                                _session.expectedBase == null || _session.dirty,
+                            viewportHeight: viewportConstraints.maxHeight,
                             controller: widget.controller,
                             channel: _previewDraft,
-                            originalChannel: _session.expectedBase,
                             clock: _clock,
                             compact:
                                 constraints.maxWidth /

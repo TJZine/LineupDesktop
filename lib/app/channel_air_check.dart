@@ -21,7 +21,8 @@ class ChannelAirCheck extends StatefulWidget {
     required this.compact,
     required this.inclusionReason,
     required this.verification,
-    this.originalChannel,
+    required this.hasUnsavedChanges,
+    this.viewportHeight,
     this.sourceIssue,
     this.sourceIssueExplained = false,
     this.playableById,
@@ -30,7 +31,7 @@ class ChannelAirCheck extends StatefulWidget {
 
   final LineupController controller;
   final Channel channel;
-  final Channel? originalChannel;
+  final double? viewportHeight;
   final DateTime Function() clock;
   final bool compact;
   final String inclusionReason;
@@ -38,15 +39,131 @@ class ChannelAirCheck extends StatefulWidget {
   final bool sourceIssueExplained;
   final Map<String, Object?>? playableById;
   final AirCheckVerification verification;
+  final bool hasUnsavedChanges;
 
   @override
   State<ChannelAirCheck> createState() => _ChannelAirCheckState();
 }
 
 class _ChannelAirCheckState extends State<ChannelAirCheck> {
+  static const _borderWidth = 1.0;
   String? _selectedId;
   bool _selectionFollowsNow = true;
   bool _synopsisExpanded = false;
+  final _scheduleScroll = ScrollController();
+  final _selectionAnchor = GlobalKey();
+  final _headerAnchor = GlobalKey();
+  final _firstRowAnchor = GlobalKey();
+  final _emptyAnchor = GlobalKey();
+  final _recoveryAnchor = GlobalKey();
+  final _footerAnchor = GlobalKey();
+  double? _panelHeight;
+  double? _minimumUsefulHeight;
+  double? _measuredWidth;
+  TextScaler? _measuredTextScaler;
+  bool _measureScheduled = false;
+
+  void _measureAvailableHeight() {
+    if (_measureScheduled) return;
+    _measureScheduled = true;
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      _measureScheduled = false;
+      if (!mounted) return;
+      final outer = Scrollable.maybeOf(context);
+      final panel = context.findRenderObject();
+      final viewport = outer?.context.findRenderObject();
+      if (outer == null || panel is! RenderBox || viewport is! RenderBox) {
+        return;
+      }
+      // Measure in the outer scrollable's canvas coordinates. Including its
+      // offset makes the allocation independent of ordinary page scrolling.
+      final contentTop =
+          panel.localToGlobal(Offset.zero, ancestor: viewport).dy +
+          outer.position.pixels;
+      final viewportHeight =
+          widget.viewportHeight ?? outer.position.viewportDimension;
+      final remaining = viewportHeight - contentTop;
+      final scaler = MediaQuery.textScalerOf(context);
+      if (_measuredWidth != panel.size.width || _measuredTextScaler != scaler) {
+        _minimumUsefulHeight = null;
+        _measuredWidth = panel.size.width;
+        _measuredTextScaler = scaler;
+      }
+      double? extent(GlobalKey key) {
+        final box = key.currentContext?.findRenderObject();
+        return box is RenderBox && box.hasSize ? box.size.height : null;
+      }
+
+      final header = extent(_headerAnchor);
+      final program = extent(_firstRowAnchor);
+      final empty = extent(_emptyAnchor);
+      final recovery = extent(_recoveryAnchor);
+      final footer = extent(_footerAnchor);
+      final padding = 2 * ((widget.compact ? 14.0 : 20.0) + _borderWidth);
+      final body = _preview == null ? empty ?? recovery ?? 0 : program;
+      if (header != null &&
+          body != null &&
+          (_preview == null || footer != null)) {
+        final usableBody = body > (recovery ?? 0) ? body : recovery ?? 0;
+        _minimumUsefulHeight =
+            padding +
+            header +
+            usableBody +
+            (footer ?? 0) +
+            (_preview == null ? 0 : 8);
+      }
+      // Small positive space is no more useful than a preview below the fold.
+      // Keep the existing columns and let the outer editor scroll reveal one
+      // usable, locally bounded viewport instead of crushing its fixed footer.
+      final minimum = _minimumUsefulHeight;
+      final height = minimum != null && remaining >= minimum
+          ? remaining.clamp(0.0, viewportHeight)
+          : viewportHeight;
+      if (_panelHeight == null || (_panelHeight! - height).abs() > .1) {
+        setState(() => _panelHeight = height);
+      }
+    });
+  }
+
+  void _revealInspectedProgram() {
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (!mounted) return;
+      _scheduleScroll.jumpTo(0);
+      final outer = Scrollable.maybeOf(context);
+      final panel = context.findRenderObject();
+      final viewport = outer?.context.findRenderObject();
+      if (outer == null || panel is! RenderBox || viewport is! RenderBox) {
+        return;
+      }
+      final contentTop =
+          panel.localToGlobal(Offset.zero, ancestor: viewport).dy +
+          outer.position.pixels;
+      outer.position.jumpTo(
+        contentTop.clamp(
+          outer.position.minScrollExtent,
+          outer.position.maxScrollExtent,
+        ),
+      );
+      final selection = _selectionAnchor.currentContext?.findRenderObject();
+      final inner = _scheduleScroll.position.context.storageContext
+          .findRenderObject();
+      if (selection is RenderBox && selection.hasSize && inner is RenderBox) {
+        final top =
+            selection.localToGlobal(Offset.zero, ancestor: inner).dy +
+            _scheduleScroll.offset;
+        final target =
+            selection.size.height <= _scheduleScroll.position.viewportDimension
+            ? top +
+                  selection.size.height -
+                  _scheduleScroll.position.viewportDimension
+            : top;
+        _scheduleScroll.jumpTo(
+          target.clamp(0.0, _scheduleScroll.position.maxScrollExtent),
+        );
+      }
+    });
+  }
+
   AirCheckPreview? get _preview => widget.verification.result.preview;
   Object? get _error => widget.verification.result.error;
   bool get _comparisonFailed => widget.verification.comparisonFailed;
@@ -97,6 +214,7 @@ class _ChannelAirCheckState extends State<ChannelAirCheck> {
   @override
   void dispose() {
     widget.verification.removeListener(_verificationChanged);
+    _scheduleScroll.dispose();
     super.dispose();
   }
 
@@ -129,134 +247,196 @@ class _ChannelAirCheckState extends State<ChannelAirCheck> {
     final preview = _preview;
     final now = widget.clock();
     final error = _error;
+    _measureAvailableHeight();
     return Semantics(
       key: const Key('channel-air-check'),
       container: true,
       label:
           'Air Check for channel ${widget.channel.number} ${widget.channel.name}',
-      child: Container(
-        decoration: BoxDecoration(
-          color: LineupTheme.of(context).primarySurface,
-          border: Border.all(color: LineupTheme.of(context).subtleBorder),
-          borderRadius: BorderRadius.circular(
-            LineupTheme.of(context).panelRadius,
+      child: SizedBox(
+        height:
+            _panelHeight ??
+            widget.viewportHeight ??
+            MediaQuery.sizeOf(context).height,
+        child: Container(
+          decoration: BoxDecoration(
+            color: LineupTheme.of(context).primarySurface,
+            border: Border.all(
+              color: LineupTheme.of(context).subtleBorder,
+              width: _borderWidth,
+            ),
+            borderRadius: BorderRadius.circular(
+              LineupTheme.of(context).panelRadius,
+            ),
           ),
-        ),
-        clipBehavior: Clip.antiAlias,
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.stretch,
-          children: [
-            Padding(
-              padding: EdgeInsets.all((widget.compact ? 14 : 20)),
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.stretch,
-                children: [
-                  _monitorHeader(now),
-                  SizedBox(height: 10),
-                  if (preview == null && error == null)
-                    _emptyRibbon(
-                      Semantics(
-                        liveRegion: true,
-                        label: 'Calculating schedule',
-                        child: Text(
-                          'Calculating schedule…',
-                          key: const Key('air-check-loading'),
-                          style: LineupTypography.tvLabelStyle(context),
-                        ),
-                      ),
-                    )
-                  else if (preview == null &&
-                      (!widget.sourceIssueExplained || _retryableError))
-                    _emptyRibbon(_errorView(error!))
-                  else if (preview == null)
-                    const SizedBox.shrink()
-                  else ...[
-                    if (_stale)
-                      Text(
-                        'Previous schedule · ${preview.sourceLabel}',
-                        key: const Key('air-check-retained-source'),
-                      ),
-                    Opacity(
-                      key: const Key('air-check-schedule-content'),
-                      opacity: _stale ? .5 : 1,
-                      child: Column(
-                        crossAxisAlignment: CrossAxisAlignment.stretch,
-                        children: [
-                          _facts(preview),
-                          SizedBox(height: 8),
-                          _selection(preview, now),
-                          SizedBox(height: 8),
-                          _verticalSchedule(preview, now),
-                          Wrap(
-                            spacing: 12,
-                            crossAxisAlignment: WrapCrossAlignment.center,
-                            children: [
-                              Text(
-                                'Schedule through ${_time(context, preview.window.lastProjectedEnd ?? preview.windowEnd)}',
+          clipBehavior: Clip.antiAlias,
+          child: Padding(
+            padding: EdgeInsets.all(widget.compact ? 14 : 20),
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.stretch,
+              children: [
+                Expanded(
+                  child: CustomScrollView(
+                    key: const Key('air-check-schedule-list'),
+                    controller: _scheduleScroll,
+                    slivers: [
+                      SliverToBoxAdapter(
+                        child: Column(
+                          crossAxisAlignment: CrossAxisAlignment.stretch,
+                          children: [
+                            KeyedSubtree(
+                              key: _headerAnchor,
+                              child: Column(
+                                crossAxisAlignment: CrossAxisAlignment.stretch,
+                                children: [
+                                  _monitorHeader(now),
+                                  const SizedBox(height: 10),
+                                  if (preview != null) ...[
+                                    _facts(preview),
+                                    const SizedBox(height: 8),
+                                  ],
+                                ],
                               ),
-                              if (_futureHours < 24)
-                                LineupInlineLink(
-                                  onPressed: _stale
-                                      ? null
-                                      : widget.verification.extendHorizon,
-                                  child: Text(
-                                    'Show next 6 hours',
-                                    style: LineupTypography.tvLabelStyle(
-                                      context,
+                            ),
+                            if (preview == null && error == null)
+                              KeyedSubtree(
+                                key: _emptyAnchor,
+                                child: _emptyRibbon(
+                                  Semantics(
+                                    liveRegion: true,
+                                    label: 'Calculating schedule',
+                                    child: Text(
+                                      'Calculating schedule…',
+                                      key: const Key('air-check-loading'),
+                                      style: LineupTypography.tvLabelStyle(
+                                        context,
+                                      ),
                                     ),
                                   ),
                                 ),
+                              ),
+                            if (preview != null) ...[
+                              if (_hasNonCurrentSelection(preview, now))
+                                _selection(preview, now),
+                              const SizedBox(height: 8),
                             ],
-                          ),
-                          if (preview.window.truncated)
-                            Text(
-                              'Preview truncated at ${_time(context, preview.window.lastProjectedEnd!)}; this is the last projected program end.',
-                            ),
-                          if (_unavailableCount(
-                                preview.channel.source,
-                                widget.playableById ??
-                                    widget.controller.playableInventory.byId,
-                              )
-                              case final count when count > 0)
-                            Text(
-                              '$count unavailable hand-picked ${count == 1 ? 'item is' : 'items are'} retained but off air until available or removed.',
-                            ),
-                          if (widget.verification.changesOnNow)
-                            const Text(
-                              'Saving these programming changes may change what is on now',
-                              key: Key('air-check-on-now-warning'),
-                            ),
-                        ],
+                            if (_comparisonFailed ||
+                                (error != null &&
+                                    (!widget.sourceIssueExplained ||
+                                        _retryableError)))
+                              KeyedSubtree(
+                                key: _recoveryAnchor,
+                                child: Column(
+                                  crossAxisAlignment:
+                                      CrossAxisAlignment.stretch,
+                                  children: [
+                                    if (_comparisonFailed)
+                                      _comparisonErrorView(),
+                                    if (error != null &&
+                                        (!widget.sourceIssueExplained ||
+                                            _retryableError))
+                                      _errorView(error),
+                                  ],
+                                ),
+                              ),
+                            if (preview != null && preview.window.truncated)
+                              Text(
+                                'Preview truncated at ${_time(context, preview.window.lastProjectedEnd!)}; this is the last projected program end.',
+                                style: TextStyle(
+                                  color: LineupTheme.of(context).secondaryText,
+                                ),
+                              ),
+                            if (_unavailableCount(
+                                  widget.channel.source,
+                                  widget.playableById ??
+                                      widget.controller.playableInventory.byId,
+                                )
+                                case final count when count > 0)
+                              Text(
+                                '$count unavailable hand-picked ${count == 1 ? 'item is' : 'items are'} retained but off air until available or removed.',
+                                style: TextStyle(
+                                  color: LineupTheme.of(context).secondaryText,
+                                ),
+                              ),
+                            if (widget.verification.changesOnNow)
+                              Text(
+                                'Saving these programming changes may change what is on now',
+                                key: const Key('air-check-on-now-warning'),
+                                style: TextStyle(
+                                  color: LineupTheme.of(context).secondaryText,
+                                ),
+                              ),
+                          ],
+                        ),
                       ),
-                    ),
-                    if (_comparisonFailed) ...[
-                      SizedBox(height: 8),
-                      _comparisonErrorView(),
+                      if (preview != null)
+                        SliverOpacity(
+                          key: const Key('air-check-schedule-content'),
+                          opacity: _stale ? .5 : 1,
+                          sliver: _verticalSchedule(preview, now),
+                        ),
                     ],
-                    if (error != null) ...[
-                      SizedBox(height: 8),
-                      _errorView(error),
-                    ],
-                  ],
+                  ),
+                ),
+                if (preview != null) ...[
+                  const SizedBox(height: 8),
+                  KeyedSubtree(key: _footerAnchor, child: _footer(preview)),
                 ],
-              ),
+              ],
             ),
-          ],
+          ),
         ),
       ),
     );
   }
 
+  bool _hasNonCurrentSelection(AirCheckPreview preview, DateTime now) =>
+      _visiblePrograms(preview, now).any(
+        (program) => program.id == _selectedId && !program.isCurrentAt(now),
+      );
+
+  Widget _footer(AirCheckPreview preview) {
+    return Wrap(
+      key: const Key('air-check-footer'),
+      spacing: 12,
+      runSpacing: 4,
+      crossAxisAlignment: WrapCrossAlignment.center,
+      alignment: WrapAlignment.spaceBetween,
+      children: [
+        Wrap(
+          spacing: 12,
+          crossAxisAlignment: WrapCrossAlignment.center,
+          children: [
+            Text(
+              'Schedule through ${_time(context, preview.window.lastProjectedEnd ?? preview.windowEnd)}',
+              style: TextStyle(color: LineupTheme.of(context).secondaryText),
+            ),
+            if (_futureHours < 24)
+              LineupInlineLink(
+                onPressed: _stale ? null : widget.verification.extendHorizon,
+                child: Text(
+                  'Show next 6 hours',
+                  style: LineupTypography.tvLabelStyle(context),
+                ),
+              ),
+          ],
+        ),
+        if (_error == null)
+          Text(
+            _stale
+                ? 'Updating…'
+                : widget.hasUnsavedChanges
+                ? 'Updates as you edit'
+                : 'Matches the saved channel',
+            key: const Key('air-check-state-note'),
+            style: TextStyle(color: LineupTheme.of(context).mutedText),
+          ),
+      ],
+    );
+  }
+
   Widget _monitorHeader(DateTime now) {
     final roles = LineupTheme.of(context);
-    final draft =
-        widget.originalChannel == null ||
-        _recipeKey(widget.originalChannel!) != _recipeKey(widget.channel);
-    final status = _stale || _error != null
-        ? 'Out of date'
-        : draft
-        ? 'Draft schedule'
-        : 'Saved channel';
     return Wrap(
       alignment: WrapAlignment.spaceBetween,
       crossAxisAlignment: WrapCrossAlignment.center,
@@ -277,14 +457,6 @@ class _ChannelAirCheckState extends State<ChannelAirCheck> {
                   fontSize: (widget.compact ? 16 : 24),
                   fontWeight: FontWeight.w600,
                 ),
-              ),
-            ),
-            Text(
-              status,
-              style: TextStyle(
-                color: roles.secondaryText,
-                fontSize: (widget.compact ? 11 : 16),
-                fontWeight: FontWeight.w400,
               ),
             ),
             if (_retryableError || _comparisonFailed)
@@ -327,101 +499,134 @@ class _ChannelAirCheckState extends State<ChannelAirCheck> {
 
   Widget _verticalSchedule(AirCheckPreview preview, DateTime now) {
     final programs = _visiblePrograms(preview, now);
-    return ConstrainedBox(
-      constraints: BoxConstraints(
-        maxHeight: widget.compact
-            ? 360
-            : (MediaQuery.sizeOf(context).height * .30).clamp(300, 680),
-      ),
-      child: ListView.separated(
-        key: const Key('air-check-schedule-list'),
-        shrinkWrap: true,
-        itemCount: programs.length,
-        separatorBuilder: (_, _) =>
-            Divider(height: 1, color: LineupTheme.of(context).subtleBorder),
-        itemBuilder: (context, index) {
-          final program = programs[index];
-          final current = program.isCurrentAt(now);
-          final selected = program.id == _selectedId;
-          void activate() => setState(() {
+    return SliverList.separated(
+      itemCount: programs.length,
+      separatorBuilder: (_, _) =>
+          Divider(height: 1, color: LineupTheme.of(context).subtleBorder),
+      itemBuilder: (context, index) {
+        final program = programs[index];
+        final current = program.isCurrentAt(now);
+        final selected = program.id == _selectedId;
+        void activate() {
+          setState(() {
             _selectedId = program.id;
             _selectionFollowsNow = false;
             _synopsisExpanded = false;
           });
-          return Semantics(
-            button: true,
-            excludeSemantics: true,
-            label:
-                'Channel ${preview.channel.number} ${preview.channel.name}, ${program.scheduled.item.title}, ${_time(context, program.scheduled.start)} to ${_time(context, program.scheduled.end)}, ${current ? 'current' : 'upcoming'}',
-            onTap: activate,
-            child: LineupNavigationRow(
-              selected: selected,
-              key: ValueKey('air-check-program-${program.id}'),
-              onPressed: activate,
-              child: Builder(
-                builder: (context) {
-                  final roles = LineupTheme.of(context);
-                  final focused =
-                      DeviceProfile.of(context).isTv &&
-                      Focus.of(context).hasFocus &&
-                      LineupFocusScope.visible(context);
-                  return Padding(
-                    padding: EdgeInsets.symmetric(
-                      horizontal: 12,
-                      vertical: (widget.compact ? 10 : 14),
-                    ),
-                    child: Row(
-                      crossAxisAlignment: CrossAxisAlignment.start,
-                      children: [
-                        SizedBox(
-                          width: (widget.compact ? 76 : 94),
-                          child: Text(
-                            current
-                                ? 'ON NOW'
-                                : _time(context, program.scheduled.start),
-                            style: TextStyle(
-                              color: current
-                                  ? (focused
-                                        ? roles.primaryText
-                                        : roles.liveAccent)
-                                  : roles.secondaryText,
-                              fontWeight: current
-                                  ? FontWeight.w600
-                                  : FontWeight.w400,
+          // The detail lives above this lazy list; reveal it when inspected.
+          _scheduleScroll.jumpTo(0);
+          _revealInspectedProgram();
+        }
+
+        final row = Semantics(
+          button: true,
+          excludeSemantics: true,
+          label:
+              'Channel ${preview.channel.number} ${preview.channel.name}, ${program.scheduled.item.title}, ${_time(context, program.scheduled.start)} to ${_time(context, program.scheduled.end)}, ${current ? 'current' : 'upcoming'}',
+          onTap: activate,
+          child: LineupNavigationRow(
+            selected: selected || current,
+            key: ValueKey('air-check-program-${program.id}'),
+            onPressed: activate,
+            child: Builder(
+              builder: (context) {
+                final roles = LineupTheme.of(context);
+                final focused =
+                    DeviceProfile.of(context).isTv &&
+                    Focus.of(context).hasFocus &&
+                    LineupFocusScope.visible(context);
+                return Padding(
+                  padding: EdgeInsets.symmetric(
+                    horizontal: 12,
+                    vertical: (widget.compact ? 10 : 14),
+                  ),
+                  child: Row(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      SizedBox(
+                        width: (widget.compact ? 76 : 94),
+                        child: Text(
+                          current
+                              ? 'ON NOW'
+                              : _time(context, program.scheduled.start),
+                          style: TextStyle(
+                            color: current
+                                ? (focused
+                                      ? roles.primaryText
+                                      : roles.liveAccent)
+                                : roles.secondaryText,
+                            fontWeight: current
+                                ? FontWeight.w600
+                                : FontWeight.w400,
+                          ),
+                        ),
+                      ),
+                      StudioProgramArtwork(
+                        controller: widget.controller,
+                        path:
+                            program.scheduled.item.poster ??
+                            _artworkPath(program.scheduled.item),
+                      ),
+                      SizedBox(width: 12),
+                      Expanded(
+                        child: Column(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: [
+                            Text(
+                              program.scheduled.item.title,
+                              style: TextStyle(
+                                fontSize: (widget.compact ? 14 : 20),
+                                fontWeight: FontWeight.w600,
+                              ),
                             ),
-                          ),
-                        ),
-                        SizedBox(width: 12),
-                        Expanded(
-                          child: Column(
-                            crossAxisAlignment: CrossAxisAlignment.start,
-                            children: [
-                              Text(
-                                program.scheduled.item.title,
-                                style: TextStyle(
-                                  fontSize: (widget.compact ? 14 : 20),
-                                  fontWeight: FontWeight.w600,
+                            Text(
+                              [
+                                if (program.scheduled.item.showTitle
+                                    case final title? when title.isNotEmpty)
+                                  title,
+                                if (program.scheduled.item.seasonNumber !=
+                                        null ||
+                                    program.scheduled.item.episodeNumber !=
+                                        null)
+                                  'S${program.scheduled.item.seasonNumber ?? '—'} E${program.scheduled.item.episodeNumber ?? '—'}',
+                                '${_time(context, program.scheduled.start)}–${_time(context, program.scheduled.end)}',
+                              ].join(' · '),
+                              style: _airCheckButtonTextStyle(
+                                color: roles.mutedText,
+                                fontWeight: FontWeight.w400,
+                              ),
+                            ),
+                            if (current)
+                              Padding(
+                                padding: const EdgeInsets.only(top: 6),
+                                child: LinearProgressIndicator(
+                                  value:
+                                      now
+                                          .difference(program.scheduled.start)
+                                          .inMilliseconds /
+                                      program.scheduled.end
+                                          .difference(program.scheduled.start)
+                                          .inMilliseconds,
+                                  minHeight: 2,
+                                  color: roles.progressFill,
+                                  backgroundColor: roles.subtleBorder,
                                 ),
                               ),
-                              Text(
-                                '${_dateContext(program.scheduled.start)} · ${_time(context, program.scheduled.start)}–${_time(context, program.scheduled.end)}',
-                                style: _airCheckButtonTextStyle(
-                                  color: roles.secondaryText,
-                                  fontWeight: FontWeight.w400,
-                                ),
-                              ),
-                            ],
-                          ),
+                          ],
                         ),
-                      ],
-                    ),
-                  );
-                },
-              ),
+                      ),
+                    ],
+                  ),
+                );
+              },
             ),
-          );
-        },
-      ),
+          ),
+        );
+        return KeyedSubtree(
+          key: index == 0 ? _firstRowAnchor : null,
+          child: row,
+        );
+      },
     );
   }
 
@@ -514,26 +719,33 @@ class _ChannelAirCheckState extends State<ChannelAirCheck> {
       ],
     );
     final artwork = _artworkPath(selected.scheduled.item);
-    if (artwork == null) return details;
-    return Row(
-      crossAxisAlignment: CrossAxisAlignment.start,
-      children: [
-        SizedBox(
-          width: (widget.compact ? 96 : 144),
-          height: (widget.compact ? 72 : 108),
-          child: ClipRRect(
-            borderRadius: BorderRadius.circular(
-              LineupTheme.of(context).panelRadius,
-            ),
-            child: _AirCheckArtwork(
-              controller: widget.controller,
-              path: artwork,
+    if (artwork == null) {
+      return KeyedSubtree(key: _selectionAnchor, child: details);
+    }
+    return KeyedSubtree(
+      key: _selectionAnchor,
+      child: Row(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          SizedBox(
+            width: (widget.compact ? 96 : 144),
+            height: (widget.compact ? 72 : 108),
+            child: ClipRRect(
+              borderRadius: BorderRadius.circular(
+                LineupTheme.of(context).panelRadius,
+              ),
+              child: StudioProgramArtwork(
+                controller: widget.controller,
+                path: artwork,
+                width: widget.compact ? 96 : 144,
+                height: widget.compact ? 72 : 108,
+              ),
             ),
           ),
-        ),
-        SizedBox(width: 12),
-        Expanded(child: details),
-      ],
+          SizedBox(width: 12),
+          Expanded(child: details),
+        ],
+      ),
     );
   }
 
@@ -590,49 +802,72 @@ class _ChannelAirCheckState extends State<ChannelAirCheck> {
   };
 }
 
-class _AirCheckArtwork extends StatefulWidget {
-  const _AirCheckArtwork({required this.controller, required this.path});
+class StudioProgramArtwork extends StatefulWidget {
+  const StudioProgramArtwork({
+    required this.controller,
+    this.path,
+    this.width = 44,
+    this.height = 64,
+    super.key,
+  });
 
   final LineupController controller;
-  final Uri path;
+  final Uri? path;
+  final double width;
+  final double height;
 
   @override
-  State<_AirCheckArtwork> createState() => _AirCheckArtworkState();
+  State<StudioProgramArtwork> createState() => _StudioProgramArtworkState();
 }
 
-class _AirCheckArtworkState extends State<_AirCheckArtwork> {
+class _StudioProgramArtworkState extends State<StudioProgramArtwork> {
   late Future<Uint8List?> _future;
 
   @override
   void initState() {
     super.initState();
-    _future = widget.controller.artworkForPath(widget.path);
+    _future = _load();
   }
 
   @override
-  void didUpdateWidget(_AirCheckArtwork oldWidget) {
+  void didUpdateWidget(StudioProgramArtwork oldWidget) {
     super.didUpdateWidget(oldWidget);
     if (oldWidget.controller != widget.controller ||
-        oldWidget.path != widget.path) {
-      _future = widget.controller.artworkForPath(widget.path);
+        oldWidget.path != widget.path ||
+        oldWidget.width != widget.width ||
+        oldWidget.height != widget.height) {
+      _future = _load();
     }
   }
 
+  Future<Uint8List?> _load() {
+    final path = widget.path;
+    return path == null
+        ? Future.value(null)
+        : widget.controller.programArtworkForPath(
+            path,
+            width: (widget.width * 3).ceil(),
+            height: (widget.height * 3).ceil(),
+          );
+  }
+
   @override
-  Widget build(BuildContext context) => FutureBuilder<Uint8List?>(
-    future: _future,
-    builder: (context, snapshot) => switch (snapshot.data) {
-      final bytes? => Image.memory(
-        bytes,
-        fit: BoxFit.cover,
-        gaplessPlayback: true,
-      ),
-      null => ColoredBox(color: LineupTheme.of(context).elevatedSurface),
-    },
+  Widget build(BuildContext context) => SizedBox(
+    width: widget.width,
+    height: widget.height,
+    child: FutureBuilder<Uint8List?>(
+      future: _future,
+      builder: (context, snapshot) => switch (snapshot.data) {
+        final bytes? => Image.memory(
+          bytes,
+          fit: BoxFit.cover,
+          gaplessPlayback: true,
+        ),
+        null => ColoredBox(color: LineupTheme.of(context).elevatedSurface),
+      },
+    ),
   );
 }
-
-String _recipeKey(Channel channel) => canonicalScheduleIdentity(channel);
 
 String _temporal(GuideProgram program, DateTime now) => program.isCurrentAt(now)
     ? 'current'

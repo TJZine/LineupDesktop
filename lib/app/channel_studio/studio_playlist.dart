@@ -27,8 +27,9 @@ class _StudioPlaylist extends StatelessWidget {
       crossAxisAlignment: CrossAxisAlignment.stretch,
       children: [
         inventoryStatus,
-        const Text(
+        Text(
           'Uses an existing Plex playlist. Manage its contents in Plex.',
+          style: _studioSupportStyle(context),
         ),
 
         LineupField(
