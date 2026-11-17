@@ -190,6 +190,16 @@ void main() {
         FocusManager.instance.primaryFocus?.debugLabel,
         'subtitleCustomise',
       );
+      if (config.tv) {
+        final helper = find.text(
+          'Text, edges, background and window · 10 options',
+        );
+        final roles = LineupTheme.of(tester.element(find.byType(SettingsView)));
+        expect(
+          tester.widget<Text>(helper).style?.color,
+          roles.focusSecondaryText,
+        );
+      }
       expect(tester.takeException(), isNull);
     });
   }

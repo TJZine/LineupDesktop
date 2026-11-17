@@ -3035,6 +3035,24 @@ void main() {
       final oldNowLine = tester
           .getTopLeft(find.byKey(const Key('guide-now-line')))
           .dx;
+      final date = find.byKey(const Key('guide-current-date-time'));
+      final contextText = tester.renderObject<RenderParagraph>(
+        find.byKey(const Key('guide-now-playing-context')),
+      );
+      final contextEnd = contextText
+          .getBoxesForSelection(
+            TextSelection(
+              baseOffset: 0,
+              extentOffset: contextText.text.toPlainText().length,
+            ),
+          )
+          .last
+          .right;
+      expect(
+        tester.getTopLeft(date).dx -
+            contextText.localToGlobal(Offset(contextEnd, 0)).dx,
+        greaterThanOrEqualTo(4),
+      );
       final oldClock = tester
           .widget<Text>(find.byKey(const Key('guide-current-date-time')))
           .data;

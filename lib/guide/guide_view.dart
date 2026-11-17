@@ -1837,6 +1837,7 @@ class _Toolbar extends StatelessWidget {
               ),
             ] else
               const Spacer(),
+            if (showDate && showPlaying) const SizedBox(width: 8),
             if (showDate)
               ListenableBuilder(
                 listenable: Listenable.merge([controller.focus, clock]),

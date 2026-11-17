@@ -170,7 +170,7 @@ extension _SubtitleSettingsPage on _SettingsViewState {
               onPressed: _openSubtitleCustomise,
               style: TextButton.styleFrom(
                 minimumSize: const Size(0, 72),
-                padding: EdgeInsets.fromLTRB(tv ? inset - 3 : 0, 12, inset, 12),
+                padding: EdgeInsets.fromLTRB(tv ? inset - 3 : 8, 12, inset, 12),
               ),
               child: const Row(
                 children: [
