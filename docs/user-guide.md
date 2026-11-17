@@ -228,7 +228,7 @@ controls; on narrower panes it appears above them in the scroll view. Text, Edge
 Background and Window are on the **Customise** page, with the preview on both pages.
 Back returns to the main page with focus on **Customise**. This preview change does not
 alter playback subtitle sizing. UI audit 2 decision, 2026-11-16; proportional preview
-clarified by the delegated Astra review.
+confirmed by the maintainer, 2026-11-17.
 
 Choose **Standard**, **Drop shadow**, **Classic box**, **High contrast**, or
 **Light**, then adjust Size (50%–300%), Position, text color and opacity, Font,

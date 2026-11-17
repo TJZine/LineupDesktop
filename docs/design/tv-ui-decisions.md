@@ -65,8 +65,7 @@ targets, inset timing/progress row, five 84-high Mini Guide rows with inset radi
 inline Watching/library, no Mini Guide or track-picker hints, English language names and
 duplicate-only subtitle support, and enlarged number entry with current program/time
 left. The standard TV focus fill and overlay setting/opacity remain. Physical Fire TV
-must confirm crisp picker edges; exact source and synthetic evidence are in the P
-report.
+must confirm crisp picker edges.
 
 Use a shared right-aligned number column with a 46 reference floor, scaled by platform
 text settings and expanded only to the actual largest rendered number extent plus one
