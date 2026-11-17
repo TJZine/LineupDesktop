@@ -61,6 +61,7 @@ class GuideLayoutPolicy {
     double tvInformationHeight = 0,
     double tvIdentityWidth = 0,
     Size tvPictureMinimum = Size.zero,
+    bool mergedBar = false,
   }) {
     final width = size.width.isFinite
         ? size.width.clamp(0.0, 10000.0).toDouble()
@@ -72,9 +73,12 @@ class GuideLayoutPolicy {
     final padding = horizontalPadding(size);
     const minimumRows = 5;
     final chromeHeight =
-        toolbarHeight(size, textScale: textScale) +
-        10 +
-        (tvControlsHeight ?? controlsHeight(size, textScale: textScale)) +
+        (mergedBar ? 72 : toolbarHeight(size, textScale: textScale)) +
+        (mergedBar
+            ? 10
+            : 10 +
+                  (tvControlsHeight ??
+                      controlsHeight(size, textScale: textScale))) +
         (timeHeaderHeight ?? 38 * textScale);
     final minimumRowHeight = math.max(58 * textScale, tvRowFloor);
     final available = math.max(0.0, height - chromeHeight);
@@ -87,9 +91,8 @@ class GuideLayoutPolicy {
       0.0,
       height -
           20 -
-          toolbarHeight(size, textScale: textScale) -
-          10 -
-          pictureControlsHeight -
+          (mergedBar ? 72 : toolbarHeight(size, textScale: textScale)) -
+          (mergedBar ? 10 : 10 + pictureControlsHeight) -
           (timeHeaderHeight ?? 38 * textScale),
     );
     const pictureRoundingAllowance = 0.005;
@@ -154,6 +157,11 @@ class GuideLayoutPolicy {
       );
     } else if (tvControlsHeight == null) {
       pictureHeight = math.min(_guideReferencePictureHeight, pictureAllocation);
+    }
+    if (tvControlsHeight != null) {
+      rowCount = ((available - showcaseHeight) / minimumRowHeight)
+          .floor()
+          .clamp(5, 6);
     }
     final rowHeight = math.max(
       minimumRowHeight,
@@ -422,6 +430,25 @@ class _GuideViewState extends State<GuideView>
   final _guideFocus = FocusNode(debugLabel: 'Guide grid');
   final _channelFilterFocus = FocusNode(debugLabel: 'Guide channel filter');
   final _searchFocus = FocusNode(debugLabel: 'Guide channel search');
+  final _searchButtonFocus = FocusNode(debugLabel: 'Guide search channels');
+  bool _searchExpanded = false;
+  bool _mergedBar = false;
+
+  void _openSearch() {
+    setState(() => _searchExpanded = true);
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (mounted) _searchFocus.requestFocus();
+    });
+  }
+
+  void _searchFocusChanged() {
+    if (!_searchFocus.hasFocus &&
+        _searchController.text.isEmpty &&
+        _searchExpanded) {
+      setState(() => _searchExpanded = false);
+    }
+  }
+
   // TooltipVisibility replaces each tooltip's child when the menu opens.
   // Keep these invokers alive so closing the menu can restore exact focus.
   final _closeFocus = FocusNode(debugLabel: 'Back to player');
@@ -436,6 +463,7 @@ class _GuideViewState extends State<GuideView>
   final _messengerKey = GlobalKey<ScaffoldMessengerState>();
   bool _filterNoticeScheduled = false;
   final _scheduleKey = GlobalKey(debugLabel: 'Guide schedule');
+  final _pictureKey = GlobalKey(debugLabel: 'Guide picture recovery');
   final _searchController = TextEditingController();
   late String _observedSearchQuery;
   late int _searchContentGeneration;
@@ -512,6 +540,7 @@ class _GuideViewState extends State<GuideView>
     _scheduleFilterFallbackNotice();
     _searchContentGeneration = widget.controller.lineup.contentGeneration;
     _searchController.addListener(_searchChanged);
+    _searchFocus.addListener(_searchFocusChanged);
     _activityPulse = AnimationController(
       vsync: this,
       duration: const Duration(milliseconds: 1800),
@@ -556,7 +585,9 @@ class _GuideViewState extends State<GuideView>
     _menuFocus.dispose();
     _guideFocus.dispose();
     _channelFilterFocus.dispose();
+    _searchFocus.removeListener(_searchFocusChanged);
     _searchFocus.dispose();
+    _searchButtonFocus.dispose();
     _closeFocus.dispose();
     _earlierFocus.dispose();
     _nowFocus.dispose();
@@ -589,7 +620,13 @@ class _GuideViewState extends State<GuideView>
 
   KeyEventResult _searchKey(FocusNode node, KeyEvent event) {
     if (event is! KeyDownEvent) return KeyEventResult.ignored;
-    if (event.logicalKey == LogicalKeyboardKey.escape) {
+    if (event.logicalKey == LogicalKeyboardKey.escape ||
+        (_mergedBar && event.logicalKey == LogicalKeyboardKey.goBack)) {
+      if (_mergedBar && _searchController.text.isEmpty) {
+        setState(() => _searchExpanded = false);
+        _searchButtonFocus.requestFocus();
+        return KeyEventResult.handled;
+      }
       if (_searchController.text.isNotEmpty) {
         _searchController.clear();
       } else {
@@ -838,7 +875,7 @@ class _GuideViewState extends State<GuideView>
         commandModifier(keyboard) &&
         !nativeFullscreenChord &&
         !_empty) {
-      _searchFocus.requestFocus();
+      _openSearch();
       return KeyEventResult.handled;
     }
     final isAndroidTvMenu =
@@ -952,16 +989,27 @@ class _GuideViewState extends State<GuideView>
   List<FocusNode> _toolbarFocusOrder() => _empty
       ? [_menuFocus]
       : [
+          if (_mergedBar) _menuFocus,
           _channelFilterFocus,
           if (widget.controller.channelFilterKey != ChannelFilter.all)
             _removeChannelFilterFocus,
-          _searchFocus,
-          if (_searchController.text.isNotEmpty) _clearSearchFocus,
-          _earlierFocus,
-          _nowFocus,
-          _laterFocus,
-          _hoursFocus,
-          _menuFocus,
+          if (!_mergedBar ||
+              _searchExpanded ||
+              _searchController.text.isNotEmpty) ...[
+            _searchFocus,
+            if (_searchController.text.isNotEmpty) _clearSearchFocus,
+          ],
+          if (!_mergedBar ||
+              !(_searchExpanded || _searchController.text.isNotEmpty)) ...[
+            _earlierFocus,
+            _nowFocus,
+            _laterFocus,
+            _hoursFocus,
+          ],
+          if (_mergedBar &&
+              !(_searchExpanded || _searchController.text.isNotEmpty))
+            _searchButtonFocus,
+          if (!_mergedBar) _menuFocus,
           if (_showBackToPlayer) _closeFocus,
         ];
 
@@ -1022,8 +1070,98 @@ class _GuideViewState extends State<GuideView>
     (nearest ?? _searchFocus).requestFocus();
   }
 
+  // Recovery is supplied by the shell. Discover only the existing typed
+  // placeholder's enabled action buttons; do not infer actions from copy or
+  // include arbitrary video-surface descendants in this TV wrap shortcut.
+  List<FocusNode> _pictureRecoveryActions() {
+    final actions = <FocusNode>[];
+    void findButtonFocus(Element element) {
+      final child = element.widget;
+      if (child is Focus) {
+        FocusNode? focus;
+        element.visitChildElements(
+          (child) => focus ??= Focus.maybeOf(child, createDependency: false),
+        );
+        if (focus?.canRequestFocus == true) {
+          final picture = _pictureKey.currentContext?.findRenderObject();
+          final action = focus!.context?.findRenderObject();
+          if (picture is RenderBox &&
+              action is RenderBox &&
+              picture.hasSize &&
+              action.hasSize &&
+              !action.size.isEmpty) {
+            final visible = picture.localToGlobal(Offset.zero) & picture.size;
+            final bounds = action.localToGlobal(Offset.zero) & action.size;
+            final shown = visible.intersect(bounds);
+            if (shown.width >= bounds.width - .1 &&
+                shown.height >= bounds.height - .1) {
+              actions.add(focus!);
+            }
+          }
+          return;
+        }
+      }
+      element.visitChildElements(findButtonFocus);
+    }
+
+    void findActions(Element element, GuidePlaybackPlaceholder placeholder) {
+      final child = element.widget;
+      if (child is TextButton &&
+          child.onPressed != null &&
+          (child.onPressed == placeholder.onRetry ||
+              child.onPressed == placeholder.onNextChannel)) {
+        element.visitChildElements(findButtonFocus);
+        return;
+      }
+      element.visitChildElements((child) => findActions(child, placeholder));
+    }
+
+    void findPlaceholder(Element element) {
+      final child = element.widget;
+      if (child is GuidePlaybackPlaceholder) {
+        if (child.unavailable) {
+          element.visitChildElements((element) => findActions(element, child));
+        }
+        return;
+      }
+      element.visitChildElements(findPlaceholder);
+    }
+
+    (_pictureKey.currentContext as Element?)?.visitChildElements(
+      findPlaceholder,
+    );
+    return actions;
+  }
+
+  KeyEventResult _pictureRecoveryKey(FocusNode node, KeyEvent event) {
+    if (!_mergedBar ||
+        !DeviceProfile.of(context).isTv ||
+        ModalRoute.of(context)?.isCurrent == false ||
+        (event is! KeyDownEvent && event is! KeyRepeatEvent)) {
+      return KeyEventResult.ignored;
+    }
+    final actions = _pictureRecoveryActions();
+    final index = actions.indexWhere((action) => action.hasPrimaryFocus);
+    if (index < 0) return KeyEventResult.ignored;
+    final key =
+        tvRemoteKeyAlias(event.logicalKey, enabled: true) ?? event.logicalKey;
+    if (key == LogicalKeyboardKey.arrowUp) {
+      _channelFilterFocus.requestFocus();
+    } else if (key == LogicalKeyboardKey.arrowDown) {
+      (widget.focusNode ?? _guideFocus).requestFocus();
+    } else if (key == LogicalKeyboardKey.arrowLeft ||
+        key == LogicalKeyboardKey.arrowRight) {
+      final next = (index + (key == LogicalKeyboardKey.arrowLeft ? -1 : 1))
+          .clamp(0, actions.length - 1);
+      actions[next].requestFocus();
+    } else {
+      return KeyEventResult.ignored;
+    }
+    return KeyEventResult.handled;
+  }
+
   KeyEventResult _toolbarKey(FocusNode node, KeyEvent event) {
-    if (!DeviceProfile.of(context).isTv) {
+    if (!DeviceProfile.of(context).isTv && !_mergedBar) {
       return KeyEventResult.ignored;
     }
     if (event is! KeyDownEvent && event is! KeyRepeatEvent) {
@@ -1035,6 +1173,17 @@ class _GuideViewState extends State<GuideView>
           enabled: DeviceProfile.of(context).isTv,
         ) ??
         event.logicalKey;
+    if (key == LogicalKeyboardKey.arrowUp &&
+        _mergedBar &&
+        DeviceProfile.of(context).isTv &&
+        _channelFilterFocus.hasPrimaryFocus &&
+        ModalRoute.of(context)?.isCurrent != false) {
+      final actions = _pictureRecoveryActions();
+      if (actions.isNotEmpty) {
+        actions.first.requestFocus();
+        return KeyEventResult.handled;
+      }
+    }
     if (key == LogicalKeyboardKey.arrowDown) {
       if (_empty && widget.onSetUpChannels == null) {
         return KeyEventResult.ignored;
@@ -1068,7 +1217,8 @@ class _GuideViewState extends State<GuideView>
   bool get _showBackToPlayer =>
       !DeviceProfile.of(context).isTv && widget.watchingChannelId != null;
 
-  Widget _toolbar() => _Toolbar(
+  Widget _toolbar({Widget? controls}) => _Toolbar(
+    controls: controls,
     controller: widget.controller,
     clock: _presentationClock,
     showBackToPlayer: _showBackToPlayer,
@@ -1090,7 +1240,15 @@ class _GuideViewState extends State<GuideView>
       ]),
       builder: (context, _) => _GuideShowcase(
         controller: widget.controller,
-        picture: widget.pictureInPicture,
+        picture: widget.pictureInPicture == null
+            ? null
+            : Focus(
+                key: _pictureKey,
+                canRequestFocus: false,
+                skipTraversal: true,
+                onKeyEvent: _pictureRecoveryKey,
+                child: widget.pictureInPicture!,
+              ),
         showIdleArtwork: widget.showIdleArtwork,
         pictureWidth: policy.pictureWidth,
         compactLogo: policy.compactLogo,
@@ -1106,6 +1264,87 @@ class _GuideViewState extends State<GuideView>
   double _filterPickerWidth(GuideLayoutPolicy policy) =>
       policy.channelRailWidth - _guideEdgeContentInset * 2;
 
+  Widget _controls(GuideLayoutPolicy policy, {bool merged = false}) =>
+      _GuideControls(
+        key: const Key('guide-control-content'),
+        controller: widget.controller,
+        pickerWidth: _filterPickerWidth(policy),
+        searchController: _searchController,
+        channelFilterFocus: _channelFilterFocus,
+        searchFocus: _searchFocus,
+        earlierFocus: _earlierFocus,
+        nowFocus: _nowFocus,
+        laterFocus: _laterFocus,
+        hoursFocus: _hoursFocus,
+        clearSearchFocus: _clearSearchFocus,
+        removeChannelFilterFocus: _removeChannelFilterFocus,
+        onSearchKey: _searchKey,
+        onKeyEvent: _toolbarKey,
+        merged: merged,
+        searchExpanded: _searchExpanded || _searchController.text.isNotEmpty,
+        searchButtonFocus: _searchButtonFocus,
+        onOpenSearch: _openSearch,
+      );
+
+  bool _barFits(BuildContext context, double width, GuideLayoutPolicy policy) {
+    final scaler = MediaQuery.textScalerOf(context);
+    final direction = Directionality.of(context);
+    final theme = Theme.of(context);
+    double text(String value, TextStyle style) =>
+        _textWidth(value, style, scaler, direction);
+    final button = theme.textButtonTheme.style!;
+    final padding = button.padding!.resolve({})!.resolve(direction);
+    final minimum = button.minimumSize!.resolve({})!;
+    final metrics = _GuideControlsMetrics.resolve(
+      context,
+      widget.controller,
+      width,
+      _filterPickerWidth(policy),
+    );
+    final lockup =
+        30 +
+        14 +
+        text(
+          'LINEUP',
+          const TextStyle(fontFamily: 'Arimo', fontSize: 22, letterSpacing: 3),
+        ) +
+        (widget.onOpenMenu == null
+            ? 0
+            : 36 + (DeviceProfile.of(context).isTv ? 40 : 0));
+    final now = widget.controller.now.toLocal();
+    final localizations = MaterialLocalizations.of(context);
+    final date =
+        '${localizations.formatMediumDate(now)}  ·  ${localizations.formatTimeOfDay(TimeOfDay.fromDateTime(now))}';
+    final dateWidth = text(
+      date,
+      theme.textTheme.bodyMedium!.copyWith(fontSize: 18),
+    );
+    final closeWidth = _showBackToPlayer
+        ? 8 +
+              math.max(
+                minimum.width,
+                text('Back to player', button.textStyle!.resolve({})!) +
+                    padding.horizontal,
+              )
+        : 0;
+    final label = widget.controller.selectedChannelFilter;
+    final labelWidth = label.key == ChannelFilter.all
+        ? 0.0
+        : text(
+                label.label,
+                theme.textTheme.bodyMedium!.copyWith(fontSize: 16),
+              ) +
+              48 +
+              8;
+    final controlsWidth =
+        _filterPickerWidth(policy) +
+        8 +
+        labelWidth +
+        math.max(340.0, metrics.navigationWidth + 8 + 48);
+    return metrics.height <= 72 &&
+        lockup + 20 + controlsWidth + 24 + dateWidth + closeWidth + 24 <= width;
+  }
+
   Widget _schedule(GuideLayoutPolicy policy, List<Channel> channels) {
     final scroll = _scrollFor(policy.rowHeight);
     final sourceRowFloor = DeviceProfile.of(context).isTv
@@ -1120,27 +1359,13 @@ class _GuideViewState extends State<GuideView>
     return Column(
       key: _scheduleKey,
       children: [
-        Padding(
-          padding: const EdgeInsets.symmetric(
-            horizontal: _guideEdgeContentInset,
+        if (!_mergedBar)
+          Padding(
+            padding: const EdgeInsets.symmetric(
+              horizontal: _guideEdgeContentInset,
+            ),
+            child: _controls(policy),
           ),
-          child: _GuideControls(
-            key: const Key('guide-control-content'),
-            controller: widget.controller,
-            pickerWidth: _filterPickerWidth(policy),
-            searchController: _searchController,
-            channelFilterFocus: _channelFilterFocus,
-            searchFocus: _searchFocus,
-            earlierFocus: _earlierFocus,
-            nowFocus: _nowFocus,
-            laterFocus: _laterFocus,
-            hoursFocus: _hoursFocus,
-            clearSearchFocus: _clearSearchFocus,
-            removeChannelFilterFocus: _removeChannelFilterFocus,
-            onSearchKey: _searchKey,
-            onKeyEvent: _toolbarKey,
-          ),
-        ),
         Expanded(
           child: LayoutBuilder(
             builder: (context, constraints) {
@@ -1343,6 +1568,7 @@ class _GuideViewState extends State<GuideView>
               builder: (context, outer) {
                 final isTv = DeviceProfile.of(context).isTv;
                 if (_empty) {
+                  _mergedBar = false;
                   return _ClassicGuideSurface(
                     color: roles.deepBackground,
                     showcaseHeight: 0,
@@ -1418,6 +1644,27 @@ class _GuideViewState extends State<GuideView>
                     tvPictureMinimum: _tvSchema!.pictureMinimum,
                   );
                 }
+                _mergedBar = _barFits(context, outer.maxWidth, policy);
+                if (_mergedBar) {
+                  policy = GuideLayoutPolicy.forSize(
+                    outer.biggest,
+                    hasPicture: widget.pictureInPicture != null,
+                    numberColumnWidth: numberWidth,
+                    isTv: isTv,
+                    textScale: MediaQuery.textScalerOf(context).scale(1),
+                    timeHeaderHeight: policy.timeHeaderHeight,
+                    tvControlsHeight: isTv ? 0 : null,
+                    tvRowFloor: isTv ? _tvSchema!.rowFloor : 0,
+                    tvInformationHeight: isTv
+                        ? _tvSchema!.informationHeight
+                        : 0,
+                    tvIdentityWidth: isTv ? _tvSchema!.identityWidth : 0,
+                    tvPictureMinimum: isTv
+                        ? _tvSchema!.pictureMinimum
+                        : Size.zero,
+                    mergedBar: true,
+                  );
+                }
                 final schedule = _schedule(policy, channels);
                 final theme = Theme.of(context);
                 return DefaultTextStyle(
@@ -1425,7 +1672,11 @@ class _GuideViewState extends State<GuideView>
                   child: _ClassicGuideSurface(
                     color: roles.deepBackground,
                     showcaseHeight: policy.showcaseHeight,
-                    toolbar: _toolbar(),
+                    toolbar: _toolbar(
+                      controls: _mergedBar
+                          ? _controls(policy, merged: true)
+                          : null,
+                    ),
                     showcase: _showcase(policy),
                     body: schedule,
                   ),
@@ -1510,7 +1761,9 @@ class _Toolbar extends StatelessWidget {
     required this.menuFocus,
     required this.closeFocus,
     required this.onKeyEvent,
+    this.controls,
   });
+  final Widget? controls;
   final GuideController controller;
   final Listenable clock;
   final String? watchingChannelId;
@@ -1543,12 +1796,14 @@ class _Toolbar extends StatelessWidget {
       skipTraversal: true,
       onKeyEvent: onKeyEvent,
       child: LineupTopBar(
+        height: controls == null ? 80 : 72,
         inset: _guideEdgeContentInset,
         menuKey: const Key('guide-app-menu'),
         menuFocusNode: menuFocus,
         onOpenMenu: onOpenMenu,
         trailing: Row(
           children: [
+            ?controls,
             if (showPlaying) ...[
               SizedBox(width: 20.0),
               Expanded(
@@ -1624,7 +1879,8 @@ int debugGuideControlsMeasureCount = 0;
 /// Measured fixed controls and label text determine both wrapping and its
 /// vertical budget. Desktop retains its established layout policy.
 class _GuideControlsMetrics {
-  const _GuideControlsMetrics(this.wrap, this.height);
+  const _GuideControlsMetrics(this.wrap, this.height, this.navigationWidth);
+  final double navigationWidth;
   final bool wrap;
   final double height;
 
@@ -1770,6 +2026,7 @@ class _GuideControlsMetrics {
       wrap
           ? math.max(controlHeight, labelHeight) + navigationHeight
           : math.max(navigationHeight, labelHeight),
+      navigationWidth,
     );
   }
 }
@@ -1799,7 +2056,15 @@ class _GuideControls extends StatelessWidget {
     required this.removeChannelFilterFocus,
     required this.onSearchKey,
     required this.onKeyEvent,
+    this.merged = false,
+    this.searchExpanded = false,
+    this.searchButtonFocus,
+    this.onOpenSearch,
   });
+  final bool merged;
+  final bool searchExpanded;
+  final FocusNode? searchButtonFocus;
+  final VoidCallback? onOpenSearch;
 
   final GuideController controller;
   final double pickerWidth;
@@ -1940,7 +2205,7 @@ class _GuideControls extends StatelessWidget {
                 child: Text(
                   activeLabel,
                   key: const Key('guide-active-channel-filter-label'),
-                  maxLines: 2,
+                  maxLines: merged ? 1 : 2,
                   overflow: TextOverflow.ellipsis,
                   style: TextStyle(fontSize: 16, color: roles.mutedText),
                 ),
@@ -2168,6 +2433,37 @@ class _GuideControls extends StatelessWidget {
         ),
       ],
     );
+    if (merged) {
+      return Focus(
+        canRequestFocus: false,
+        skipTraversal: true,
+        onKeyEvent: onKeyEvent,
+        child: Row(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            picker,
+            const SizedBox(width: 8),
+            if (activeLabel != null) ...[label, const SizedBox(width: 8)],
+            if (searchExpanded)
+              search(340)
+            else ...[
+              navigation,
+              const SizedBox(width: 8),
+              IconButton(
+                key: const Key('guide-search-button'),
+                focusNode: searchButtonFocus,
+                tooltip: 'Search channels',
+                onPressed: onOpenSearch,
+                icon: const Icon(
+                  Icons.search,
+                  semanticLabel: 'Search channels',
+                ),
+              ),
+            ],
+          ],
+        ),
+      );
+    }
     return Focus(
       canRequestFocus: false,
       skipTraversal: true,
