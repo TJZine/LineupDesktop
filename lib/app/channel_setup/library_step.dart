@@ -115,7 +115,7 @@ class SetupLibraryStep extends StatelessWidget {
     _ => false,
   };
 
-  String _summary() {
+  String _summary(Set<String> usableIds) {
     final statuses = [
       for (final id in selectedLibraryIds)
         data.libraryScanFacts[id]?.status ?? LibraryScanStatus.idle,
@@ -138,7 +138,9 @@ class SetupLibraryStep extends StatelessWidget {
     if (data.libraryScanStatus == LibraryScanStatus.cancelled) {
       return 'Your selections are preserved. Scan again when you’re ready.';
     }
-    if (!_settled || statuses.isEmpty) {
+    if (!_settled ||
+        statuses.isEmpty ||
+        (usableIds.isNotEmpty && !selectedLibraryIds.any(usableIds.contains))) {
       return 'Choose the libraries to build channels from.';
     }
     final ready = data.libraryScanCommittableIds
@@ -349,9 +351,10 @@ class SetupLibraryStep extends StatelessWidget {
           itemBuilder: (_, index) =>
               _libraryRow(context, data.libraries[index], index),
         );
-        final unusable = data.libraries
-            .where((library) => _unusable(library.id))
-            .length;
+        final usableIds = {
+          for (final library in data.libraries)
+            if (!_unusable(library.id)) library.id,
+        };
         final content = Column(
           mainAxisSize: MainAxisSize.min,
           crossAxisAlignment: CrossAxisAlignment.stretch,
@@ -359,13 +362,13 @@ class SetupLibraryStep extends StatelessWidget {
             _header(
               context,
               'Choose libraries',
-              unusable > 0 &&
+              usableIds.length < data.libraries.length &&
                       !scanning &&
                       data.libraryScanStatus != LibraryScanStatus.cancelled
                   ? '${data.libraryScanCommittableIds.length} of ${data.libraries.length} libraries can be used. The others are left out; you can scan again at any time.'
                   : data.libraries.isEmpty || _settled || scanning
                   ? ''
-                  : _summary(),
+                  : _summary(usableIds),
             ),
             if (scanning) ...[
               const SizedBox(height: 10),
@@ -383,7 +386,7 @@ class SetupLibraryStep extends StatelessWidget {
                 ),
               )
             else ...[
-              _selectionSummary(context),
+              _selectionSummary(context, usableIds),
               if (singleScroll)
                 list
               else
@@ -401,7 +404,7 @@ class SetupLibraryStep extends StatelessWidget {
                             ?data.profileCredentialRecoveryNotice,
                           ].join('\n')
                         : ready.isEmpty
-                        ? _summary()
+                        ? _summary(usableIds)
                         : '${ready.length} of ${selectedLibraryIds.length} ${selectedLibraryIds.length == 1 ? 'library' : 'libraries'} ${ready.length == 1 ? 'is' : 'are'} ready. Continuing builds from ${data.libraries.where((library) => ready.contains(library.id)).map((library) => library.title).join(', ')}${excluded > 0 ? ' only' : ''}.',
                     style: bodyStyle,
                   ),
@@ -478,16 +481,12 @@ class SetupLibraryStep extends StatelessWidget {
     ],
   );
 
-  Widget _selectionSummary(BuildContext context) {
+  Widget _selectionSummary(BuildContext context, Set<String> usableIds) {
     final roles = LineupTheme.of(context);
     final summaryStyle = Theme.of(context).textTheme.bodyMedium!
         .copyWith(color: roles.secondaryText, fontSize: 16, height: 1.4);
     final editable =
         !data.busy && data.libraryScanStatus != LibraryScanStatus.scanning;
-    final usableIds = {
-      for (final library in data.libraries)
-        if (!_unusable(library.id)) library.id,
-    };
     final selected = usableIds.intersection(selectedLibraryIds).length;
     final all = usableIds.isNotEmpty && selected == usableIds.length;
     void toggleAll() => onToggleAll(usableIds);

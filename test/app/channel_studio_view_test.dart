@@ -6805,7 +6805,15 @@ void main() {
       );
       _expectStudioFieldNavigating(tester, search);
       await _studioKey(tester, LogicalKeyboardKey.arrowDown);
-      expect(_studioFieldNavigation(tester, search).hasFocus, isFalse);
+      expect(
+        Focus.of(tester.element(find.text('Comedy'))).hasPrimaryFocus,
+        isTrue,
+      );
+      await _studioKey(tester, LogicalKeyboardKey.arrowUp);
+      expect(
+        Focus.of(tester.element(find.text('0 selected'))).hasPrimaryFocus,
+        isTrue,
+      );
       await _studioKey(tester, LogicalKeyboardKey.arrowUp);
       _expectStudioFieldNavigating(tester, search);
 
@@ -6818,6 +6826,114 @@ void main() {
       await _studioKey(tester, LogicalKeyboardKey.escape);
       expect(picker, findsNothing);
     });
+  });
+
+  _studioTvTest('filter value navigation returns to actionable TV controls', (
+    tester,
+  ) async {
+    tester.view
+      ..physicalSize = const Size(1920, 1080)
+      ..devicePixelRatio = 2;
+    addTearDown(tester.view.reset);
+    final original = _channel(
+      id: 'picker-navigation',
+      number: 1,
+      name: 'Evening films',
+      source: const LibrarySource(
+        libraryId: 'movies',
+        libraryType: PlexLibraryType.movie,
+        filters: {
+          LibraryFilter.genre: ['Drama'],
+        },
+      ),
+    );
+    final controller = _RecordingSaveController(
+      scenario: _studioGenreScenario(extraGenres: 40),
+    );
+    addTearDown(controller.dispose);
+    await tester.pumpWidget(
+      _studio(
+        controller,
+        ChannelStudioMode.editCustom,
+        channel: original,
+        textScaler: TextScaler.linear(1.3),
+        theme: LineupTheme.forName(
+          LineupThemeName.emberSteel,
+          formFactor: profileFor(true).formFactor,
+        ),
+        profile: tvProfile,
+      ),
+    );
+    await _settleAirCheck(tester);
+    final chip = find.text('Genre: Drama');
+    await tester.ensureVisible(chip);
+    await tester.tap(chip);
+    await tester.pumpAndSettle();
+
+    bool focused(String text) =>
+        Focus.of(tester.element(find.text(text))).hasPrimaryFocus;
+
+    await _studioKey(tester, LogicalKeyboardKey.arrowDown);
+    expect(focused('Comedy'), isTrue);
+    await _studioKey(tester, LogicalKeyboardKey.arrowUp);
+    expect(focused('1 selected'), isTrue);
+
+    // Selected-only hides Comedy. Down now reaches the first matching value.
+    await _studioKey(tester, LogicalKeyboardKey.select);
+    expect(find.text('Comedy'), findsNothing);
+    await _studioKey(tester, LogicalKeyboardKey.arrowDown);
+    expect(focused('Drama'), isTrue);
+    await _studioKey(tester, LogicalKeyboardKey.arrowUp);
+    expect(focused('1 selected'), isTrue);
+    await _studioKey(tester, LogicalKeyboardKey.select);
+
+    await _studioKey(tester, LogicalKeyboardKey.arrowRight);
+    expect(focused('Clear selection'), isTrue);
+    final position = tester
+        .state<ScrollableState>(
+          find.descendant(
+            of: find.descendant(
+              of: find.byKey(const Key('studio-filter-picker-genre')),
+              matching: find.byType(ListView),
+            ),
+            matching: find.byType(Scrollable),
+          ),
+        )
+        .position;
+    final comedy = find.widgetWithText(
+      CheckboxListTile,
+      'Comedy',
+      skipOffstage: false,
+    );
+    position.jumpTo(80);
+    await tester.pumpAndSettle();
+    expect(comedy, findsOneWidget);
+    expect(comedy.hitTestable(), findsNothing);
+    await _studioKey(tester, LogicalKeyboardKey.arrowDown);
+    expect(focused('Comedy'), isTrue);
+    expect(comedy.hitTestable(), findsOneWidget);
+    await _studioKey(tester, LogicalKeyboardKey.arrowUp);
+    expect(focused('Clear selection'), isTrue);
+
+    position.jumpTo(position.maxScrollExtent);
+    await tester.pumpAndSettle();
+    expect(comedy, findsNothing);
+    await _studioKey(tester, LogicalKeyboardKey.arrowDown);
+    expect(focused('Comedy'), isTrue);
+    expect(comedy.hitTestable(), findsOneWidget);
+    await _studioKey(tester, LogicalKeyboardKey.select);
+    expect(
+      tester
+          .widget<CheckboxListTile>(
+            find.widgetWithText(CheckboxListTile, 'Comedy'),
+          )
+          .value,
+      isTrue,
+    );
+
+    await _studioKey(tester, LogicalKeyboardKey.escape);
+    expect(find.byKey(const Key('studio-filter-picker-genre')), findsNothing);
+    expect(find.text('Genre: Drama, Comedy'), findsOneWidget);
   });
 
   _studioTvTest('new Studio focuses the source and respects edited names', (
@@ -6948,7 +7064,7 @@ void _studioTvTest(String name, WidgetTesterCallback body) {
   });
 }
 
-LineupScenario _studioGenreScenario() => LineupScenario(
+LineupScenario _studioGenreScenario({int extraGenres = 0}) => LineupScenario(
   libraries: const [
     PlexLibrary(id: 'movies', title: 'Movies', type: PlexLibraryType.movie),
   ],
@@ -6956,6 +7072,8 @@ LineupScenario _studioGenreScenario() => LineupScenario(
   availableMedia: [
     _media('drama', libraryId: 'movies', genres: ['Drama']),
     _media('comedy', libraryId: 'movies', genres: ['Comedy']),
+    for (var index = 0; index < extraGenres; index++)
+      _media('genre-$index', libraryId: 'movies', genres: ['Genre $index']),
   ],
 );
 
