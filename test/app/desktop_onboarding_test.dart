@@ -319,6 +319,52 @@ void main() {
 
   for (final picker in ['profiles', 'servers']) {
     for (final fail in [false, true]) {
+      testWidgets(
+        'TV PIN keypad takes focus from persistent onboarding controls',
+        (tester) async {
+          final controller = _AuthorizationController(
+            scenario: const LineupScenario(
+              stage: SetupStage.profiles,
+              profiles: [
+                PlexHomeUser(
+                  id: 'protected',
+                  name: 'Protected viewer',
+                  protected: true,
+                ),
+                PlexHomeUser(id: 'open', name: 'Open viewer', protected: false),
+              ],
+            ),
+          );
+          await tester.pumpWidget(
+            UiFixture(controller: controller, profile: tvProfile).build(),
+          );
+          await tester.pumpAndSettle();
+
+          final settings = tester.widget<TextButton>(
+            find.widgetWithText(TextButton, 'Settings'),
+          );
+          settings.focusNode!.requestFocus();
+          await tester.pump();
+          expect(settings.focusNode!.hasPrimaryFocus, isTrue);
+
+          await tester.tap(find.widgetWithText(TextButton, 'Protected viewer'));
+          await tester.pumpAndSettle();
+
+          expect(find.byKey(const Key('profile-pin-sheet')), findsOneWidget);
+          expect(
+            FocusManager.instance.primaryFocus?.debugLabel,
+            'Profile PIN digit 1',
+          );
+          await tester.sendKeyEvent(LogicalKeyboardKey.arrowRight);
+          await tester.sendKeyEvent(LogicalKeyboardKey.select);
+          await tester.pumpAndSettle();
+          final progress = tester.widget<Semantics>(
+            find.byKey(const Key('profile-pin-progress')),
+          );
+          expect(progress.properties.label, '1 of 4 digits entered');
+        },
+      );
+
       testWidgets('NAV-I2 cancellable $picker real save fail=$fail', (
         tester,
       ) async {

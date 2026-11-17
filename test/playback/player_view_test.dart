@@ -4493,7 +4493,7 @@ void main() {
     );
     expect(
       find.descendant(of: identity, matching: find.text('•')),
-      findsOneWidget,
+      findsNothing,
     );
     fixture.player.closeOverlay();
     await tester.pumpWidget(const SizedBox.shrink());

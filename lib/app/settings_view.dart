@@ -634,6 +634,19 @@ class _SettingsViewState extends State<SettingsView> {
             ],
             SettingsCategory.subtitles => const [],
             SettingsCategory.accessibility => [
+              ..._settingControl<LineupTextSize>(
+                _SettingKey.textSize,
+                (current, item) => current.copyWith(textSize: item),
+                (onChanged) => _Dropdown<LineupTextSize>(
+                  'Text size',
+                  'Larger text can show fewer Guide rows.',
+                  value.textSize,
+                  LineupTextSize.values,
+                  (item) => item.label,
+                  onChanged,
+                  first: true,
+                ),
+              ),
               ..._settingControl<bool>(
                 _SettingKey.reduceMotion,
                 (current, item) => current.copyWith(reduceMotion: item),
@@ -644,7 +657,6 @@ class _SettingsViewState extends State<SettingsView> {
                   ),
                   value: value.reduceMotion,
                   onChanged: onChanged,
-                  first: true,
                 ),
               ),
               ..._settingControl<bool>(
@@ -1358,6 +1370,7 @@ enum _SettingKey {
   osdAutoHideSeconds,
   dvrControlsEnabled,
   matchDisplayHdr,
+  textSize,
   reduceMotion,
   largeFocusIndicators,
   profilePickerOnStartup,

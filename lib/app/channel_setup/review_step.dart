@@ -454,7 +454,7 @@ class _SetupReviewStepState extends State<SetupReviewStep> {
                           widget.onRemovalChanged(channel.id, selected.single),
                     );
                     final title = Text(
-                      '${channel.number} • ${channel.name}',
+                      '${channel.number}  ${channel.name}',
                       style: TextStyle(color: roles.primaryText, fontSize: 18),
                     );
                     if (constraints.maxWidth /

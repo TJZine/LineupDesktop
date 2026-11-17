@@ -796,7 +796,7 @@ void main() {
               tester
                   .widget<Text>(find.byKey(const Key('guide-info-channel')))
                   .data,
-              contains('2 • Synthetic channel 2'),
+              contains('2  Synthetic channel 2'),
             );
           }
           expect(tester.takeException(), isNull);

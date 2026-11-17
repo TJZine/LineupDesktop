@@ -1559,7 +1559,7 @@ class _Toolbar extends StatelessWidget {
                       tunedChannel.id,
                     );
                     return Text(
-                      '${tunedChannel.number} • ${tunedChannel.name}${tunedProgram == null ? '' : ' · ${tunedProgram.scheduled.item.title}'}',
+                      '${tunedChannel.number}  ${tunedChannel.name}${tunedProgram == null ? '' : ' · ${tunedProgram.scheduled.item.title}'}',
                       key: const Key('guide-now-playing-context'),
                       maxLines: 1,
                       overflow: TextOverflow.ellipsis,
@@ -4216,7 +4216,7 @@ class _GuideDetailsPlaceholder extends StatelessWidget {
       GuideLoadState.ready => 'No programs scheduled in this time range',
     };
     final roles = LineupTheme.of(context);
-    final identity = '${inspected.number} • ${inspected.name}';
+    final identity = '${inspected.number}  ${inspected.name}';
     final identityStyle = Theme.of(context).textTheme.labelLarge
         ?.copyWith(color: roles.progressFill, fontWeight: FontWeight.w600);
     return Align(
@@ -4295,7 +4295,7 @@ class _ProgramDetails extends StatelessWidget {
       ...item.genres.take(3),
     ].join(metadataSeparator);
     final eyebrow = Text(
-      channel == null ? '' : '${channel!.number} • ${channel!.name}',
+      channel == null ? '' : '${channel!.number}  ${channel!.name}',
       key: const Key('guide-info-channel'),
       style: channelStyle,
       maxLines: 1,
