@@ -437,4 +437,13 @@ class _SettingsTextScaler extends TextScaler {
 
   @override
   double get textScaleFactor => scale(14) / 14;
+
+  @override
+  bool operator ==(Object other) =>
+      other is _SettingsTextScaler &&
+      other.platform == platform &&
+      other.multiplier == multiplier;
+
+  @override
+  int get hashCode => Object.hash(platform, multiplier);
 }

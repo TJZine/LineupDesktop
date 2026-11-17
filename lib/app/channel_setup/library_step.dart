@@ -95,7 +95,7 @@ class SetupLibraryStep extends StatelessWidget {
   final SetupScanIntent onScan;
   final Future<void> Function(Set<String> ready) onCommit;
   final ValueChanged<String> onToggleLibrary;
-  final VoidCallback onToggleAll;
+  final ValueChanged<Set<String>> onToggleAll;
   final FocusNode? entryFocusNode;
   final Future<void> Function()? onRequestLogout;
 
@@ -484,9 +484,13 @@ class SetupLibraryStep extends StatelessWidget {
         .copyWith(color: roles.secondaryText, fontSize: 16, height: 1.4);
     final editable =
         !data.busy && data.libraryScanStatus != LibraryScanStatus.scanning;
-    final libraries = data.libraries;
-    final selected = selectedLibraryIds.length;
-    final all = selected == libraries.length;
+    final usableIds = {
+      for (final library in data.libraries)
+        if (!_unusable(library.id)) library.id,
+    };
+    final selected = usableIds.intersection(selectedLibraryIds).length;
+    final all = usableIds.isNotEmpty && selected == usableIds.length;
+    void toggleAll() => onToggleAll(usableIds);
     final value = all
         ? true
         : selected == 0
@@ -496,7 +500,7 @@ class SetupLibraryStep extends StatelessWidget {
       padding: const EdgeInsets.fromLTRB(0, 0, 8, 16),
       child: Row(
         children: [
-          if (libraries.where((library) => !_unusable(library.id)).length > 1)
+          if (usableIds.length > 1)
             FocusTraversalOrder(
               order: const NumericFocusOrder(0),
               // One focus target covers the checkbox and its label, matching
@@ -511,7 +515,7 @@ class SetupLibraryStep extends StatelessWidget {
                         EdgeInsets.symmetric(horizontal: 8),
                       ),
                     ),
-                    onPressed: editable ? onToggleAll : null,
+                    onPressed: editable ? toggleAll : null,
                     child: Row(
                       mainAxisSize: MainAxisSize.min,
                       children: [
@@ -520,7 +524,7 @@ class SetupLibraryStep extends StatelessWidget {
                           skipTraversal: true,
                           tristate: true,
                           value: value,
-                          onChanged: editable ? (_) => onToggleAll() : null,
+                          onChanged: editable ? (_) => toggleAll() : null,
                         ),
                         const SizedBox(width: 8),
                         Builder(
@@ -545,7 +549,7 @@ class SetupLibraryStep extends StatelessWidget {
             ),
           const Spacer(),
           Text(
-            '$selected of ${libraries.length} selected',
+            '$selected of ${usableIds.length} selected',
             style: summaryStyle,
           ),
         ],

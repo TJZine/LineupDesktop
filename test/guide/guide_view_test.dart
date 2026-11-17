@@ -3035,6 +3035,24 @@ void main() {
       final oldNowLine = tester
           .getTopLeft(find.byKey(const Key('guide-now-line')))
           .dx;
+      final date = find.byKey(const Key('guide-current-date-time'));
+      final contextText = tester.renderObject<RenderParagraph>(
+        find.byKey(const Key('guide-now-playing-context')),
+      );
+      final contextEnd = contextText
+          .getBoxesForSelection(
+            TextSelection(
+              baseOffset: 0,
+              extentOffset: contextText.text.toPlainText().length,
+            ),
+          )
+          .last
+          .right;
+      expect(
+        tester.getTopLeft(date).dx -
+            contextText.localToGlobal(Offset(contextEnd, 0)).dx,
+        greaterThanOrEqualTo(4),
+      );
       final oldClock = tester
           .widget<Text>(find.byKey(const Key('guide-current-date-time')))
           .data;
@@ -5459,6 +5477,10 @@ void main() {
 
     final context = find.byKey(const Key('guide-now-playing-context'));
     expect(context, findsOneWidget);
+    final contextText = tester.widget<Text>(context);
+    expect(contextText.textAlign, TextAlign.right);
+    expect(contextText.maxLines, 1);
+    expect(contextText.overflow, TextOverflow.ellipsis);
     expect(tester.widget<Text>(context).data, contains('Channel 0'));
 
     guide.moveVertical(1);

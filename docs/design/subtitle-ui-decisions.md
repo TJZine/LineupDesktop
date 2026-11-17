@@ -1,7 +1,7 @@
 # Subtitle settings UI: decisions record (APPROVED October 29, 2026)
 
 - **Status:** drafted by Claude (UI/UX owner) and **approved by the maintainer on October 29, 2026** with the answer "Approve as drafted" to "Approve the draft as recommended?". The approval covers every item's **Recommended** choice, UI-1 through UI-12. That includes the separate protected-Player change UI-9 (SD-17) and the scoped golden/render update in UI-12. The rendered alternatives are not approved.
-- **Amended October 29, 2026** after a read-only adversarial review by Codex (`review/report.md`, findings R-1 to R-7). The maintainer decided its three open questions: clip the top when a cue cannot fit above the panel; fall back to A and shrink only the preview crop when A2 is too narrow or text is very large; Reset keeps device mode. The amended text below is authoritative. The pre-amendment copy is `review/subtitle-ui-decisions.before-amendment.md`; see "Amendments" at the end.
+- **Amended October 29, 2026** after a read-only adversarial review by Codex (`review/report.md`, findings R-1 to R-7). The maintainer decided its three open questions: clip the top when a cue cannot fit above the panel; fall back to A and shrink only the preview crop when A2 is too narrow or text is very large; Reset keeps device mode. The November 17 amendment in UI-1 and UI-2 supersedes the October preview sizing and crop rules. The pre-amendment copy is `review/subtitle-ui-decisions.before-amendment.md`; see "Amendments" at the end.
 - **Source:** integration `0a10575601a390a202d3a7c0d007d95daf161042` (D1, N1, N2, F1 integrated; landed mobile foundation `ab6afd55` included). Specimen worktree `ui/specimen/` (detached, uncommitted edits only).
 - **Brief:** `docs/handoffs/subtitle-style-plan.md` §8, contracts §§6–7. Maintainer decisions already in force: SD-3 maximum, SD-4 Standard/no box, all SD defaults, device size applies to all formats when device settings are on, SD-9 out of v1.
 - **Handheld viewport:** no approved mobile UI-A record exists in the pinned tree, so handheld uses the §8 fallback 412×915 dp. Replace this if a mobile record is approved first.
@@ -35,18 +35,14 @@ Each item: **Recommended** (what I ask you to approve), then the alternatives re
 ### UI-1. Where the controls live (SD-8)
 
 - **Recommended: a new Subtitles category in Settings, between Playback and Accessibility.**
-  - **Which layout applies (amended, R-2):**
-    - The Settings shell is compact when `LineupLayout.isCompactWidth(constraints.maxWidth)` **or** `MediaQuery.textScalerOf(context).scale(1) >= 2`, evaluated inside `LineupCanvas`. The 900 threshold is in **canvas units**, not physical pixels: desktop scales the canvas by at least 0.8.
-    - **Compact Settings uses A:** a full-width preview band pinned above the rows.
-    - **Non-compact Settings uses A2,** rows on the left and an actual-size preview pinned on the right, **only when the rows column (0.54 × detail width − 32) is at least 560 canvas units.** In practice that means a detail width of about 1,096 or more: TV and desktop at 1280×720 and above.
-    - **Otherwise, non-compact Settings uses A** inside the same shell. This fallback was approved by the maintainer on October 29; it does not adopt B or change any other Settings category.
-  - Row labels and helpers may grow vertically; 72 is a minimum, not a fixed height. Selected dropdown values must always be fully legible.
-- **Why A2 on wide layouts:**
-  - At 1080 canvas height it shows about 7 rows on TV and desktop. The plain band (A) shows 3, and only 2 at 1280×720 (`sheets/options-desktop-1280x720.png`).
-  - Its tall preview shows every Position, and every size up to 300%, at their true height.
-  - It keeps the existing Settings shell, rail, Back behavior and traversal.
-- **A2's limitation (disclosed):** the preview is a crop about 46% of the pane wide. Lines wrap at that width, so a long line wraps in the preview earlier than it would full screen. In the reference configurations the short sample lines wrap only at 300%; near the A2 boundary they can wrap at smaller sizes. The em scale and the bottom and Position distances are always exact, because they come from the reference frame height.
-- **Alternatives rendered:**
+  - UI audit 2 decision, 2026-11-16; proportional preview confirmed by the maintainer, 2026-11-17.
+  - Both the main page and Customise show a full 16:9 picture. At detail widths of
+    1212 canvas units or more, controls occupy 620 units on the left. A 32-unit
+    gap separates them from the preview on the right, which can grow to 800 units wide.
+    At narrower widths the preview sits above the controls in the detail scroll view
+    and keeps the same width cap.
+  - Row labels and helpers may grow vertically. Keep the focused control and its save feedback visible.
+- **Alternatives rendered in the October specimen:**
   - **A (band above rows) everywhere:** faithful line width, but too few rows on TV and desktop.
   - **B (full-screen page, rows in a 40% sheet over a full-bleed frame):**
     - The most faithful preview, and the most rows (about 9).
@@ -59,29 +55,16 @@ Each item: **Recommended** (what I ask you to approve), then the alternatives re
 
 - **Recommended:**
   - **Source:** `SubtitleLayer` with the sample cue "Look out!" / "[Door creaks]" (align 2).
-  - **Frame:** laid out against the real full-screen video height, so text is drawn at actual size. Frame height = the shorter side of the window in canvas units; handheld therefore uses landscape, the way people watch. The layout ignores the app `TextScaler`, as confirmed across text scales 1.0, 1.15 and 1.3.
-  - **Wide (A2):**
-    - column width 46% of the detail width, 32 gap from the rows;
-    - height = min(available height − 24, 0.72 × frame height), top-aligned;
-    - the cue sits at its true distance from the frame bottom.
-  - **Compact (A):** full detail width, height 0.36 × frame height, bottom-anchored. At large sizes or positions the top line clips, which honestly says "this is big".
+  - **Frame:** render the sample against the complete 16:9 picture and scale the cue
+    and its position proportionally with the picture. Application text scaling applies
+    to the controls independently of the sample cue. Playback subtitle sizing continues
+    to follow the playback style.
   - **Scene:** synthetic, no asset.
     - A horizontal gradient so one line crosses both a bright and a dark picture: `#F1EADB` → `#C9BFA8` at .38 → `#4A4136` at .62 → `#0C0B09`.
     - Overlaid by a vertical gradient from 0% to 20% black.
     - The plan's vertical sky-to-ground gradient would put the whole cue on dark ground.
   - **Frame chrome:** 1 px `subtleBorder`, 8 px radius (the panel radius).
   - **Never focusable.**
-  - **Height bounds and adaptive crop (amended, R-2):**
-    - Let F = min(window canvas width, window canvas height), and A = the detail body's available height below the Subtitles heading, helper and their gaps.
-    - The requested preview height is min(max(0, A − 24), 0.72F) for A2, and 0.36F for A. Both are bounded by A.
-    - At short heights or large text, **shrink only the preview's visible crop** until one complete focused row fits in the scroll viewport, including its focus frame and any save feedback.
-    - Never reduce the `SubtitleLayer` reference-frame height or the subtitle em size to make room.
-    - This was approved by the maintainer on October 29. U1 adds matched captures at the A2/A boundary and at text scale 2.
-  - **Conditional heading scroll (maintainer-approved amendment, October 29, 2026):**
-    - Only when the focused row, its save feedback and focus clearance still cannot fit after the preview crop and its adjoining gap reach zero, the Subtitles heading and helper join the detail scroll content, as shown in `ui/adaptive-feedback/compare-saving.png` and `compare-error.png`.
-    - The global Settings header, rail, typography, controls and rows remain unchanged. Every normal fitting layout must render pixel-identically.
-    - Entering or leaving this exception must keep the focused control fully visible and focused. The layout must not oscillate as Saving or error feedback appears and disappears on the same row.
-    - U1 must test both transition focus/visibility and same-row feedback stability. The `SubtitleLayer` reference-frame height and subtitle em size remain unchanged.
   - **What it shows (amended, R-3):**
     - **The displayed Settings value,** including accepted selections whose save is still pending, like every other Settings row. Highlighting an option in an open menu never changes it.
     - Back cancels only the open menu. A failed save restores the committed value and recomposes the other pending changes, matching the rows.
@@ -263,8 +246,8 @@ The outline is the only legibility device in the no-box default (SD-4), so it is
 
 | Item | Approved choice |
 | --- | --- |
-| UI-1 | Subtitles category after Playback; A2 (rows left, preview right) when non-compact and the rows column is at least 560 canvas units; A (band above rows) otherwise |
-| UI-2 | Actual-size preview as specified, with the adaptive crop (only the crop shrinks) and displayed-value/device-snapshot rules; shared `SubtitleAppearanceSource` passed into Settings |
+| UI-1 | Subtitles category after Playback. At detail widths of 1212 canvas units or more, place controls beside the preview. At smaller widths, place the preview above the controls. |
+| UI-2 | Complete proportional 16:9 preview on the main and Customise pages, following displayed values and device snapshots from the shared `SubtitleAppearanceSource`. |
 | UI-3 | Compact one-control rows, groups and order as specified; switch control 56 wide |
 | UI-4 | Existing menus; Font menu in each typeface; Custom shown only when no preset matches, with the menu focusing Standard; no open-menu live preview in v1 |
 | UI-5 | Disabled states as specified, including Edge color disabled while Edge style is None; Reset preserves `useDeviceStyle` |
@@ -291,4 +274,4 @@ The maintainer answered the three product questions with the recommended choices
 2. **Narrow or large text:** fall back to A when the A2 rows column is under 560 canvas units, and shrink only the preview crop so one complete focused row fits.
 3. **Reset:** keep device mode.
 
-One divergence from the review's R-2 text: it asked A2 to apply only when every label and value "can display". This record replaces that with the deterministic 560-unit rows-column rule, which is testable, and requires selected values to stay legible.
+The October review proposed A2 only when every label and value could fit. The maintainer approved a 560-unit minimum for the rows column in October. The November 17 amendment replaces that breakpoint and keeps the requirement for legible selected values.

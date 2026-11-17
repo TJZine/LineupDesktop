@@ -53,6 +53,17 @@ void main() {
           await tester.pumpAndSettle();
           expect(scale(), closeTo(1.2 * size.multiplier, .001));
         }
+        TextScaler scaler() =>
+            MediaQuery.textScalerOf(tester.element(find.byType(GuideView)));
+        final before = scaler();
+        await controller.updateSettings(
+          (current) => current.copyWith(reduceMotion: !current.reduceMotion),
+        );
+        await tester.pumpAndSettle();
+        final after = scaler();
+        expect(identical(after, before), isFalse);
+        expect(after, before);
+        expect(after.hashCode, before.hashCode);
         tester.platformDispatcher.textScaleFactorTestValue = 1.8;
         await tester.pumpAndSettle();
         expect(scale(), closeTo(2.0, .001));

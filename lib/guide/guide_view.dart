@@ -1828,6 +1828,7 @@ class _Toolbar extends StatelessWidget {
                       '${tunedChannel.number}  ${tunedChannel.name}${tunedProgram == null ? '' : ' · ${tunedProgram.scheduled.item.title}'}',
                       key: const Key('guide-now-playing-context'),
                       maxLines: 1,
+                      textAlign: TextAlign.right,
                       overflow: TextOverflow.ellipsis,
                       style: supportingStyle,
                     );
@@ -1836,6 +1837,7 @@ class _Toolbar extends StatelessWidget {
               ),
             ] else
               const Spacer(),
+            if (showDate && showPlaying) const SizedBox(width: 8),
             if (showDate)
               ListenableBuilder(
                 listenable: Listenable.merge([controller.focus, clock]),

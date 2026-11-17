@@ -154,7 +154,22 @@ void main() {
       );
       await tester.ensureVisible(customise);
       await tester.pumpAndSettle();
-      await tester.tap(customise);
+      final position = find.byKey(
+        const ValueKey('subtitle-field-subtitlePosition'),
+      );
+      final row = tester.getRect(customise);
+      final field = tester.getRect(position);
+      final chevron = find.descendant(
+        of: customise,
+        matching: find.byIcon(Icons.chevron_right),
+      );
+      expect(row.right, greaterThanOrEqualTo(field.right));
+      expect(tester.getRect(chevron).right, closeTo(field.right, .1));
+      expect(
+        tester.getRect(find.text('Customise')).left,
+        lessThan(row.center.dx),
+      );
+      await tester.tapAt(Offset(row.left + 16, row.center.dy));
       await tester.pumpAndSettle();
       expect(
         find.byKey(const ValueKey('subtitle-field-subtitlePreset')),
@@ -175,6 +190,16 @@ void main() {
         FocusManager.instance.primaryFocus?.debugLabel,
         'subtitleCustomise',
       );
+      if (config.tv) {
+        final helper = find.text(
+          'Text, edges, background and window · 10 options',
+        );
+        final roles = LineupTheme.of(tester.element(find.byType(SettingsView)));
+        expect(
+          tester.widget<Text>(helper).style?.color,
+          roles.focusSecondaryText,
+        );
+      }
       expect(tester.takeException(), isNull);
     });
   }
