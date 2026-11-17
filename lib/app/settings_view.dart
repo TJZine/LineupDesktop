@@ -89,11 +89,17 @@ class _SettingsViewState extends State<SettingsView> {
   final _subtitleFocus = <_SettingKey, FocusNode>{};
   bool _subtitleCustomising = false;
 
+  _SettingKey get _firstSubtitleCustomiseSetting =>
+      defaultTargetPlatform == TargetPlatform.android &&
+          _displaySettings.subtitleStyle.useDeviceStyle
+      ? _SettingKey.subtitleBold
+      : _SettingKey.subtitleTextColor;
+
   void _openSubtitleCustomise() {
     setState(() => _subtitleCustomising = true);
     WidgetsBinding.instance.addPostFrameCallback((_) {
       if (mounted) {
-        _subtitleFocus[_SettingKey.subtitleTextColor]?.requestFocus();
+        _subtitleFocus[_firstSubtitleCustomiseSetting]?.requestFocus();
       }
     });
   }
@@ -416,7 +422,7 @@ class _SettingsViewState extends State<SettingsView> {
       _themeSwatchesKey.currentState?.focusFirst();
     } else if (_category == SettingsCategory.subtitles) {
       _subtitleFocus[_subtitleCustomising
-              ? _SettingKey.subtitleTextColor
+              ? _firstSubtitleCustomiseSetting
               : defaultTargetPlatform == TargetPlatform.android
               ? _SettingKey.subtitleDevice
               : _SettingKey.subtitlePreset]

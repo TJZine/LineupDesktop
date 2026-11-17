@@ -2,7 +2,9 @@ import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:lineup_desktop/app/settings_view.dart';
+import 'package:lineup_desktop/app/lineup_controller.dart';
 import 'package:lineup_desktop/settings/lineup_settings.dart';
+import 'package:lineup_desktop/settings/subtitle_style.dart';
 import 'package:lineup_desktop/ui/app_theme.dart';
 import 'package:lineup_desktop/ui/lineup_canvas.dart';
 
@@ -176,6 +178,80 @@ void main() {
       expect(tester.takeException(), isNull);
     });
   }
+
+  testWidgets('TV device subtitle style enters an enabled Customise control', (
+    tester,
+  ) async {
+    final controller = FixtureController(
+      scenario: const LineupScenario(
+        settings: LineupSettings(
+          subtitleStyle: SubtitleStyle(useDeviceStyle: true),
+        ),
+      ),
+    );
+    addTearDown(controller.dispose);
+    await show(
+      tester,
+      controller,
+      tv: true,
+      category: SettingsCategory.subtitles,
+    );
+    final rail = tester
+        .widget<TextButton>(find.widgetWithText(TextButton, 'Subtitles').first)
+        .focusNode!;
+    expect(rail.hasPrimaryFocus, isTrue);
+    await tester.sendKeyEvent(LogicalKeyboardKey.arrowRight);
+    await tester.pumpAndSettle();
+    final customise = find.byKey(
+      const ValueKey('subtitle-field-subtitleCustomise'),
+    );
+    final invoke = tester.widget<TextButton>(customise).focusNode!;
+    for (var i = 0; i < 5 && !invoke.hasPrimaryFocus; i++) {
+      await tester.sendKeyEvent(LogicalKeyboardKey.arrowDown);
+      await tester.pumpAndSettle();
+    }
+    expect(invoke.hasPrimaryFocus, isTrue);
+    await tester.sendKeyEvent(LogicalKeyboardKey.select);
+    await tester.pumpAndSettle();
+    final bold = tester.widget<Switch>(
+      find.byKey(const ValueKey('subtitle-field-subtitleBold')),
+    );
+    expect(bold.onChanged, isNotNull);
+    expect(bold.focusNode!.hasPrimaryFocus, isTrue);
+    final color = find.descendant(
+      of: find.byKey(const ValueKey('subtitle-field-subtitleTextColor')),
+      matching: find.byType(DropdownButton<SubtitleColor>),
+    );
+    expect(
+      tester.widget<DropdownButton<SubtitleColor>>(color).onChanged,
+      isNull,
+    );
+    await tester.sendKeyEvent(LogicalKeyboardKey.arrowLeft);
+    await tester.pumpAndSettle();
+    expect(rail.hasPrimaryFocus, isTrue);
+    await tester.sendKeyEvent(LogicalKeyboardKey.arrowRight);
+    await tester.pumpAndSettle();
+    expect(bold.focusNode!.hasPrimaryFocus, isTrue);
+    await tester.sendKeyEvent(LogicalKeyboardKey.escape);
+    await tester.pumpAndSettle();
+    expect(
+      tester.widget<TextButton>(customise).focusNode!.hasPrimaryFocus,
+      isTrue,
+    );
+    expect(
+      find.byKey(const ValueKey('subtitle-field-subtitlePreset')),
+      findsOneWidget,
+    );
+    expect(
+      find.byKey(const ValueKey('subtitle-field-subtitleBold')),
+      findsNothing,
+    );
+    expect(
+      controller.settings.subtitleStyle,
+      const SubtitleStyle(useDeviceStyle: true),
+    );
+    expect(tester.takeException(), isNull);
+  }, variant: const TargetPlatformVariant({TargetPlatform.android}));
 
   for (final category in SettingsCategory.values.where(
     (c) => c != SettingsCategory.subtitles,
