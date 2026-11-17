@@ -86,17 +86,20 @@ Each item: **Recommended** (what I ask you to approve), then the alternatives re
   - **Switch control:** its own 56-wide box. The specimen used 55%, which needlessly squeezes switch labels on handheld; U1 should use 56.
   - **Why not the existing 132-tall rows with helper text:** at 15 controls they would show about 2 rows on TV.
 - **Group labels:** uppercase `LineupTypography.small`, letter spacing 1.2, `mutedText`; padding 24 above and 8 below (TV adds 16 left); exposed as headers in semantics.
-- **Order:**
+- **Main page order**
   1. Use device subtitle settings (Android only, per E5).
   2. Style.
   3. Size.
   4. Position.
-  5. TEXT: Color, Opacity, Font, Bold.
-  6. EDGES: Style, Color.
-  7. BACKGROUND (BEHIND EACH LINE): Opacity, Color.
-  8. WINDOW (ONE BOX BEHIND THE CAPTION): Opacity, Color.
-  9. STYLED SUBTITLES: Apply my style to styled subtitles.
-  10. Reset to standard.
+  5. Customise.
+  6. Apply my style to styled subtitles.
+  7. Reset to standard.
+- **Customise page order**
+  1. Back.
+  2. TEXT (Color, Opacity, Font, Bold).
+  3. EDGES (Style, Color).
+  4. BACKGROUND (BEHIND EACH LINE), with Opacity and Color.
+  5. WINDOW (ONE BOX BEHIND THE CAPTION), with Opacity and Color.
 - **Opacity before Color** in Background and Window, so the enabling control comes first. The plan's sketch had Color first.
 - **Semantics:** names carry the group, for example "Text Color" and "Edge Style"; the specimen's field keys follow this.
 - **Category description:** the plan's helper copy, "Applies to text subtitles. Image subtitles follow Size and Position only."

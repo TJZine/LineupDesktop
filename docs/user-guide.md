@@ -388,11 +388,9 @@ uses a responsive shallow broadcast layout at 1280×720 and 1920×1080. The
 channel bug is in the top-right. When **Prefer official title artwork** is
 enabled, the lower-left/lower band uses official Plex title artwork when
 available. When the preference is disabled, or the artwork is missing or fails
-to load, it falls back to text. Secondary actions sit in the lower-right. The
-timeline tier immediately above the edge-to-edge progress line shows
-`current / total • time left` on the left when duration is known and
-`Up next • scheduled start • title` on the right. Metadata and actions are
-restrained, and the progress line is anchored to the absolute bottom. By
+to load, it falls back to text. Secondary actions sit in the lower-right. One
+timing row shows elapsed and total time, an inset progress line, time remaining
+when known, and **Up next** with its scheduled start and title when available. By
 default, the **Pause and seek controls** setting is off: transport buttons are
 hidden and Player-local pause/play, seek, stop, rewind, and fast-forward
 keyboard/media shortcuts are blocked. Page Up/Page Down channel surfing,
@@ -647,9 +645,9 @@ identity**. Duplication creates a separate custom draft with a new identity and
 the lowest available channel number; it does not alter the generated source.
 
 Custom Studio programming uses **Library** with metadata filters or an
-explicitly ordered **Hand-picked** list. Filter values apply as you choose them
-and stay when you close the picker; an open picker never blocks **Save** or **Tune
-in**. Existing playlist and mixed sources
+explicitly ordered **Hand-picked** list. Filter values apply as you choose them.
+Select **Back** to close the picker and keep your selections. An open picker
+never blocks **Save** or **Tune in**. Existing playlist and mixed sources
 remain inspectable and preserved until deliberately replaced. Hand-picked programming has separate **Browse** and
 **Rundown** stages; matching and selected counts stay visible, and search and
 filter state is preserved when you switch between them. Search, local facets,

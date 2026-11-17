@@ -144,6 +144,14 @@ class _StudioFilterPickerState extends State<_StudioFilterPicker> {
                 'Choose a filter',
                 style: _studioSectionHeadingStyle(context),
               ),
+              Align(
+                alignment: Alignment.centerLeft,
+                child: TextButton(
+                  key: const Key('studio-filter-back'),
+                  onPressed: widget.onCancel,
+                  child: const Text('Back'),
+                ),
+              ),
               for (final criterion in _facetKeys)
                 TextButton(
                   key: Key('studio-filter-$criterion'),
@@ -231,6 +239,14 @@ class _StudioFilterPickerState extends State<_StudioFilterPicker> {
               ),
               SizedBox(height: 4),
               Text(widget.libraryTitle, style: _studioSupportStyle(context)),
+              Align(
+                alignment: Alignment.centerLeft,
+                child: TextButton(
+                  key: const Key('studio-filter-back'),
+                  onPressed: widget.onCancel,
+                  child: const Text('Back'),
+                ),
+              ),
               SizedBox(height: 8),
               LineupTextFieldActivation(
                 focusNode: _filterPickerFocus,

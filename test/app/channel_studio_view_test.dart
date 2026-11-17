@@ -6072,7 +6072,33 @@ void main() {
         _studio(controller, ChannelStudioMode.editCustom, channel: original),
       );
       await _settleAirCheck(tester);
+      final addFilter = find.byKey(const Key('studio-library-add-filter'));
+      final back = find.byKey(const Key('studio-filter-back'));
+      await tester.ensureVisible(addFilter);
+      await tester.tap(addFilter);
+      await tester.pumpAndSettle();
+      expect(find.text('Choose a filter'), findsOneWidget);
+      await tester.ensureVisible(back);
+      await tester.tap(back, kind: PointerDeviceKind.mouse);
+      await tester.pumpAndSettle();
+      expect(find.text('Choose a filter'), findsNothing);
+      expect(addFilter, findsOneWidget);
+      expect(
+        tester
+            .widget<ChannelAirCheck>(find.byType(ChannelAirCheck))
+            .channel
+            .source,
+        isA<LibrarySource>().having(
+          (source) => source.filters,
+          'filters',
+          isEmpty,
+        ),
+      );
+
       await _openStudioFilter(tester, 'genre');
+      await tester.ensureVisible(
+        find.widgetWithText(CheckboxListTile, 'Drama'),
+      );
       await tester.tap(find.widgetWithText(CheckboxListTile, 'Drama'));
       await _settleAirCheck(tester);
       expect(find.text('Done'), findsNothing);
@@ -6097,8 +6123,10 @@ void main() {
           ['Drama'],
         ),
       );
-      await tester.sendKeyEvent(LogicalKeyboardKey.escape);
+      await tester.ensureVisible(back);
+      await tester.tap(back, kind: PointerDeviceKind.mouse);
       await tester.pumpAndSettle();
+      expect(back, findsNothing);
       expect(find.text('Genre: Drama'), findsOneWidget);
       await _openStudioFilter(tester, 'genre');
       await tester.tap(find.text('Clear selection'));
