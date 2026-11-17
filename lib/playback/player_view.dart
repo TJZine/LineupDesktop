@@ -1232,6 +1232,31 @@ class _PlayerInsets {
   final double top;
 }
 
+/// Resting tag metrics are shared with expanded-panel clearance so larger text
+/// cannot put its pointer target underneath the top-right channel controls.
+class _ChannelBugMetrics {
+  const _ChannelBugMetrics(this.labelStyle, this.height);
+
+  factory _ChannelBugMetrics.of(BuildContext context, Channel channel) {
+    final style = Theme.of(context).textTheme.labelLarge?.copyWith(
+      color: LineupTheme.of(context).primaryText,
+      fontSize: 22,
+      fontWeight: FontWeight.w600,
+    );
+    return _ChannelBugMetrics(
+      style,
+      math.max(
+        52,
+        _textSize(context, channel.name, style).height + padding.vertical,
+      ),
+    );
+  }
+
+  static const padding = EdgeInsets.symmetric(horizontal: 12, vertical: 10);
+  final TextStyle? labelStyle;
+  final double height;
+}
+
 class _AnimatedChannelBug extends StatelessWidget {
   const _AnimatedChannelBug({
     required this.visible,
@@ -1315,6 +1340,20 @@ class _Osd extends StatelessWidget {
     final rightInset = insets.right;
     final dvrControlsEnabled = controller.lineup.settings.dvrControlsEnabled;
     final bottomInset = math.max(30.0, safe.bottom);
+    const expandedTopPadding = 20.0;
+    final channel = controller.currentChannel;
+    final badgeBottom = channel == null
+        ? null
+        : insets.top + _ChannelBugMetrics.of(context, channel).height;
+    final safeBottom = DeviceProfile.of(context).isTv
+        ? 0.0
+        : MediaQuery.paddingOf(context).bottom;
+    final expandedPanelHeight = badgeBottom == null
+        ? size.height - safeBottom
+        : math.max(
+            0.0,
+            size.height - safeBottom - badgeBottom - 8 + expandedTopPadding,
+          );
     final program = controller.currentProgram;
     final audioAvailable = controller.tracks.any(
       (track) => track.type == PlayerTrackType.audio,
@@ -1709,111 +1748,119 @@ class _Osd extends StatelessWidget {
         right: !DeviceProfile.of(context).isTv,
         bottom: !DeviceProfile.of(context).isTv,
         child: _BottomPanelExpansion(
-          child: SubtitlePanelReporter(
-            avoidance: subtitleAvoidance,
-            presentationKey: subtitleLayerKey,
-            feather: detailsExpanded ? 180 : _OsdPanelMaterial.feather,
-            child: CustomPaint(
-              painter: _OsdPanelMaterial(
-                expanded: detailsExpanded,
-                color: _overlayColor(context, controller, more: .62),
-                collapsedFade:
-                    !detailsExpanded &&
-                    controller.lineup.settings.overlayTransparency ==
-                        OverlayTransparency.moreTransparent,
-              ),
-              child: Container(
-                key: const Key('player-osd-surface'),
-                width: double.infinity,
-                padding: EdgeInsets.fromLTRB(
-                  leftInset,
-                  detailsExpanded
-                      ? 20
-                      : horizontal
-                      ? (size.height >= 900 ? 44 : 20)
-                      : (size.height >= 720 ? 56 : 40),
-                  rightInset,
-                  bottomInset,
+          child: ConstrainedBox(
+            constraints: BoxConstraints(
+              maxHeight: detailsExpanded
+                  ? expandedPanelHeight
+                  : double.infinity,
+            ),
+            child: SubtitlePanelReporter(
+              avoidance: subtitleAvoidance,
+              presentationKey: subtitleLayerKey,
+              feather: detailsExpanded ? 180 : _OsdPanelMaterial.feather,
+              child: CustomPaint(
+                painter: _OsdPanelMaterial(
+                  expanded: detailsExpanded,
+                  color: _overlayColor(context, controller, more: .62),
+                  collapsedFade:
+                      !detailsExpanded &&
+                      controller.lineup.settings.overlayTransparency ==
+                          OverlayTransparency.moreTransparent,
                 ),
-                child: _consumeOverlayPadding(
-                  context,
-                  Semantics(
-                    container: true,
-                    label: 'Playback controls',
-                    child: Column(
-                      mainAxisSize: MainAxisSize.min,
-                      crossAxisAlignment: CrossAxisAlignment.stretch,
-                      children: [
-                        if (detailsExpanded) ...[
-                          Flexible(
-                            fit: FlexFit.loose,
-                            child: _NowPlaying(
-                              closeFocus: controls[_PlayerControl.close]!,
-                              moreInfoFocus: controls[_PlayerControl.moreInfo]!,
-                              controller: controller,
-                              maxHeight: math.max(
-                                80,
-                                size.height -
-                                    (wrapActions ? 280 : 190) -
-                                    (dvrControlsEnabled ? 40 : 0) +
-                                    // The additive compact More info action must
-                                    // not crop the shelf's four cast/role pairs.
-                                    (DeviceProfile.of(context).isTv ? 52 : 0),
+                child: Container(
+                  key: const Key('player-osd-surface'),
+                  width: double.infinity,
+                  padding: EdgeInsets.fromLTRB(
+                    leftInset,
+                    detailsExpanded
+                        ? expandedTopPadding
+                        : horizontal
+                        ? (size.height >= 900 ? 44 : 20)
+                        : (size.height >= 720 ? 56 : 40),
+                    rightInset,
+                    bottomInset,
+                  ),
+                  child: _consumeOverlayPadding(
+                    context,
+                    Semantics(
+                      container: true,
+                      label: 'Playback controls',
+                      child: Column(
+                        mainAxisSize: MainAxisSize.min,
+                        crossAxisAlignment: CrossAxisAlignment.stretch,
+                        children: [
+                          if (detailsExpanded) ...[
+                            Flexible(
+                              fit: FlexFit.loose,
+                              child: _NowPlaying(
+                                closeFocus: controls[_PlayerControl.close]!,
+                                moreInfoFocus:
+                                    controls[_PlayerControl.moreInfo]!,
+                                controller: controller,
+                                maxHeight: math.max(
+                                  80,
+                                  size.height -
+                                      (wrapActions ? 280 : 190) -
+                                      (dvrControlsEnabled ? 40 : 0) +
+                                      // The additive compact More info action must
+                                      // not crop the shelf's four cast/role pairs.
+                                      (DeviceProfile.of(context).isTv ? 52 : 0),
+                                ),
                               ),
                             ),
-                          ),
-                          const SizedBox(height: 20),
-                          if (horizontal && !wrapActions)
+                            const SizedBox(height: 20),
+                            if (horizontal && !wrapActions)
+                              Row(
+                                crossAxisAlignment: CrossAxisAlignment.end,
+                                children: [
+                                  Expanded(child: playbackStatus),
+                                  const SizedBox(width: 24),
+                                  groupedActions,
+                                ],
+                              )
+                            else ...[
+                              playbackStatus,
+                              const SizedBox(height: 6),
+                              Align(
+                                alignment: Alignment.centerRight,
+                                child: groupedActions,
+                              ),
+                            ],
+                          ] else if (horizontal && !wrapActions)
                             Row(
+                              key: const Key('player-osd-horizontal-layout'),
                               crossAxisAlignment: CrossAxisAlignment.end,
                               children: [
-                                Expanded(child: playbackStatus),
-                                const SizedBox(width: 24),
+                                Expanded(child: identity),
+                                SizedBox(width: 24),
                                 groupedActions,
                               ],
                             )
                           else ...[
-                            playbackStatus,
-                            const SizedBox(height: 6),
+                            KeyedSubtree(
+                              key: horizontal
+                                  ? const Key('player-osd-horizontal-layout')
+                                  : null,
+                              child: identity,
+                            ),
+                            SizedBox(height: 6),
                             Align(
                               alignment: Alignment.centerRight,
-                              child: groupedActions,
+                              child: wrapActions
+                                  ? groupedActions
+                                  : Row(
+                                      key: const Key(
+                                        'player-osd-stacked-controls',
+                                      ),
+                                      mainAxisSize: MainAxisSize.min,
+                                      children: [groupedActions],
+                                    ),
                             ),
                           ],
-                        ] else if (horizontal && !wrapActions)
-                          Row(
-                            key: const Key('player-osd-horizontal-layout'),
-                            crossAxisAlignment: CrossAxisAlignment.end,
-                            children: [
-                              Expanded(child: identity),
-                              SizedBox(width: 24),
-                              groupedActions,
-                            ],
-                          )
-                        else ...[
-                          KeyedSubtree(
-                            key: horizontal
-                                ? const Key('player-osd-horizontal-layout')
-                                : null,
-                            child: identity,
-                          ),
-                          SizedBox(height: 6),
-                          Align(
-                            alignment: Alignment.centerRight,
-                            child: wrapActions
-                                ? groupedActions
-                                : Row(
-                                    key: const Key(
-                                      'player-osd-stacked-controls',
-                                    ),
-                                    mainAxisSize: MainAxisSize.min,
-                                    children: [groupedActions],
-                                  ),
-                          ),
+                          SizedBox(height: 10),
+                          progress,
                         ],
-                        SizedBox(height: 10),
-                        progress,
-                      ],
+                      ),
                     ),
                   ),
                 ),
@@ -2121,25 +2168,15 @@ class _ChannelBugState extends State<_ChannelBug> {
         width: border ? roles.focusBorderWidth : 1,
       ),
     );
-    final labelStyle = Theme.of(context).textTheme.labelLarge?.copyWith(
-      color: roles.primaryText,
-      fontSize: 22,
-      fontWeight: FontWeight.w600,
-    );
-    const verticalPadding = 10.0;
-    final badgeHeight = math.max(
-      52.0,
-      _textSize(context, channel.name, labelStyle).height + 2 * verticalPadding,
-    );
+    final metrics = _ChannelBugMetrics.of(context, channel);
+    final labelStyle = metrics.labelStyle;
+    final badgeHeight = metrics.height;
     final identity = Container(
       constraints: BoxConstraints(
         minHeight: badgeHeight,
         maxWidth: size.width * .65,
       ),
-      padding: const EdgeInsets.symmetric(
-        horizontal: 12,
-        vertical: verticalPadding,
-      ),
+      padding: _ChannelBugMetrics.padding,
       child: ChannelIdentity(
         channel: channel,
         libraryTag: libraryTag,

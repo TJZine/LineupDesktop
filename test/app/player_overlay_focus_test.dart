@@ -12,6 +12,9 @@ import 'package:lineup_desktop/playback/player_view.dart';
 import 'package:lineup_desktop/settings/lineup_settings.dart';
 
 import '../support/ui_fixture.dart';
+import '../support/golden_test_support.dart';
+
+import 'package:lineup_desktop/ui/lineup_canvas.dart';
 
 void main() {
   for (final pointerCollapse in [true, false]) {
@@ -270,11 +273,101 @@ void main() {
     semanticsEnabled: true,
     variant: TargetPlatformVariant.only(TargetPlatform.macOS),
   );
+
+  for (final textSize in [LineupTextSize.standard, LineupTextSize.larger]) {
+    testWidgets(
+      'small Now Playing keeps full Close and hovered badge targets separate: $textSize',
+      (tester) async {
+        await tester.runAsync(loadPinnedTestFonts);
+        final h = await _Harness.mount(tester, richProgram: true);
+        await h.controller.updateSettings(
+          (settings) => settings.copyWith(textSize: textSize),
+        );
+        await tester.pumpAndSettle();
+        await h.restoreNowPlayingMenu();
+        final mouse = await tester.createGesture(kind: PointerDeviceKind.mouse);
+        await mouse.addPointer(location: const Offset(10, 10));
+        addTearDown(mouse.removePointer);
+
+        void expectClearance(Size window) {
+          final close = find.byKey(const Key('player-now-playing-collapse'));
+          final badge = find.byKey(const Key('player-osd-channel-bug'));
+          final closeRect = tester.getRect(close);
+          final badgeRect = tester.getRect(badge);
+          final viewport = (Offset.zero & window).inflate(.01);
+          for (final rect in [
+            closeRect,
+            badgeRect,
+            tester.getRect(find.byKey(const Key('player-osd-action-groups'))),
+            tester.getRect(find.byKey(const Key('player-osd-progress-block'))),
+          ]) {
+            expect(viewport.contains(rect.topLeft), isTrue);
+            expect(viewport.contains(rect.bottomRight), isTrue);
+          }
+          expect(closeRect.overlaps(badgeRect), isFalse);
+          expect(
+            closeRect.top - badgeRect.bottom,
+            greaterThanOrEqualTo(8 * LineupCanvas.scaleFor(window) - .01),
+          );
+          expect(close.hitTestable(), findsOneWidget);
+        }
+
+        for (final window in [
+          const Size(800, 632),
+          const Size(1024, 768),
+          const Size(800, 632),
+        ]) {
+          tester.view.physicalSize = window;
+          await tester.pumpAndSettle();
+          expectClearance(window);
+          await mouse.moveTo(
+            tester.getCenter(find.byKey(const Key('player-osd-channel-bug'))),
+          );
+          await tester.pumpAndSettle();
+          expect(
+            find.byKey(const Key('player-channel-step-pill')),
+            findsOneWidget,
+          );
+          expectClearance(window);
+        }
+        final details = find.byKey(const Key('player-now-playing-details'));
+        final scroll = tester.widget<SingleChildScrollView>(details);
+        expect(scroll.physics, isNot(isA<NeverScrollableScrollPhysics>()));
+        final cast = find.byKey(
+          const ValueKey('player-now-playing-cast-role-3'),
+        );
+        await tester.ensureVisible(cast);
+        await tester.pumpAndSettle();
+        expect(
+          tester.getRect(cast).bottom,
+          lessThanOrEqualTo(tester.getRect(details).bottom + .01),
+        );
+        await tester.tap(find.byKey(const Key('player-now-playing-collapse')));
+        await tester.pumpAndSettle();
+        expect(h.player.overlay, PlayerOverlay.osd);
+        await h.sendKey(LogicalKeyboardKey.keyI);
+        await tester.pumpAndSettle();
+        expect(h.player.overlay, PlayerOverlay.nowPlaying);
+        expectClearance(const Size(800, 632));
+        await tester.tap(
+          find.bySemanticsLabel(
+            'Channel 7, Synthetic channel. Open Mini Guide',
+          ),
+        );
+        await tester.pumpAndSettle();
+        expect(h.player.overlay, PlayerOverlay.miniGuide);
+        expect(tester.takeException(), isNull);
+        await h.close();
+      },
+      semanticsEnabled: true,
+      variant: TargetPlatformVariant.only(TargetPlatform.macOS),
+    );
+  }
 }
 
 class _Harness {
-  _Harness(this.tester)
-    : controller = _ScheduleController(),
+  _Harness(this.tester, {bool richProgram = false})
+    : controller = _ScheduleController(richProgram: richProgram),
       native = FixturePlayer()
         ..emit(
           const PlayerStatus(state: PlayerState.ready, message: 'Ready'),
@@ -289,8 +382,11 @@ class _Harness {
       tester.widget<PlayerView>(find.byType(PlayerView)).focusNode!;
   bool _closed = false;
 
-  static Future<_Harness> mount(WidgetTester tester) async {
-    final h = _Harness(tester);
+  static Future<_Harness> mount(
+    WidgetTester tester, {
+    bool richProgram = false,
+  }) async {
+    final h = _Harness(tester, richProgram: richProgram);
     tester.view.devicePixelRatio = 1;
     tester.view.physicalSize = const Size(800, 632);
     addTearDown(tester.view.resetPhysicalSize);
@@ -343,7 +439,7 @@ class _Harness {
     expect(player.overlay, PlayerOverlay.nowPlaying);
     tester.view.physicalSize = const Size(800, 632);
     await tester.pumpAndSettle();
-    final menuButton = tester.widget<IconButton>(
+    final menuButton = tester.widget<TextButton>(
       find.byKey(const Key('player-app-menu')),
     );
     expect(FocusManager.instance.primaryFocus, same(menuButton.focusNode));
@@ -372,7 +468,7 @@ class _Harness {
     await tester.pumpAndSettle();
     expect(player.overlay, PlayerOverlay.nowPlaying);
     final target = tester
-        .widget<IconButton>(find.byKey(const Key('player-app-menu')))
+        .widget<TextButton>(find.byKey(const Key('player-app-menu')))
         .focusNode;
     for (
       var i = 0;
@@ -409,7 +505,7 @@ class _Harness {
 final _now = DateTime(2026, 10, 19, 12);
 
 class _ScheduleController extends FixtureController {
-  _ScheduleController()
+  _ScheduleController({bool richProgram = false})
     : super(
         scenario: LineupScenario(
           stage: SetupStage.ready,
@@ -424,6 +520,22 @@ class _ScheduleController extends FixtureController {
                 ChannelItem(
                   id: 'program',
                   title: 'Synthetic program',
+                  showTitle: richProgram ? 'Synthetic series' : null,
+                  summary: richProgram
+                      ? List.filled(
+                          12,
+                          'A synthetic summary with enough detail to exercise the existing reader.',
+                        ).join(' ')
+                      : null,
+                  cast: richProgram
+                      ? List.generate(
+                          4,
+                          (index) => ChannelCastMember(
+                            name: 'Synthetic actor $index',
+                            role: 'Synthetic character $index',
+                          ),
+                        )
+                      : const [],
                   duration: const Duration(hours: 24),
                 ),
               ]),
