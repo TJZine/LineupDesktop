@@ -24,6 +24,43 @@ import 'package:lineup_desktop/settings/lineup_settings.dart';
 import '../support/ui_fixture.dart';
 
 void main() {
+  for (final tv in [false, true]) {
+    testWidgets(
+      'root multiplies platform text size once on ${tv ? 'TV' : 'desktop'}',
+      (tester) async {
+        tester.view
+          ..physicalSize = const Size(1920, 1080)
+          ..devicePixelRatio = tv ? 2 : 1;
+        addTearDown(tester.view.reset);
+        tester.platformDispatcher.textScaleFactorTestValue = 1.2;
+        addTearDown(tester.platformDispatcher.clearTextScaleFactorTestValue);
+        final controller = FixtureController(
+          scenario: const LineupScenario(stage: SetupStage.ready),
+        );
+        await tester.pumpWidget(
+          UiFixture(controller: controller, profile: profileFor(tv)).build(),
+        );
+        await tester.pumpAndSettle();
+        double scale() =>
+            MediaQuery.textScalerOf(tester.element(find.byType(GuideView)))
+                .scale(20) /
+            20;
+        expect(scale(), closeTo(1.2, .001));
+        for (final size in LineupTextSize.values) {
+          await controller.updateSettings(
+            (current) => current.copyWith(textSize: size),
+          );
+          await tester.pumpAndSettle();
+          expect(scale(), closeTo(1.2 * size.multiplier, .001));
+        }
+        tester.platformDispatcher.textScaleFactorTestValue = 1.8;
+        await tester.pumpAndSettle();
+        expect(scale(), closeTo(2.0, .001));
+        await tester.pumpWidget(const SizedBox.shrink());
+      },
+    );
+  }
+
   testWidgets(
     'TV shell keeps Player and Settings video full-frame with safe menus',
     (tester) async {

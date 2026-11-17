@@ -279,7 +279,7 @@ void main() {
               );
               final identity = find.descendant(
                 of: details,
-                matching: find.text('1 • ${channels.first.name}'),
+                matching: find.text('1  ${channels.first.name}'),
               );
               expect(identity, findsOneWidget);
               expect(

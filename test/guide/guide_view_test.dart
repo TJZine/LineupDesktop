@@ -1171,7 +1171,7 @@ void main() {
         await tester.sendKeyEvent(LogicalKeyboardKey.arrowDown);
         await tester.pump();
         expect(guide.focusedChannelId, 'channel-1');
-        expect(find.text('2 • Channel 1'), findsOneWidget);
+        expect(find.text('2  Channel 1'), findsOneWidget);
         await tester.sendKeyEvent(LogicalKeyboardKey.arrowRight);
         await tester.pump();
         expect(
@@ -2493,7 +2493,7 @@ void main() {
 
       guide.moveVertical(1);
       await tester.pump();
-      expect(find.text('2 • Channel B'), findsOneWidget);
+      expect(find.text('2  Channel B'), findsOneWidget);
       expect(find.text('Loading schedule…'), findsWidgets);
       expect(
         find.descendant(
@@ -2505,14 +2505,14 @@ void main() {
 
       firstLoad.completeError(StateError('offline'));
       await tester.pumpAndSettle();
-      expect(find.text('2 • Channel B'), findsOneWidget);
+      expect(find.text('2  Channel B'), findsOneWidget);
       expect(find.text('Schedule unavailable'), findsWidgets);
       expect(detailText('Program A'), findsNothing);
       expect(lineup.currentChannelId, 'channel-a');
 
       await guide.retry('channel-b');
       await tester.pump();
-      expect(find.text('2 • Channel B'), findsOneWidget);
+      expect(find.text('2  Channel B'), findsOneWidget);
       expect(find.text('Retrying…'), findsWidgets);
       expect(detailText('Program A'), findsNothing);
 
@@ -2574,7 +2574,7 @@ void main() {
     await tester.pump();
 
     expect(guide.row('channel-1').state, GuideLoadState.ready);
-    expect(find.text('2 • Channel 1'), findsOneWidget);
+    expect(find.text('2  Channel 1'), findsOneWidget);
     expect(find.text('No programs scheduled in this time range'), findsWidgets);
   });
 
@@ -2988,7 +2988,7 @@ void main() {
         tester
             .widget<Text>(find.byKey(const Key('guide-now-playing-context')))
             .data,
-        '1 • Channel 0 · Earlier 0',
+        '1  Channel 0 · Earlier 0',
       );
       final oldNowLine = tester
           .getTopLeft(find.byKey(const Key('guide-now-line')))
@@ -3004,7 +3004,7 @@ void main() {
         tester
             .widget<Text>(find.byKey(const Key('guide-now-playing-context')))
             .data,
-        '1 • Channel 0 · Next 0',
+        '1  Channel 0 · Next 0',
       );
       expect(label(next), contains('currently airing'));
       expect(marker(earlier), findsNothing);

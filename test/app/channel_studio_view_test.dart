@@ -5217,8 +5217,8 @@ void main() {
     await _settleAirCheck(tester);
 
     expect(find.text('Also used by'), findsOneWidget);
-    expect(find.text('22 • Second playlist channel'), findsOneWidget);
-    expect(find.text('10 • First playlist channel'), findsNothing);
+    expect(find.text('22  Second playlist channel'), findsOneWidget);
+    expect(find.text('10  First playlist channel'), findsNothing);
     expect(
       find.text('Uses an existing Plex playlist. Manage its contents in Plex.'),
       findsOneWidget,

@@ -195,6 +195,7 @@ class _LineupBootstrapState extends State<LineupBootstrap> {
     if (settings.theme == _settings.theme &&
         settings.largeFocusIndicators == _settings.largeFocusIndicators &&
         settings.reduceMotion == _settings.reduceMotion &&
+        settings.textSize == _settings.textSize &&
         startupRecoveryNotice == _startupRecoveryNotice &&
         restoreStarted == _restoreStarted) {
       return;
@@ -249,9 +250,18 @@ class _LineupBootstrapState extends State<LineupBootstrap> {
             ? Duration.zero
             : kThemeAnimationDuration,
         builder: (context, child) {
-          final canvas = LineupCanvas(
-            reduceMotion: settings.reduceMotion,
-            child: child!,
+          final media = MediaQuery.of(context);
+          final canvas = MediaQuery(
+            data: media.copyWith(
+              textScaler: _SettingsTextScaler(
+                media.textScaler,
+                settings.textSize.multiplier,
+              ).clamp(maxScaleFactor: 2.0),
+            ),
+            child: LineupCanvas(
+              reduceMotion: settings.reduceMotion,
+              child: child!,
+            ),
           );
           return profile.isTv
               ? KeyboardVisibilityScope(
@@ -413,4 +423,18 @@ class _StartupFailureBody extends StatelessWidget {
       ),
     );
   }
+}
+
+/// Multiply the platform scaler without discarding Android's nonlinear curve.
+class _SettingsTextScaler extends TextScaler {
+  const _SettingsTextScaler(this.platform, this.multiplier);
+
+  final TextScaler platform;
+  final double multiplier;
+
+  @override
+  double scale(double fontSize) => platform.scale(fontSize) * multiplier;
+
+  @override
+  double get textScaleFactor => scale(14) / 14;
 }

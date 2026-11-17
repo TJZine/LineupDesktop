@@ -2056,6 +2056,18 @@ class _ProfilePinStepState extends State<_ProfilePinStep> {
   final _keyboardFocus = FocusNode(debugLabel: 'Profile PIN keyboard owner');
   final _firstDigitFocus = FocusNode(debugLabel: 'Profile PIN digit 1');
 
+  @override
+  void initState() {
+    super.initState();
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (mounted && DeviceProfile.of(context).isTv) {
+        // The onboarding focus scope can already own focus when the keypad
+        // replaces Profiles, so the digit's autofocus alone is insufficient.
+        _firstDigitFocus.requestFocus();
+      }
+    });
+  }
+
   bool handleBack() {
     if (_submitting) return true;
     widget.onBack();
@@ -2293,7 +2305,7 @@ class _ProfilePinStepState extends State<_ProfilePinStep> {
                             _PinKey(
                               digit: digit,
                               focusNode: digit == 1 ? _firstDigitFocus : null,
-                              autofocus: digit == 1 && !_submitting,
+                              autofocus: !isTv && digit == 1 && !_submitting,
                               onPressed: _submitting
                                   ? null
                                   : () => _digit(digit),
