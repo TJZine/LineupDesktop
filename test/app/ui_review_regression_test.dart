@@ -358,7 +358,32 @@ void main() {
     await tester.tap(find.text('Keep editing'));
     await tester.pumpAndSettle();
     expect(controller.setupEntries, 0);
-    expect(find.text('Create custom channel'), findsOneWidget);
+    final studio = find.byType(ChannelStudioView);
+    expect(studio, findsOneWidget);
+    final view = tester.widget<ChannelStudioView>(studio);
+    expect(view.mode, ChannelStudioMode.createCustom);
+    expect(view.channel?.id, isNull);
+    expect(
+      find.descendant(
+        of: find.ancestor(
+          of: find.byKey(const Key('studio-status-tag')),
+          matching: find.byWidgetPredicate(
+            (widget) => widget is Semantics && widget.properties.header == true,
+          ),
+        ),
+        matching: find.byWidgetPredicate(
+          (widget) => widget is Text && widget.data == 'Unsaved',
+        ),
+      ),
+      findsOneWidget,
+    );
+    expect(
+      find.descendant(
+        of: find.byKey(const Key('studio-status-tag')),
+        matching: find.text('Draft'),
+      ),
+      findsOneWidget,
+    );
 
     await tester.ensureVisible(find.text('Update lineup…'));
     final recovery = tester.widget<TextButton>(
@@ -371,7 +396,7 @@ void main() {
     await tester.pumpAndSettle();
     expect(controller.setupEntries, 1);
     expect(controller.stage, SetupStage.channelSetup);
-    expect(find.text('Create custom channel'), findsNothing);
+    expect(find.byType(ChannelStudioView), findsNothing);
   });
 
   testWidgets('manual channel edits retain unavailable selected items', (
