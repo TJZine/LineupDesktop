@@ -1807,6 +1807,85 @@ void main() {
     expect(controller.error, 'The Plex link code expired. Request a new code.');
   });
 
+  for (final tv in [false, true]) {
+    for (final state in ['fresh', 'near expiry', 'expired', 'failed']) {
+      testWidgets('U sign-in paired panels and actions $state TV=$tv', (
+        tester,
+      ) async {
+        tester.view
+          ..physicalSize = tv ? const Size(1920, 1080) : const Size(1280, 720)
+          ..devicePixelRatio = 1;
+        addTearDown(tester.view.reset);
+        final controller = FixtureController(
+          scenario: LineupScenario(
+            stage: SetupStage.linking,
+            settings: const LineupSettings(reduceMotion: true),
+            activePin: PlexPin(
+              id: 1,
+              code: 'ABCD',
+              expiresAt: DateTime.now().add(
+                Duration(
+                  seconds: state == 'expired'
+                      ? -1
+                      : state == 'near expiry'
+                      ? 15
+                      : 240,
+                ),
+              ),
+            ),
+            error: state == 'failed' ? 'Synthetic safe Plex failure.' : null,
+          ),
+        );
+        addTearDown(controller.dispose);
+        await show(tester, controller, isTv: tv);
+        await tester.pumpAndSettle();
+        expect(
+          find.text(
+            'Use whichever is easier. Lineup continues by itself once you have signed in.',
+          ),
+          findsOneWidget,
+        );
+        expect(find.text('With your phone'), findsOneWidget);
+        expect(find.text('On another device'), findsOneWidget);
+        expect(find.text('or'), findsNothing);
+        final phone = tester.getRect(
+          find.byKey(const ValueKey('linking-phone-panel')),
+        );
+        final device = tester.getRect(
+          find.byKey(const ValueKey('linking-device-panel')),
+        );
+        expect(phone.width, closeTo(device.width, .1));
+        expect(phone.height, closeTo(device.height, .1));
+        expect(phone.left, lessThan(device.left));
+        if (state == 'fresh' || state == 'near expiry') {
+          expect(
+            find.text(tv ? 'Open on this TV' : 'Open browser'),
+            findsOneWidget,
+          );
+          expect(find.text('Copy code'), tv ? findsNothing : findsOneWidget);
+          expect(find.text('Scan with your camera'), findsOneWidget);
+          if (tv) {
+            expect(
+              FocusManager.instance.primaryFocus?.debugLabel,
+              'Retry secure cancellation',
+            );
+          }
+        } else {
+          expect(find.text('Get a new code'), findsOneWidget);
+          expect(
+            find.text(
+              state == 'expired'
+                  ? 'That code expired before sign-in finished.'
+                  : 'Synthetic safe Plex failure.',
+            ),
+            findsOneWidget,
+          );
+        }
+        expect(tester.takeException(), isNull);
+      });
+    }
+  }
+
   testWidgets('linking slots stay aligned across code and failure states', (
     tester,
   ) async {
@@ -1894,12 +1973,7 @@ void main() {
         reason: 'failure slot $index',
       );
     }
-    final separator = tester.widget<Visibility>(
-      find
-          .ancestor(of: find.text('or'), matching: find.byType(Visibility))
-          .first,
-    );
-    expect(separator.visible, isFalse);
+    expect(find.text('or'), findsNothing);
     expect(
       find.text('That code expired before sign-in finished.'),
       findsNothing,
