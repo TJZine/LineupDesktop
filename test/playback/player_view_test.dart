@@ -255,7 +255,12 @@ void main() {
         find.byType(SubtitleLayer),
       );
       final expected = layerBox.globalToLocal(
-        panelBox.localToGlobal(const Offset(0, -55)),
+        panelBox.localToGlobal(
+          Offset(
+            0,
+            fixture.player.overlay == PlayerOverlay.nowPlaying ? -180 : -55,
+          ),
+        ),
       );
       final paint =
           tester
@@ -8661,7 +8666,7 @@ void main() {
     final title = tester.widget<Text>(
       find.byKey(const Key('player-now-playing-title')),
     );
-    expect(title.style?.fontSize, 54);
+    expect(title.style?.fontSize, 40);
     expect(title.style?.fontWeight, FontWeight.w600);
     expect(
       find.text('A synthetic synopsis for deterministic tests.'),
@@ -8750,8 +8755,12 @@ void main() {
         find.byKey(const ValueKey('player-now-playing-cast-name-4')),
         findsNothing,
       );
-      for (final member in cast.take(4)) {
-        expect(find.text(member.name), findsOneWidget);
+      for (final (index, member) in cast.take(4).indexed) {
+        expect(
+          find.byKey(ValueKey('player-now-playing-cast-name-$index')),
+          findsOneWidget,
+        );
+        expect(find.byTooltip(member.name), findsOneWidget);
       }
       expect(
         find.byKey(const Key('player-now-playing-cast-names')),
@@ -9572,10 +9581,7 @@ void main() {
         );
         expect(shelfSize.width, closeTo(viewport.width, .01));
         expect(shelfSize.height, lessThan(viewport.height));
-        expect(
-          posterSize.width,
-          closeTo((canvas.height < 900 ? 160 : 240) * scale, .01),
-        );
+        expect(posterSize.width, closeTo(248 * scale, .01));
         expect(
           posterSize.height,
           lessThanOrEqualTo(posterSize.width * 1.5 + .01),
@@ -9603,7 +9609,7 @@ void main() {
           final title = tester.widget<Text>(
             find.byKey(const Key('player-now-playing-title')).last,
           );
-          expect(title.style?.fontSize, 54);
+          expect(title.style?.fontSize, 40);
           expect(title.style?.fontWeight, FontWeight.w600);
         }
         expect(

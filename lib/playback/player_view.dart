@@ -1729,9 +1729,10 @@ class _Osd extends StatelessWidget {
           child: SubtitlePanelReporter(
             avoidance: subtitleAvoidance,
             presentationKey: subtitleLayerKey,
-            feather: _OsdPanelMaterial.feather,
+            feather: detailsExpanded ? 180 : _OsdPanelMaterial.feather,
             child: CustomPaint(
               painter: _OsdPanelMaterial(
+                expanded: detailsExpanded,
                 color: _overlayColor(context, controller, more: .62),
                 collapsedFade:
                     !detailsExpanded &&
@@ -2309,7 +2310,7 @@ class _NowPlaying extends StatelessWidget {
       ?item.summary,
       if (castFacts.isNotEmpty) 'Cast: $castFacts',
     ].join('. ');
-    final posterWidth = dense ? 160.0 : 240.0;
+    const posterWidth = 248.0;
 
     return GestureDetector(
       behavior: HitTestBehavior.opaque,
@@ -2366,7 +2367,7 @@ class _NowPlaying extends StatelessWidget {
                           width: posterWidth,
                           height: math.min(posterWidth * 1.5, maxHeight - 64),
                           child: ClipRRect(
-                            borderRadius: BorderRadius.circular(8),
+                            borderRadius: BorderRadius.circular(6),
                             child: posterPath == null
                                 ? _ArtworkFallback(roles: roles)
                                 : _PlayerArtwork(
@@ -2397,6 +2398,7 @@ class _NowPlaying extends StatelessWidget {
                                 .bodyLarge
                                 ?.copyWith(
                                   color: roles.primaryText,
+                                  fontSize: 21,
                                   height: 1.45,
                                 );
                             final summary = item.summary;
@@ -2419,7 +2421,7 @@ class _NowPlaying extends StatelessWidget {
                                     maxLines: 3,
                                   )..layout(
                                     maxWidth: math.min(
-                                      900,
+                                      1040,
                                       constraints.maxWidth,
                                     ),
                                   );
@@ -2492,7 +2494,7 @@ class _NowPlaying extends StatelessWidget {
                                   ExcludeSemantics(
                                     child: ConstrainedBox(
                                       constraints: const BoxConstraints(
-                                        maxWidth: 900,
+                                        maxWidth: 1040,
                                       ),
                                       child: Text(
                                         summary,
@@ -2506,6 +2508,7 @@ class _NowPlaying extends StatelessWidget {
                                             .bodyLarge
                                             ?.copyWith(
                                               color: roles.primaryText,
+                                              fontSize: 21,
                                               height: 1.45,
                                             ),
                                       ),
@@ -2633,14 +2636,14 @@ class _NowPlayingIdentityState extends State<_NowPlayingIdentity> {
         overflow: TextOverflow.ellipsis,
         style: _nowPlayingTitleStyle(context, dense: widget.compact),
       );
-      const logoMaxHeight = 72.0;
+      const logoMaxHeight = 110.0;
       const logoMaxWidth = logoMaxHeight * 6;
       return LayoutBuilder(
         builder: (context, available) {
           Widget clearLogo(Uint8List bytes, Widget fallback) => ClearLogoImage(
             bytes,
             imageKey: const Key('player-now-playing-logo'),
-            maximumVisibleHeight: 56,
+            maximumVisibleHeight: 110,
             excludeFromSemantics: true,
             maximumSize: const Size(logoMaxWidth, logoMaxHeight),
             minimumVisibleSize: Size(96, widget.compact ? 20 : 28),
@@ -2741,6 +2744,7 @@ TextStyle? _nowPlayingSeriesStyle(
 
 TextStyle _nowPlayingTitleStyle(BuildContext context, {required bool dense}) =>
     LineupTypography.programTitle.copyWith(
+      fontSize: 40,
       color: LineupTheme.of(context).primaryText,
       shadows: _overlayTextShadow,
     );
@@ -2874,14 +2878,14 @@ class _NowPlayingCast extends StatelessWidget {
     final roles = LineupTheme.of(context);
     const limit = 4;
     final visible = cast.take(limit).toList(growable: false);
-    final diameter = (dense ? 40.0 : 46.0);
+    const diameter = 56.0;
     const gap = 24.0;
     final nameStyle = _nowPlayingSecondaryStyle(
       context,
       dense: dense,
-    )?.copyWith(fontSize: 16, height: 1.3, color: roles.primaryText);
+    )?.copyWith(fontSize: 20, height: 1.3, color: roles.primaryText);
     final roleStyle = Theme.of(context).textTheme.bodySmall
-        ?.copyWith(color: roles.secondaryText, fontSize: 14);
+        ?.copyWith(color: roles.secondaryText, fontSize: 18);
     final naturalWidths = [
       for (final member in visible)
         math.max(
@@ -3046,7 +3050,7 @@ class _NowPlayingCastColumn extends StatelessWidget {
     final nameStyle = _nowPlayingSecondaryStyle(
       context,
       dense: dense,
-    )?.copyWith(fontSize: 16, height: 1.3, color: roles.primaryText);
+    )?.copyWith(fontSize: 20, height: 1.3, color: roles.primaryText);
     var displayName = member.name;
     final words = member.name.trim().split(RegExp(r'\s+'));
     if (words.length > 2) {
@@ -3128,7 +3132,7 @@ class _NowPlayingCastColumn extends StatelessWidget {
                   overflow: TextOverflow.ellipsis,
                   textAlign: TextAlign.start,
                   style: Theme.of(context).textTheme.bodySmall
-                      ?.copyWith(color: roles.secondaryText, fontSize: 14),
+                      ?.copyWith(color: roles.secondaryText, fontSize: 18),
                 ),
               ),
             ),
@@ -5486,21 +5490,27 @@ ButtonStyle _playerActionStyle(BuildContext context) {
 }
 
 class _OsdPanelMaterial extends CustomPainter {
-  const _OsdPanelMaterial({required this.color, required this.collapsedFade});
+  const _OsdPanelMaterial({
+    required this.color,
+    required this.collapsedFade,
+    this.expanded = false,
+  });
   static const feather = 55.0;
 
   final Color color;
   final bool collapsedFade;
+  final bool expanded;
 
   @override
   void paint(Canvas canvas, Size size) {
+    final fadeHeight = expanded ? 180.0 : feather;
     final bounds = Rect.fromLTWH(
       0,
-      -feather,
+      -fadeHeight,
       size.width,
-      size.height + feather,
+      size.height + fadeHeight,
     );
-    final join = feather / bounds.height;
+    final join = fadeHeight / bounds.height;
     final colors = collapsedFade
         ? [
             color.withValues(alpha: 0),
@@ -5527,7 +5537,9 @@ class _OsdPanelMaterial extends CustomPainter {
 
   @override
   bool shouldRepaint(_OsdPanelMaterial oldDelegate) =>
-      color != oldDelegate.color || collapsedFade != oldDelegate.collapsedFade;
+      color != oldDelegate.color ||
+      collapsedFade != oldDelegate.collapsedFade ||
+      expanded != oldDelegate.expanded;
 }
 
 class _TrackListFade extends StatelessWidget {
