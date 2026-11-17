@@ -187,6 +187,7 @@ void main() {
     }
     final later = tester.getSemantics(find.byTooltip('Later by 30 minutes'));
     expect(later.getSemanticsData().hasAction(SemanticsAction.tap), isTrue);
+    await _openGuideSearch(tester);
     final search = find.byKey(const Key('guide-channel-search'));
     await tester.enterText(search, 'Channel');
     await tester.pumpAndSettle();
@@ -308,12 +309,18 @@ void main() {
           find.byKey(const Key('guide-control-content')),
         );
         final inset = 12 * LineupCanvas.scaleFor(size);
-        expect(controls.left, closeTo(inset, .001));
-        expect(controls.right, closeTo(size.width - inset, .001));
-        expect(
-          _drawnRect(tester, find.text('1')).left,
-          closeTo(controls.left, .001),
-        );
+        final merged = find
+            .byKey(const Key('guide-search-button'))
+            .evaluate()
+            .isNotEmpty;
+        if (!merged) {
+          expect(controls.left, closeTo(inset, .001));
+          expect(controls.right, closeTo(size.width - inset, .001));
+        } else {
+          expect(controls.left, greaterThan(inset));
+          expect(controls.bottom, lessThan(bounds.top));
+        }
+        expect(_drawnRect(tester, find.text('1')).left, closeTo(inset, .001));
         position().jumpTo(row * 2.4);
         await tester.pumpAndSettle();
         expect(position().pixels, closeTo(row * 2, .000001));
@@ -413,6 +420,7 @@ void main() {
           ),
           findsOneWidget,
         );
+        await _openGuideSearch(tester);
         final search = find.byKey(const Key('guide-channel-search'));
         final center = _drawnRect(tester, search).center.dy;
         final hint = find.descendant(
@@ -442,6 +450,10 @@ void main() {
           reason: 'input at text scale $scale',
         );
         expect(inputCenter, closeTo(hintCenter, 1));
+        await tester.sendKeyEvent(LogicalKeyboardKey.escape);
+        await tester.pumpAndSettle();
+        await tester.sendKeyEvent(LogicalKeyboardKey.escape);
+        await tester.pumpAndSettle();
         await tester.tap(hours);
         await tester.pumpAndSettle();
         expect(find.byType(LineupDropdownMenuRow), findsWidgets);
@@ -512,23 +524,46 @@ void main() {
           expect(radius.topRight, const Radius.circular(12));
           expect(radius.bottomRight, const Radius.circular(12));
           final rect = player.rects.last;
+          final canvasScale = LineupCanvas.scaleFor(size);
+          final merged =
+              tester
+                  .getSize(find.byKey(const ValueKey('lineup-top-bar')))
+                  .height ==
+              72;
+          final policy = GuideLayoutPolicy.forSize(
+            size / canvasScale,
+            hasPicture: true,
+            textScale: textScale,
+            mergedBar: merged,
+          );
+          final expectedBand = policy.showcaseHeight * canvasScale;
+          final expectedAperture = Size(
+            policy.pictureWidth * canvasScale,
+            expectedBand,
+          );
           expect(
             _drawnRect(
               tester,
               find.byKey(const Key('guide-information-area')),
             ).height,
-            closeTo(expectedInformationHeight, .001),
+            closeTo(merged ? expectedBand : expectedInformationHeight, .001),
             reason: '$size text=$textScale information height',
           );
 
           expect(
             aperture.width,
-            closeTo(expectedPicture.width, .001),
+            closeTo(
+              merged ? expectedAperture.width : expectedPicture.width,
+              .001,
+            ),
             reason: '$size text=$textScale DPR=$dpr',
           );
           expect(
             aperture.height,
-            closeTo(expectedPicture.height, .001),
+            closeTo(
+              merged ? expectedAperture.height : expectedPicture.height,
+              .001,
+            ),
             reason: '$size text=$textScale DPR=$dpr',
           );
           expect(aperture.left, closeTo(0, .001));
@@ -1081,14 +1116,16 @@ void main() {
         );
         expect(
           tester.getTopLeft(time).dx - tester.getTopRight(episode).dx,
-          closeTo(12, .1),
+          tester
+              .getSize(find.descendant(of: cell, matching: find.text(' · ')))
+              .width,
         );
-        expect(
-          tester.getTopLeft(dot).dx,
-          lessThan(tester.getTopLeft(title).dx),
-        );
+        expect(dot, findsNothing);
+        expect(tester.getTopLeft(title).dx, tester.getTopLeft(episode).dx);
         final container = tester.widget<AnimatedContainer>(
-          find.descendant(of: cell, matching: find.byType(AnimatedContainer)),
+          find
+              .descendant(of: cell, matching: find.byType(AnimatedContainer))
+              .first,
         );
         final decoration = container.decoration! as BoxDecoration;
         expect((decoration.border! as Border).top.color, Colors.transparent);
@@ -2205,6 +2242,11 @@ void main() {
       final policy = GuideLayoutPolicy.forSize(
         size / LineupCanvas.scaleFor(size),
         hasPicture: true,
+        mergedBar:
+            tester
+                .getSize(find.byKey(const ValueKey('lineup-top-bar')))
+                .height ==
+            72,
       );
       expect(
         pictureSize.width,
@@ -2244,8 +2286,8 @@ void main() {
       expect(tester.takeException(), isNull, reason: '$size');
     }
 
-    expect(tallGeometry[1080]!.$1, closeTo(92.8, .001));
-    expect(tallGeometry[1200]!.$1, closeTo(97.333, .001));
+    expect(tallGeometry[1080]!.$1, closeTo(105.6, .001));
+    expect(tallGeometry[1200]!.$1, closeTo(108, .001));
     expect(tallGeometry[1200]!.$2, tallGeometry[1080]!.$2);
     expect(tallGeometry[1200]!.$3, tallGeometry[1080]!.$3);
     final pictureSemantics = find.bySemanticsLabel(
@@ -4781,6 +4823,7 @@ void main() {
         expect(closes, beforeClose + 1);
         expect(tunes, 0);
       }
+      await _openGuideSearch(tester);
       final search = find.byKey(const Key('guide-channel-search'));
       await tester.enterText(search, 'channel');
       await tester.pump();
@@ -4793,10 +4836,15 @@ void main() {
       await tester.sendKeyEvent(LogicalKeyboardKey.escape);
       await tester.pump();
       expect(closes, beforeSearchEscape);
-      expect(tester.widget<TextField>(search).focusNode!.hasFocus, isFalse);
+      if (search.evaluate().isNotEmpty) {
+        expect(tester.widget<TextField>(search).focusNode!.hasFocus, isFalse);
+      } else {
+        expect(find.byKey(const Key('guide-search-button')), findsOneWidget);
+      }
 
       final program = guide.currentProgram(ready.id)!;
       await tester.tap(find.byKey(ValueKey(program.id)));
+      await tester.pump(kDoubleTapTimeout);
       await tester.pumpAndSettle();
       expect(tunes, 0);
       await focus(find.byKey(ValueKey(program.id)));
@@ -4870,6 +4918,7 @@ void main() {
       );
       await tester.pump();
       await tester.pump(const Duration(milliseconds: 100));
+      await _openGuideSearch(tester);
       final search = find.byKey(const Key('guide-channel-search'));
       await tester.enterText(search, 'channel ');
       await tester.pump();
@@ -4937,6 +4986,7 @@ void main() {
       lineup: lineup,
       loadSchedule: (channel) async => _schedule(channel),
     );
+    await _openGuideSearch(tester);
     final search = find.byKey(const Key('guide-channel-search'));
     var findReachedParent = false;
     Future<bool> searchFocusedAfterChord(
@@ -4969,7 +5019,11 @@ void main() {
       final program = guide.currentProgram(lineup.channels.first.id)!;
       await tester.tap(find.byKey(ValueKey(program.id)));
       await tester.pumpAndSettle();
-      expect(tester.widget<TextField>(search).focusNode!.hasFocus, isFalse);
+      if (search.evaluate().isNotEmpty) {
+        expect(tester.widget<TextField>(search).focusNode!.hasFocus, isFalse);
+      } else {
+        expect(find.byKey(const Key('guide-search-button')), findsOneWidget);
+      }
       if (withControl) {
         await tester.sendKeyDownEvent(LogicalKeyboardKey.controlLeft);
       }
@@ -5054,6 +5108,7 @@ void main() {
     );
     await tester.pumpAndSettle();
 
+    await _openGuideSearch(tester);
     final search = find.byKey(const Key('guide-channel-search'));
     expect(find.byTooltip('Clear search'), findsNothing);
     await tester.tap(search);
@@ -5094,7 +5149,11 @@ void main() {
 
     await tester.sendKeyEvent(LogicalKeyboardKey.enter);
     await tester.pump();
-    expect(tester.widget<TextField>(search).focusNode!.hasFocus, isFalse);
+    if (search.evaluate().isNotEmpty) {
+      expect(tester.widget<TextField>(search).focusNode!.hasFocus, isFalse);
+    } else {
+      expect(find.byKey(const Key('guide-search-button')), findsOneWidget);
+    }
     expect(tunes, 0);
     await tester.tap(search);
     await tester.sendKeyEvent(LogicalKeyboardKey.escape);
@@ -5105,7 +5164,11 @@ void main() {
 
     await tester.sendKeyEvent(LogicalKeyboardKey.escape);
     await tester.pump();
-    expect(tester.widget<TextField>(search).focusNode!.hasFocus, isFalse);
+    if (search.evaluate().isNotEmpty) {
+      expect(tester.widget<TextField>(search).focusNode!.hasFocus, isFalse);
+    } else {
+      expect(find.byKey(const Key('guide-search-button')), findsOneWidget);
+    }
     expect(tunes, 0);
     expect(closes, 0);
 
@@ -5947,4 +6010,12 @@ class _GuideBoundsPlayer extends FixturePlayer {
   final rects = <PlayerVideoRect>[];
   @override
   Future<void> setVideoRect(PlayerVideoRect rect) async => rects.add(rect);
+}
+
+Future<void> _openGuideSearch(WidgetTester tester) async {
+  final button = find.byKey(const Key('guide-search-button'));
+  if (button.evaluate().isNotEmpty) {
+    await tester.tap(button);
+    await tester.pumpAndSettle();
+  }
 }

@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
+import 'package:flutter/gestures.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:lineup_desktop/app/lineup_controller.dart';
 import 'package:lineup_desktop/channels/channel.dart';
@@ -120,6 +121,232 @@ void main() {
       }
     });
   }
+  testWidgets('cell lines mask now-line and episode code follows title', (
+    tester,
+  ) async {
+    final guide = await _mount(tester, tv: true);
+    expect(find.byKey(const Key('guide-airing-dot')), findsNothing);
+    final cell = find.byKey(ValueKey(guide.currentProgram('c0')!.id));
+    final title = find.descendant(
+      of: cell,
+      matching: find.text('Signal House'),
+    );
+    final code = find.descendant(of: cell, matching: find.text('S02E01'));
+    final episode = find.descendant(
+      of: cell,
+      matching: find.text('The Last Frequency'),
+    );
+    expect(
+      tester.getTopLeft(code).dx - tester.getTopRight(title).dx,
+      closeTo(8, .001),
+    );
+    expect(tester.getTopLeft(title).dx, tester.getTopLeft(episode).dx);
+    final backing = find.descendant(
+      of: cell,
+      matching: find.byKey(const Key('guide-cell-text-backing')),
+    );
+    expect(backing, findsNWidgets(2));
+    final fill =
+        (tester
+                    .widget<AnimatedContainer>(
+                      find
+                          .descendant(
+                            of: cell,
+                            matching: find.byType(AnimatedContainer),
+                          )
+                          .first,
+                    )
+                    .decoration!
+                as BoxDecoration)
+            .color!;
+    final roles = LineupTheme.of(tester.element(cell));
+    for (final widget in tester.widgetList<AnimatedContainer>(backing)) {
+      final color = (widget.decoration! as BoxDecoration).color!;
+      expect(color, Color.alphaBlend(fill, roles.deepBackground));
+      expect(color.a, 1);
+      expect(widget.padding, const EdgeInsets.symmetric(horizontal: 6));
+    }
+    expect(
+      tester.getTopLeft(backing.first).dx,
+      tester.getTopLeft(title).dx - 6,
+    );
+    final secondary = tester.widget<Text>(episode).style!;
+    expect(secondary.fontSize, 19);
+    final marker = tester.getRect(find.byKey(const Key('guide-now-marker')));
+    final line = tester.getRect(find.byKey(const Key('guide-now-line')));
+    expect(marker.center.dx, line.center.dx);
+    expect(line.top, marker.center.dy);
+    expect(find.text('12:18'), findsOneWidget);
+  });
+  testWidgets('narrow cells hide text while inspection remains available', (
+    tester,
+  ) async {
+    final guide = await _mount(
+      tester,
+      tv: true,
+      items: const [
+        ChannelItem(
+          id: 'long',
+          title: 'Long Program',
+          duration: Duration(minutes: 48),
+        ),
+        ChannelItem(
+          id: 'tiny',
+          title: 'Wide Narrow Title',
+          duration: Duration(minutes: 2),
+        ),
+        ChannelItem(
+          id: 'next',
+          title: 'Next Program',
+          duration: Duration(minutes: 48),
+        ),
+      ],
+    );
+    final tiny = guide
+        .row('c0')
+        .programs
+        .firstWhere((p) => p.scheduled.item.id == 'tiny');
+    final cell = find.byKey(ValueKey(tiny.id));
+    expect(cell, findsOneWidget);
+    expect(
+      find.descendant(of: cell, matching: find.byType(Text)),
+      findsNothing,
+    );
+    guide.focusProgram(tiny);
+    await tester.pumpAndSettle();
+    expect(guide.focusedProgramId, tiny.id);
+    expect(
+      find.descendant(of: cell, matching: find.byType(Text)),
+      findsNothing,
+    );
+    expect(find.text('Wide Narrow Title'), findsOneWidget);
+  });
+  testWidgets('now marker hides an overlapping half-hour label', (
+    tester,
+  ) async {
+    await _mount(tester, now: DateTime(2026, 11, 16, 12, 30));
+    expect(find.byKey(const ValueKey('guide-time-label-0')), findsNothing);
+    expect(find.byKey(const ValueKey('guide-time-label-1')), findsOneWidget);
+    expect(find.text('12:30'), findsOneWidget);
+  });
+  for (final sample in const [
+    (name: 'film', title: 'Feature Film', show: null, range: true),
+    (
+      name: 'episode without distinct subtitle',
+      title: 'Signal House',
+      show: 'Signal House',
+      range: true,
+    ),
+    (
+      name: 'episode with room for range',
+      title: 'The Relay',
+      show: 'Signal House',
+      range: true,
+    ),
+    (
+      name: 'episode title takes priority',
+      title: 'A very long episode title that fills the program cell and leaves no room for the time range to follow it',
+      show: 'Signal House',
+      range: false,
+    ),
+  ]) {
+    testWidgets('second cell line ${sample.name}', (tester) async {
+      final guide = await _mount(
+        tester,
+        tv: true,
+        items: [
+          ChannelItem(
+            id: 'sample',
+            title: sample.title,
+            showTitle: sample.show,
+            duration: const Duration(minutes: 48),
+          ),
+        ],
+      );
+      final cell = find.byKey(ValueKey(guide.currentProgram('c0')!.id));
+      final range = find.descendant(
+        of: cell,
+        matching: find.byWidgetPredicate(
+          (widget) => widget is Text && (widget.data?.contains('–') ?? false),
+        ),
+      );
+      expect(range, sample.range ? findsOneWidget : findsNothing);
+      if (sample.show != null && sample.title != sample.show) {
+        expect(
+          find.descendant(of: cell, matching: find.text(sample.title)),
+          findsOneWidget,
+        );
+      }
+    });
+  }
+  testWidgets('line masks use opaque effective fills in all cell states', (
+    tester,
+  ) async {
+    final guide = await _mount(
+      tester,
+      tv: true,
+      items: const [
+        ChannelItem(
+          id: 'past',
+          title: 'Past Feature',
+          duration: Duration(minutes: 8),
+        ),
+        ChannelItem(
+          id: 'current',
+          title: 'Current Feature',
+          duration: Duration(minutes: 48),
+        ),
+        ChannelItem(
+          id: 'future',
+          title: 'Future Feature',
+          duration: Duration(minutes: 48),
+        ),
+      ],
+    );
+    final programs = guide.row('c0').programs.take(3).toList();
+    void check() {
+      for (final program in programs) {
+        final cell = find.byKey(ValueKey(program.id));
+        final fill =
+            (tester
+                        .widget<AnimatedContainer>(
+                          find
+                              .descendant(
+                                of: cell,
+                                matching: find.byType(AnimatedContainer),
+                              )
+                              .first,
+                        )
+                        .decoration!
+                    as BoxDecoration)
+                .color!;
+        final roles = LineupTheme.of(tester.element(cell));
+        for (final mask in tester.widgetList<AnimatedContainer>(
+          find.descendant(
+            of: cell,
+            matching: find.byKey(const Key('guide-cell-text-backing')),
+          ),
+        )) {
+          final color = (mask.decoration! as BoxDecoration).color!;
+          expect(color, Color.alphaBlend(fill, roles.deepBackground));
+          expect(color.a, 1);
+        }
+      }
+    }
+
+    check();
+    guide.selectProgram(programs.first);
+    guide.focusProgram(programs[1]);
+    await tester.pumpAndSettle();
+    check();
+    final mouse = await tester.createGesture(kind: PointerDeviceKind.mouse);
+    await mouse.addPointer(
+      location: tester.getCenter(find.byKey(ValueKey(programs.last.id))),
+    );
+    await tester.pumpAndSettle();
+    check();
+    await mouse.removePointer();
+  });
   testWidgets('merged TV recovery wrap reaches actions and restores grid', (
     tester,
   ) async {

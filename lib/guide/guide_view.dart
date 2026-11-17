@@ -1421,7 +1421,7 @@ class _GuideViewState extends State<GuideView>
                             policy.channelRailWidth +
                             _guideTimelineGutter +
                             timelineWidth * fraction,
-                        top: 0,
+                        top: policy.timeHeaderHeight / 2,
                         bottom: 0,
                         child: Semantics(
                           container: true,
@@ -1439,10 +1439,13 @@ class _GuideViewState extends State<GuideView>
                   ),
                   Column(
                     children: [
-                      _TimeHeader(
-                        controller: widget.controller,
-                        railWidth: policy.channelRailWidth,
-                        height: policy.timeHeaderHeight,
+                      ListenableBuilder(
+                        listenable: _presentationClock,
+                        builder: (context, _) => _TimeHeader(
+                          controller: widget.controller,
+                          railWidth: policy.channelRailWidth,
+                          height: policy.timeHeaderHeight,
+                        ),
                       ),
                       Expanded(
                         child: channels.isEmpty
@@ -3160,69 +3163,138 @@ class _TimeHeader extends StatelessWidget {
                   1,
                   slots,
                 );
-                return Row(
+                final now = controller.now;
+                final fraction =
+                    now.difference(controller.windowStart).inMicroseconds /
+                    controller.windowEnd
+                        .difference(controller.windowStart)
+                        .inMicroseconds;
+                final showMarker = fraction >= 0 && fraction < 1;
+                final localNow = now.toLocal();
+                final markerLabel =
+                    '${localNow.hour % 12 == 0 ? 12 : localNow.hour % 12}:${localNow.minute.toString().padLeft(2, '0')}';
+                final style = DefaultTextStyle.of(context).style;
+                final markerStyle = style.copyWith(
+                  fontWeight: FontWeight.w600,
+                  color: LineupTheme.of(context).onFocus,
+                );
+                final markerWidth =
+                    _textWidth(
+                      markerLabel,
+                      markerStyle,
+                      MediaQuery.textScalerOf(context),
+                      Directionality.of(context),
+                    ) +
+                    16;
+                final markerLeft = width * fraction + 1 - markerWidth / 2;
+                return Stack(
+                  clipBehavior: Clip.none,
                   children: [
-                    for (var index = 0; index < slots; index++)
-                      Expanded(
-                        child: Container(
-                          alignment: Alignment.center,
-                          decoration: BoxDecoration(
-                            border: Border(
-                              left: BorderSide(
-                                color: LineupTheme.of(context).subtleBorder,
+                    Row(
+                      children: [
+                        for (var index = 0; index < slots; index++)
+                          Expanded(
+                            child: Container(
+                              alignment: Alignment.centerLeft,
+                              decoration: BoxDecoration(
+                                border: Border(
+                                  left: BorderSide(
+                                    color: LineupTheme.of(context).subtleBorder,
+                                  ),
+                                ),
                               ),
-                            ),
-                          ),
-                          child: index % stride == 0
-                              ? Padding(
-                                  padding: EdgeInsets.only(left: 12),
-                                  child: Align(
-                                    alignment: Alignment.centerLeft,
-                                    child: Builder(
+                              child: index % stride == 0
+                                  ? Builder(
                                       builder: (context) {
-                                        final tick = controller.windowStart.add(
-                                          Duration(minutes: 30 * index),
+                                        final tick = controller.windowStart
+                                            .add(Duration(minutes: 30 * index))
+                                            .toLocal();
+                                        final label = _time(context, tick);
+                                        final labelLeft =
+                                            index * slotWidth + 12;
+                                        final labelWidth = _textWidth(
+                                          label,
+                                          style,
+                                          MediaQuery.textScalerOf(context),
+                                          Directionality.of(context),
                                         );
-                                        final localTick = tick.toLocal();
-                                        final midnight =
-                                            localTick.hour == 0 &&
-                                            localTick.minute == 0;
-                                        return Column(
-                                          mainAxisAlignment:
-                                              MainAxisAlignment.center,
-                                          crossAxisAlignment:
-                                              CrossAxisAlignment.start,
-                                          children: [
-                                            Text(
-                                              _time(context, localTick),
-                                              overflow: TextOverflow.clip,
-                                              maxLines: 1,
-                                            ),
-                                            if (midnight)
+                                        if (showMarker &&
+                                            labelLeft <
+                                                markerLeft + markerWidth &&
+                                            labelLeft + labelWidth >
+                                                markerLeft) {
+                                          return const SizedBox.shrink();
+                                        }
+                                        return Padding(
+                                          padding: const EdgeInsets.only(
+                                            left: 12,
+                                          ),
+                                          child: Column(
+                                            mainAxisAlignment:
+                                                MainAxisAlignment.center,
+                                            crossAxisAlignment:
+                                                CrossAxisAlignment.start,
+                                            children: [
                                               Text(
-                                                MaterialLocalizations.of(
-                                                  context,
-                                                ).formatMediumDate(localTick),
-                                                key: const Key(
-                                                  'guide-midnight-date',
+                                                label,
+                                                key: ValueKey(
+                                                  'guide-time-label-$index',
                                                 ),
+                                                overflow: TextOverflow.clip,
                                                 maxLines: 1,
-                                                style: Theme.of(context)
-                                                    .textTheme
-                                                    .labelSmall
-                                                    ?.copyWith(
-                                                      color: LineupTheme.of(
-                                                        context,
-                                                      ).progressFill,
-                                                    ),
                                               ),
-                                          ],
+                                              if (tick.hour == 0 &&
+                                                  tick.minute == 0)
+                                                Text(
+                                                  MaterialLocalizations.of(
+                                                    context,
+                                                  ).formatMediumDate(tick),
+                                                  key: const Key(
+                                                    'guide-midnight-date',
+                                                  ),
+                                                  maxLines: 1,
+                                                  style: Theme.of(context)
+                                                      .textTheme
+                                                      .labelSmall
+                                                      ?.copyWith(
+                                                        color: LineupTheme.of(
+                                                          context,
+                                                        ).progressFill,
+                                                      ),
+                                                ),
+                                            ],
+                                          ),
                                         );
                                       },
-                                    ),
-                                  ),
-                                )
-                              : null,
+                                    )
+                                  : null,
+                            ),
+                          ),
+                      ],
+                    ),
+                    if (showMarker)
+                      Positioned(
+                        left: markerLeft,
+                        top: 0,
+                        bottom: 0,
+                        width: markerWidth,
+                        child: Center(
+                          child: Container(
+                            key: const Key('guide-now-marker'),
+                            padding: const EdgeInsets.symmetric(
+                              horizontal: 8,
+                              vertical: 2,
+                            ),
+                            decoration: BoxDecoration(
+                              color: LineupTheme.of(context).liveAccent,
+                              borderRadius: BorderRadius.circular(6),
+                            ),
+                            child: Text(
+                              markerLabel,
+                              maxLines: 1,
+                              style: markerStyle,
+                            ),
+                          ),
                         ),
                       ),
                   ],
@@ -3924,6 +3996,10 @@ class _ProgramCellState extends State<_ProgramCell> {
                         current: widget.current,
                         past: widget.past,
                         reduceMotion: widget.reduceMotion,
+                        backingColor: Color.alphaBlend(
+                          fill,
+                          roles.deepBackground,
+                        ),
                       ),
                     ),
                   ],
@@ -3944,8 +4020,10 @@ class _ProgramCellContent extends StatelessWidget {
     required this.current,
     required this.past,
     required this.reduceMotion,
+    required this.backingColor,
   });
 
+  final Color backingColor;
   final GuideProgram program;
   final bool focused;
   final bool current;
@@ -3963,7 +4041,7 @@ class _ProgramCellContent extends StatelessWidget {
         : null;
     return LayoutBuilder(
       builder: (context, constraints) {
-        final double gap = 12.0;
+        const gap = 8.0;
         final scaler = MediaQuery.textScalerOf(context);
         final direction = Directionality.of(context);
         final roles = LineupTheme.of(context);
@@ -3975,109 +4053,132 @@ class _ProgramCellContent extends StatelessWidget {
               : null,
         );
         final secondaryStyle = _GuideStyles.rowSecondary(context)
-            .copyWith(color: focused ? roles.focusedText : roles.mutedText);
-        final tagStyle = Theme.of(context).textTheme.labelSmall?.copyWith(
+            .copyWith(color: focused ? roles.focusMutedText : roles.mutedText);
+        final tagStyle = Theme.of(context).textTheme.labelSmall!.copyWith(
           height: 1.1,
           fontSize: DeviceProfile.of(context).isTv
               ? LineupTypography.tvTextFloor
               : 14,
-          color: focused ? roles.focusedText : null,
+          color: focused ? roles.focusSecondaryText : roles.secondaryText,
           fontWeight: FontWeight.w500,
           letterSpacing: 0.2,
         );
+        if (constraints.maxWidth <
+            _textWidth(
+              primaryTitle.characters.take(4).toString(),
+              titleStyle,
+              scaler,
+              direction,
+            )) {
+          return const SizedBox.shrink();
+        }
         final time =
             '${_time(context, program.scheduled.start)}–${_time(context, program.scheduled.end)}';
-        final liveWidth = current ? 7 + gap : 0.0;
-        final titleWidth = episodeCode == null
-            ? 0.0
-            : _textWidth(primaryTitle, titleStyle, scaler, direction);
+        final titleWidth = _textWidth(
+          primaryTitle,
+          titleStyle,
+          scaler,
+          direction,
+        );
         final tagWidth = episodeCode == null
             ? 0.0
             : _textWidth(episodeCode, tagStyle, scaler, direction);
         final showEpisode =
             episodeCode != null &&
-            titleWidth + tagWidth + liveWidth + gap <= constraints.maxWidth;
+            titleWidth + tagWidth + gap <= constraints.maxWidth;
         final subtitleWidth = episodeTitle == null
             ? 0.0
             : _textWidth(episodeTitle, secondaryStyle, scaler, direction);
-        final timeWidth = _textWidth(time, secondaryStyle, scaler, direction);
+        final timeStyle = secondaryStyle.copyWith(
+          fontFeatures: const [ui.FontFeature.tabularFigures()],
+        );
+        final timeWidth = _textWidth(time, timeStyle, scaler, direction);
+        final separatorWidth = _textWidth(
+          ' · ',
+          secondaryStyle,
+          scaler,
+          direction,
+        );
         final showTime = episodeTitle == null
             ? timeWidth <= constraints.maxWidth
-            : subtitleWidth + timeWidth + gap <= constraints.maxWidth;
+            : subtitleWidth + separatorWidth + timeWidth <=
+                  constraints.maxWidth;
         final showBottom =
             constraints.maxHeight >=
             _textHeight(titleStyle, scaler, direction) +
                 _textHeight(secondaryStyle, scaler, direction);
-        return ClipRect(
+        // The opaque backing extends six pixels either side of the visible
+        // line, masking both now-line layers without changing text alignment.
+        Widget backed(double width, Widget child) => Transform.translate(
+          offset: const Offset(-6, 0),
+          child: AnimatedContainer(
+            key: const Key('guide-cell-text-backing'),
+            duration: reduceMotion
+                ? Duration.zero
+                : const Duration(milliseconds: 90),
+            color: backingColor,
+            padding: const EdgeInsets.symmetric(horizontal: 6),
+            child: SizedBox(width: width, child: child),
+          ),
+        );
+        final firstWidth = math.min(
+          constraints.maxWidth,
+          titleWidth + (showEpisode ? gap + tagWidth : 0),
+        );
+        final secondWidth = math.min(
+          constraints.maxWidth,
+          episodeTitle == null
+              ? timeWidth
+              : subtitleWidth + (showTime ? separatorWidth + timeWidth : 0),
+        );
+        return OverflowBox(
+          alignment: Alignment.centerLeft,
+          minWidth: constraints.maxWidth + 12,
+          maxWidth: constraints.maxWidth + 12,
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.start,
             mainAxisAlignment: MainAxisAlignment.center,
             children: [
-              Row(
-                children: [
-                  if (current) ...[
-                    Container(
-                      key: const Key('guide-airing-dot'),
-                      width: 7,
-                      height: 7,
-                      decoration: BoxDecoration(
-                        color: LineupTheme.of(context).liveAccent,
-                        shape: BoxShape.circle,
-                      ),
-                    ),
-                    SizedBox(width: gap),
-                  ],
-                  Expanded(
-                    child: FocusedTicker(
-                      text: primaryTitle,
-                      focused: focused,
-                      reduceMotion: reduceMotion,
-                      style: titleStyle,
-                    ),
-                  ),
-                  if (showEpisode) ...[
-                    SizedBox(width: gap),
-                    Text(episodeCode, style: tagStyle),
-                  ],
-                ],
-              ),
-              if (showBottom && (episodeTitle != null || showTime))
+              backed(
+                firstWidth,
                 Row(
                   children: [
-                    if (episodeTitle != null)
-                      if (showTime)
-                        SizedBox(
-                          width: subtitleWidth,
-                          child: FocusedTicker(
-                            text: episodeTitle,
-                            focused: focused,
-                            reduceMotion: reduceMotion,
-                            style: secondaryStyle,
-                          ),
-                        )
-                      else
-                        Expanded(
-                          child: FocusedTicker(
-                            text: episodeTitle,
-                            focused: focused,
-                            reduceMotion: reduceMotion,
-                            style: secondaryStyle,
-                          ),
-                        ),
-                    if (episodeTitle != null && showTime)
-                      SizedBox(
-                        width: gap,
-                        child: Center(child: Text('·', style: secondaryStyle)),
+                    SizedBox(
+                      width: showEpisode ? titleWidth : firstWidth,
+                      child: FocusedTicker(
+                        text: primaryTitle,
+                        focused: focused,
+                        reduceMotion: reduceMotion,
+                        style: titleStyle,
                       ),
-                    if (showTime)
-                      Text(
-                        time,
-                        maxLines: 1,
-                        style: secondaryStyle.copyWith(
-                          fontFeatures: const [ui.FontFeature.tabularFigures()],
-                        ),
-                      ),
+                    ),
+                    if (showEpisode) ...[
+                      const SizedBox(width: gap),
+                      Text(episodeCode, style: tagStyle),
+                    ],
                   ],
+                ),
+              ),
+              if (showBottom && (episodeTitle != null || showTime))
+                backed(
+                  secondWidth,
+                  Row(
+                    children: [
+                      if (episodeTitle != null)
+                        SizedBox(
+                          width: showTime ? subtitleWidth : secondWidth,
+                          child: FocusedTicker(
+                            text: episodeTitle,
+                            focused: focused,
+                            reduceMotion: reduceMotion,
+                            style: secondaryStyle,
+                          ),
+                        ),
+                      if (episodeTitle != null && showTime)
+                        Text(' · ', style: secondaryStyle),
+                      if (showTime) Text(time, maxLines: 1, style: timeStyle),
+                    ],
+                  ),
                 ),
             ],
           ),
@@ -4223,7 +4324,7 @@ abstract final class _GuideStyles {
   static final metadata = LineupTypography.body.copyWith(height: 1.2);
   static TextStyle rowSecondary(BuildContext context) =>
       Theme.of(context).textTheme.bodySmall!
-          .copyWith(height: 1.1, fontSize: 18);
+          .copyWith(height: 1.1, fontSize: 19);
   static TextStyle badge(BuildContext context) => Theme.of(context)
       .textTheme
       .labelMedium!
