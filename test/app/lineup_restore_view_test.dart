@@ -213,17 +213,14 @@ void main() {
           if (!empty) {
             expect(
               tester.getTopLeft(find.text('Switch server')).dx,
-              closeTo(
-                tester.getTopLeft(find.text('Review your libraries')).dx,
-                .1,
-              ),
+              closeTo(tester.getTopLeft(find.text('Choose libraries')).dx, .1),
             );
             expect(find.text('Scan again'), findsOneWidget);
             expect(find.text('Continue with 1 library'), findsOneWidget);
             await tester.tap(find.text('Scan again'));
             await tester.pumpAndSettle();
             expect(c.scans, 1);
-            expect(find.text('Review your libraries'), findsOneWidget);
+            expect(find.text('Choose libraries'), findsOneWidget);
             expect(find.text('Choose channels'), findsNothing);
           } else {
             expect(

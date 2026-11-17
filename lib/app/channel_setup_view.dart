@@ -534,7 +534,7 @@ class UpstreamChannelSetupViewState extends State<UpstreamChannelSetupView> {
         Text(
           subtitleText ??
               switch (_configurationSection) {
-                0 => 'Choose the channels you want from your libraries.',
+                0 => 'Choose which kinds of channels Lineup builds from your libraries.',
                 1 => 'Choose how your generated channels will play.',
                 _ => 'Choose the size and balance of your generated lineup.',
               },

@@ -102,7 +102,7 @@ void main() {
         isFalse,
       );
       fixture.itemReads.clear();
-      await tester.tap(find.byKey(const ValueKey('retry-failed-libraries')));
+      await tester.tap(find.byKey(const ValueKey('scan-again-libraries')));
       await _settleScan(tester, fixture.controller);
 
       expect(fixture.itemReads.toSet(), _libraries);
@@ -120,10 +120,14 @@ void main() {
       fixture.failedLibraries.clear();
       fixture.revision = 'recovered';
       fixture.itemReads.clear();
-      await tester.tap(find.byKey(const ValueKey('retry-failed-libraries')));
+      await tester.tap(find.byKey(const ValueKey('scan-again-libraries')));
       await _settleScan(tester, fixture.controller);
 
       expect(fixture.itemReads.toSet(), _libraries);
+      // Scan again intentionally stays on Libraries; Continue commits the same
+      // selected ready inventory after the removed redundant retry action.
+      await tester.tap(find.byKey(const ValueKey('continue-ready-libraries')));
+      await tester.pumpAndSettle();
       expect(find.text('Choose channels'), findsOneWidget);
       expect(fixture.controller.error, isNull);
       expect(fixture.controller.libraryScanRetryIds, isEmpty);
