@@ -90,23 +90,6 @@ class _StudioFilterPickerState extends State<_StudioFilterPicker> {
                   ),
                   child: Text(_facetLabel(criterion)),
                 ),
-              Wrap(
-                spacing: 8,
-                crossAxisAlignment: WrapCrossAlignment.center,
-                children: [
-                  Semantics(
-                    liveRegion: true,
-                    child: Text(
-                      'Finish this filter with Done, or cancel it, before saving or tuning.',
-                      style: _studioSupportStyle(context),
-                    ),
-                  ),
-                  TextButton(
-                    onPressed: () => widget.onCancel(),
-                    child: const Text('Cancel'),
-                  ),
-                ],
-              ),
             ],
           ),
         ),
@@ -151,6 +134,7 @@ class _StudioFilterPickerState extends State<_StudioFilterPicker> {
         checked == true
             ? _pendingFilterValues.add(value)
             : _pendingFilterValues.remove(value);
+        widget.onApply(_pendingFilterValues.toList());
       }),
     );
     final media = MediaQuery.of(context);
@@ -206,14 +190,18 @@ class _StudioFilterPickerState extends State<_StudioFilterPicker> {
                   TextButton(
                     onPressed: _pendingFilterValues.isEmpty
                         ? null
-                        : () => setState(_pendingFilterValues.clear),
+                        : () => setState(() {
+                            _pendingFilterValues.clear();
+                            widget.onApply(const []);
+                          }),
                     child: const Text('Clear selection'),
                   ),
                   if (unavailable.isNotEmpty)
                     TextButton(
-                      onPressed: () => setState(
-                        () => _pendingFilterValues.removeAll(unavailable),
-                      ),
+                      onPressed: () => setState(() {
+                        _pendingFilterValues.removeAll(unavailable);
+                        widget.onApply(_pendingFilterValues.toList());
+                      }),
                       child: Text('Remove ${unavailable.length} unavailable'),
                     ),
                   Text(
@@ -234,31 +222,6 @@ class _StudioFilterPickerState extends State<_StudioFilterPicker> {
               else
                 for (final value in visible) valueTile(value),
               SizedBox(height: 12),
-              Wrap(
-                alignment: WrapAlignment.end,
-                spacing: 8,
-                runSpacing: 8,
-                crossAxisAlignment: WrapCrossAlignment.center,
-                children: [
-                  Semantics(
-                    liveRegion: true,
-                    child: Text(
-                      'Finish this filter with Done, or cancel it, before saving or tuning.',
-                      style: _studioSupportStyle(context),
-                    ),
-                  ),
-                  TextButton(
-                    onPressed: () => widget.onCancel(),
-                    child: const Text('Cancel'),
-                  ),
-                  FilledButton(
-                    onPressed: () {
-                      widget.onApply(_pendingFilterValues.toList());
-                    },
-                    child: const Text('Done'),
-                  ),
-                ],
-              ),
             ],
           ),
         ),

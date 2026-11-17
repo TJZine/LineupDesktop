@@ -8,6 +8,7 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:lineup_desktop/ui/lineup_canvas.dart';
 import 'package:lineup_desktop/app/lineup_app.dart';
 import 'package:lineup_desktop/app/lineup_controller.dart';
+import 'package:lineup_desktop/app/channel_studio_view.dart';
 import 'package:lineup_desktop/app/lineup_shell.dart';
 import 'package:lineup_desktop/app/onboarding_view.dart';
 import 'package:lineup_desktop/channels/channel.dart';
@@ -438,7 +439,32 @@ void main() {
     await tester.pumpAndSettle();
 
     expect(controller.stage, SetupStage.ready);
-    expect(find.text('Create custom channel'), findsOneWidget);
+    final studio = find.byType(ChannelStudioView);
+    expect(studio, findsOneWidget);
+    final view = tester.widget<ChannelStudioView>(studio);
+    expect(view.mode, ChannelStudioMode.createCustom);
+    expect(view.channel?.id, isNull);
+    expect(
+      find.descendant(
+        of: find.ancestor(
+          of: find.byKey(const Key('studio-status-tag')),
+          matching: find.byWidgetPredicate(
+            (widget) => widget is Semantics && widget.properties.header == true,
+          ),
+        ),
+        matching: find.byWidgetPredicate(
+          (widget) => widget is Text && widget.data == 'Movies',
+        ),
+      ),
+      findsOneWidget,
+    );
+    expect(
+      find.descendant(
+        of: find.byKey(const Key('studio-status-tag')),
+        matching: find.text('Draft'),
+      ),
+      findsOneWidget,
+    );
     expect(
       find.textContaining('No channel numbers are available'),
       findsOneWidget,

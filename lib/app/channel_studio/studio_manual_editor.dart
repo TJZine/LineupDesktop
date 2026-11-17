@@ -4,6 +4,7 @@ class _StudioManualEditor extends StatefulWidget {
   const _StudioManualEditor({
     required this.rundown,
     required this.inventory,
+    required this.controller,
     required this.readInventory,
     required this.selectedLibraries,
     required this.libraries,
@@ -20,6 +21,7 @@ class _StudioManualEditor extends StatefulWidget {
   });
   final ManualRundown rundown;
   final _StudioInventory inventory;
+  final LineupController controller;
   final _StudioInventory Function() readInventory;
   final List<PlexLibrary> selectedLibraries;
   final List<PlexLibrary> libraries;
@@ -162,9 +164,7 @@ class _StudioManualEditorState extends State<_StudioManualEditor>
   Widget _pendingHint() => Semantics(
     liveRegion: true,
     child: Text(
-      _picker.activeKey != null
-          ? 'Finish this filter with Done, or cancel it, before saving or tuning.'
-          : 'Add the selected programs, or cancel selection, before saving or tuning.',
+      'Add the selected programs, or cancel selection, before saving or tuning.',
       style: _studioSupportStyle(context),
     ),
   );
@@ -372,6 +372,7 @@ class _StudioManualEditorState extends State<_StudioManualEditor>
                   ? [
                       Text(
                         '${_browseSelection.length} selected${_browseSelection.where((id) => !visible.any((item) => item.id == id)).isEmpty ? '' : ' · selections outside this view'}${unavailableSelections == 0 ? '' : ' · $unavailableSelections unavailable; retained off air if added'}',
+                        style: _studioSupportStyle(context),
                       ),
                       _pendingHint(),
                       TextButton(
@@ -452,7 +453,18 @@ class _StudioManualEditorState extends State<_StudioManualEditor>
                           'Unavailable — retained off air if added',
                       ].join(' · '),
                     ),
-                    leading: _browseSelecting ? browseCheckbox : null,
+                    leading: Row(
+                      mainAxisSize: MainAxisSize.min,
+                      children: [
+                        if (_browseSelecting) browseCheckbox,
+                        StudioProgramArtwork(
+                          controller: widget.controller,
+                          path: item.thumbPath == null
+                              ? null
+                              : Uri.tryParse(item.thumbPath!),
+                        ),
+                      ],
+                    ),
                     trailing: selectedIds.contains(item.id)
                         ? Row(
                             mainAxisSize: MainAxisSize.min,
@@ -543,6 +555,7 @@ class _StudioManualEditorState extends State<_StudioManualEditor>
               entries.isEmpty
                   ? 'No programs selected. Return to Browse library to add programming.'
                   : '${rundownEntries.length} of ${entries.length} shown · Alt+Up/Down reorders · Delete removes${rundownQuery.isEmpty ? '' : ' · Clear search to drag reorder'}',
+              style: _studioSupportStyle(context),
             ),
             SizedBox(height: 8),
             SizedBox(
@@ -712,23 +725,36 @@ class _StudioManualEditorState extends State<_StudioManualEditor>
           subtitle: Column(
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
-              Text(facts.join(' · ')),
+              Text(facts.join(' · '), style: _studioSupportStyle(context)),
               if (unavailable)
-                const Text('Unavailable — retained until removed'),
+                Text(
+                  'Unavailable — retained until removed',
+                  style: _studioSupportStyle(context),
+                ),
               if (wrapActions)
                 Align(alignment: Alignment.centerRight, child: actions),
             ],
           ),
           trailing: wrapActions ? null : actions,
-          leading: dragIndex == null
-              ? null
-              : Tooltip(
+          leading: Row(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              if (dragIndex != null)
+                Tooltip(
                   message: 'Drag $positionedTitle to reorder',
                   child: ReorderableDragStartListener(
                     index: dragIndex,
                     child: const Icon(Icons.drag_handle, size: 24),
                   ),
                 ),
+              StudioProgramArtwork(
+                controller: widget.controller,
+                path: liveItem?.thumbPath == null
+                    ? entry.item.poster
+                    : Uri.tryParse(liveItem!.thumbPath!),
+              ),
+            ],
+          ),
         );
       },
     );

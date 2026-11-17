@@ -71,25 +71,16 @@ class _StudioTitleState extends State<_StudioTitle> {
     final name = widget.name.trim().isEmpty
         ? 'New channel'
         : widget.name.trim();
-    final status = widget.conflict
-        ? 'My draft retained'
-        : widget.baseDeleted
-        ? 'Source deleted'
+    final status = !persisted
+        ? 'Draft'
         : widget.dirty
         ? 'Unsaved changes'
-        : saved
-        ? 'Saved'
-        : 'Draft';
+        : 'Saved';
     final mode = _modeLabel(widget.mode);
     final titleStyle = LineupTypography.pageTitle.copyWith(
       color: roles.primaryText,
     );
-    final statusStyle = _studioBodyStyle(
-      context,
-      color: widget.conflict || widget.baseDeleted
-          ? Theme.of(context).colorScheme.error
-          : roles.secondaryText,
-    );
+    final statusStyle = _studioBodyStyle(context, color: roles.secondaryText);
     final back = FocusTraversalOrder(
       order: const NumericFocusOrder(0),
       child: LineupInlineLink(
@@ -112,20 +103,23 @@ class _StudioTitleState extends State<_StudioTitle> {
           excludeSemantics: true,
           label:
               '${number == null ? 'No channel number' : 'Channel $number'}, $name, ${_modeHeaderLabel(widget.mode)}, $mode, $status',
-          child: Column(
-            crossAxisAlignment: CrossAxisAlignment.start,
+          child: Wrap(
+            spacing: 16,
+            runSpacing: 8,
+            crossAxisAlignment: WrapCrossAlignment.center,
             children: [
               Text(name, softWrap: true, style: titleStyle),
-              SizedBox(height: 4),
-              Wrap(
-                spacing: 8,
-                runSpacing: 2,
-                crossAxisAlignment: WrapCrossAlignment.center,
-                children: [
-                  Text(mode, style: statusStyle),
-                  Text('·', style: statusStyle),
-                  Text(status, style: statusStyle),
-                ],
+              Container(
+                key: const Key('studio-status-tag'),
+                padding: const EdgeInsets.symmetric(
+                  horizontal: 10,
+                  vertical: 4,
+                ),
+                decoration: BoxDecoration(
+                  border: Border.all(color: roles.subtleBorder),
+                  borderRadius: BorderRadius.circular(roles.panelRadius),
+                ),
+                child: Text(status, style: statusStyle),
               ),
             ],
           ),

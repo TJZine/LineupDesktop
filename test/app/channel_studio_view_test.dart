@@ -21,6 +21,7 @@ import 'package:lineup_desktop/channels/scheduler.dart';
 import 'package:lineup_desktop/plex/plex_models.dart';
 import 'package:lineup_desktop/playback/native_player.dart';
 import 'package:lineup_desktop/guide/guide_view.dart';
+import 'package:lineup_desktop/guide/guide_controller.dart';
 import 'package:lineup_desktop/settings/lineup_settings.dart';
 import 'package:lineup_desktop/ui/app_theme.dart';
 import 'package:lineup_desktop/ui/app_ui.dart';
@@ -34,6 +35,652 @@ Widget _studioDesktopCanvasBuilder(BuildContext context, Widget? child) =>
     );
 
 void main() {
+  testWidgets('Studio labels and pinned preview footer fit at 1280 by 720', (
+    tester,
+  ) async {
+    tester.view
+      ..physicalSize = const Size(1280, 720)
+      ..devicePixelRatio = 1;
+    addTearDown(tester.view.reset);
+    final original = _channel(
+      id: 'fit',
+      number: 42,
+      name: 'Evening films',
+      source: const ManualSource([
+        ChannelItem(id: 'one', title: 'One', duration: Duration(minutes: 30)),
+      ]),
+    );
+    final controller = _RecordingSaveController(
+      scenario: LineupScenario(
+        channels: [original],
+        availableMedia: [_media('one')],
+      ),
+    );
+    addTearDown(controller.dispose);
+    await tester.pumpWidget(
+      _studio(controller, ChannelStudioMode.editCustom, channel: original),
+    );
+    await _settleAirCheck(tester);
+    await tester.enterText(
+      find.byKey(const Key('studio-name')),
+      'Edited films',
+    );
+    await tester.pumpAndSettle();
+    expect(find.text('Unsaved changes'), findsOneWidget);
+    for (final label in ['Channel name', 'Number', 'Playback order']) {
+      final text = find.text(label).first;
+      expect(tester.getRect(text).height, greaterThan(0));
+      expect(
+        tester.getTopLeft(text).dy,
+        greaterThanOrEqualTo(
+          tester.getTopLeft(find.byKey(const Key('studio-scroll'))).dy,
+        ),
+      );
+    }
+    await tester.ensureVisible(find.byKey(const Key('air-check-footer')));
+    final footer = tester.getRect(find.byKey(const Key('air-check-footer')));
+    final panel = tester.getRect(find.byKey(const Key('channel-air-check')));
+    expect(footer.bottom, lessThanOrEqualTo(panel.bottom));
+    expect(find.byKey(const Key('air-check-selection')), findsNothing);
+    expect(tester.takeException(), isNull);
+  });
+
+  for (final mode in ChannelStudioMode.values) {
+    for (final tv in [false, true]) {
+      testWidgets('Studio full field labels and status mode=$mode tv=$tv', (
+        tester,
+      ) async {
+        tester.view
+          ..physicalSize = tv ? const Size(1920, 1080) : const Size(1280, 720)
+          ..devicePixelRatio = 1;
+        addTearDown(tester.view.reset);
+        final original = _channel(
+          id: 'modes',
+          number: 42,
+          name: 'Mode example',
+          builderKey: mode == ChannelStudioMode.inspectGenerated
+              ? 'builder:modes'
+              : null,
+          source: const ManualSource([
+            ChannelItem(
+              id: 'one',
+              title: 'One',
+              duration: Duration(minutes: 30),
+            ),
+          ]),
+        );
+        final controller = _RecordingSaveController(
+          scenario: LineupScenario(
+            channels: [original],
+            availableMedia: [_media('one')],
+          ),
+        );
+        addTearDown(controller.dispose);
+        await tester.pumpWidget(
+          _studio(
+            controller,
+            mode,
+            channel: mode == ChannelStudioMode.createCustom ? null : original,
+            profile: profileFor(tv),
+            textScaler: const TextScaler.linear(1.3),
+          ),
+        );
+        await _settleAirCheck(tester);
+        final persisted =
+            mode == ChannelStudioMode.editCustom ||
+            mode == ChannelStudioMode.inspectGenerated;
+        expect(
+          find.descendant(
+            of: find.byKey(const Key('studio-status-tag')),
+            matching: find.text(persisted ? 'Saved' : 'Draft'),
+          ),
+          findsOneWidget,
+        );
+        for (final label in [
+          'Channel name',
+          'Number',
+          mode == ChannelStudioMode.inspectGenerated
+              ? 'Playback order · Read-only'
+              : 'Playback order',
+        ]) {
+          final rect = tester.getRect(find.text(label).first);
+          final viewport = tester.getRect(
+            find.byKey(const Key('studio-scroll')),
+          );
+          expect(
+            viewport.inflate(.01).contains(rect.topLeft),
+            isTrue,
+            reason: '$label top',
+          );
+          expect(
+            viewport.inflate(.01).contains(rect.bottomRight),
+            isTrue,
+            reason: '$label bottom',
+          );
+        }
+        if (persisted) {
+          await tester.enterText(
+            find.byKey(const Key('studio-name')),
+            'Changed mode',
+          );
+          await tester.pumpAndSettle();
+          expect(
+            find.descendant(
+              of: find.byKey(const Key('studio-status-tag')),
+              matching: find.text('Unsaved changes'),
+            ),
+            findsOneWidget,
+          );
+          for (final label in [
+            'Channel name',
+            'Number',
+            mode == ChannelStudioMode.inspectGenerated
+                ? 'Playback order · Read-only'
+                : 'Playback order',
+          ]) {
+            final rect = tester.getRect(find.text(label).first);
+            final viewport = tester.getRect(
+              find.byKey(const Key('studio-scroll')),
+            );
+            expect(
+              viewport.inflate(.01).contains(rect.topLeft),
+              isTrue,
+              reason: '$label edited top',
+            );
+            expect(
+              viewport.inflate(.01).contains(rect.bottomRight),
+              isTrue,
+              reason: '$label edited bottom',
+            );
+          }
+        }
+        expect(tester.takeException(), isNull);
+      });
+    }
+  }
+
+  for (final manual in [false, true]) {
+    for (final configuration in [
+      (name: 'desktop', size: const Size(1280, 720), tv: false, text: 1.0),
+      (name: 'tv', size: const Size(1920, 1080), tv: true, text: 1.0),
+      (name: 'tv130', size: const Size(1920, 1080), tv: true, text: 1.3),
+      (name: 'stacked', size: const Size(700, 720), tv: false, text: 1.3),
+    ]) {
+      testWidgets(
+        'Studio preview stays in actual viewport ${configuration.name} manual=$manual',
+        (tester) async {
+          tester.view
+            ..physicalSize = configuration.size
+            ..devicePixelRatio = 1;
+          addTearDown(tester.view.reset);
+          final items = [
+            for (var i = 0; i < 10; i++) _media('fit-$i', libraryId: 'movies'),
+          ];
+          final original = _channel(
+            id: 'viewport',
+            number: 42,
+            name: 'Viewport',
+            source: manual
+                ? ManualSource([
+                    for (final item in items)
+                      ChannelItem(
+                        id: item.id,
+                        title: item.title,
+                        duration: item.duration,
+                      ),
+                  ])
+                : const LibrarySource(
+                    libraryId: 'movies',
+                    libraryType: PlexLibraryType.movie,
+                  ),
+          );
+          final controller = _FailingSaveController(
+            scenario: LineupScenario(
+              channels: [original],
+              libraries: const [
+                PlexLibrary(
+                  id: 'movies',
+                  title: 'Movies',
+                  type: PlexLibraryType.movie,
+                ),
+              ],
+              selectedLibraryIds: {'movies'},
+              availableMedia: items,
+            ),
+          );
+          addTearDown(controller.dispose);
+          await tester.pumpWidget(
+            _studio(
+              controller,
+              ChannelStudioMode.editCustom,
+              channel: original,
+              profile: profileFor(configuration.tv),
+              textScaler: TextScaler.linear(configuration.text),
+            ),
+          );
+          await _settleAirCheck(tester);
+          final outer = find
+              .descendant(
+                of: find.byKey(const Key('studio-scroll')),
+                matching: find.byType(Scrollable),
+              )
+              .first;
+          final outerState = tester.state<ScrollableState>(outer);
+          Future<void> revealPreview() => _revealStudioPreview(tester);
+          void expectFooterVisible() {
+            final viewport = tester
+                .getRect(find.byKey(const Key('studio-scroll')))
+                .inflate(.1);
+            final footer = tester.getRect(
+              find.byKey(const Key('air-check-footer')),
+            );
+            expect(
+              viewport.contains(footer.topLeft),
+              isTrue,
+              reason: 'footer top in real viewport',
+            );
+            expect(
+              viewport.contains(footer.bottomRight),
+              isTrue,
+              reason: 'footer bottom in real viewport',
+            );
+            expect(
+              footer.bottom,
+              lessThanOrEqualTo(tester.view.physicalSize.height + .1),
+            );
+            expect(
+              find.text('Show next 6 hours').hitTestable(),
+              findsOneWidget,
+            );
+          }
+
+          await revealPreview();
+          expectFooterVisible();
+          final height = tester
+              .getSize(find.byKey(const Key('channel-air-check')))
+              .height;
+          final prior = outerState.position.pixels;
+          await tester.dragFrom(
+            Offset(
+              tester.getRect(find.byKey(const Key('studio-scroll'))).left + 2,
+              400,
+            ),
+            const Offset(0, -60),
+          );
+          await tester.pumpAndSettle();
+          expect(
+            tester.getSize(find.byKey(const Key('channel-air-check'))).height,
+            closeTo(height, .1),
+            reason: 'ordinary scroll does not resize preview',
+          );
+          outerState.position.jumpTo(prior);
+          await tester.pumpAndSettle();
+          // A save failure inserts the existing notice above the station. The
+          // allocation must follow its actual new position, preserving the error.
+          await tester.enterText(
+            find.byKey(const Key('studio-name')),
+            'Changed viewport',
+          );
+          await tester.pumpAndSettle();
+          await tester.tap(find.text('Save changes'));
+          await tester.pumpAndSettle();
+          expect(find.byType(LineupNotice), findsOneWidget);
+          await revealPreview();
+          expectFooterVisible();
+          final preview = tester.widget<ChannelAirCheck>(
+            find.byType(ChannelAirCheck),
+          );
+          final future = preview.verification.result.preview!.programs
+              .firstWhere(
+                (program) => program.scheduled.start.isAfter(preview.clock()),
+              );
+          final row = find.byKey(ValueKey('air-check-program-${future.id}'));
+          final inner = find.descendant(
+            of: find.byKey(const Key('air-check-schedule-list')),
+            matching: find.byType(Scrollable),
+          );
+          for (
+            var attempt = 0;
+            row.hitTestable().evaluate().isEmpty && attempt < 30;
+            attempt++
+          ) {
+            final rect = tester.getRect(inner);
+            await tester.dragFrom(
+              Offset(rect.center.dx, rect.bottom - 20),
+              const Offset(0, -100),
+            );
+            await tester.pumpAndSettle();
+          }
+          expect(row.hitTestable(), findsOneWidget);
+
+          await tester.tap(row);
+          await tester.pumpAndSettle();
+          final detail = tester.getRect(
+            find.byKey(const Key('air-check-selection')),
+          );
+          final previewViewport = tester.getRect(inner).inflate(.1);
+          expect(previewViewport.contains(detail.topLeft), isTrue);
+          expect(previewViewport.contains(detail.bottomRight), isTrue);
+          expect(find.text('Back to now').hitTestable(), findsOneWidget);
+          expectFooterVisible();
+          await tester.tap(find.text('Back to now'));
+          await tester.pumpAndSettle();
+          expect(find.byKey(const Key('air-check-selection')), findsNothing);
+          if (configuration.name != 'stacked') {
+            outerState.position.jumpTo(0);
+            tester.view.physicalSize = configuration.tv
+                ? const Size(1512, 945)
+                : const Size(1152, 720);
+            await tester.pumpAndSettle();
+            await revealPreview();
+            expectFooterVisible();
+          }
+          expect(tester.takeException(), isNull);
+        },
+      );
+    }
+  }
+
+  testWidgets(
+    'Studio wide tall controls use a reachable bounded viewport at remainder boundaries',
+    (tester) async {
+      tester.view
+        ..physicalSize = const Size(800, 600)
+        ..devicePixelRatio = 1;
+      addTearDown(tester.view.reset);
+      final original = _channel(
+        id: 'remainder',
+        number: 7,
+        name: 'Remainder',
+        source: const PlaylistSource('playlist'),
+        mode: PlaybackMode.block,
+        blockSize: 5,
+      );
+      final controller = _ExpectedBaseController(
+        scenario: LineupScenario(
+          channels: [original],
+          availablePlaylists: [_playlist('playlist')],
+        ),
+      );
+      addTearDown(controller.dispose);
+      await tester.pumpWidget(
+        _studio(controller, ChannelStudioMode.editCustom, channel: original),
+      );
+      await tester.pumpAndSettle();
+      final outer = find
+          .descendant(
+            of: find.byKey(const Key('studio-scroll')),
+            matching: find.byType(Scrollable),
+          )
+          .first;
+      final position = tester.state<ScrollableState>(outer).position;
+      double remainder() {
+        final viewport = tester.getRect(find.byKey(const Key('studio-scroll')));
+        final panel = tester.getRect(
+          find.byKey(const Key('channel-air-check')),
+        );
+        final scale = LineupCanvas.scaleOf(
+          tester.element(find.byType(ChannelAirCheck)),
+        );
+        return viewport.bottom - panel.top - position.pixels * scale;
+      }
+
+      Future<void> revealAndVerify() async {
+        await _revealStudioPreview(tester);
+        final viewport = tester
+            .getRect(find.byKey(const Key('studio-scroll')))
+            .inflate(.1);
+        final panel = tester.getRect(
+          find.byKey(const Key('channel-air-check')),
+        );
+        final footer = tester.getRect(
+          find.byKey(const Key('air-check-footer')),
+        );
+        expect(panel.height, closeTo(viewport.height - .2, .1));
+        expect(viewport.contains(footer.topLeft), isTrue);
+        expect(viewport.contains(footer.bottomRight), isTrue);
+        expect(find.text('Show next 6 hours').hitTestable(), findsOneWidget);
+        expect(
+          tester
+              .widget<ChannelAirCheck>(find.byType(ChannelAirCheck))
+              .viewportHeight,
+          isNotNull,
+        );
+      }
+
+      final smallPositive = remainder();
+      expect(smallPositive, greaterThan(0));
+      expect(
+        smallPositive,
+        lessThan(
+          tester.getRect(find.byKey(const Key('channel-air-check'))).height,
+        ),
+      );
+      await revealAndVerify();
+      tester.view.physicalSize = Size(800, 600 - smallPositive);
+      await tester.pumpAndSettle();
+      expect(remainder(), closeTo(0, .1));
+      await revealAndVerify();
+      await tester.enterText(
+        find.byKey(const Key('studio-name')),
+        'My retained draft',
+      );
+      await tester.pumpAndSettle();
+      controller.fixtureActor.replaceChannels([
+        _channel(
+          id: original.id,
+          number: original.number,
+          name:
+              'A different saved version with a longer synthetic channel name',
+          source: original.source,
+          mode: original.playbackMode,
+          blockSize: original.blockSize,
+        ),
+      ]);
+      await tester.tap(find.text('Save changes'));
+      await tester.pumpAndSettle();
+      expect(find.text('Another edit was saved first'), findsOneWidget);
+      expect(remainder(), lessThan(0));
+      await revealAndVerify();
+      expect(tester.takeException(), isNull);
+    },
+  );
+
+  for (final mode in [
+    ChannelStudioMode.createCustom,
+    ChannelStudioMode.duplicateCustom,
+    ChannelStudioMode.inspectGenerated,
+  ]) {
+    testWidgets('Studio owns untouched preview footer state $mode', (
+      tester,
+    ) async {
+      final original = _channel(
+        id: 'footer-mode',
+        number: 7,
+        name: 'Mode',
+        builderKey: mode == ChannelStudioMode.inspectGenerated
+            ? 'builder:mode'
+            : null,
+        source: const LibrarySource(
+          libraryId: 'movies',
+          libraryType: PlexLibraryType.movie,
+        ),
+      );
+      final controller = _RecordingSaveController(
+        scenario: LineupScenario(
+          channels: [original],
+          libraries: const [
+            PlexLibrary(
+              id: 'movies',
+              title: 'Movies',
+              type: PlexLibraryType.movie,
+            ),
+          ],
+          selectedLibraryIds: {'movies'},
+          availableMedia: [_media('one', libraryId: 'movies')],
+        ),
+      );
+      addTearDown(controller.dispose);
+      final studio = GlobalKey<ChannelStudioViewState>();
+      await tester.pumpWidget(
+        _studio(
+          controller,
+          mode,
+          studioKey: studio,
+          channel: mode == ChannelStudioMode.createCustom ? null : original,
+        ),
+      );
+      await _settleAirCheck(tester);
+      expect(studio.currentState!.dirty, isFalse);
+      expect(
+        find.text(
+          mode == ChannelStudioMode.inspectGenerated
+              ? 'Matches the saved channel'
+              : 'Updates as you edit',
+        ),
+        findsOneWidget,
+      );
+    });
+  }
+
+  testWidgets(
+    'Studio footer distinguishes refreshed metadata from unsaved identity and recipe edits',
+    (tester) async {
+      final original = _channel(
+        id: 'footer-edits',
+        number: 7,
+        name: 'Original title',
+        source: const ManualSource([
+          ChannelItem(
+            id: 'one',
+            title: 'Old snapshot title',
+            duration: Duration(minutes: 30),
+          ),
+        ]),
+      );
+      final controller = _RecordingSaveController(
+        scenario: LineupScenario(
+          channels: [original],
+          availableMedia: [
+            _media(
+              'one',
+              title: 'Fresh catalog title',
+              thumbPath: '/library/metadata/one/thumb',
+            ),
+          ],
+        ),
+      );
+      addTearDown(controller.dispose);
+      final studio = GlobalKey<ChannelStudioViewState>();
+      await tester.pumpWidget(
+        _studio(
+          controller,
+          ChannelStudioMode.editCustom,
+          channel: original,
+          studioKey: studio,
+        ),
+      );
+      await _settleAirCheck(tester);
+      expect(studio.currentState!.dirty, isFalse);
+      expect(find.text('Fresh catalog title'), findsWidgets);
+      expect(find.text('Matches the saved channel'), findsOneWidget);
+      for (final change in [
+        ('studio-name', 'New title', 'Original title'),
+        ('studio-number', '8', '7'),
+      ]) {
+        await tester.enterText(find.byKey(Key(change.$1)), change.$2);
+        await tester.pumpAndSettle();
+        expect(find.text('Unsaved changes'), findsOneWidget);
+        expect(find.text('Updates as you edit'), findsOneWidget);
+        await tester.enterText(find.byKey(Key(change.$1)), change.$3);
+        await tester.pumpAndSettle();
+        expect(studio.currentState!.dirty, isFalse);
+        expect(find.text('Matches the saved channel'), findsOneWidget);
+      }
+      await _chooseDropdown(tester, 'studio-playback-order', 'Shuffle');
+      await _settleAirCheck(tester);
+      expect(find.text('Updates as you edit'), findsOneWidget);
+      await tester.tap(find.text('Save changes'));
+      await tester.pumpAndSettle();
+      expect(controller.saved, isNotNull);
+      expect(studio.currentState!.dirty, isFalse);
+      expect(find.text('Saved'), findsOneWidget);
+      expect(find.text('Matches the saved channel'), findsOneWidget);
+      await tester.enterText(
+        find.byKey(const Key('studio-name')),
+        'Another edit',
+      );
+      await tester.pumpAndSettle();
+      expect(find.text('Updates as you edit'), findsOneWidget);
+      await tester.enterText(
+        find.byKey(const Key('studio-name')),
+        'Original title',
+      );
+      await tester.pumpAndSettle();
+      expect(find.text('Matches the saved channel'), findsOneWidget);
+    },
+  );
+
+  testWidgets('Studio requests sized artwork only for built program rows', (
+    tester,
+  ) async {
+    final media = [
+      for (var i = 0; i < 200; i++) _media('art-$i', thumbPath: '/art/$i'),
+    ];
+    final original = _channel(
+      id: 'art',
+      number: 42,
+      name: 'Artwork',
+      source: ManualSource([
+        for (final item in media)
+          ChannelItem(
+            id: item.id,
+            title: item.title,
+            duration: item.duration,
+            poster: Uri.parse(item.thumbPath!),
+          ),
+      ]),
+    );
+    final controller = _SizedArtworkController(
+      scenario: LineupScenario(channels: [original], availableMedia: media),
+    );
+    addTearDown(controller.dispose);
+    await tester.pumpWidget(
+      _studio(controller, ChannelStudioMode.editCustom, channel: original),
+    );
+    await _settleAirCheck(tester);
+    expect(controller.artworkRequests, isNotEmpty);
+    expect(
+      controller.artworkRequests.map((call) => call.$1).toSet().length,
+      lessThan(200),
+    );
+    expect(
+      controller.artworkRequests.every(
+        (call) => call.$2 == 132 && call.$3 == 192,
+      ),
+      isTrue,
+    );
+    final before = controller.artworkRequests.map((call) => call.$1).toSet();
+    final list = find.descendant(
+      of: find.byKey(const Key('studio-rundown')),
+      matching: find.byType(Scrollable),
+    );
+    await tester.ensureVisible(find.byKey(const Key('studio-rundown')));
+    await tester.pumpAndSettle();
+    final position = tester.state<ScrollableState>(list).position;
+    final offset = position.pixels;
+    await tester.drag(list, const Offset(0, -600));
+    await tester.pumpAndSettle();
+    expect(position.pixels, greaterThan(offset));
+    expect(
+      controller.artworkRequests
+          .map((call) => call.$1)
+          .toSet()
+          .difference(before),
+      isNotEmpty,
+    );
+  });
+
   testWidgets('Studio rundown icon actions expose accessible names', (
     tester,
   ) async {
@@ -366,7 +1013,7 @@ void main() {
 
     await tester.tap(find.text('Add a custom channel'));
     await tester.pumpAndSettle();
-    expect(find.text('Create custom channel'), findsOneWidget);
+    expect(find.text('Draft'), findsOneWidget);
     expect(find.text('Schedule preview'), findsOneWidget);
     expect(find.text('New channel'), findsWidgets);
     expect(find.text('1'), findsWidgets);
@@ -375,7 +1022,7 @@ void main() {
 
     await tester.tap(find.byTooltip('Open Custom four'));
     await tester.pumpAndSettle();
-    expect(find.text('Edit custom channel'), findsOneWidget);
+    expect(find.text('Saved'), findsOneWidget);
     expect(find.text('Schedule preview'), findsOneWidget);
     expect(find.byType(Dialog), findsNothing);
     await tester.tap(find.text('‹ Channels'));
@@ -384,7 +1031,7 @@ void main() {
 
     await tester.tap(find.byTooltip('Open Generated eight'));
     await tester.pumpAndSettle();
-    expect(find.text('Inspect generated channel'), findsOneWidget);
+    expect(find.text('Saved'), findsOneWidget);
     expect(find.text('Schedule preview'), findsOneWidget);
     expect(
       find.text('Programming is read-only and will be preserved exactly.'),
@@ -393,9 +1040,9 @@ void main() {
     expect(find.textContaining('Mini-marathons of 4'), findsOneWidget);
     await tester.tap(find.text('Duplicate as custom'));
     await tester.pumpAndSettle();
-    expect(find.text('Duplicate as custom'), findsWidgets);
+    expect(find.text('Draft'), findsOneWidget);
     expect(find.text('Schedule preview'), findsOneWidget);
-    expect(find.text('Duplicate as custom'), findsWidgets);
+    expect(find.text('Draft'), findsOneWidget);
     expect(
       tester
           .widget<TextFormField>(find.byKey(const Key('studio-name')))
@@ -951,7 +1598,7 @@ void main() {
     expect(controller.saved, isNull);
     expect(find.text('Select at least one program.'), findsOneWidget);
     expect(_fieldText(tester, 'studio-name'), 'Empty draft');
-    expect(find.text('Unsaved changes'), findsOneWidget);
+    expect(find.text('Draft'), findsOneWidget);
   });
 
   testWidgets('tune completion owns one blocking Studio action', (
@@ -1145,6 +1792,26 @@ void main() {
       channel.anchor,
       await controller.loadScheduleFor(channel),
     );
+    final preview = find.byKey(const Key('channel-air-check'));
+    await tester.ensureVisible(preview);
+    await tester.pump();
+    final previewScroll = find.descendant(
+      of: find.byKey(const Key('air-check-schedule-list')),
+      matching: find.byType(Scrollable),
+    );
+    final expectedPreview = GuideProgram(
+      channelId: 'air-check',
+      scheduled: expected,
+    );
+    final expectedRow = find.byKey(
+      ValueKey('air-check-program-${expectedPreview.id}'),
+    );
+    await tester.scrollUntilVisible(
+      expectedRow,
+      120,
+      scrollable: previewScroll,
+    );
+    await tester.pump();
     expect(
       find.bySemanticsLabel(
         RegExp(
@@ -1484,107 +2151,104 @@ void main() {
     expect(saved.includeWatched, isFalse);
   });
 
-  testWidgets(
-    'source switch cancels pending filter and preserves completed drafts',
-    (tester) async {
-      final original = _channel(
-        id: 'playlist-channel',
-        number: 3,
-        name: 'Playlist channel',
-        source: const PlaylistSource('favorites'),
-      );
-      final controller = _RecordingSaveController(
-        scenario: LineupScenario(
-          channels: [original],
-          libraries: const [
-            PlexLibrary(
-              id: 'movies',
-              title: 'Movies',
-              type: PlexLibraryType.movie,
-            ),
-          ],
-          selectedLibraryIds: {'movies'},
-          availableMedia: [
-            _media('drama', libraryId: 'movies', genres: ['Drama']),
-            _media('comedy', libraryId: 'movies', genres: ['Comedy']),
-          ],
-          availablePlaylists: [_playlist('favorites'), _playlist('later')],
-        ),
-      );
-      addTearDown(controller.dispose);
-      await tester.pumpWidget(
-        _studio(controller, ChannelStudioMode.editCustom, channel: original),
-      );
-      await _settleAirCheck(tester);
-      await _chooseDropdown(tester, 'studio-playlist', 'Playlist later');
-      await tester.ensureVisible(find.text('Library').first);
-      await tester.tap(find.text('Library').first);
-      await _settleAirCheck(tester);
-      await _openStudioFilter(tester, 'genre');
-      await tester.tap(find.widgetWithText(CheckboxListTile, 'Drama'));
-      await tester.ensureVisible(find.text('Done'));
-      await tester.tap(find.text('Done'));
-      await _settleAirCheck(tester);
-      await _openStudioFilter(tester, 'genre');
-      await tester.tap(find.widgetWithText(CheckboxListTile, 'Comedy'));
-      await tester.ensureVisible(find.text('Plex playlist'));
-      await tester.tap(find.text('Plex playlist'));
-      await _settleAirCheck(tester);
-      expect(
-        tester
-            .widget<ButtonStyleButton>(find.byKey(const Key('studio-tune')))
-            .onPressed,
-        isNotNull,
-      );
-      expect(
-        tester
-            .widget<FilledButton>(
-              find.widgetWithText(FilledButton, 'Save changes'),
-            )
-            .onPressed,
-        isNotNull,
-      );
-      expect(
-        tester
-            .widget<DropdownButtonFormField<String>>(
-              find.byKey(const Key('studio-playlist')),
-            )
-            .initialValue,
-        'later',
-      );
-      await tester.ensureVisible(find.text('Library').first);
-      await tester.tap(find.text('Library').first);
-      await _settleAirCheck(tester);
-      expect(find.text('Genre: Drama'), findsOneWidget);
-      expect(find.byKey(const Key('studio-filter-picker-genre')), findsNothing);
-      await _openStudioFilter(tester, 'genre');
-      expect(
-        tester
-            .widget<CheckboxListTile>(
-              find.widgetWithText(CheckboxListTile, 'Comedy'),
-            )
-            .value,
-        isFalse,
-      );
-      await tester.ensureVisible(find.text('Cancel'));
-      await tester.tap(find.text('Cancel'));
-      await tester.ensureVisible(find.text('Plex playlist'));
-      await tester.tap(find.text('Plex playlist'));
-      await _settleAirCheck(tester);
-      await tester.tap(find.text('Save changes'));
-      await tester.pumpAndSettle();
-      expect(
-        controller.saved!.source.toJson(),
-        const PlaylistSource('later').toJson(),
-      );
-      expect(
-        tester
-            .widget<ButtonStyleButton>(find.byKey(const Key('studio-tune')))
-            .onPressed,
-        isNotNull,
-      );
-    },
-  );
+  testWidgets('source switch retains live filter values and completed drafts', (
+    tester,
+  ) async {
+    final original = _channel(
+      id: 'playlist-channel',
+      number: 3,
+      name: 'Playlist channel',
+      source: const PlaylistSource('favorites'),
+    );
+    final controller = _RecordingSaveController(
+      scenario: LineupScenario(
+        channels: [original],
+        libraries: const [
+          PlexLibrary(
+            id: 'movies',
+            title: 'Movies',
+            type: PlexLibraryType.movie,
+          ),
+        ],
+        selectedLibraryIds: {'movies'},
+        availableMedia: [
+          _media('drama', libraryId: 'movies', genres: ['Drama']),
+          _media('comedy', libraryId: 'movies', genres: ['Comedy']),
+        ],
+        availablePlaylists: [_playlist('favorites'), _playlist('later')],
+      ),
+    );
+    addTearDown(controller.dispose);
+    await tester.pumpWidget(
+      _studio(controller, ChannelStudioMode.editCustom, channel: original),
+    );
+    await _settleAirCheck(tester);
+    await _chooseDropdown(tester, 'studio-playlist', 'Playlist later');
+    await tester.ensureVisible(find.text('Library').first);
+    await tester.tap(find.text('Library').first);
+    await _settleAirCheck(tester);
+    await _openStudioFilter(tester, 'genre');
+    await tester.tap(find.widgetWithText(CheckboxListTile, 'Drama'));
+    await tester.sendKeyEvent(LogicalKeyboardKey.escape);
+    await _settleAirCheck(tester);
+    await _openStudioFilter(tester, 'genre');
+    await tester.tap(find.widgetWithText(CheckboxListTile, 'Comedy'));
+    await tester.ensureVisible(find.text('Plex playlist'));
+    await tester.tap(find.text('Plex playlist'));
+    await _settleAirCheck(tester);
+    expect(
+      tester
+          .widget<ButtonStyleButton>(find.byKey(const Key('studio-tune')))
+          .onPressed,
+      isNotNull,
+    );
+    expect(
+      tester
+          .widget<FilledButton>(
+            find.widgetWithText(FilledButton, 'Save changes'),
+          )
+          .onPressed,
+      isNotNull,
+    );
+    expect(
+      tester
+          .widget<DropdownButtonFormField<String>>(
+            find.byKey(const Key('studio-playlist')),
+          )
+          .initialValue,
+      'later',
+    );
+    await tester.ensureVisible(find.text('Library').first);
+    await tester.tap(find.text('Library').first);
+    await _settleAirCheck(tester);
+    expect(find.text('Genre: Drama, Comedy'), findsOneWidget);
+    expect(find.byKey(const Key('studio-filter-picker-genre')), findsNothing);
+    await _openStudioFilter(tester, 'genre');
+    expect(
+      tester
+          .widget<CheckboxListTile>(
+            find.widgetWithText(CheckboxListTile, 'Comedy'),
+          )
+          .value,
+      isTrue,
+    );
+    await tester.sendKeyEvent(LogicalKeyboardKey.escape);
+    await tester.ensureVisible(find.text('Plex playlist'));
+    await tester.tap(find.text('Plex playlist'));
+    await _settleAirCheck(tester);
+    await tester.tap(find.text('Save changes'));
+    await tester.pumpAndSettle();
+    expect(
+      controller.saved!.source.toJson(),
+      const PlaylistSource('later').toJson(),
+    );
+    expect(
+      tester
+          .widget<ButtonStyleButton>(find.byKey(const Key('studio-tune')))
+          .onPressed,
+      isNotNull,
+    );
+  });
 
   testWidgets('custom mixed sources stay lossless until explicitly replaced', (
     tester,
@@ -2988,8 +3652,7 @@ void main() {
     await _chooseDropdown(tester, 'studio-media-type', 'episode');
     await _openStudioFilter(tester, 'genre', browse: true);
     await tester.tap(find.widgetWithText(CheckboxListTile, 'Comedy'));
-    await tester.ensureVisible(find.text('Done'));
-    await tester.tap(find.text('Done'));
+    await tester.sendKeyEvent(LogicalKeyboardKey.escape);
     await tester.pumpAndSettle();
     expect(key.currentState!.dirty, isFalse);
     await tester.enterText(find.byKey(const Key('studio-search')), 'none');
@@ -5173,7 +5836,7 @@ void main() {
         find.byWidgetPredicate(
           (widget) => widget is Image && widget.image is MemoryImage,
         ),
-        findsOneWidget,
+        findsWidgets,
       );
       final coverage = tester
           .widget<Text>(find.textContaining('Schedule through'))
@@ -5383,74 +6046,76 @@ void main() {
     expect(find.text('Stale playlist tag'), findsNothing);
   });
 
-  testWidgets('Library filter picker keeps pending values local until Done', (
-    tester,
-  ) async {
-    final controller = _RecordingSaveController(
-      scenario: LineupScenario(
-        libraries: const [
-          PlexLibrary(
-            id: 'movies',
-            title: 'Movies',
-            type: PlexLibraryType.movie,
-          ),
-        ],
-        selectedLibraryIds: {'movies'},
-        availableMedia: [
-          _media('drama', libraryId: 'movies', genres: ['Drama']),
-          _media('comedy', libraryId: 'movies', genres: ['Comedy']),
-        ],
-      ),
-    );
-    addTearDown(controller.dispose);
-    await tester.pumpWidget(
-      _studio(controller, ChannelStudioMode.createCustom),
-    );
-    await _settleAirCheck(tester);
-
-    expect(find.text('None in this library'), findsOneWidget);
-    expect(
-      tester
-          .widget<LineupFieldButton>(
-            find.byKey(const Key('studio-filter-collection')),
-          )
-          .onPressed,
-      isNull,
-    );
-    await _openStudioFilter(tester, 'genre');
-    await tester.pumpAndSettle();
-    expect(find.byKey(const Key('studio-filter-picker-genre')), findsOneWidget);
-    await tester.tap(find.widgetWithText(CheckboxListTile, 'Drama'));
-    expect(
-      tester
-          .widget<FilledButton>(
-            find.widgetWithText(FilledButton, 'Save channel'),
-          )
-          .onPressed,
-      isNull,
-    );
-    expect(find.textContaining('Finish this filter'), findsOneWidget);
-    await tester.ensureVisible(find.text('Cancel'));
-    await tester.tap(find.text('Cancel'));
-    await tester.pumpAndSettle();
-    expect(find.byKey(const Key('studio-applied-genre')), findsNothing);
-
-    await _openStudioFilter(tester, 'genre');
-    await tester.pumpAndSettle();
-    await tester.tap(find.widgetWithText(CheckboxListTile, 'Drama'));
-    expect(
-      tester
-          .widget<FilledButton>(
-            find.widgetWithText(FilledButton, 'Save channel'),
-          )
-          .onPressed,
-      isNull,
-    );
-    await tester.ensureVisible(find.text('Done'));
-    await tester.tap(find.text('Done'));
-    await tester.pumpAndSettle();
-    expect(find.text('Genre: Drama'), findsOneWidget);
-  });
+  testWidgets(
+    'Library filters update the draft immediately and keep Save available',
+    (tester) async {
+      final original = _channel(id: 'live', number: 12, name: 'Live filters');
+      final controller = _RecordingSaveController(
+        scenario: LineupScenario(
+          channels: [original],
+          libraries: const [
+            PlexLibrary(
+              id: 'movies',
+              title: 'Movies',
+              type: PlexLibraryType.movie,
+            ),
+          ],
+          selectedLibraryIds: {'movies'},
+          availableMedia: [
+            _media('drama', libraryId: 'movies', genres: ['Drama']),
+            _media('comedy', libraryId: 'movies', genres: ['Comedy']),
+          ],
+        ),
+      );
+      addTearDown(controller.dispose);
+      await tester.pumpWidget(
+        _studio(controller, ChannelStudioMode.editCustom, channel: original),
+      );
+      await _settleAirCheck(tester);
+      await _openStudioFilter(tester, 'genre');
+      await tester.tap(find.widgetWithText(CheckboxListTile, 'Drama'));
+      await _settleAirCheck(tester);
+      expect(find.text('Done'), findsNothing);
+      expect(find.text('Cancel'), findsNothing);
+      expect(find.textContaining('Finish this filter'), findsNothing);
+      expect(
+        tester
+            .widget<FilledButton>(
+              find.widgetWithText(FilledButton, 'Save changes'),
+            )
+            .onPressed,
+        isNotNull,
+      );
+      expect(
+        tester
+            .widget<ChannelAirCheck>(find.byType(ChannelAirCheck))
+            .channel
+            .source,
+        isA<LibrarySource>().having(
+          (source) => source.filters[LibraryFilter.genre],
+          'genre',
+          ['Drama'],
+        ),
+      );
+      await tester.sendKeyEvent(LogicalKeyboardKey.escape);
+      await tester.pumpAndSettle();
+      expect(find.text('Genre: Drama'), findsOneWidget);
+      await _openStudioFilter(tester, 'genre');
+      await tester.tap(find.text('Clear selection'));
+      await _settleAirCheck(tester);
+      expect(
+        tester
+            .widget<ChannelAirCheck>(find.byType(ChannelAirCheck))
+            .channel
+            .source,
+        isA<LibrarySource>().having(
+          (source) => source.filters,
+          'filters',
+          isEmpty,
+        ),
+      );
+    },
+  );
 
   testWidgets(
     'TV Back cancels a nested Studio filter before leaving the editor',
@@ -5513,12 +6178,13 @@ void main() {
           findsNothing,
         );
         expect(find.text('Discard changes?'), findsNothing);
-        expect(find.byKey(const Key('studio-applied-genre')), findsNothing);
+        expect(find.byKey(const Key('studio-applied-genre')), findsOneWidget);
         expect(backgrounded, 0);
 
         await tester.binding.handlePopRoute();
         await tester.pumpAndSettle();
-        expect(find.byType(ChannelStudioView), findsNothing);
+        expect(find.byType(ChannelStudioView), findsOneWidget);
+        expect(find.text('Discard changes?'), findsOneWidget);
         expect(backgrounded, 0);
       } finally {
         await tester.pumpWidget(const SizedBox.shrink());
@@ -5569,7 +6235,7 @@ void main() {
       expect(studioKey.currentState!.cancelPendingChoice(), isTrue);
       await tester.pumpAndSettle();
       expect(find.byKey(const Key('studio-filter-picker-genre')), findsNothing);
-      expect(find.byKey(const Key('studio-applied-genre')), findsNothing);
+      expect(find.byKey(const Key('studio-applied-genre')), findsOneWidget);
 
       await tester.tap(find.byKey(const Key('studio-library-add-filter')));
       await tester.pumpAndSettle();
@@ -5840,14 +6506,9 @@ void main() {
         tester
             .widget<FilledButton>(find.byKey(const Key('studio-tune')))
             .onPressed,
-        isNull,
+        isNotNull,
       );
-      expect(
-        find.byTooltip(
-          'Finish this filter with Done, or cancel it, before saving or tuning.',
-        ),
-        findsNWidgets(2),
-      );
+      expect(find.byTooltip('Finish this filter'), findsNothing);
       await tester.ensureVisible(
         find.widgetWithText(CheckboxListTile, 'Drama'),
       );
@@ -5883,13 +6544,23 @@ void main() {
           tester
               .widget<FilledButton>(find.byKey(const Key('studio-tune')))
               .onPressed,
-          isNull,
+          isNotNull,
         );
       }
       await tester.sendKeyEvent(LogicalKeyboardKey.escape);
       await tester.pumpAndSettle();
       expect(find.byKey(const Key('studio-filter-picker-genre')), findsNothing);
-      expect(FocusManager.instance.primaryFocus?.debugLabel, 'Add filter');
+      expect(
+        FocusManager.instance.primaryFocus?.debugLabel,
+        'Edit Genre filter',
+      );
+      expect(find.text('Genre: Drama'), findsOneWidget);
+      expect(find.byKey(const Key('studio-result-two')), findsNothing);
+      final genreChip = find.byKey(const Key('studio-browse-genre'));
+      await tester.ensureVisible(genreChip);
+      tester.widget<InputChip>(genreChip).onDeleted!();
+      await tester.pumpAndSettle();
+      expect(find.byKey(const Key('studio-result-two')), findsOneWidget);
       await tester.ensureVisible(find.text('Select'));
       await tester.tap(find.text('Select'));
       await tester.pump();
@@ -5958,15 +6629,13 @@ void main() {
       await _openStudioFilter(tester, 'genre', browse: true);
       await tester.tap(find.widgetWithText(CheckboxListTile, 'Comedy'));
       await tester.tap(find.widgetWithText(CheckboxListTile, 'Drama'));
-      await tester.ensureVisible(find.text('Done'));
-      await tester.tap(find.text('Done'));
+      await tester.sendKeyEvent(LogicalKeyboardKey.escape);
       await tester.pumpAndSettle();
       expect(find.text('3 matching · 0 added'), findsOneWidget);
       expect(find.text('Genre: Comedy, Drama'), findsOneWidget);
       await _openStudioFilter(tester, 'studio', browse: true);
       await tester.tap(find.widgetWithText(CheckboxListTile, 'Studio A'));
-      await tester.ensureVisible(find.text('Done'));
-      await tester.tap(find.text('Done'));
+      await tester.sendKeyEvent(LogicalKeyboardKey.escape);
       await tester.pumpAndSettle();
       expect(find.text('2 matching · 0 added'), findsOneWidget);
       final dirty = key.currentState!.dirty;
@@ -6358,6 +7027,25 @@ void _expectFitsHorizontally(
   expect(rect.right, lessThanOrEqualTo(viewport.width));
 }
 
+Future<void> _revealStudioPreview(WidgetTester tester) async {
+  for (var attempt = 0; attempt < 10; attempt++) {
+    final viewport = tester.getRect(find.byKey(const Key('studio-scroll')));
+    final panel = tester.getRect(find.byKey(const Key('channel-air-check')));
+    final delta = panel.bottom > viewport.bottom + .1
+        ? viewport.bottom - panel.bottom
+        : panel.top < viewport.top - .1
+        ? viewport.top - panel.top
+        : 0.0;
+    if (delta.abs() <= .1) return;
+    await tester.dragFrom(
+      Offset(viewport.left + 2, viewport.center.dy),
+      Offset(0, delta),
+      touchSlopY: 0,
+    );
+    await tester.pumpAndSettle();
+  }
+}
+
 Future<void> _openStudioFilter(
   WidgetTester tester,
   String criterion, {
@@ -6524,10 +7212,10 @@ class _ArtworkController extends _RecordingSaveController {
   _ArtworkController({super.scenario});
 
   @override
-  Future<Uint8List?> artworkForPath(
+  Future<Uint8List?> programArtworkForPath(
     Uri path, {
-    int? width,
-    int? height,
+    required int width,
+    required int height,
   }) async => Uint8List.fromList(
     base64Decode(
       'iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mNk+A8AAQUBAScY42YAAAAASUVORK5CYII=',
@@ -7045,5 +7733,19 @@ class _DelayedStudioPlayer extends FixturePlayer {
     started.complete();
     await release.future;
     emit(const PlayerStatus(state: PlayerState.playing, message: 'Playing'));
+  }
+}
+
+class _SizedArtworkController extends _RecordingSaveController {
+  _SizedArtworkController({super.scenario});
+  final artworkRequests = <(Uri, int, int)>[];
+  @override
+  Future<Uint8List?> programArtworkForPath(
+    Uri path, {
+    required int width,
+    required int height,
+  }) async {
+    artworkRequests.add((path, width, height));
+    return null;
   }
 }

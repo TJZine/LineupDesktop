@@ -11,6 +11,7 @@ import 'package:flutter/services.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:lineup_desktop/app/channels_view.dart';
 import 'package:lineup_desktop/app/lineup_controller.dart';
+import 'package:lineup_desktop/app/channel_studio_view.dart';
 import 'package:lineup_desktop/app/lineup_app.dart';
 import 'package:lineup_desktop/channels/channel.dart';
 import 'package:lineup_desktop/channels/channel_filter.dart';
@@ -1974,7 +1975,27 @@ void main() {
           await tester.sendKeyEvent(LogicalKeyboardKey.enter);
         }
         await tester.pumpAndSettle();
-        expect(find.text('Edit custom channel'), findsOneWidget);
+        final studio = find.byType(ChannelStudioView);
+        expect(studio, findsOneWidget);
+        final view = tester.widget<ChannelStudioView>(studio);
+        expect(view.mode, ChannelStudioMode.editCustom);
+        expect(view.channel?.id, 'custom');
+        expect(
+          find.descendant(
+            of: studio,
+            matching: find.byWidgetPredicate(
+              (widget) => widget is Text && widget.data == 'Custom station',
+            ),
+          ),
+          findsOneWidget,
+        );
+        expect(
+          find.descendant(
+            of: find.byKey(const Key('studio-status-tag')),
+            matching: find.text('Saved'),
+          ),
+          findsOneWidget,
+        );
       },
     );
   }
@@ -2117,10 +2138,64 @@ void main() {
       }
 
       await choose('Custom station', 'Edit');
-      expect(find.text('Edit custom channel'), findsOneWidget);
+      final studio = find.byType(ChannelStudioView);
+      expect(studio, findsOneWidget);
+      final view = tester.widget<ChannelStudioView>(studio);
+      expect(view.mode, ChannelStudioMode.editCustom);
+      expect(view.channel?.id, 'custom');
+      expect(
+        find.descendant(
+          of: find.ancestor(
+            of: find.byKey(const Key('studio-status-tag')),
+            matching: find.byWidgetPredicate(
+              (widget) =>
+                  widget is Semantics && widget.properties.header == true,
+            ),
+          ),
+          matching: find.byWidgetPredicate(
+            (widget) => widget is Text && widget.data == 'Custom station',
+          ),
+        ),
+        findsOneWidget,
+      );
+      expect(
+        find.descendant(
+          of: find.byKey(const Key('studio-status-tag')),
+          matching: find.text('Saved'),
+        ),
+        findsOneWidget,
+      );
       await tester.tap(find.text('‹ Channels'));
       await tester.pumpAndSettle();
       await choose('Generated station', 'Duplicate as custom');
+      final duplicate = tester.widget<ChannelStudioView>(
+        find.byType(ChannelStudioView),
+      );
+      expect(duplicate.mode, ChannelStudioMode.duplicateCustom);
+      expect(duplicate.channel?.id, 'gen');
+      expect(
+        find.descendant(
+          of: find.ancestor(
+            of: find.byKey(const Key('studio-status-tag')),
+            matching: find.byWidgetPredicate(
+              (widget) =>
+                  widget is Semantics && widget.properties.header == true,
+            ),
+          ),
+          matching: find.byWidgetPredicate(
+            (widget) =>
+                widget is Text && widget.data == 'Generated station copy',
+          ),
+        ),
+        findsOneWidget,
+      );
+      expect(
+        find.descendant(
+          of: find.byKey(const Key('studio-status-tag')),
+          matching: find.text('Draft'),
+        ),
+        findsOneWidget,
+      );
       expect(
         tester
             .widget<TextFormField>(find.byKey(const Key('studio-name')))
