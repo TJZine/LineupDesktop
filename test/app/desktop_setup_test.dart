@@ -70,8 +70,21 @@ void main() {
             expect(tester.widget<InkWell>(row).onTap, isNull);
           }
           expect(controller.commitCalls, 0);
+          final scanning = status == LibraryScanStatus.scanning;
+          if (scanning) {
+            // A running scan has no committable libraries yet. The completed
+            // Shows row is unchecked while the pending Movies row stays checked.
+            final shows = find.descendant(
+              of: find.byKey(const ValueKey('library-row-shows')),
+              matching: find.byType(Checkbox),
+            );
+            expect(tester.widget<Checkbox>(shows).value, isFalse);
+            expect(checkbox.value, isTrue);
+          }
           expect(
-            find.text(unusable ? '1 of 1 selected' : '2 of 2 selected'),
+            find.text(
+              unusable || scanning ? '1 of 1 selected' : '2 of 2 selected',
+            ),
             findsOneWidget,
           );
           expect(find.text("Won't be used"), findsNothing);
