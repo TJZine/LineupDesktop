@@ -85,8 +85,24 @@ void main() {
     (tester) async {
       final fixture = _Fixture()
         ..review = _review(updated: 92, removed: true)
+        ..filter = SetupReviewFilter.updated
         ..search = 'Test';
       await fixture.pump(tester);
+      // Entry chooses the first nonempty tab even if an earlier view supplied
+      // another category. Choose Updated explicitly before its disclosure path.
+      await _reveal(tester, find.text('Removed 1'));
+      final removedTab = find
+          .ancestor(
+            of: find.text('Removed 1'),
+            matching: find.byWidgetPredicate(
+              (widget) =>
+                  widget is Semantics && widget.properties.selected != null,
+            ),
+          )
+          .first;
+      expect(tester.widget<Semantics>(removedTab).properties.selected, isTrue);
+      await tester.tap(find.text('Updated 1'));
+      await tester.pumpAndSettle();
       final row = _row(92);
       await _reveal(tester, row);
       final tile = find.descendant(
@@ -141,7 +157,7 @@ void main() {
       expect(node.hasPrimaryFocus, isTrue);
       expect(fixture.confirmed, isTrue);
       expect(fixture.search, 'Test');
-      expect(fixture.filter, SetupReviewFilter.all);
+      expect(fixture.filter, SetupReviewFilter.updated);
       expect(fixture.actions, 0);
     },
   );
@@ -394,7 +410,12 @@ void main() {
       );
       await tester.pumpAndSettle();
       final before = fixture.actions;
+      final keep = find.descendant(of: choice, matching: find.text('Keep'));
+      Focus.of(tester.element(keep)).requestFocus();
+      await tester.pumpAndSettle();
+      expect(_footerFocused(tester), isFalse);
       await tester.sendKeyEvent(LogicalKeyboardKey.arrowRight);
+
       await tester.pumpAndSettle();
       expect(_footerFocused(tester), isFalse);
       expect(fixture.actions, before);

@@ -673,7 +673,7 @@ void main() {
       await tester.testTextInput.receiveAction(TextInputAction.done);
       await tester.pumpAndSettle();
       final filter = find.ancestor(
-        of: find.textContaining(RegExp(r'^[0-9]+ Unchanged$')),
+        of: find.textContaining(RegExp(r'^Unchanged [0-9]+$')),
         matching: find.byType(TextButton),
       );
       await tester.ensureVisible(filter);

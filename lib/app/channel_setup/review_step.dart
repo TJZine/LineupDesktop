@@ -60,7 +60,9 @@ class SetupReviewStep extends StatefulWidget {
 }
 
 class _SetupReviewStepState extends State<SetupReviewStep> {
-  late SetupReviewFilter _filter = widget.initialFilter;
+  late SetupReviewFilter _filter = _firstSetup
+      ? SetupReviewFilter.all
+      : _tabs.firstOrNull?.$1 ?? SetupReviewFilter.all;
   late final _search = TextEditingController(text: widget.initialSearch);
   final _searchFocus = FocusNode(debugLabel: 'Setup review search');
 
@@ -1032,13 +1034,13 @@ class _SetupReviewStepState extends State<SetupReviewStep> {
               ? 'No matching channels'
               : 'No channels in this filter',
         ),
-        if (query.isNotEmpty)
+        if (query.isNotEmpty || _firstSetup)
           LineupInlineLink(
             onPressed: () => setState(() {
               if (query.isNotEmpty) _search.clear();
               if (query.isNotEmpty) widget.onSearchChanged('');
             }),
-            child: const Text('Clear search'),
+            child: Text(query.isNotEmpty ? 'Clear search' : 'Show all'),
           ),
       ],
     ),

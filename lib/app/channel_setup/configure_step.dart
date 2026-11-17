@@ -150,101 +150,119 @@ class _SetupConfigureStepState extends State<SetupConfigureStep> {
 
   @override
   Widget build(BuildContext context) {
-    return SetupStage(
+    final body = SetupStage(
       footerGap: 0,
-      footer: SetupFooter(
-        configuration: true,
-        leading: [
-          TextButton(
-            onPressed: widget.onBack,
-            child: const Text('Back to libraries'),
+      footer: FocusTraversalOrder(
+        order: const NumericFocusOrder(1),
+        child: SetupFooter(
+          configuration: true,
+          leading: [
+            TextButton(
+              onPressed: widget.onBack,
+              child: const Text('Back to libraries'),
+            ),
+          ],
+          summary: _configurationSummary(widget.allocation),
+          trailing: FilledButton(
+            key: const ValueKey('review-channels'),
+            onPressed:
+                widget.allocation.channels.isNotEmpty ||
+                    widget.allocation.existingSkipped > 0 ||
+                    widget.hasConfirmedMissingSources ||
+                    widget.orderChanged
+                ? widget.onReview
+                : null,
+            child: const Text('Review channels'),
           ),
-        ],
-        summary: _configurationSummary(widget.allocation),
-        trailing: FilledButton(
-          key: const ValueKey('review-channels'),
-          onPressed:
-              widget.allocation.channels.isNotEmpty ||
-                  widget.allocation.existingSkipped > 0 ||
-                  widget.hasConfirmedMissingSources ||
-                  widget.orderChanged
-              ? widget.onReview
-              : null,
-          child: const Text('Review channels'),
         ),
       ),
-      child: LayoutBuilder(
-        builder: (context, constraints) {
-          const labels = ['Channel sources', 'Playback order', 'Lineup rules'];
-          final compact =
-              constraints.maxWidth < 1100 ||
-              MediaQuery.textScalerOf(context).scale(1) >= 1.6;
-          final navigation = [
-            for (var index = 0; index < labels.length; index++)
-              Semantics(
-                selected: widget.section == index,
-                child: LineupNavigationRow(
+      child: FocusTraversalOrder(
+        order: const NumericFocusOrder(0),
+        child: LayoutBuilder(
+          builder: (context, constraints) {
+            const labels = [
+              'Channel sources',
+              'Playback order',
+              'Lineup rules',
+            ];
+            final compact =
+                constraints.maxWidth < 1100 ||
+                MediaQuery.textScalerOf(context).scale(1) >= 1.6;
+            final navigation = [
+              for (var index = 0; index < labels.length; index++)
+                Semantics(
                   selected: widget.section == index,
-                  key: ValueKey('configure-section-$index'),
-                  autofocus: DeviceProfile.of(context).isTv && index == 0,
-                  onPressed: () => widget.onSectionChanged(index),
-                  child: Text(labels[index]),
-                ),
-              ),
-          ];
-          final selectedContent = switch (widget.section) {
-            0 => _configureSectionContent(widget.allocation, 0, _focus),
-            1 => _configureSectionContent(widget.allocation, 1, _focus),
-            _ => _configureSectionContent(widget.allocation, 2, _focus),
-          };
-          final content = KeyedSubtree(
-            key: const ValueKey('channel-configuration'),
-            child: ListView(
-              key: ValueKey(widget.section),
-              children: [
-                if (widget.section == 1)
-                  _heading(
-                    labels[widget.section],
-                    widget.section == 0
-                        ? 'Choose which kinds of generated channels to include.'
-                        : 'For generated channels containing TV episodes',
+                  child: LineupNavigationRow(
+                    selected: widget.section == index,
+                    key: ValueKey('configure-section-$index'),
+                    autofocus: DeviceProfile.of(context).isTv && index == 0,
+                    onPressed: () => widget.onSectionChanged(index),
+                    child: Text(labels[index]),
                   ),
-                selectedContent,
-              ],
-            ),
-          );
-          if (compact) {
-            return Column(
-              crossAxisAlignment: CrossAxisAlignment.stretch,
+                ),
+            ];
+            final selectedContent = switch (widget.section) {
+              0 => _configureSectionContent(widget.allocation, 0, _focus),
+              1 => _configureSectionContent(widget.allocation, 1, _focus),
+              _ => _configureSectionContent(widget.allocation, 2, _focus),
+            };
+            final content = KeyedSubtree(
+              key: const ValueKey('channel-configuration'),
+              child: ListView(
+                key: ValueKey(widget.section),
+                children: [
+                  if (widget.section == 1)
+                    _heading(
+                      labels[widget.section],
+                      widget.section == 0
+                          ? 'Choose which kinds of generated channels to include.'
+                          : 'For generated channels containing TV episodes',
+                    ),
+                  selectedContent,
+                ],
+              ),
+            );
+            if (compact) {
+              return Column(
+                crossAxisAlignment: CrossAxisAlignment.stretch,
+                children: [
+                  Wrap(spacing: 8, runSpacing: 4, children: navigation),
+                  const SizedBox(height: 16),
+                  Expanded(child: content),
+                ],
+              );
+            }
+            return Row(
+              crossAxisAlignment: CrossAxisAlignment.start,
               children: [
-                Wrap(spacing: 8, runSpacing: 4, children: navigation),
-                const SizedBox(height: 16),
+                SizedBox(
+                  width: 236,
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.stretch,
+                    children: [
+                      for (final item in navigation) ...[
+                        item,
+                        const SizedBox(height: 12),
+                      ],
+                    ],
+                  ),
+                ),
+                const SizedBox(width: 40),
                 Expanded(child: content),
               ],
             );
-          }
-          return Row(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              SizedBox(
-                width: 236,
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.stretch,
-                  children: [
-                    for (final item in navigation) ...[
-                      item,
-                      const SizedBox(height: 12),
-                    ],
-                  ],
-                ),
-              ),
-              const SizedBox(width: 40),
-              Expanded(child: content),
-            ],
-          );
-        },
+          },
+        ),
       ),
     );
+    // Available sources can sit above the last rail item. Keep remote vertical
+    // traversal in body order, then enter the footer, independent of geometry.
+    return DeviceProfile.of(context).isTv
+        ? FocusTraversalGroup(
+            policy: SetupVerticalTraversalPolicy(),
+            child: body,
+          )
+        : body;
   }
 
   Widget _heading(String title, String description) {
