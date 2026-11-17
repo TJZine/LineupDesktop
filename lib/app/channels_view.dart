@@ -648,10 +648,12 @@ class ChannelsViewState extends State<ChannelsView> {
                   const SizedBox(width: 12),
                   Text(group.label, style: LineupTypography.title(24, 88)),
                   const SizedBox(width: 16),
-                  Text(
-                    '${group.count} channels',
-                    style: TextStyle(
-                      color: LineupTheme.of(context).secondaryText,
+                  Builder(
+                    builder: (context) => Text(
+                      '${group.count} channels',
+                      style: TextStyle(
+                        color: LineupTheme.of(context).secondaryText,
+                      ),
                     ),
                   ),
                 ],

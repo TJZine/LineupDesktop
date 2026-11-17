@@ -28,6 +28,63 @@ import 'package:lineup_desktop/settings/lineup_settings.dart';
 import '../support/ui_fixture.dart';
 
 void main() {
+  for (final target in [
+    for (final theme in LineupThemeName.values) (isTv: true, theme: theme),
+    (isTv: false, theme: LineupThemeName.emberSteel),
+  ]) {
+    testWidgets(
+      'group count follows existing focus ink ${target.theme.name} TV=${target.isTv}',
+      (tester) async {
+        tester.view
+          ..physicalSize = const Size(1920, 1080)
+          ..devicePixelRatio = 1;
+        addTearDown(tester.view.reset);
+        await tester.pumpWidget(
+          UiFixture(
+            profile: profileFor(target.isTv),
+            scenario: LineupScenario(
+              stage: SetupStage.ready,
+              settings: LineupSettings(theme: target.theme),
+              channels: [
+                _channel('first', 1, 'First'),
+                _channel('second', 2, 'Second'),
+              ],
+            ),
+          ).build(),
+        );
+        await tester.pumpAndSettle();
+        await openDestination(tester, 'Channels');
+        await _chooseDirectoryView(tester, 'Grouped by source');
+        final header = find.byKey(const ValueKey('channel-group-custom'));
+        final count = find.descendant(
+          of: header,
+          matching: find.text('2 channels'),
+        );
+        final roles = LineupTheme.of(tester.element(find.byType(ChannelsView)));
+        Color? countInk() => tester.widget<Text>(count).style?.color;
+        expect(countInk(), roles.secondaryText);
+        await tester.sendKeyEvent(LogicalKeyboardKey.shiftLeft);
+        final focus = tester.widget<TextButton>(header).focusNode!;
+        focus.requestFocus();
+        await tester.pumpAndSettle();
+        expect(focus.hasPrimaryFocus, isTrue);
+        final focusedInk = target.isTv
+            ? roles.focusSecondaryText
+            : roles.secondaryText;
+        expect(countInk(), focusedInk);
+        await tester.sendKeyEvent(LogicalKeyboardKey.arrowDown);
+        await tester.pumpAndSettle();
+        expect(FocusManager.instance.primaryFocus?.debugLabel, 'Open First');
+        expect(countInk(), roles.secondaryText);
+        await tester.sendKeyEvent(LogicalKeyboardKey.arrowUp);
+        await tester.pumpAndSettle();
+        expect(focus.hasPrimaryFocus, isTrue);
+        expect(countInk(), focusedInk);
+        await tester.pumpWidget(const SizedBox());
+      },
+    );
+  }
+
   for (final isTv in [false, true]) {
     testWidgets(
       'directory semantics retain marker facts and row controls TV=$isTv',
