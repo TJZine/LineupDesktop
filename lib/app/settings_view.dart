@@ -1113,90 +1113,118 @@ class _ThemeSwatchesState extends State<_ThemeSwatches> {
                                   .requestFocus();
                               return KeyEventResult.handled;
                             },
-                            child: OutlinedButton(
-                              focusNode: _focus[theme],
-                              key: ValueKey('settings-theme-${theme.name}'),
-                              onPressed: widget.onChanged == null
+                            child: Semantics(
+                              button: true,
+                              label: theme.label,
+                              selected: selected,
+                              enabled: widget.onChanged != null,
+                              onTap: widget.onChanged == null
                                   ? null
                                   : () => widget.onChanged!(theme),
-                              style: OutlinedButton.styleFrom(
-                                padding: const EdgeInsets.all(4),
-                                side: BorderSide.none,
-                                shape: RoundedRectangleBorder(
-                                  borderRadius: BorderRadius.circular(
-                                    roles.panelRadius,
-                                  ),
-                                ),
-                              ),
-                              child: Column(
-                                crossAxisAlignment: CrossAxisAlignment.stretch,
-                                children: [
-                                  Container(
-                                    key: ValueKey(
-                                      'settings-theme-preview-${theme.name}',
-                                    ),
-                                    height: 132,
-                                    padding: const EdgeInsets.all(24),
-                                    decoration: BoxDecoration(
-                                      color: swatch.deepBackground,
-                                      borderRadius: BorderRadius.circular(
-                                        roles.panelRadius,
-                                      ),
-                                      border: Border.all(
-                                        color: selected
-                                            ? roles.progressFill
-                                            : roles.subtleBorder,
-                                        width: selected ? 3 : 1,
-                                      ),
-                                    ),
-                                    child: Column(
-                                      crossAxisAlignment:
-                                          CrossAxisAlignment.start,
-                                      children: [
-                                        Container(
-                                          width: 100,
-                                          height: 8,
-                                          color: swatch.primaryText,
-                                        ),
-                                        const SizedBox(height: 12),
-                                        Container(
-                                          width: 72,
-                                          height: 6,
-                                          color: swatch.primaryText.withValues(
-                                            alpha: .55,
+                              child: ExcludeSemantics(
+                                child: OutlinedButton(
+                                  focusNode: _focus[theme],
+                                  key: ValueKey('settings-theme-${theme.name}'),
+                                  onPressed: () {
+                                    if (widget.onChanged != null) {
+                                      _focus[theme]!.requestFocus();
+                                      widget.onChanged!(theme);
+                                    }
+                                  },
+                                  style:
+                                      OutlinedButton.styleFrom(
+                                        padding: const EdgeInsets.all(4),
+                                        foregroundColor:
+                                            widget.onChanged == null
+                                            ? roles.mutedText
+                                            : null,
+                                        shape: RoundedRectangleBorder(
+                                          borderRadius: BorderRadius.circular(
+                                            roles.panelRadius,
                                           ),
                                         ),
-                                        const Spacer(),
-                                        Row(
+                                      ).copyWith(
+                                        side: WidgetStateProperty.resolveWith(
+                                          (states) =>
+                                              states.contains(
+                                                WidgetState.focused,
+                                              )
+                                              ? null
+                                              : BorderSide.none,
+                                        ),
+                                      ),
+                                  child: Column(
+                                    crossAxisAlignment:
+                                        CrossAxisAlignment.stretch,
+                                    children: [
+                                      Container(
+                                        key: ValueKey(
+                                          'settings-theme-preview-${theme.name}',
+                                        ),
+                                        height: 132,
+                                        padding: const EdgeInsets.all(24),
+                                        decoration: BoxDecoration(
+                                          color: swatch.deepBackground,
+                                          borderRadius: BorderRadius.circular(
+                                            roles.panelRadius,
+                                          ),
+                                          border: Border.all(
+                                            color: selected
+                                                ? roles.progressFill
+                                                : roles.subtleBorder,
+                                            width: selected ? 3 : 1,
+                                          ),
+                                        ),
+                                        child: Column(
+                                          crossAxisAlignment:
+                                              CrossAxisAlignment.start,
                                           children: [
-                                            Expanded(
-                                              child: Container(
-                                                height: 24,
-                                                color: swatch.elevatedSurface,
-                                              ),
-                                            ),
-                                            const SizedBox(width: 8),
                                             Container(
-                                              width: 48,
-                                              height: 24,
-                                              color: swatch.progressFill,
+                                              width: 100,
+                                              height: 8,
+                                              color: swatch.primaryText,
+                                            ),
+                                            const SizedBox(height: 12),
+                                            Container(
+                                              width: 72,
+                                              height: 6,
+                                              color: swatch.primaryText
+                                                  .withValues(alpha: .55),
+                                            ),
+                                            const Spacer(),
+                                            Row(
+                                              children: [
+                                                Expanded(
+                                                  child: Container(
+                                                    height: 24,
+                                                    color:
+                                                        swatch.elevatedSurface,
+                                                  ),
+                                                ),
+                                                const SizedBox(width: 8),
+                                                Container(
+                                                  width: 48,
+                                                  height: 24,
+                                                  color: swatch.progressFill,
+                                                ),
+                                              ],
                                             ),
                                           ],
                                         ),
-                                      ],
-                                    ),
+                                      ),
+                                      const SizedBox(height: 10),
+                                      Text(
+                                        theme.label,
+                                        style: TextStyle(
+                                          fontSize: 18,
+                                          fontWeight: selected
+                                              ? FontWeight.w600
+                                              : FontWeight.w400,
+                                        ),
+                                      ),
+                                    ],
                                   ),
-                                  const SizedBox(height: 10),
-                                  Text(
-                                    theme.label,
-                                    style: TextStyle(
-                                      fontSize: 18,
-                                      fontWeight: selected
-                                          ? FontWeight.w600
-                                          : FontWeight.w400,
-                                    ),
-                                  ),
-                                ],
+                                ),
                               ),
                             ),
                           );
