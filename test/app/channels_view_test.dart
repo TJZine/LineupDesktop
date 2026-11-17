@@ -1,5 +1,5 @@
 import 'dart:async';
-import 'dart:ui' show Tristate;
+import 'dart:ui' show CheckedState, Tristate;
 
 import 'package:flutter/foundation.dart'
     show TargetPlatform, debugDefaultTargetPlatformOverride;
@@ -28,6 +28,141 @@ import 'package:lineup_desktop/settings/lineup_settings.dart';
 import '../support/ui_fixture.dart';
 
 void main() {
+  for (final isTv in [false, true]) {
+    testWidgets(
+      'directory semantics retain marker facts and row controls TV=$isTv',
+      (tester) async {
+        tester.view
+          ..physicalSize = const Size(1920, 1080)
+          ..devicePixelRatio = 1;
+        addTearDown(tester.view.reset);
+        const name = 'Shared station';
+        await tester.pumpWidget(
+          UiFixture(
+            profile: profileFor(isTv),
+            scenario: LineupScenario(
+              stage: SetupStage.ready,
+              channels: [
+                _channel(
+                  'marked',
+                  1,
+                  name,
+                  sourceLibraries: const {'one': 'Library One'},
+                ).copyWith(favorite: true),
+                _channel(
+                  'other',
+                  2,
+                  name,
+                  sourceLibraries: const {'two': 'Library Two'},
+                ),
+              ],
+            ),
+          ).build(),
+        );
+        await tester.pumpAndSettle();
+        await openDestination(tester, 'Channels');
+        final row = find.byKey(const ValueKey('channel-row-marked'));
+        final other = find.byKey(const ValueKey('channel-row-other'));
+        void expectFacts(
+          Finder row,
+          String fullIdentity, {
+          required bool custom,
+          required bool favourite,
+        }) {
+          final node = tester.getSemantics(
+            find.descendant(of: row, matching: find.text(name)),
+          );
+          final label = node.label;
+          expect(label, contains(fullIdentity));
+          expect(
+            RegExp('Channel [12], Shared station').allMatches(label),
+            hasLength(1),
+          );
+          expect(
+            RegExp(r'\bCustom\b').allMatches(label),
+            hasLength(custom ? 1 : 0),
+          );
+          expect(
+            RegExp(r'\bFavourite\b').allMatches(label),
+            hasLength(favourite ? 1 : 0),
+          );
+          expect(
+            node.getSemanticsData().hasAction(SemanticsAction.tap),
+            isTrue,
+          );
+        }
+
+        void expectActions() {
+          final actions = tester
+              .getSemantics(
+                find.descendant(
+                  of: row,
+                  matching: find.byTooltip('Actions for $name'),
+                ),
+              )
+              .getSemanticsData();
+          expect(actions.label, 'Actions for $name');
+          expect(actions.flagsCollection.isButton, isTrue);
+          expect(actions.hasAction(SemanticsAction.tap), isTrue);
+        }
+
+        const identity = 'Channel 1, Shared station, Library One library';
+        expectFacts(row, identity, custom: true, favourite: true);
+        expectFacts(
+          other,
+          'Channel 2, Shared station, Library Two library',
+          custom: true,
+          favourite: false,
+        );
+        expectActions();
+        await _chooseDirectoryView(tester, 'Grouped by source');
+        expectFacts(row, identity, custom: false, favourite: true);
+        expectFacts(
+          other,
+          'Channel 2, Shared station, Library Two library',
+          custom: false,
+          favourite: false,
+        );
+        expectActions();
+        await tester.tap(find.text('Select'));
+        await tester.pumpAndSettle();
+        final checkbox = find.descendant(
+          of: row,
+          matching: find.byType(Checkbox),
+        );
+        var selection = tester.getSemantics(checkbox).getSemanticsData();
+        expect(selection.label, 'Select $name');
+        expect(selection.flagsCollection.isChecked, CheckedState.isFalse);
+        expect(selection.hasAction(SemanticsAction.tap), isTrue);
+        expectFacts(row, identity, custom: false, favourite: true);
+        expect(
+          find.descendant(
+            of: row,
+            matching: find.byTooltip('Actions for $name'),
+          ),
+          findsNothing,
+        );
+        await tester.tap(checkbox);
+        await tester.pumpAndSettle();
+        selection = tester.getSemantics(checkbox).getSemanticsData();
+        expect(selection.flagsCollection.isChecked, CheckedState.isTrue);
+        expectFacts(row, identity, custom: false, favourite: true);
+        await _chooseDirectoryView(tester, 'Channel order');
+        expectFacts(row, identity, custom: true, favourite: true);
+        expect(
+          tester
+              .getSemantics(checkbox)
+              .getSemanticsData()
+              .flagsCollection
+              .isChecked,
+          CheckedState.isTrue,
+        );
+        await tester.pumpWidget(const SizedBox());
+      },
+      semanticsEnabled: true,
+    );
+  }
+
   for (final isTv in [false, true]) {
     testWidgets(
       'directory markers follow name and keep platform row height TV=$isTv',

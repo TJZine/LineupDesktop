@@ -2151,10 +2151,14 @@ class _DirectoryChannelIdentity extends StatelessWidget {
     final roles = LineupTheme.of(context);
     final support = identity.supportStyle;
     return Semantics(
-      label: ChannelIdentity.label(
-        identity.channel,
-        libraryTag: identity.libraryTag,
-      ),
+      label: [
+        ChannelIdentity.label(
+          identity.channel,
+          libraryTag: identity.libraryTag,
+        ),
+        if (custom) 'Custom',
+        if (favourite) 'Favourite',
+      ].join(', '),
       excludeSemantics: true,
       child: LayoutBuilder(
         builder: (context, constraints) {
