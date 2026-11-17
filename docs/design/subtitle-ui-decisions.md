@@ -274,4 +274,4 @@ The maintainer answered the three product questions with the recommended choices
 2. **Narrow or large text:** fall back to A when the A2 rows column is under 560 canvas units, and shrink only the preview crop so one complete focused row fits.
 3. **Reset:** keep device mode.
 
-In the October design, before the November 17 preview amendment, it asked A2 to apply only when every label and value "can display". The October approval used the deterministic 560-unit rows-column rule, which is testable, and requires selected values to stay legible.
+The October review proposed A2 only when every label and value could fit. The maintainer approved a 560-unit minimum for the rows column in October. The November 17 amendment replaces that breakpoint and keeps the requirement for legible selected values.

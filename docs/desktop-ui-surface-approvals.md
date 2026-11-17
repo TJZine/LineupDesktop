@@ -88,9 +88,7 @@ Studio do not approve T's unfinished refinement.
 The approved scope is shared identity/Text size/PIN treatment; Guide layout and
 cells; Player controls/details/Mini Guide/pickers/number entry; both Manage
 channels views; Welcome/Sign in/setup; and Settings/Diagnostics as described in
-the current amendments. Gated before/after comparisons and adaptive exceptions
-retain their exact identities in the manifest. Runtime-only focus repairs reuse
-unchanged appearance only where their diff and evidence justify it.
+the current amendments.
 
 Headless production-widget captures use synthetic media and establish no real
 native-media output. Emulator checks use credential-free fixtures and establish
