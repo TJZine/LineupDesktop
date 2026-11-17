@@ -1199,41 +1199,49 @@ class UpstreamOnboardingViewState extends State<UpstreamOnboardingView>
             ),
           ),
         SizedBox(height: 12),
-        Wrap(
-          spacing: 12,
-          runSpacing: 12,
-          alignment: WrapAlignment.center,
+        Row(
           children: [
-            OutlinedButton.icon(
-              autofocus: !_actionsBusy && widget.controller.servers.isEmpty,
-              // Keep remote focus on Refresh while its request is pending.
-              // _refreshServers ignores repeated activation while busy.
-              onPressed: !_actionsBusy || (_isTv && _serverRefresh != null)
-                  ? _refreshServers
-                  : null,
-              icon: const Icon(Icons.refresh),
-              label: const Text('Refresh servers'),
-            ),
-            if (widget.controller.profiles.length > 1)
-              OutlinedButton.icon(
-                onPressed: _actionsBusy ? null : _showProfiles,
-                icon: const Icon(Icons.switch_account),
-                label: const Text('Switch profile'),
+            Expanded(
+              child: Wrap(
+                spacing: 12,
+                runSpacing: 12,
+                alignment: WrapAlignment.start,
+                children: [
+                  OutlinedButton.icon(
+                    autofocus:
+                        !_actionsBusy && widget.controller.servers.isEmpty,
+                    // Keep remote focus on Refresh while its request is pending.
+                    // _refreshServers ignores repeated activation while busy.
+                    onPressed:
+                        !_actionsBusy || (_isTv && _serverRefresh != null)
+                        ? _refreshServers
+                        : null,
+                    icon: const Icon(Icons.refresh),
+                    label: const Text('Refresh servers'),
+                  ),
+                  if (widget.controller.profiles.length > 1)
+                    OutlinedButton.icon(
+                      onPressed: _actionsBusy ? null : _showProfiles,
+                      icon: const Icon(Icons.switch_account),
+                      label: const Text('Switch profile'),
+                    ),
+                  if (widget.controller.serverSelectionCanCancel)
+                    TextButton(
+                      focusNode: _serverCancelFocus,
+                      onPressed: widget.authorizationStopPending
+                          ? null
+                          : _cancelServerSelection,
+                      child: Text(
+                        widget.accountOrigin ? '‹ Settings · Account' : 'Back',
+                      ),
+                    ),
+                ],
               ),
+            ),
             if (widget.onRequestLogout != null)
               TextButton(
                 onPressed: _actionsBusy ? null : widget.onRequestLogout,
                 child: const Text('Sign out'),
-              ),
-            if (widget.controller.serverSelectionCanCancel)
-              TextButton(
-                focusNode: _serverCancelFocus,
-                onPressed: widget.authorizationStopPending
-                    ? null
-                    : _cancelServerSelection,
-                child: Text(
-                  widget.accountOrigin ? '‹ Settings · Account' : 'Back',
-                ),
               ),
           ],
         ),
@@ -1871,16 +1879,6 @@ class _ServerCard extends StatelessWidget {
         Text(server.owned ? 'Yours' : 'Shared with you', style: supportStyle),
         if (previouslyUsed && !current)
           Text('Previously used', style: supportStyle),
-        if (unreachable || measuredConnection?.latency != null) ...[
-          const SizedBox(height: 8),
-          if (unreachable)
-            Semantics(
-              liveRegion: true,
-              child: Text('Unreachable', style: supportStyle),
-            )
-          else
-            LineupConnectionStatus(connection: measuredConnection),
-        ],
       ],
     );
     final buttonLabel = pending
@@ -1897,7 +1895,7 @@ class _ServerCard extends StatelessWidget {
       'Retry' when unreachable => 'Retry ${server.name}',
       _ => buttonLabel,
     };
-    final trailing = MergeSemantics(
+    final action = MergeSemantics(
       child: Semantics(
         label: actionLabel,
         // Only continuing with the connected server is emphasized; list
@@ -1926,6 +1924,27 @@ class _ServerCard extends StatelessWidget {
                 ),
               ),
       ),
+    );
+    final trailing = Row(
+      mainAxisSize: MainAxisSize.min,
+      children: [
+        if (unreachable || measuredConnection?.latency != null) ...[
+          if (unreachable)
+            Semantics(
+              liveRegion: true,
+              child: Text(
+                'Unreachable',
+                style: supportStyle.copyWith(
+                  color: Theme.of(context).colorScheme.error,
+                ),
+              ),
+            )
+          else
+            LineupConnectionStatus(connection: measuredConnection),
+          const SizedBox(width: 16),
+        ],
+        action,
+      ],
     );
 
     return LayoutBuilder(

@@ -202,7 +202,7 @@ class _SetupConfigureStepState extends State<SetupConfigureStep> {
             child: ListView(
               key: ValueKey(widget.section),
               children: [
-                if (widget.section != 2)
+                if (widget.section == 1)
                   _heading(
                     labels[widget.section],
                     widget.section == 0
@@ -376,29 +376,30 @@ class _SetupConfigureStepState extends State<SetupConfigureStep> {
     int section,
     _ConfigureFocus focus,
   ) {
-    final roles = LineupTheme.of(context);
     if (section == 0) {
-      const sourcePairs = [
-        (BuilderStrategy.playlists, BuilderStrategy.collections),
-        (BuilderStrategy.recentlyAdded, BuilderStrategy.decades),
-        (BuilderStrategy.genres, BuilderStrategy.studios),
-        (BuilderStrategy.actors, BuilderStrategy.directors),
+      const order = [
+        BuilderStrategy.playlists,
+        BuilderStrategy.collections,
+        BuilderStrategy.recentlyAdded,
+        BuilderStrategy.decades,
+        BuilderStrategy.genres,
+        BuilderStrategy.studios,
+        BuilderStrategy.actors,
+        BuilderStrategy.directors,
+      ];
+      final ordered = [
+        for (final available in [true, false])
+          for (final strategy in order)
+            if ((_sourceEligible(strategy, allocation) > 0) == available)
+              strategy,
+      ];
+      final sourcePairs = [
+        for (var i = 0; i < ordered.length; i += 2)
+          (ordered[i], ordered[i + 1]),
       ];
       return Column(
         crossAxisAlignment: CrossAxisAlignment.stretch,
         children: [
-          if (widget.selectedLibraryCount > 1)
-            Padding(
-              padding: const EdgeInsets.only(bottom: 8),
-              child: Text(
-                'Use one channel across libraries when they share a genre or studio.',
-                style: TextStyle(
-                  color: roles.secondaryText,
-                  fontSize: 16,
-                  height: 1.4,
-                ),
-              ),
-            ),
           LayoutBuilder(
             builder: (_, constraints) {
               final compact =
@@ -518,7 +519,7 @@ class _SetupConfigureStepState extends State<SetupConfigureStep> {
             children: [
               Text(
                 '$total',
-                style: TextStyle(
+                style: LineupTypography.pageTitle.copyWith(
                   color: roles.primaryText,
                   fontSize: 30,
                   fontWeight: FontWeight.w600,
@@ -528,7 +529,7 @@ class _SetupConfigureStepState extends State<SetupConfigureStep> {
               SizedBox(width: 8),
               Flexible(
                 child: Text(
-                  'generated ${total == 1 ? 'channel' : 'channels'}',
+                  'channels from ${_strategies.where((strategy) => _sourceEligible(strategy, result) > 0).length} sources',
                   style: secondaryStyle,
                 ),
               ),
@@ -662,6 +663,13 @@ class _SetupConfigureStepState extends State<SetupConfigureStep> {
         )
       : _sourceSelectionContent(context, strategy, allocation);
 
+  int _sourceEligible(
+    BuilderStrategy strategy,
+    ChannelPlanAllocation allocation,
+  ) => _strategies.contains(strategy)
+      ? allocation.eligibleOriginalsByStrategy[strategy] ?? 0
+      : widget.disabledEligibility[strategy] ?? 0;
+
   Widget _sourceSelectionContent(
     BuildContext context,
     BuilderStrategy strategy,
@@ -670,11 +678,10 @@ class _SetupConfigureStepState extends State<SetupConfigureStep> {
     final roles = LineupTheme.of(context);
     final emptyPlaylists =
         strategy == BuilderStrategy.playlists && !widget.hasPlaylists;
-    final enabled = _strategies.contains(strategy) && !emptyPlaylists;
+    final eligible = _sourceEligible(strategy, allocation);
+    final unavailable = emptyPlaylists || eligible == 0;
+    final enabled = _strategies.contains(strategy) && !unavailable;
     final discoveryFailure = widget.discoveryFailures[strategy];
-    final eligible = enabled
-        ? allocation.eligibleOriginalsByStrategy[strategy] ?? 0
-        : (widget.disabledEligibility[strategy] ?? 0);
     final included = allocation.allocatedOriginalsByStrategy[strategy] ?? 0;
     final channels = enabled
         ? allocation.allocatedChannelsByStrategy[strategy] ?? 0
@@ -738,7 +745,7 @@ class _SetupConfigureStepState extends State<SetupConfigureStep> {
               : EdgeInsets.zero,
           title: title,
           subtitle: subtitle,
-          onChanged: emptyPlaylists ? null : changed,
+          onChanged: unavailable ? null : changed,
         ),
         if (collectionRecovery case final recovery?)
           Padding(
@@ -776,7 +783,9 @@ class _SetupConfigureStepState extends State<SetupConfigureStep> {
   Widget _sourceGroupingControl(BuilderStrategy strategy) {
     final roles = LineupTheme.of(context);
     final menuTheme = DeviceProfile.of(context).isTv ? Theme.of(context) : null;
-    final enabled = _strategies.contains(strategy);
+    final enabled =
+        _strategies.contains(strategy) &&
+        _sourceEligible(strategy, widget.allocation) > 0;
     final countStyle = TextStyle(
       color: roles.secondaryText,
       fontSize: 16,
@@ -1663,7 +1672,9 @@ class _SetupConfigureStepState extends State<SetupConfigureStep> {
       var focused =
           focus.order[strategy]!.earlier.hasFocus ||
           focus.order[strategy]!.later.hasFocus;
-      final enabled = _strategies.contains(strategy);
+      final enabled =
+          _strategies.contains(strategy) &&
+          _sourceEligible(strategy, widget.allocation) > 0;
       return StatefulBuilder(
         key: ValueKey('source-order-state-${strategy.name}'),
         builder: (context, setRowState) => Focus(

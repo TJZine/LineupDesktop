@@ -820,6 +820,7 @@ void main() {
     WidgetTester tester,
     LineupController controller, {
     Future<void> Function()? browser,
+    Future<void> Function()? requestLogout,
     bool accountOrigin = false,
     bool isTv = false,
     double textScale = 1,
@@ -852,6 +853,7 @@ void main() {
           },
           onLogout: () async {},
           openBrowser: browser ?? () async {},
+          onRequestLogout: requestLogout,
           accountOrigin: accountOrigin,
         ),
       ),
@@ -1805,6 +1807,44 @@ void main() {
     expect(plex.cancelPinCalls, 0);
     expect(controller.activePin, isNull);
     expect(controller.error, 'The Plex link code expired. Request a new code.');
+  });
+
+  testWidgets('U server status precedes its button and footer spans list', (
+    tester,
+  ) async {
+    tester.view
+      ..physicalSize = const Size(1920, 1080)
+      ..devicePixelRatio = 1;
+    addTearDown(tester.view.reset);
+    final controller = _ServerController(
+      scenario: const LineupScenario(
+        stage: SetupStage.servers,
+        servers: [
+          PlexServer(
+            id: 'one',
+            name: 'Synthetic server',
+            owned: true,
+            connections: [],
+          ),
+        ],
+      ),
+    )..unreachable = 'one';
+    addTearDown(controller.dispose);
+    await show(tester, controller, requestLogout: () async {});
+    await tester.pumpAndSettle();
+    final status = tester.getRect(find.text('Unreachable'));
+    final action = tester.getRect(find.widgetWithText(OutlinedButton, 'Retry'));
+    expect(status.right, lessThan(action.left));
+    expect(status.center.dy, closeTo(action.center.dy, .1));
+    expect(
+      tester.widget<Text>(find.text('Unreachable')).style?.color,
+      Theme.of(tester.element(find.text('Unreachable'))).colorScheme.error,
+    );
+    expect(
+      tester.getTopLeft(find.text('Refresh servers')).dx,
+      lessThan(tester.getTopLeft(find.text('Sign out')).dx),
+    );
+    expect(find.text('Yours'), findsOneWidget);
   });
 
   for (final tv in [false, true]) {
@@ -2912,6 +2952,9 @@ class _PinController extends FixtureController {
 
 class _ServerController extends FixtureController {
   _ServerController({super.scenario});
+  String? unreachable;
+  @override
+  String? get unreachableServerId => unreachable ?? super.unreachableServerId;
 
   Completer<void>? pendingSelection;
   bool failSelection = false;
