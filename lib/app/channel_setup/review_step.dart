@@ -875,8 +875,13 @@ class _SetupReviewStepState extends State<SetupReviewStep> {
                           spacing: 8,
                           runSpacing: 4,
                           children: [
-                            for (final tab in _tabs)
-                              _filterChip(tab.$1, tab.$2),
+                            // Keep tabs after the intro (-1) and before search
+                            // (0), so vertical remote traversal reaches rows.
+                            for (final (index, tab) in _tabs.indexed)
+                              FocusTraversalOrder(
+                                order: NumericFocusOrder(-0.5 + index * 0.1),
+                                child: _filterChip(tab.$1, tab.$2),
+                              ),
                           ],
                         ),
                       ),

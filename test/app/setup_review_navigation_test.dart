@@ -12,6 +12,42 @@ import 'package:lineup_desktop/settings/lineup_settings.dart';
 import 'package:lineup_desktop/ui/lineup_canvas.dart';
 
 void main() {
+  testWidgets(
+    'U-D1 TV 1.3 tab selection returns through search to readonly rows',
+    (tester) async {
+      final fixture = _Fixture()..review = _review(updated: 92);
+      await fixture.pump(tester, scale: 1.3);
+      expect(
+        FocusManager.instance.primaryFocus?.debugLabel,
+        'Setup review search',
+      );
+      await tester.sendKeyEvent(LogicalKeyboardKey.arrowLeft);
+      await tester.pumpAndSettle();
+      final tab = find.text('Unchanged 183');
+      expect(Focus.of(tester.element(tab)).hasPrimaryFocus, isTrue);
+      await tester.sendKeyEvent(LogicalKeyboardKey.select);
+      await tester.pumpAndSettle();
+      expect(fixture.filter, SetupReviewFilter.unchanged);
+      await tester.sendKeyEvent(LogicalKeyboardKey.arrowDown);
+      await tester.pumpAndSettle();
+      expect(
+        FocusManager.instance.primaryFocus?.debugLabel,
+        'Setup review search',
+      );
+      await tester.sendKeyEvent(LogicalKeyboardKey.arrowDown);
+      await tester.pumpAndSettle();
+      final row = _row(1);
+      expect(_readNode(tester, row).hasPrimaryFocus, isTrue);
+      await tester.sendKeyEvent(LogicalKeyboardKey.arrowRight);
+      await tester.pumpAndSettle();
+      expect(_primary(tester).hasPrimaryFocus, isTrue);
+      await tester.sendKeyEvent(LogicalKeyboardKey.arrowUp);
+      await tester.pumpAndSettle();
+      expect(_readNode(tester, row).hasPrimaryFocus, isTrue);
+      expect(fixture.actions, 0);
+    },
+  );
+
   testWidgets('184 virtualized rows: first, middle, last region key counts', (
     tester,
   ) async {
