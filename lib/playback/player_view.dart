@@ -3186,6 +3186,20 @@ class _MiniGuide extends StatelessWidget {
     final rowInset = (large ? 18.0 : 12.0);
     const fadeTail = 55.0;
     final theme = Theme.of(context);
+    // Keep one aligned number column for the five built rows. The reference
+    // floor grows with platform text, and actual glyphs may require more room.
+    final numberStyle = theme.textTheme.bodyMedium?.copyWith(
+      fontSize: 18,
+      fontWeight: FontWeight.w500,
+    );
+    final numberColumnWidth = channels.fold<double>(
+      46 * math.max(1, textScale),
+      (width, channel) => math.max(
+        width,
+        _textWidth(context, '${channel.number}', numberStyle).ceilToDouble() +
+            1,
+      ),
+    );
     final actionLabelStyle = LineupTypography.tvLabelStyle(context);
     return DefaultTextStyle(
       style: theme.textTheme.bodyMedium!,
@@ -3370,6 +3384,7 @@ class _MiniGuide extends StatelessWidget {
                                 channel: channel,
                                 rowHeight: rowHeight,
                                 channelColumnWidth: channelColumnWidth,
+                                numberColumnWidth: numberColumnWidth,
                                 columnGap: columnGap,
                                 active: active,
                                 large: large,
@@ -3441,6 +3456,7 @@ class _MiniGuideRow extends StatelessWidget {
     required this.channel,
     required this.rowHeight,
     required this.channelColumnWidth,
+    required this.numberColumnWidth,
     required this.columnGap,
     required this.active,
     required this.large,
@@ -3452,6 +3468,7 @@ class _MiniGuideRow extends StatelessWidget {
   final Channel channel;
   final double? rowHeight;
   final double channelColumnWidth;
+  final double numberColumnWidth;
   final double columnGap;
   final bool active;
   final bool large;
@@ -3529,7 +3546,7 @@ class _MiniGuideRow extends StatelessWidget {
                 channel: channel,
                 libraryTag: libraryTag,
                 nameStyle: titleStyle,
-                numberWidth: 46,
+                numberWidth: numberColumnWidth,
                 numberAlignment: TextAlign.end,
                 supportStyle: metadataStyle,
                 showSemantics: false,
@@ -5030,6 +5047,17 @@ class _StatusBug extends StatelessWidget {
             controller.guide.now.difference(entryProgram.scheduled.start),
             entryProgram.scheduled.end.difference(entryProgram.scheduled.start),
           );
+    final entryDescription = entryProgram == null
+        ? null
+        : [entryProgram.scheduled.item.title, ?entryRemaining].join(' · ');
+    final liveLabel = !numberEntry
+        ? text
+        : channel == null
+        ? '$text. Not in this lineup'
+        : [
+            ChannelIdentity.label(channel, libraryTag: libraryTag),
+            ?entryDescription,
+          ].join('. ');
     final style = Theme.of(context).textTheme.bodyLarge
         ?.copyWith(color: roles.primaryText, shadows: _overlayTextShadow);
     return Align(
@@ -5051,9 +5079,7 @@ class _StatusBug extends StatelessWidget {
             Semantics(
               container: true,
               liveRegion: true,
-              label: channel == null
-                  ? text
-                  : ChannelIdentity.label(channel, libraryTag: libraryTag),
+              label: liveLabel,
               excludeSemantics: true,
               child: Container(
                 key: numberEntry
@@ -5100,12 +5126,9 @@ class _StatusBug extends StatelessWidget {
                               'Not in this lineup',
                               style: style?.copyWith(fontSize: 22),
                             ),
-                          if (entryProgram != null)
+                          if (entryDescription != null)
                             Text(
-                              [
-                                entryProgram.scheduled.item.title,
-                                ?entryRemaining,
-                              ].join(' · '),
+                              entryDescription,
                               key: const Key('channel-number-program'),
                               maxLines: 1,
                               overflow: TextOverflow.ellipsis,

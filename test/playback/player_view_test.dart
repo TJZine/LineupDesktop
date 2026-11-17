@@ -171,14 +171,46 @@ void main() {
       );
       expect(text.data, contains('left'));
       expect(text.style!.fontSize, 19);
+      final knownLabel = 'Channel 7, Channel. ${text.data}';
+      final knownNodes = tester.semantics
+          .simulatedAccessibilityTraversal()
+          .where((node) => node.label == knownLabel)
+          .toList();
+      expect(knownNodes, hasLength(1));
+      expect(
+        knownNodes.single.getSemanticsData().flagsCollection.isLiveRegion,
+        isTrue,
+      );
+      expect(
+        tester.semantics.simulatedAccessibilityTraversal().where(
+          (node) => node.label == text.data,
+        ),
+        isEmpty,
+      );
       fixture.player.closeOverlay();
       fixture.player.appendChannelDigit('9');
       await tester.pumpAndSettle();
       expect(find.text('Not in this lineup'), findsOneWidget);
       expect(program, findsNothing);
+      final unknownNodes = tester.semantics
+          .simulatedAccessibilityTraversal()
+          .where((node) => node.label == '9. Not in this lineup')
+          .toList();
+      expect(unknownNodes, hasLength(1));
+      expect(
+        unknownNodes.single.getSemanticsData().flagsCollection.isLiveRegion,
+        isTrue,
+      );
+      expect(
+        tester.semantics.simulatedAccessibilityTraversal().where(
+          (node) => node.label == 'Not in this lineup',
+        ),
+        isEmpty,
+      );
       fixture.player.closeOverlay();
       await tester.pumpWidget(const SizedBox.shrink());
     },
+    semanticsEnabled: true,
   );
 
   testWidgets(
@@ -8786,6 +8818,96 @@ void main() {
     await tester.pumpWidget(const SizedBox.shrink());
     fixture.dispose();
   });
+
+  testWidgets(
+    'Mini Guide keeps channel 1000 complete beside its icon at enlarged text',
+    (tester) async {
+      await tester.runAsync(loadPinnedTestFonts);
+      tester.view
+        ..devicePixelRatio = 1
+        ..physicalSize = const Size(1920, 1080);
+      addTearDown(tester.view.reset);
+      final fixture = _Fixture(PlayerState.playing, channelCount: 2);
+      addTearDown(fixture.dispose);
+      final original = fixture.lineup.channels.first;
+      final other = fixture.lineup.channels.last;
+      fixture.lineup.fixtureActor.replaceChannels([
+        Channel(
+          id: original.id,
+          number: 1000,
+          name: 'Four digit channel',
+          kind: ChannelKind.tv,
+          source: const ManualSource([
+            ChannelItem(
+              id: 'four-digit-program',
+              title: 'Four digit program',
+              duration: Duration(hours: 1),
+              mediaKind: ChannelMediaKind.episode,
+            ),
+          ]),
+          playbackMode: original.playbackMode,
+          anchor: original.anchor,
+          shuffleSeed: original.shuffleSeed,
+        ),
+        other,
+      ]);
+      fixture.lineup.notifyListeners();
+      fixture.player.showMiniGuide();
+      for (final scale in [1.0, 1.3]) {
+        await tester.pumpWidget(
+          MaterialApp(
+            theme: LineupTheme.forName(
+              LineupThemeName.emberSteel,
+              formFactor: tvProfile.formFactor,
+            ),
+            builder: (context, child) => MediaQuery(
+              data: MediaQuery.of(context)
+                  .copyWith(textScaler: TextScaler.linear(scale)),
+              child: _playerTvCanvasBuilder(context, child),
+            ),
+            home: PlayerView(controller: fixture.player, openGuide: () {}),
+          ),
+        );
+        await tester.pumpAndSettle();
+        final row = find.byKey(const Key('mini-guide-row-channel'));
+        final number = find.descendant(of: row, matching: find.text('1000'));
+        final paragraph = tester.renderObject<RenderParagraph>(number);
+        expect(paragraph.didExceedMaxLines, isFalse, reason: 'text $scale');
+        final boxes = paragraph.getBoxesForSelection(
+          const TextSelection(baseOffset: 0, extentOffset: 4),
+        );
+        expect(boxes, hasLength(1));
+        expect(
+          boxes.single.right - boxes.single.left,
+          lessThanOrEqualTo(paragraph.size.width + .01),
+        );
+        final identity = tester.widget<ChannelIdentity>(
+          find.descendant(of: row, matching: find.byType(ChannelIdentity)),
+        );
+        expect(identity.numberWidth, greaterThanOrEqualTo(46 * scale));
+        final otherIdentity = tester.widget<ChannelIdentity>(
+          find.descendant(
+            of: find.byKey(Key('mini-guide-row-${other.id}')),
+            matching: find.byType(ChannelIdentity),
+          ),
+        );
+        expect(otherIdentity.numberWidth, identity.numberWidth);
+        final icon = find.descendant(
+          of: row,
+          matching: find.byIcon(Icons.tv_outlined),
+        );
+        final name = find.byKey(const Key('mini-guide-channel-channel'));
+        final numberRect = _drawnRect(tester, number);
+        final iconRect = _drawnRect(tester, icon);
+        final nameRect = _drawnRect(tester, name);
+        expect(numberRect.right, lessThan(iconRect.left));
+        expect(iconRect.right, lessThan(nameRect.left));
+        expect(_drawnRect(tester, row).contains(nameRect.bottomRight), isTrue);
+        expect(tester.takeException(), isNull);
+      }
+      await tester.pumpWidget(const SizedBox.shrink());
+    },
+  );
 
   testWidgets('rich Now Playing renders metadata, artwork, and one surface', (
     tester,
