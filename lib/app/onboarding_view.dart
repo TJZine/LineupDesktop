@@ -12,6 +12,7 @@ import '../ui/app_ui.dart';
 import 'lineup_controller.dart';
 import 'navigation_shortcuts.dart';
 import 'plex_link_launcher.dart';
+import 'setup_result_atmosphere.dart';
 
 sealed class _ServerAttempt {
   const _ServerAttempt();
@@ -429,7 +430,6 @@ class UpstreamOnboardingViewState extends State<UpstreamOnboardingView>
   @override
   Widget build(BuildContext context) {
     _scheduleServerEntryFocus();
-    final roles = LineupTheme.of(context);
     final refinedStage = switch (widget.controller.stage) {
       SetupStage.linking || SetupStage.profiles || SetupStage.servers => true,
       _ => false,
@@ -459,19 +459,7 @@ class UpstreamOnboardingViewState extends State<UpstreamOnboardingView>
             },
           },
           child: Scaffold(
-            body: DecoratedBox(
-              decoration: refinedStage
-                  ? BoxDecoration(color: roles.deepBackground)
-                  : BoxDecoration(
-                      gradient: RadialGradient(
-                        center: const Alignment(-0.6, -0.65),
-                        radius: 1.25,
-                        colors: [
-                          roles.progressFill.withValues(alpha: 0.08),
-                          roles.deepBackground,
-                        ],
-                      ),
-                    ),
+            body: _background(
               child: SafeArea(
                 child: Column(
                   children: [
@@ -533,6 +521,13 @@ class UpstreamOnboardingViewState extends State<UpstreamOnboardingView>
       ),
     );
   }
+
+  Widget _background({required Widget child}) => ColoredBox(
+    color: LineupTheme.of(context).deepBackground,
+    child: widget.controller.stage == SetupStage.welcome
+        ? SetupResultAtmosphere(applying: false, failed: false, child: child)
+        : child,
+  );
 
   Widget _screen({required Key key}) {
     final controller = widget.controller;
