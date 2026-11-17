@@ -3049,6 +3049,17 @@ void main() {
         '1  Channel 0 · Next 0',
       );
       expect(label(next), contains('currently airing'));
+      final headerMarker = find.byKey(const Key('guide-now-marker'));
+      expect(
+        tester.getCenter(headerMarker).dx,
+        tester.getCenter(find.byKey(const Key('guide-now-line'))).dx,
+      );
+      final markerLabel = tester
+          .widget<Text>(
+            find.descendant(of: headerMarker, matching: find.byType(Text)),
+          )
+          .data;
+      expect(markerLabel, '7:10');
       expect(marker(earlier), findsNothing);
       expect(marker(next), findsOneWidget);
       expect(
@@ -3070,6 +3081,10 @@ void main() {
       guide.focusProgram(next);
       await tester.pump();
       expect(tester.getTopLeft(marker(next)).dx, greaterThan(markerBefore));
+      expect(
+        tester.getCenter(headerMarker).dx,
+        tester.getCenter(find.byKey(const Key('guide-now-line'))).dx,
+      );
       expect(
         rebuilt.where(
           (element) => element.widget.runtimeType.toString() == '_ProgramCell',

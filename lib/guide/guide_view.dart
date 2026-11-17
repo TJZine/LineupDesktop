@@ -1440,7 +1440,10 @@ class _GuideViewState extends State<GuideView>
                   Column(
                     children: [
                       ListenableBuilder(
-                        listenable: _presentationClock,
+                        listenable: Listenable.merge([
+                          widget.controller.focus,
+                          _presentationClock,
+                        ]),
                         builder: (context, _) => _TimeHeader(
                           controller: widget.controller,
                           railWidth: policy.channelRailWidth,
@@ -3287,7 +3290,7 @@ class _TimeHeader extends StatelessWidget {
                             ),
                             decoration: BoxDecoration(
                               color: LineupTheme.of(context).liveAccent,
-                              borderRadius: BorderRadius.circular(6),
+                              borderRadius: BorderRadius.circular(999),
                             ),
                             child: Text(
                               markerLabel,
