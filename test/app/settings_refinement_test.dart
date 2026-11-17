@@ -70,22 +70,58 @@ void main() {
       expect(first, findsOneWidget);
     });
   }
-  testWidgets('TV swatches traverse with left and right and select', (
+  testWidgets('TV rail enters first swatch before and after category rebuild', (
     tester,
   ) async {
     final controller = FixtureController();
     addTearDown(controller.dispose);
     await show(tester, controller, tv: true);
     final first = find.byKey(const ValueKey('settings-theme-emberSteel'));
-    tester.widget<OutlinedButton>(first).focusNode!.requestFocus();
-    await tester.pumpAndSettle();
+    final appearance = tester
+        .widget<TextButton>(find.widgetWithText(TextButton, 'Appearance').first)
+        .focusNode!;
+    expect(appearance.hasPrimaryFocus, isTrue);
     await tester.sendKeyEvent(LogicalKeyboardKey.arrowRight);
     await tester.pumpAndSettle();
+    expect(
+      tester.widget<OutlinedButton>(first).focusNode!.hasPrimaryFocus,
+      isTrue,
+    );
     await tester.sendKeyEvent(LogicalKeyboardKey.arrowRight);
     await tester.pumpAndSettle();
+    final second = find.byKey(const ValueKey('settings-theme-slatePine'));
+    expect(
+      tester.widget<OutlinedButton>(second).focusNode!.hasPrimaryFocus,
+      isTrue,
+    );
     await tester.sendKeyEvent(LogicalKeyboardKey.enter);
     await tester.pumpAndSettle();
-    expect(controller.settings.theme, isNot(LineupThemeName.emberSteel));
+    expect(controller.settings.theme, LineupThemeName.slatePine);
+    await tester.sendKeyEvent(LogicalKeyboardKey.arrowLeft);
+    await tester.pumpAndSettle();
+    expect(
+      tester.widget<OutlinedButton>(first).focusNode!.hasPrimaryFocus,
+      isTrue,
+    );
+    await tester.sendKeyEvent(LogicalKeyboardKey.arrowLeft);
+    await tester.pumpAndSettle();
+    expect(appearance.hasPrimaryFocus, isTrue);
+    await tester.sendKeyEvent(LogicalKeyboardKey.arrowDown);
+    await tester.pump(const Duration(milliseconds: 200));
+    await tester.pumpAndSettle();
+    expect(first, findsNothing);
+    // Enter Appearance before its dwell timer fires: entry owns the rebuild
+    // and must wait for the recreated swatches to attach their focus nodes.
+    await tester.sendKeyEvent(LogicalKeyboardKey.arrowUp);
+    await tester.pump();
+    await tester.sendKeyEvent(LogicalKeyboardKey.arrowRight);
+    await tester.pumpAndSettle();
+    expect(
+      tester.widget<OutlinedButton>(first).focusNode!.hasPrimaryFocus,
+      isTrue,
+    );
+    expect(controller.settings.theme, LineupThemeName.slatePine);
+    expect(tester.takeException(), isNull);
   });
   for (final config in [
     (size: const Size(1280, 720), tv: false, columns: false),

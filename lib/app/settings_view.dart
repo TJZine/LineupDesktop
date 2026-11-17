@@ -83,6 +83,7 @@ class _SettingsViewState extends State<SettingsView> {
       category: FocusNode(debugLabel: 'Settings ${category.name}'),
   };
   final _detailFocus = FocusNode(debugLabel: 'Settings detail');
+  final _themeSwatchesKey = GlobalKey<_ThemeSwatchesState>();
   final _desktopSubtitleRailFocus = FocusNode(debugLabel: 'Subtitles category');
   Timer? _railDwell;
   final _subtitleFocus = <_SettingKey, FocusNode>{};
@@ -411,7 +412,9 @@ class _SettingsViewState extends State<SettingsView> {
   }
 
   void _focusFirstSetting() {
-    if (_category == SettingsCategory.subtitles) {
+    if (_category == SettingsCategory.appearance) {
+      _themeSwatchesKey.currentState?.focusFirst();
+    } else if (_category == SettingsCategory.subtitles) {
       _subtitleFocus[_subtitleCustomising
               ? _SettingKey.subtitleTextColor
               : defaultTargetPlatform == TargetPlatform.android
@@ -500,8 +503,11 @@ class _SettingsViewState extends State<SettingsView> {
               ..._settingControl<LineupThemeName>(
                 _SettingKey.theme,
                 (current, item) => current.copyWith(theme: item),
-                (onChanged) =>
-                    _ThemeSwatches(value: value.theme, onChanged: onChanged),
+                (onChanged) => _ThemeSwatches(
+                  key: _themeSwatchesKey,
+                  value: value.theme,
+                  onChanged: onChanged,
+                ),
               ),
               ..._settingControl<GuideInfoBackgroundMode>(
                 _SettingKey.guideInfoBackgroundMode,
@@ -1018,7 +1024,11 @@ class _SettingsSection extends StatelessWidget {
 }
 
 class _ThemeSwatches extends StatefulWidget {
-  const _ThemeSwatches({required this.value, required this.onChanged});
+  const _ThemeSwatches({
+    required this.value,
+    required this.onChanged,
+    super.key,
+  });
 
   final LineupThemeName value;
   final ValueChanged<LineupThemeName>? onChanged;
@@ -1032,6 +1042,8 @@ class _ThemeSwatchesState extends State<_ThemeSwatches> {
     for (final theme in LineupThemeName.values)
       theme: FocusNode(debugLabel: 'Theme ${theme.label}'),
   };
+
+  void focusFirst() => _focus[LineupThemeName.values.first]!.requestFocus();
 
   @override
   void dispose() {
