@@ -1167,6 +1167,11 @@ class _GuideViewState extends State<GuideView>
     if (event is! KeyDownEvent && event is! KeyRepeatEvent) {
       return KeyEventResult.ignored;
     }
+    // Desktop's field owns its primary editing focus; TV has a separate
+    // navigation node, whose existing bar/IME handling stays below.
+    if (!DeviceProfile.of(context).isTv && _searchFocus.hasFocus) {
+      return KeyEventResult.ignored;
+    }
     final key =
         tvRemoteKeyAlias(
           event.logicalKey,

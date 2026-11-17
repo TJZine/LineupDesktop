@@ -54,6 +54,52 @@ void main() {
       );
       await tester.enterText(search, 'Signal');
       await tester.pumpAndSettle();
+      if (!tv) {
+        final editor = tester.widget<TextField>(search).controller!;
+        await tester.sendKeyEvent(LogicalKeyboardKey.arrowDown);
+        await tester.pumpAndSettle();
+        expect(
+          tester.widget<TextField>(search).focusNode!.hasPrimaryFocus,
+          isTrue,
+        );
+        editor.selection = const TextSelection.collapsed(offset: 3);
+        await tester.pump();
+        await tester.sendKeyEvent(LogicalKeyboardKey.arrowLeft);
+        await tester.pumpAndSettle();
+        expect(editor.selection, const TextSelection.collapsed(offset: 2));
+        expect(
+          tester.widget<TextField>(search).focusNode!.hasPrimaryFocus,
+          isTrue,
+        );
+        await tester.sendKeyEvent(LogicalKeyboardKey.arrowRight);
+        await tester.pumpAndSettle();
+        expect(editor.selection, const TextSelection.collapsed(offset: 3));
+        expect(
+          tester.widget<TextField>(search).focusNode!.hasPrimaryFocus,
+          isTrue,
+        );
+        await tester.sendKeyDownEvent(LogicalKeyboardKey.shiftLeft);
+        await tester.sendKeyEvent(LogicalKeyboardKey.arrowRight);
+        await tester.sendKeyUpEvent(LogicalKeyboardKey.shiftLeft);
+        await tester.pumpAndSettle();
+        expect(
+          editor.selection,
+          const TextSelection(baseOffset: 3, extentOffset: 4),
+        );
+        expect(
+          tester.widget<TextField>(search).focusNode!.hasPrimaryFocus,
+          isTrue,
+        );
+        await tester.sendKeyDownEvent(LogicalKeyboardKey.shiftLeft);
+        await tester.sendKeyEvent(LogicalKeyboardKey.arrowLeft);
+        await tester.sendKeyUpEvent(LogicalKeyboardKey.shiftLeft);
+        await tester.pumpAndSettle();
+        expect(editor.selection, const TextSelection.collapsed(offset: 3));
+        expect(
+          tester.widget<TextField>(search).focusNode!.hasPrimaryFocus,
+          isTrue,
+        );
+      }
       FocusManager.instance.primaryFocus?.unfocus();
       await tester.pumpAndSettle();
       expect(search, findsOneWidget);
