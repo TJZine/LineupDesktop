@@ -26,6 +26,148 @@ import 'package:lineup_desktop/settings/lineup_settings.dart';
 import '../support/ui_fixture.dart';
 
 void main() {
+  for (final isTv in [false, true]) {
+    testWidgets(
+      'directory markers follow name and keep platform row height TV=$isTv',
+      (tester) async {
+        tester.view
+          ..physicalSize = const Size(1920, 1080)
+          ..devicePixelRatio = 1;
+        addTearDown(tester.view.reset);
+        final name = 'Shared station';
+        await tester.pumpWidget(
+          UiFixture(
+            profile: profileFor(isTv),
+            scenario: LineupScenario(
+              stage: SetupStage.ready,
+              channels: [
+                _channel(
+                  'marked',
+                  1,
+                  name,
+                  sourceLibraries: const {'one': 'Library One'},
+                ).copyWith(favorite: true),
+                _channel(
+                  'other',
+                  2,
+                  name,
+                  sourceLibraries: const {'two': 'Library Two'},
+                ),
+                _channel(
+                  'long',
+                  3,
+                  'A very long channel name ' * 10,
+                ).copyWith(favorite: true),
+              ],
+            ),
+          ).build(),
+        );
+        await tester.pumpAndSettle();
+        await openDestination(tester, 'Channels');
+        final row = find.byKey(const ValueKey('channel-row-marked'));
+        final library = find.descendant(
+          of: row,
+          matching: find.text('Library One'),
+        );
+        final tag = find.byKey(const ValueKey('channel-custom-marked'));
+        final star = find.byKey(const ValueKey('channel-favourite-marked'));
+        expect(
+          tester.getTopLeft(library).dx,
+          greaterThan(
+            tester
+                .getTopRight(
+                  find.descendant(of: row, matching: find.text(name)),
+                )
+                .dx,
+          ),
+        );
+        expect(
+          tester.getTopLeft(tag).dx,
+          greaterThan(tester.getTopRight(library).dx),
+        );
+        expect(
+          tester.getTopLeft(star).dx,
+          greaterThan(tester.getTopRight(tag).dx),
+        );
+        expect(
+          (tester.widget<Container>(tag).decoration as BoxDecoration).border,
+          isNotNull,
+        );
+        expect(tester.widget<Icon>(star).icon, Icons.star);
+        expect(
+          tester.widget<Icon>(star).color,
+          LineupTheme.of(tester.element(star)).progressFill,
+        );
+        expect(tester.getSize(row).height, isTv ? 72 : 80);
+        expect(
+          tester.getSize(find.byKey(const ValueKey('channel-row-long'))).height,
+          tester.getSize(row).height,
+        );
+        tester.platformDispatcher.textScaleFactorTestValue = 1.3;
+        addTearDown(tester.platformDispatcher.clearTextScaleFactorTestValue);
+        await tester.pumpAndSettle();
+        expect(tester.getSize(row).height, isTv ? 72 : 80);
+        expect(
+          tester.getSize(find.byKey(const ValueKey('channel-row-long'))).height,
+          tester.getSize(row).height,
+        );
+        expect(tester.takeException(), isNull);
+      },
+    );
+  }
+
+  for (final isTv in [false, true]) {
+    for (final scale in [1.0, 1.3]) {
+      testWidgets(
+        'recovery row retains its pre-refinement height TV=$isTv text=$scale',
+        (tester) async {
+          tester.view
+            ..physicalSize = isTv
+                ? const Size(1920, 1080)
+                : const Size(1280, 720)
+            ..devicePixelRatio = 1;
+          tester.platformDispatcher.textScaleFactorTestValue = scale;
+          addTearDown(tester.view.reset);
+          addTearDown(tester.platformDispatcher.clearTextScaleFactorTestValue);
+          await tester.pumpWidget(
+            UiFixture(
+              profile: profileFor(isTv),
+              controller: _FailedScheduleController(
+                scenario: LineupScenario(
+                  stage: SetupStage.ready,
+                  channels: [
+                    _channel(
+                      'recovery',
+                      1,
+                      'Recovery station',
+                    ).copyWith(favorite: true),
+                  ],
+                ),
+              ),
+            ).build(),
+          );
+          await tester.pumpAndSettle();
+          await openDestination(tester, 'Channels');
+          final row = find.byKey(const ValueKey('channel-row-recovery'));
+          final recovery = find.text(
+            'Schedule issue — open this channel to recover',
+          );
+          expect(recovery, findsOneWidget);
+          // Measured from the production baseline with identical profile/font scale.
+          final baseline = isTv
+              ? (scale == 1 ? 101.0 : 125.0)
+              : (scale == 1 ? 105.0 : 129.0);
+          expect(tester.getSize(row).height, baseline);
+          expect(
+            tester.getBottomRight(recovery).dy,
+            lessThanOrEqualTo(tester.getBottomRight(row).dy),
+          );
+          expect(tester.takeException(), isNull);
+        },
+      );
+    }
+  }
+
   for (final isTv in [true, false]) {
     testWidgets(
       'bulk-selected channel rows show checked state on the checkbox only (TV: $isTv)',
@@ -1381,7 +1523,7 @@ void main() {
   );
 
   testWidgets(
-    'both directories drop the Custom tag before crowding a wide name',
+    'directory retains outlined Custom for long names while reorder keeps prior tag policy',
     (tester) async {
       tester.view
         ..physicalSize = const Size(1280, 1080)
@@ -1415,14 +1557,21 @@ void main() {
           of: shortRow,
           matching: find.text('Custom'),
         );
-        expect(tester.getTopLeft(shortTag).dy, tester.getTopLeft(shortName).dy);
+        if (prefix == 'reorder') {
+          expect(
+            tester.getTopLeft(shortTag).dy,
+            tester.getTopLeft(shortName).dy,
+          );
+        } else {
+          expect(tester.getCenter(shortTag).dy, tester.getCenter(shortName).dy);
+        }
         expect(
           tester.getTopLeft(shortTag).dx,
           greaterThanOrEqualTo(tester.getTopRight(shortName).dx),
         );
         expect(
           find.descendant(of: longRow, matching: find.text('Custom')),
-          findsNothing,
+          prefix == 'reorder' ? findsNothing : findsOneWidget,
         );
         expect(
           tester
@@ -2052,4 +2201,11 @@ class _RecordingDirectoryController extends FixtureController {
       throw failure;
     }
   }
+}
+
+class _FailedScheduleController extends FixtureController {
+  _FailedScheduleController({super.scenario});
+  @override
+  Future<ScheduleIndex> loadScheduleFor(Channel channel) async =>
+      throw StateError('Synthetic schedule failure');
 }

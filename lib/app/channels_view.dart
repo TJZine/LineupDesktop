@@ -654,6 +654,10 @@ class ChannelsViewState extends State<ChannelsView> {
                                       ],
                                     ),
                                     custom: channel.builderKey == null,
+                                    favourite: channel.favorite,
+                                    scheduleIssue:
+                                        _healthMonitor.issueFor(channel.id) ==
+                                        true,
                                     source: _directorySource(
                                       channel,
                                       rowSupportStyle,
@@ -962,6 +966,8 @@ class ChannelsViewState extends State<ChannelsView> {
     required Widget source,
     required Widget playback,
     bool custom = false,
+    bool favourite = false,
+    bool scheduleIssue = false,
     required Widget action,
     Widget? leading,
     bool heading = false,
@@ -969,10 +975,14 @@ class ChannelsViewState extends State<ChannelsView> {
     final textScale = MediaQuery.textScalerOf(context).scale(1);
     final numberWidth = 52 * textScale;
     final tv = DeviceProfile.of(context).isTv;
+    final rowHeight = tv ? 72.0 : _directorySize(80, 68);
     return ConstrainedBox(
       constraints: heading
           ? const BoxConstraints()
-          : BoxConstraints(minHeight: tv ? 72 : _directorySize(80, 68)),
+          : BoxConstraints(
+              minHeight: rowHeight,
+              maxHeight: scheduleIssue ? double.infinity : rowHeight,
+            ),
       child: Padding(
         padding: EdgeInsets.symmetric(
           horizontal: 12,
@@ -1007,15 +1017,20 @@ class ChannelsViewState extends State<ChannelsView> {
                       mainAxisSize: MainAxisSize.min,
                       crossAxisAlignment: CrossAxisAlignment.start,
                       children: [
-                        if (custom)
-                          _DirectoryCustomIdentity(
-                            name: identity.channel.name,
-                            nameStyle: identity.nameStyle,
-                            supportStyle: identity.supportStyle,
+                        if (scheduleIssue)
+                          _DirectoryChannelIdentity(
                             identity: identity,
+                            custom: custom,
+                            favourite: favourite,
                           )
                         else
-                          identity,
+                          Flexible(
+                            child: _DirectoryChannelIdentity(
+                              identity: identity,
+                              custom: custom,
+                              favourite: favourite,
+                            ),
+                          ),
                         Padding(
                           padding: EdgeInsetsDirectional.only(
                             start: identity.nameIndent(context),
@@ -1868,19 +1883,149 @@ class _MoveChannelDialogState extends State<_MoveChannelDialog> {
   }
 }
 
-/// Gives the optional tag space only when the full identity already fits.
+/// Reserves the row markers before fitting the name to the existing row height.
+class _DirectoryChannelIdentity extends StatelessWidget {
+  const _DirectoryChannelIdentity({
+    required this.identity,
+    required this.custom,
+    required this.favourite,
+  });
+
+  final ChannelIdentity identity;
+  final bool custom;
+  final bool favourite;
+
+  @override
+  Widget build(BuildContext context) {
+    final roles = LineupTheme.of(context);
+    final support = identity.supportStyle;
+    return Semantics(
+      label: ChannelIdentity.label(
+        identity.channel,
+        libraryTag: identity.libraryTag,
+      ),
+      excludeSemantics: true,
+      child: LayoutBuilder(
+        builder: (context, constraints) {
+          final text = TextPainter(
+            text: TextSpan(
+              text: 'M',
+              style: DefaultTextStyle.of(context).style
+                  .merge(identity.nameStyle),
+            ),
+            textDirection: Directionality.of(context),
+            textScaler: MediaQuery.textScalerOf(context),
+          )..layout();
+          int lines;
+          if (constraints.hasBoundedHeight) {
+            lines = (constraints.maxHeight / text.preferredLineHeight)
+                .floor()
+                .clamp(1, 2);
+          } else {
+            // Recovery rows already reserve space for a health line. Markers may
+            // truncate the name, but must not add lines to that existing state.
+            final room = (constraints.maxWidth - identity.nameIndent(context))
+                .clamp(0.0, double.infinity);
+            final style = DefaultTextStyle.of(context).style
+                .merge(identity.nameStyle);
+            final longestWord = identity.channel.name
+                .split(RegExp(r'\s+'))
+                .map(
+                  (word) => TextPainter.computeWidth(
+                    text: TextSpan(text: word, style: style),
+                    textDirection: Directionality.of(context),
+                    textScaler: MediaQuery.textScalerOf(context),
+                  ),
+                )
+                .fold(0.0, (a, b) => a > b ? a : b);
+            if (longestWord > room) {
+              lines = 1;
+            } else {
+              final baseline = TextPainter(
+                text: TextSpan(text: identity.channel.name, style: style),
+                textDirection: Directionality.of(context),
+                textScaler: MediaQuery.textScalerOf(context),
+              )..layout(maxWidth: room);
+              lines = baseline.computeLineMetrics().length.clamp(1, 1000);
+              baseline.dispose();
+            }
+          }
+          text.dispose();
+          return Row(
+            children: [
+              Flexible(
+                child: ChannelIdentity(
+                  channel: identity.channel,
+                  numberWidth: identity.numberWidth,
+                  nameStyle: identity.nameStyle,
+                  numberStyle: identity.numberStyle,
+                  supportStyle: support,
+                  maxLines: lines,
+                  showSemantics: false,
+                ),
+              ),
+              if (identity.libraryTag case final library?) ...[
+                const SizedBox(width: 8),
+                ConstrainedBox(
+                  constraints: BoxConstraints(
+                    maxWidth: constraints.maxWidth * .3,
+                  ),
+                  child: Text(
+                    library,
+                    style: support,
+                    maxLines: 1,
+                    overflow: TextOverflow.ellipsis,
+                  ),
+                ),
+              ],
+              if (custom) ...[
+                const SizedBox(width: 8),
+                Container(
+                  key: ValueKey('channel-custom-${identity.channel.id}'),
+                  padding: const EdgeInsets.symmetric(
+                    horizontal: 4,
+                    vertical: 1,
+                  ),
+                  decoration: BoxDecoration(
+                    border: Border.all(color: roles.defaultBorder),
+                    borderRadius: BorderRadius.circular(4),
+                  ),
+                  child: Text(
+                    'Custom',
+                    style: support?.copyWith(
+                      fontSize: 14,
+                      fontWeight: FontWeight.w600,
+                    ),
+                  ),
+                ),
+              ],
+              if (favourite) ...[
+                const SizedBox(width: 8),
+                Icon(
+                  Icons.star,
+                  key: ValueKey('channel-favourite-${identity.channel.id}'),
+                  size: 18,
+                  color: roles.progressFill,
+                ),
+              ],
+            ],
+          );
+        },
+      ),
+    );
+  }
+}
+
 class _DirectoryCustomIdentity extends StatelessWidget {
   const _DirectoryCustomIdentity({
     required this.name,
     required this.nameStyle,
     required this.supportStyle,
-    this.identity,
   });
 
   final String name;
   final TextStyle? nameStyle;
   final TextStyle? supportStyle;
-  final ChannelIdentity? identity;
 
   @override
   Widget build(BuildContext context) {
@@ -1899,21 +2044,11 @@ class _DirectoryCustomIdentity extends StatelessWidget {
       textScaler: textScaler,
       locale: Localizations.maybeLocaleOf(context),
     );
-    final label = identity ?? Text(name, style: nameStyle, softWrap: true);
+    final label = Text(name, style: nameStyle, softWrap: true);
     return LayoutBuilder(
       builder: (context, constraints) {
-        final prefix = identity?.nameIndent(context) ?? 0;
-        final libraryTag = identity?.libraryTag;
-        final libraryWidth = libraryTag == null
-            ? 0.0
-            : measure('· $libraryTag', support) +
-                  textScaler.scale(labelStyle.fontSize ?? 14) * .25;
         final requiredWidth =
-            prefix +
-            measure(name, labelStyle) +
-            libraryWidth +
-            gap +
-            measure('Custom', tagStyle);
+            measure(name, labelStyle) + gap + measure('Custom', tagStyle);
         if (requiredWidth > constraints.maxWidth) return label;
         return Row(
           crossAxisAlignment: CrossAxisAlignment.start,
