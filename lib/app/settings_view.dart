@@ -352,7 +352,18 @@ class _SettingsViewState extends State<SettingsView> {
         }
         return KeyEventResult.ignored;
       },
-      child: _categoryDetail(context),
+      child: Align(
+        alignment: Alignment.topLeft,
+        child: ConstrainedBox(
+          key: const Key('settings-content-column'),
+          constraints: BoxConstraints(
+            maxWidth: _category == SettingsCategory.subtitles
+                ? double.infinity
+                : 1040,
+          ),
+          child: _categoryDetail(context),
+        ),
+      ),
     ),
   );
 
