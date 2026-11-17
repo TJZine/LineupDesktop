@@ -41,7 +41,7 @@ may cover multiple listed states only when that scope is clear to the user.
 | surface-13 | Library scan outcomes · corrected | Approved at 1080p | Behavior checks passed; adaptive/Windows pending | Candidate03 state family; `692083fc` |
 | surface-14 | Setup progress | Approved at 1080p | Behavior checks passed; adaptive/Windows pending | Candidate02 family; `22743fd6` |
 | surface-15 | Setup complete | Approved at 1080p | Behavior checks passed; adaptive/Windows pending | Candidate02 family; `22743fd6` |
-| surface-16 | Manage channels · Channel order / Grouped by source | Approved at 1080p | Portable behavior/layout passed; physical Windows/Fire TV pending | UI audit 2, delegated Astra approval, 2026-11-17; Channels commit `692a77aa`; earlier Candidate05/06 `d98e9761` |
+| surface-16 | Manage channels · Channel order / Grouped by source | Approved at 1080p | Portable behavior/layout passed; physical Windows/Fire TV pending | UI audit 2, delegated Astra approval, 2026-11-17; Channels package; earlier Candidate05/06 `d98e9761` |
 | surface-17 | Channel selection | Approved at 1080p | Behavior checks passed; adaptive/Windows pending | Candidate05/06; `d98e9761` |
 | surface-18 | Channel reorder | Approved at 1080p | Behavior checks passed; adaptive/Windows pending | Candidate05/06; `d98e9761` |
 | surface-19 | Delete confirmation | Approved at 1080p | Behavior checks passed; adaptive/Windows pending | Text-only final amendment; recapture waived; `aa25168f` |
@@ -61,7 +61,7 @@ may cover multiple listed states only when that scope is clear to the user.
 | surface-33 | Settings · Appearance | Approved at 1080p (shared treatment) | Behavior checks passed; adaptive/Windows pending | Account representative review; `6baa7a9b` |
 | surface-34 | Settings · Guide | Approved at 1080p (shared treatment) | Behavior checks passed; adaptive/Windows pending | Account representative review; `6baa7a9b` |
 | surface-35 | Settings · Playback | Approved at 1080p (shared treatment) | Behavior checks passed; adaptive/Windows pending | Account representative review; `6baa7a9b` |
-| surface-36 | Settings · Accessibility | Approved at 1080p | Portable behavior checks passed; physical Windows/Fire TV pending | UI audit 2, delegated Astra approval, 2026-11-17; Shared commit `479c4008`; earlier shared treatment `6baa7a9b` |
+| surface-36 | Settings · Accessibility | Approved at 1080p | Portable behavior checks passed; physical Windows/Fire TV pending | UI audit 2, delegated Astra approval, 2026-11-17; Shared package; earlier shared treatment `6baa7a9b` |
 | surface-37 | Settings · Account | Approved at 1080p (shared treatment) | Behavior checks passed; adaptive/Windows pending | Account representative review; `6baa7a9b` |
 | surface-38 | Settings · Support | Approved at 1080p (shared treatment) | Behavior checks passed; adaptive/Windows pending | Account representative review; `6baa7a9b` |
 | surface-39 | Settings over playback | Approved at 1080p (shared treatment) | Behavior checks passed; adaptive/Windows pending | Account representative review; `6baa7a9b` |
@@ -1546,7 +1546,8 @@ maintainer acceptance of the matched renders (UX assessment decision, 2026-11-13
 UI audit 2 decision, 2026-11-16. The G package supersedes the earlier
 separate-control-row placement, fixed TV five-row rule and right-aligned episode code
 for current Guide code. Its isolated header commit provides matched desktop/TV 1920×1080
-before/after evidence. Commit `61f7e426` passed the Guide focus and layout checks. Physical Fire TV and Windows acceptance remains pending.
+before/after evidence. The Guide focus and layout checks passed. Physical Fire TV
+and Windows acceptance remains pending.
 The merged header is 72 px, with the original 80 px/wrapping fallback, and TV shows six
 rows where its measured minimum permits, otherwise five. Program-derived information
 styling and the TV picture/information size are preserved.
@@ -1858,7 +1859,8 @@ refined Now Playing 110-art/40-title/248×372-poster/56-cast targets, five Mini 
 rows, 84 px high with inline provenance/Watching and no hints, 36/26 picker headings and
 English track names, duplicate-only subtitle support, and 84 px number-entry digits with
 current program/time left. Existing tokens, overlay setting/opacity, interaction and
-four stacked cast columns remain. Astra approved the Player changes at `036ee167`. Physical Fire TV and Windows acceptance remains pending.
+four stacked cast columns remain. Astra approved the Player changes. Physical
+Fire TV and Windows acceptance remains pending.
 
 Use a shared right-aligned number column with a 46 reference floor, scaled by platform
 text settings and expanded only to the actual largest rendered number extent plus one
@@ -1925,7 +1927,7 @@ existing controls and TV rail behavior. Ordinary detail content is capped at 104
 Appearance now uses theme swatches. Subtitles uses main and Customise pages and a
 proportional 16:9 preview. At detail widths of 1212 canvas units or more the preview
 appears beside the 620-unit controls column. On narrower panes it appears above the
-controls. Astra approved the Settings changes at `26c377fe`. Physical Fire TV and
+controls. Astra approved the Settings changes. Physical Fire TV and
 Windows acceptance remains pending.
 
 ## September 12 — Lineup menu41 locked
@@ -2001,4 +2003,4 @@ This completes the requested visual sequence; skipped surfaces are not approved.
 UI audit 2 decision, 2026-11-16. Diagnostics surfaces 42–45 now use equal Playback,
 Video, Picture and Plex summary cards and four technical groups. Idle remains inline;
 unknown method has no supporting line. Reported signal and display facts retain their
-platform/physical-evidence limits. Astra approved these Diagnostics changes at `26c377fe`.
+platform/physical-evidence limits. Astra approved these Diagnostics changes.
