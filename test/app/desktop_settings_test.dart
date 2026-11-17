@@ -459,8 +459,7 @@ String _categoryContent(SettingsCategory category) => switch (category) {
   SettingsCategory.appearance => 'Use title artwork',
   SettingsCategory.guide => 'Show now playing in Guide',
   SettingsCategory.playback => 'Pause and seek controls',
-  SettingsCategory.subtitles =>
-    'Applies to text subtitles. Image subtitles follow Size and Position only.',
+  SettingsCategory.subtitles => 'How subtitles look over the picture.',
   SettingsCategory.accessibility => 'Large focus indicators',
   SettingsCategory.account => 'Signed-in Plex account',
   SettingsCategory.support => 'Diagnostics',

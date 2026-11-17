@@ -87,6 +87,60 @@ void main() {
     await tester.pumpAndSettle();
     expect(controller.settings.theme, isNot(LineupThemeName.emberSteel));
   });
+  for (final config in [
+    (size: const Size(1280, 720), tv: false, columns: false),
+    (size: const Size(1512, 945), tv: false, columns: true),
+    (size: const Size(1920, 1080), tv: true, columns: true),
+  ]) {
+    testWidgets('subtitle pages fit and restore focus at $config', (
+      tester,
+    ) async {
+      final controller = FixtureController();
+      addTearDown(controller.dispose);
+      await show(
+        tester,
+        controller,
+        size: config.size,
+        tv: config.tv,
+        category: SettingsCategory.subtitles,
+      );
+      final rows = find.byKey(const ValueKey('subtitle-rows'));
+      final preview = find.byKey(const ValueKey('subtitle-preview'));
+      expect(tester.getSize(preview).aspectRatio, closeTo(16 / 9, .01));
+      expect(
+        tester.getRect(preview).left >= tester.getRect(rows).right,
+        config.columns,
+      );
+      final customise = find.byKey(
+        const ValueKey('subtitle-field-subtitleCustomise'),
+      );
+      await tester.ensureVisible(customise);
+      await tester.pumpAndSettle();
+      await tester.tap(customise);
+      await tester.pumpAndSettle();
+      expect(
+        find.byKey(const ValueKey('subtitle-field-subtitlePreset')),
+        findsNothing,
+      );
+      expect(
+        find.byKey(const ValueKey('subtitle-field-subtitleTextColor')),
+        findsOneWidget,
+      );
+      expect(preview, findsOneWidget);
+      await tester.sendKeyEvent(LogicalKeyboardKey.escape);
+      await tester.pumpAndSettle();
+      expect(
+        find.byKey(const ValueKey('subtitle-field-subtitlePreset')),
+        findsOneWidget,
+      );
+      expect(
+        FocusManager.instance.primaryFocus?.debugLabel,
+        'subtitleCustomise',
+      );
+      expect(tester.takeException(), isNull);
+    });
+  }
+
   for (final category in SettingsCategory.values.where(
     (c) => c != SettingsCategory.subtitles,
   )) {
