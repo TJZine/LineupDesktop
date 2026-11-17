@@ -479,7 +479,7 @@ void main() {
 
     await openDestination(tester, 'Settings');
 
-    expect(find.byType(DropdownButton<LineupThemeName>), findsOneWidget);
+    expect(find.byKey(const ValueKey('settings-field-Theme')), findsOneWidget);
 
     await tester.pumpWidget(const SizedBox.shrink());
     await tester.pumpAndSettle();
@@ -684,7 +684,7 @@ void main() {
 
     await tester.sendKeyEvent(LogicalKeyboardKey.f3);
     await tester.pumpAndSettle();
-    expect(find.byType(DropdownButton<LineupThemeName>), findsOneWidget);
+    expect(find.byKey(const ValueKey('settings-field-Theme')), findsOneWidget);
     expectSettingsRailFocus(tester, 'Appearance');
 
     await tester.sendKeyEvent(LogicalKeyboardKey.escape);
@@ -703,7 +703,7 @@ void main() {
     await tester.sendKeyEvent(LogicalKeyboardKey.f3);
     await tester.pumpAndSettle();
 
-    expect(find.byType(DropdownButton<LineupThemeName>), findsOneWidget);
+    expect(find.byKey(const ValueKey('settings-field-Theme')), findsOneWidget);
     expectSettingsRailFocus(tester, 'Appearance');
 
     await tester.sendKeyEvent(LogicalKeyboardKey.backspace);
@@ -1165,7 +1165,7 @@ void main() {
     await tester.sendKeyEvent(LogicalKeyboardKey.digit3);
     await tester.sendKeyUpEvent(LogicalKeyboardKey.controlLeft);
     await tester.pumpAndSettle();
-    expect(find.byType(DropdownButton<LineupThemeName>), findsOneWidget);
+    expect(find.byKey(const ValueKey('settings-field-Theme')), findsOneWidget);
     await tester.sendKeyDownEvent(LogicalKeyboardKey.controlLeft);
     await tester.sendKeyEvent(LogicalKeyboardKey.keyG);
     await tester.sendKeyUpEvent(LogicalKeyboardKey.controlLeft);
@@ -1174,7 +1174,7 @@ void main() {
     await tester.pumpAndSettle();
 
     expect(FocusManager.instance.primaryFocus?.debugLabel, 'Player');
-    expect(find.byType(DropdownButton<LineupThemeName>), findsNothing);
+    expect(find.byKey(const ValueKey('settings-field-Theme')), findsNothing);
 
     final playback = tester
         .widget<PlayerView>(find.byType(PlayerView))
