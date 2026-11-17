@@ -91,11 +91,7 @@ class _StudioProgrammingState extends State<_StudioProgramming> {
   }
 
   void _publishPending() => widget.onPendingChanged(
-    _picker.activeKey != null
-        ? _StudioPendingChoice.filter
-        : _selectionPending
-        ? _StudioPendingChoice.selection
-        : null,
+    _selectionPending ? _StudioPendingChoice.selection : null,
   );
 
   bool cancelPendingChoice() {

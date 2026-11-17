@@ -162,9 +162,7 @@ class _StudioManualEditorState extends State<_StudioManualEditor>
   Widget _pendingHint() => Semantics(
     liveRegion: true,
     child: Text(
-      _picker.activeKey != null
-          ? 'Finish this filter with Done, or cancel it, before saving or tuning.'
-          : 'Add the selected programs, or cancel selection, before saving or tuning.',
+      'Add the selected programs, or cancel selection, before saving or tuning.',
       style: _studioSupportStyle(context),
     ),
   );

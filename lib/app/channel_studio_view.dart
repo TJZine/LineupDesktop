@@ -889,9 +889,7 @@ class ChannelStudioViewState extends State<ChannelStudioView> {
 
   bool get _hasPendingProgrammingChoice => _pendingProgrammingChoice != null;
   String get _pendingProgrammingHint =>
-      _pendingProgrammingChoice == _StudioPendingChoice.filter
-      ? 'Finish this filter with Done, or cancel it, before saving or tuning.'
-      : 'Add the selected programs, or cancel selection, before saving or tuning.';
+      'Add the selected programs, or cancel selection, before saving or tuning.';
 
   bool get _canSave {
     final persisted = _session.expectedBase != null;
@@ -913,9 +911,7 @@ class ChannelStudioViewState extends State<ChannelStudioView> {
     if (_busy) return;
     if (_hasPendingProgrammingChoice) {
       setState(
-        () => _error = _pendingProgrammingChoice == _StudioPendingChoice.filter
-            ? 'Finish or cancel the open filter before saving.'
-            : 'Add or cancel the selected programs before saving.',
+        () => _error = 'Add or cancel the selected programs before saving.',
       );
       return;
     }

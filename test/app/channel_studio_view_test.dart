@@ -1484,107 +1484,104 @@ void main() {
     expect(saved.includeWatched, isFalse);
   });
 
-  testWidgets(
-    'source switch cancels pending filter and preserves completed drafts',
-    (tester) async {
-      final original = _channel(
-        id: 'playlist-channel',
-        number: 3,
-        name: 'Playlist channel',
-        source: const PlaylistSource('favorites'),
-      );
-      final controller = _RecordingSaveController(
-        scenario: LineupScenario(
-          channels: [original],
-          libraries: const [
-            PlexLibrary(
-              id: 'movies',
-              title: 'Movies',
-              type: PlexLibraryType.movie,
-            ),
-          ],
-          selectedLibraryIds: {'movies'},
-          availableMedia: [
-            _media('drama', libraryId: 'movies', genres: ['Drama']),
-            _media('comedy', libraryId: 'movies', genres: ['Comedy']),
-          ],
-          availablePlaylists: [_playlist('favorites'), _playlist('later')],
-        ),
-      );
-      addTearDown(controller.dispose);
-      await tester.pumpWidget(
-        _studio(controller, ChannelStudioMode.editCustom, channel: original),
-      );
-      await _settleAirCheck(tester);
-      await _chooseDropdown(tester, 'studio-playlist', 'Playlist later');
-      await tester.ensureVisible(find.text('Library').first);
-      await tester.tap(find.text('Library').first);
-      await _settleAirCheck(tester);
-      await _openStudioFilter(tester, 'genre');
-      await tester.tap(find.widgetWithText(CheckboxListTile, 'Drama'));
-      await tester.ensureVisible(find.text('Done'));
-      await tester.tap(find.text('Done'));
-      await _settleAirCheck(tester);
-      await _openStudioFilter(tester, 'genre');
-      await tester.tap(find.widgetWithText(CheckboxListTile, 'Comedy'));
-      await tester.ensureVisible(find.text('Plex playlist'));
-      await tester.tap(find.text('Plex playlist'));
-      await _settleAirCheck(tester);
-      expect(
-        tester
-            .widget<ButtonStyleButton>(find.byKey(const Key('studio-tune')))
-            .onPressed,
-        isNotNull,
-      );
-      expect(
-        tester
-            .widget<FilledButton>(
-              find.widgetWithText(FilledButton, 'Save changes'),
-            )
-            .onPressed,
-        isNotNull,
-      );
-      expect(
-        tester
-            .widget<DropdownButtonFormField<String>>(
-              find.byKey(const Key('studio-playlist')),
-            )
-            .initialValue,
-        'later',
-      );
-      await tester.ensureVisible(find.text('Library').first);
-      await tester.tap(find.text('Library').first);
-      await _settleAirCheck(tester);
-      expect(find.text('Genre: Drama'), findsOneWidget);
-      expect(find.byKey(const Key('studio-filter-picker-genre')), findsNothing);
-      await _openStudioFilter(tester, 'genre');
-      expect(
-        tester
-            .widget<CheckboxListTile>(
-              find.widgetWithText(CheckboxListTile, 'Comedy'),
-            )
-            .value,
-        isFalse,
-      );
-      await tester.ensureVisible(find.text('Cancel'));
-      await tester.tap(find.text('Cancel'));
-      await tester.ensureVisible(find.text('Plex playlist'));
-      await tester.tap(find.text('Plex playlist'));
-      await _settleAirCheck(tester);
-      await tester.tap(find.text('Save changes'));
-      await tester.pumpAndSettle();
-      expect(
-        controller.saved!.source.toJson(),
-        const PlaylistSource('later').toJson(),
-      );
-      expect(
-        tester
-            .widget<ButtonStyleButton>(find.byKey(const Key('studio-tune')))
-            .onPressed,
-        isNotNull,
-      );
-    },
-  );
+  testWidgets('source switch retains live filter values and completed drafts', (
+    tester,
+  ) async {
+    final original = _channel(
+      id: 'playlist-channel',
+      number: 3,
+      name: 'Playlist channel',
+      source: const PlaylistSource('favorites'),
+    );
+    final controller = _RecordingSaveController(
+      scenario: LineupScenario(
+        channels: [original],
+        libraries: const [
+          PlexLibrary(
+            id: 'movies',
+            title: 'Movies',
+            type: PlexLibraryType.movie,
+          ),
+        ],
+        selectedLibraryIds: {'movies'},
+        availableMedia: [
+          _media('drama', libraryId: 'movies', genres: ['Drama']),
+          _media('comedy', libraryId: 'movies', genres: ['Comedy']),
+        ],
+        availablePlaylists: [_playlist('favorites'), _playlist('later')],
+      ),
+    );
+    addTearDown(controller.dispose);
+    await tester.pumpWidget(
+      _studio(controller, ChannelStudioMode.editCustom, channel: original),
+    );
+    await _settleAirCheck(tester);
+    await _chooseDropdown(tester, 'studio-playlist', 'Playlist later');
+    await tester.ensureVisible(find.text('Library').first);
+    await tester.tap(find.text('Library').first);
+    await _settleAirCheck(tester);
+    await _openStudioFilter(tester, 'genre');
+    await tester.tap(find.widgetWithText(CheckboxListTile, 'Drama'));
+    await tester.sendKeyEvent(LogicalKeyboardKey.escape);
+    await _settleAirCheck(tester);
+    await _openStudioFilter(tester, 'genre');
+    await tester.tap(find.widgetWithText(CheckboxListTile, 'Comedy'));
+    await tester.ensureVisible(find.text('Plex playlist'));
+    await tester.tap(find.text('Plex playlist'));
+    await _settleAirCheck(tester);
+    expect(
+      tester
+          .widget<ButtonStyleButton>(find.byKey(const Key('studio-tune')))
+          .onPressed,
+      isNotNull,
+    );
+    expect(
+      tester
+          .widget<FilledButton>(
+            find.widgetWithText(FilledButton, 'Save changes'),
+          )
+          .onPressed,
+      isNotNull,
+    );
+    expect(
+      tester
+          .widget<DropdownButtonFormField<String>>(
+            find.byKey(const Key('studio-playlist')),
+          )
+          .initialValue,
+      'later',
+    );
+    await tester.ensureVisible(find.text('Library').first);
+    await tester.tap(find.text('Library').first);
+    await _settleAirCheck(tester);
+    expect(find.text('Genre: Drama, Comedy'), findsOneWidget);
+    expect(find.byKey(const Key('studio-filter-picker-genre')), findsNothing);
+    await _openStudioFilter(tester, 'genre');
+    expect(
+      tester
+          .widget<CheckboxListTile>(
+            find.widgetWithText(CheckboxListTile, 'Comedy'),
+          )
+          .value,
+      isTrue,
+    );
+    await tester.sendKeyEvent(LogicalKeyboardKey.escape);
+    await tester.ensureVisible(find.text('Plex playlist'));
+    await tester.tap(find.text('Plex playlist'));
+    await _settleAirCheck(tester);
+    await tester.tap(find.text('Save changes'));
+    await tester.pumpAndSettle();
+    expect(
+      controller.saved!.source.toJson(),
+      const PlaylistSource('later').toJson(),
+    );
+    expect(
+      tester
+          .widget<ButtonStyleButton>(find.byKey(const Key('studio-tune')))
+          .onPressed,
+      isNotNull,
+    );
+  });
 
   testWidgets('custom mixed sources stay lossless until explicitly replaced', (
     tester,
@@ -2988,8 +2985,7 @@ void main() {
     await _chooseDropdown(tester, 'studio-media-type', 'episode');
     await _openStudioFilter(tester, 'genre', browse: true);
     await tester.tap(find.widgetWithText(CheckboxListTile, 'Comedy'));
-    await tester.ensureVisible(find.text('Done'));
-    await tester.tap(find.text('Done'));
+    await tester.sendKeyEvent(LogicalKeyboardKey.escape);
     await tester.pumpAndSettle();
     expect(key.currentState!.dirty, isFalse);
     await tester.enterText(find.byKey(const Key('studio-search')), 'none');
@@ -5383,74 +5379,76 @@ void main() {
     expect(find.text('Stale playlist tag'), findsNothing);
   });
 
-  testWidgets('Library filter picker keeps pending values local until Done', (
-    tester,
-  ) async {
-    final controller = _RecordingSaveController(
-      scenario: LineupScenario(
-        libraries: const [
-          PlexLibrary(
-            id: 'movies',
-            title: 'Movies',
-            type: PlexLibraryType.movie,
-          ),
-        ],
-        selectedLibraryIds: {'movies'},
-        availableMedia: [
-          _media('drama', libraryId: 'movies', genres: ['Drama']),
-          _media('comedy', libraryId: 'movies', genres: ['Comedy']),
-        ],
-      ),
-    );
-    addTearDown(controller.dispose);
-    await tester.pumpWidget(
-      _studio(controller, ChannelStudioMode.createCustom),
-    );
-    await _settleAirCheck(tester);
-
-    expect(find.text('None in this library'), findsOneWidget);
-    expect(
-      tester
-          .widget<LineupFieldButton>(
-            find.byKey(const Key('studio-filter-collection')),
-          )
-          .onPressed,
-      isNull,
-    );
-    await _openStudioFilter(tester, 'genre');
-    await tester.pumpAndSettle();
-    expect(find.byKey(const Key('studio-filter-picker-genre')), findsOneWidget);
-    await tester.tap(find.widgetWithText(CheckboxListTile, 'Drama'));
-    expect(
-      tester
-          .widget<FilledButton>(
-            find.widgetWithText(FilledButton, 'Save channel'),
-          )
-          .onPressed,
-      isNull,
-    );
-    expect(find.textContaining('Finish this filter'), findsOneWidget);
-    await tester.ensureVisible(find.text('Cancel'));
-    await tester.tap(find.text('Cancel'));
-    await tester.pumpAndSettle();
-    expect(find.byKey(const Key('studio-applied-genre')), findsNothing);
-
-    await _openStudioFilter(tester, 'genre');
-    await tester.pumpAndSettle();
-    await tester.tap(find.widgetWithText(CheckboxListTile, 'Drama'));
-    expect(
-      tester
-          .widget<FilledButton>(
-            find.widgetWithText(FilledButton, 'Save channel'),
-          )
-          .onPressed,
-      isNull,
-    );
-    await tester.ensureVisible(find.text('Done'));
-    await tester.tap(find.text('Done'));
-    await tester.pumpAndSettle();
-    expect(find.text('Genre: Drama'), findsOneWidget);
-  });
+  testWidgets(
+    'Library filters update the draft immediately and keep Save available',
+    (tester) async {
+      final original = _channel(id: 'live', number: 12, name: 'Live filters');
+      final controller = _RecordingSaveController(
+        scenario: LineupScenario(
+          channels: [original],
+          libraries: const [
+            PlexLibrary(
+              id: 'movies',
+              title: 'Movies',
+              type: PlexLibraryType.movie,
+            ),
+          ],
+          selectedLibraryIds: {'movies'},
+          availableMedia: [
+            _media('drama', libraryId: 'movies', genres: ['Drama']),
+            _media('comedy', libraryId: 'movies', genres: ['Comedy']),
+          ],
+        ),
+      );
+      addTearDown(controller.dispose);
+      await tester.pumpWidget(
+        _studio(controller, ChannelStudioMode.editCustom, channel: original),
+      );
+      await _settleAirCheck(tester);
+      await _openStudioFilter(tester, 'genre');
+      await tester.tap(find.widgetWithText(CheckboxListTile, 'Drama'));
+      await _settleAirCheck(tester);
+      expect(find.text('Done'), findsNothing);
+      expect(find.text('Cancel'), findsNothing);
+      expect(find.textContaining('Finish this filter'), findsNothing);
+      expect(
+        tester
+            .widget<FilledButton>(
+              find.widgetWithText(FilledButton, 'Save changes'),
+            )
+            .onPressed,
+        isNotNull,
+      );
+      expect(
+        tester
+            .widget<ChannelAirCheck>(find.byType(ChannelAirCheck))
+            .channel
+            .source,
+        isA<LibrarySource>().having(
+          (source) => source.filters[LibraryFilter.genre],
+          'genre',
+          ['Drama'],
+        ),
+      );
+      await tester.sendKeyEvent(LogicalKeyboardKey.escape);
+      await tester.pumpAndSettle();
+      expect(find.text('Genre: Drama'), findsOneWidget);
+      await _openStudioFilter(tester, 'genre');
+      await tester.tap(find.text('Clear selection'));
+      await _settleAirCheck(tester);
+      expect(
+        tester
+            .widget<ChannelAirCheck>(find.byType(ChannelAirCheck))
+            .channel
+            .source,
+        isA<LibrarySource>().having(
+          (source) => source.filters,
+          'filters',
+          isEmpty,
+        ),
+      );
+    },
+  );
 
   testWidgets(
     'TV Back cancels a nested Studio filter before leaving the editor',
@@ -5513,12 +5511,13 @@ void main() {
           findsNothing,
         );
         expect(find.text('Discard changes?'), findsNothing);
-        expect(find.byKey(const Key('studio-applied-genre')), findsNothing);
+        expect(find.byKey(const Key('studio-applied-genre')), findsOneWidget);
         expect(backgrounded, 0);
 
         await tester.binding.handlePopRoute();
         await tester.pumpAndSettle();
-        expect(find.byType(ChannelStudioView), findsNothing);
+        expect(find.byType(ChannelStudioView), findsOneWidget);
+        expect(find.text('Discard changes?'), findsOneWidget);
         expect(backgrounded, 0);
       } finally {
         await tester.pumpWidget(const SizedBox.shrink());
@@ -5569,7 +5568,7 @@ void main() {
       expect(studioKey.currentState!.cancelPendingChoice(), isTrue);
       await tester.pumpAndSettle();
       expect(find.byKey(const Key('studio-filter-picker-genre')), findsNothing);
-      expect(find.byKey(const Key('studio-applied-genre')), findsNothing);
+      expect(find.byKey(const Key('studio-applied-genre')), findsOneWidget);
 
       await tester.tap(find.byKey(const Key('studio-library-add-filter')));
       await tester.pumpAndSettle();
@@ -5840,14 +5839,9 @@ void main() {
         tester
             .widget<FilledButton>(find.byKey(const Key('studio-tune')))
             .onPressed,
-        isNull,
+        isNotNull,
       );
-      expect(
-        find.byTooltip(
-          'Finish this filter with Done, or cancel it, before saving or tuning.',
-        ),
-        findsNWidgets(2),
-      );
+      expect(find.byTooltip('Finish this filter'), findsNothing);
       await tester.ensureVisible(
         find.widgetWithText(CheckboxListTile, 'Drama'),
       );
@@ -5883,13 +5877,23 @@ void main() {
           tester
               .widget<FilledButton>(find.byKey(const Key('studio-tune')))
               .onPressed,
-          isNull,
+          isNotNull,
         );
       }
       await tester.sendKeyEvent(LogicalKeyboardKey.escape);
       await tester.pumpAndSettle();
       expect(find.byKey(const Key('studio-filter-picker-genre')), findsNothing);
-      expect(FocusManager.instance.primaryFocus?.debugLabel, 'Add filter');
+      expect(
+        FocusManager.instance.primaryFocus?.debugLabel,
+        'Edit Genre filter',
+      );
+      expect(find.text('Genre: Drama'), findsOneWidget);
+      expect(find.byKey(const Key('studio-result-two')), findsNothing);
+      final genreChip = find.byKey(const Key('studio-browse-genre'));
+      await tester.ensureVisible(genreChip);
+      tester.widget<InputChip>(genreChip).onDeleted!();
+      await tester.pumpAndSettle();
+      expect(find.byKey(const Key('studio-result-two')), findsOneWidget);
       await tester.ensureVisible(find.text('Select'));
       await tester.tap(find.text('Select'));
       await tester.pump();
@@ -5958,15 +5962,13 @@ void main() {
       await _openStudioFilter(tester, 'genre', browse: true);
       await tester.tap(find.widgetWithText(CheckboxListTile, 'Comedy'));
       await tester.tap(find.widgetWithText(CheckboxListTile, 'Drama'));
-      await tester.ensureVisible(find.text('Done'));
-      await tester.tap(find.text('Done'));
+      await tester.sendKeyEvent(LogicalKeyboardKey.escape);
       await tester.pumpAndSettle();
       expect(find.text('3 matching · 0 added'), findsOneWidget);
       expect(find.text('Genre: Comedy, Drama'), findsOneWidget);
       await _openStudioFilter(tester, 'studio', browse: true);
       await tester.tap(find.widgetWithText(CheckboxListTile, 'Studio A'));
-      await tester.ensureVisible(find.text('Done'));
-      await tester.tap(find.text('Done'));
+      await tester.sendKeyEvent(LogicalKeyboardKey.escape);
       await tester.pumpAndSettle();
       expect(find.text('2 matching · 0 added'), findsOneWidget);
       final dirty = key.currentState!.dirty;
