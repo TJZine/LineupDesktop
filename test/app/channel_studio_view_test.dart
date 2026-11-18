@@ -5759,6 +5759,8 @@ void main() {
         controller,
         ChannelStudioMode.createCustom,
         textScaler: const TextScaler.linear(2),
+        // The two-digit schedule-through hour wraps the footer at this size.
+        clock: () => DateTime(2026, 11, 17, 18, 40),
       ),
     );
     await _settleAirCheck(tester);
@@ -5782,6 +5784,21 @@ void main() {
     await tester.ensureVisible(find.byKey(const Key('studio-result-one')));
     await tester.tap(find.byKey(const Key('studio-result-one')));
     await _settleAirCheck(tester);
+    expect(tester.takeException(), isNull);
+    await _revealStudioPreview(tester);
+    expect(
+      tester.getSize(find.byKey(const Key('air-check-schedule-list'))).height,
+      greaterThan(0),
+    );
+    for (final footerItem in [
+      find.text('Show next 6 hours'),
+      find.byKey(const Key('air-check-state-note')),
+    ]) {
+      await tester.ensureVisible(footerItem);
+      await tester.pumpAndSettle();
+      expect(footerItem.hitTestable(), findsOneWidget);
+      expect(tester.takeException(), isNull);
+    }
     tester
         .widget<FilledButton>(find.widgetWithText(FilledButton, 'Save channel'))
         .onPressed!();
