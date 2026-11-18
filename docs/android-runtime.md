@@ -122,7 +122,7 @@ distribution checksum before Gradle execution. CI also runs the maintained
 Gradle wrapper-validation action. Wrapper regeneration is a reviewed toolchain
 update.
 
-KGP 2.4.21 addresses CVE-2026-53914. The exact Guava 33.7.2-android runtime
+KGP 2.4.21 addresses CVE-2026-53914. The exact Guava 33.8.0-android runtime
 constraint addresses the affected older transitive Android dependency. Actual
 settings buildscript classpath and `releaseRuntimeClasspath` reports establish selected
 versions through `check-resolved-dependencies.py`. [Kotlin advisory](https://github.com/advisories/GHSA-r937-wjx7-w2jp),
@@ -130,7 +130,7 @@ versions through `check-resolved-dependencies.py`. [Kotlin advisory](https://git
 The pinned Flutter SDK's separate included build still compiles its Gradle
 plugin with KGP 2.2.20, and the build-tool classpath includes Guava 33.3.1-jre.
 The app's resolved settings classpath selects KGP 2.4.21 and its shipped runtime
-selects Guava 33.7.2-android. Keep the older SDK/build-tool advisory exposure
+selects Guava 33.8.0-android. Keep the older SDK/build-tool advisory exposure
 visible separately from those application dependency results.
 
 

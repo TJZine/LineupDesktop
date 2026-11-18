@@ -16,7 +16,7 @@ def check(report, runtime_report=None):
     for group, artifact, expected in (
         ('org.jetbrains.kotlin', 'kotlin-gradle-plugin', '2.4.21'),
         ('com.android.tools.build', 'gradle', '9.1.0'),
-        ('com.google.guava', 'guava', '33.7.2-android'),
+        ('com.google.guava', 'guava', '33.8.0-android'),
     ):
         selected = (notices.parse_report(runtime_report)
                     if artifact == 'guava' and runtime_report is not None else coordinates)
