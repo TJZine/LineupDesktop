@@ -125,7 +125,7 @@ void main() {
     );
   });
 
-  testWidgets('Swiss profile rows keep square production surfaces', (
+  testWidgets('Swiss TV profile uses the Large avatar ring on a clear tile', (
     tester,
   ) async {
     const profile = PlexHomeUser(
@@ -158,27 +158,30 @@ void main() {
     await tester.pumpAndSettle();
 
     final card = find.byKey(const ValueKey('profile-card-movies'));
-    final row = find.descendant(
+    final ring = find.descendant(
       of: card,
-      matching: find.byType(LineupRowSurface),
+      matching: find.byKey(const ValueKey('tv-profile-focus-ring')),
     );
-    expect(row, findsOneWidget);
-    final surface = tester.widget<Container>(
-      find.descendant(of: row, matching: find.byType(Container)).first,
+    final decoration =
+        tester
+                .widget<DecoratedBox>(
+                  find.descendant(
+                    of: ring,
+                    matching: find.byType(DecoratedBox),
+                  ),
+                )
+                .decoration
+            as BoxDecoration;
+    expect(decoration.shape, BoxShape.circle);
+    expect(decoration.border!.top.width, 5);
+    expect(decoration.border!.top.color, const Color(0xFFC6EEDB));
+    expect(LineupTheme.of(tester.element(ring)).panelRadius, 0);
+    final materials = tester.widgetList<Material>(
+      find.descendant(of: card, matching: find.byType(Material)),
     );
-    expect((surface.decoration! as BoxDecoration).borderRadius, isNull);
-    expect(LineupTheme.of(tester.element(row)).panelRadius, 0);
-    final frame = find.descendant(
-      of: row,
-      matching: find.byType(LineupFocusFrame),
-    );
-    expect(frame, findsNWidgets(2));
+    expect(materials, isNotEmpty);
     expect(
-      tester
-          .widgetList<CustomPaint>(
-            find.descendant(of: frame, matching: find.byType(CustomPaint)),
-          )
-          .any((paint) => paint.foregroundPainter != null),
+      materials.every((material) => material.color == Colors.transparent),
       isTrue,
     );
   });
@@ -274,7 +277,7 @@ void main() {
     await tester.pumpWidget(fixture.build());
     await tester.pumpAndSettle();
     await openDestination(tester, 'Channels');
-    await tester.tap(find.text('Create a custom channel'));
+    await tester.tap(find.text('Add a custom channel'));
     await tester.pumpAndSettle();
 
     expect(find.text('Include watched items'), findsOneWidget);
@@ -319,7 +322,7 @@ void main() {
     await tester.pumpWidget(fixture.build());
     await tester.pumpAndSettle();
     await openDestination(tester, 'Channels');
-    await tester.tap(find.text('Create a custom channel'));
+    await tester.tap(find.text('Add a custom channel'));
     await tester.pumpAndSettle();
     await tester.enterText(find.byType(TextFormField).first, 'Movies');
 
@@ -343,23 +346,23 @@ void main() {
     await tester.pump();
     await tester.pump();
     await openDestination(tester, 'Channels');
-    await tester.tap(find.text('Create a custom channel'));
+    await tester.tap(find.text('Add a custom channel'));
     await tester.pumpAndSettle();
     await tester.enterText(find.byKey(const Key('studio-name')), 'Unsaved');
     await tester.pump();
 
-    await tester.ensureVisible(find.text('Open Generate lineup'));
-    await tester.tap(find.text('Open Generate lineup'));
+    await tester.ensureVisible(find.text('Update lineup…'));
+    await tester.tap(find.text('Update lineup…'));
     await tester.pumpAndSettle();
-    expect(find.text('Open Generate lineup?'), findsOneWidget);
+    expect(find.text('Open Update lineup?'), findsOneWidget);
     await tester.tap(find.text('Keep editing'));
     await tester.pumpAndSettle();
     expect(controller.setupEntries, 0);
     expect(find.text('Create custom channel'), findsOneWidget);
 
-    await tester.ensureVisible(find.text('Open Generate lineup'));
+    await tester.ensureVisible(find.text('Update lineup…'));
     final recovery = tester.widget<TextButton>(
-      find.widgetWithText(TextButton, 'Open Generate lineup'),
+      find.widgetWithText(TextButton, 'Update lineup…'),
     );
     recovery.onPressed!();
     recovery.onPressed!();
@@ -1223,6 +1226,8 @@ class _PendingChannelSetupController extends _MediaChannelSetupController {
     required ChannelBuildMode mode,
     required List<Channel> expectedBase,
     Set<String> removeChannelIds = const {},
+    ChannelOrder? channelOrder,
+    Map<String, int> reviewedNumbers = const {},
   }) async {
     await _apply.future;
     fixtureActor.replaceChannels(

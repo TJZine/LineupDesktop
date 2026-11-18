@@ -104,8 +104,7 @@ void main() {
                 instant: reduce,
               );
 
-              // Right enters the spatially nearest Account control. Canvas and
-              // text density can place that on a later row; walk the real remote
+              // Right enters the Account controls; walk the real remote
               // path to the first row before checking the complete down/up tour.
               for (
                 var i = 0;
@@ -249,20 +248,12 @@ void main() {
               );
 
               await _key(tester, LogicalKeyboardKey.arrowLeft);
-              for (
-                var i = 0;
-                i < 6 &&
-                    !Focus.of(tester.element(find.text('Support').last))
-                        .hasPrimaryFocus;
-                i++
-              ) {
-                await _key(tester, LogicalKeyboardKey.arrowDown);
-              }
-              expect(
-                Focus.of(tester.element(find.text('Support').last))
-                    .hasPrimaryFocus,
-                isTrue,
+              final support = find.descendant(
+                of: find.byKey(const Key('settings-category-rail')),
+                matching: find.text('Support'),
               );
+              await _key(tester, LogicalKeyboardKey.arrowDown);
+              expect(Focus.of(tester.element(support)).hasPrimaryFocus, isTrue);
               await _key(tester, LogicalKeyboardKey.select);
               await _key(
                 tester,

@@ -1715,6 +1715,8 @@ class _PendingVisualController extends _VisualController {
     required ChannelBuildMode mode,
     required List<Channel> expectedBase,
     Set<String> removeChannelIds = const {},
+    ChannelOrder? channelOrder,
+    Map<String, int> reviewedNumbers = const {},
   }) async {
     await _apply.future;
     return super.applyReviewedChannelPlan(
@@ -1722,6 +1724,8 @@ class _PendingVisualController extends _VisualController {
       mode: mode,
       expectedBase: expectedBase,
       removeChannelIds: removeChannelIds,
+      channelOrder: channelOrder,
+      reviewedNumbers: reviewedNumbers,
     );
   }
 

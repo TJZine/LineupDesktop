@@ -55,7 +55,25 @@ python3 tool/android/generate-licenses.py --check --gradle-project android \
 (cd android && ./gradlew :app:dependencies --configuration releaseRuntimeClasspath \
   --no-daemon --no-build-cache --no-configuration-cache) > "$scratch/runtime-dependencies.txt"
 python3 tool/android/check-resolved-dependencies.py "$scratch/build-environment.txt" "$scratch/runtime-dependencies.txt"
-flutter build apk --release --target-platform android-arm,android-arm64
+# Flutter derives the APK version name and code from this pubspec entry.
+version="$(awk '
+  /^version[[:space:]]*:/ {
+    count++
+    sub(/^version[[:space:]]*:[[:space:]]*/, "")
+    sub(/[[:space:]]*(#.*)?$/, "")
+    value = $0
+  }
+  END {
+    if (count != 1 || value !~ /^[^+[:space:]]+[+][0-9]+$/) exit 1
+    print value
+  }
+' pubspec.yaml)" || {
+  echo 'pubspec.yaml must contain one top-level version in name+build form.' >&2
+  exit 1
+}
+flutter build apk --release --target-platform android-arm,android-arm64 \
+  "--dart-define=LINEUP_VERSION=${version%+*}" \
+  "--dart-define=LINEUP_BUILD=${version##*+}@$reviewed_commit"
 apk="$root/build/app/outputs/flutter-apk/app-release.apk"
 python3 tool/android/check-unsigned-apk.py "$apk"
 mkdir -p build/android-release

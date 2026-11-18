@@ -806,6 +806,14 @@ enum LineupButtonTier { primary, secondary, text, link, destructive }
 
 /// Canvas-pixel roles. Width variation applies only to Instrument Sans titles.
 abstract final class LineupTypography {
+  static const tvTextFloor = 20.0;
+
+  /// Opt-in for a label that fits the existing TV layout at both scales.
+  static TextStyle? tvLabelStyle(BuildContext context) =>
+      DeviceProfile.of(context).isTv
+      ? const TextStyle(fontSize: tvTextFloor)
+      : null;
+
   static const body = TextStyle(
     fontFamily: 'Inter',
     fontFeatures: [FontFeature.tabularFigures()],

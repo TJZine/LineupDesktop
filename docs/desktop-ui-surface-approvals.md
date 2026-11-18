@@ -72,6 +72,21 @@ may cover multiple listed states only when that scope is clear to the user.
 | surface-44 | Diagnostics · technical details | Approved at 1080p | Behavior checks passed; adaptive/Windows pending | September12 conditional lock completed; `7193d52e` |
 | surface-45 | Diagnostics · events and details | Approved at 1080p | Behavior checks passed; adaptive/Windows pending | September12 conditional lock completed; `7193d52e` |
 
+## November 13–14 visual-system assessment
+
+UX assessment decision, 2026-11-13/14 (N20–N22, D8, N6). Use the bullet only
+for channel number and name, and the middle dot between metadata items. The
+LINEUP wordmark uses the bundled [Arimo Regular](licenses-and-rebuilding.md#arimo-wordmark)
+at the approved size, weight and letter spacing. Earlier captures retain their
+recorded font from the time of approval.
+
+The empty Guide shows **No channels yet** and **Set up channels** across its
+content area with the toolbar controls and picture absent. Studio programming,
+the empty Manage channels directory and Diagnostics recent events use the
+shared centered empty state. **Generate lineup…** remains primary and **Add
+a custom channel** remains available in the empty directory. Diagnostics'
+one-line idle playback summary remains in place.
+
 ## Approval records
 
 Surface-01 was explicitly approved on September 9, 2026, as recorded below.
@@ -609,6 +624,12 @@ worker assignment yet. Counts/reasons must use real available scan facts; the
 mock's usable-media counts and specific timeout reason are not automatically
 available from LibraryScanFact.
 
+### Surface13 Libraries entry
+
+UX assessment decision, 2026-11-13/14 (N16 and change 13). The first library
+row receives TV entry focus. The selection screen says “Choose the libraries
+to build channels from.”
+
 ### Surface13 first-pass direction
 
 User approved the starting corrections, emphasized closer scrutiny and asked
@@ -894,6 +915,17 @@ until explicit user visual approval. Adaptive/enlarged-text/accessibility and
 physical Windows checks remain grouped and outstanding. No additional independent
 review recommended for this bounded presentation change.
 
+### First-run server rows (surface-12)
+
+UX assessment decision, 2026-11-13/14 (N9, N10 and change 13). On unresolved
+first run, a sole server that connects opens Choose libraries directly.
+Several servers or a failed connection open the picker. Server ownership
+labels read “Yours” or “Shared with you.” A measured connection shows its path
+and latency. The affected row shows one “Unreachable” status with “Retry”
+after a failed reachability probe. Focus starts on the first server when
+available, and the whole row activates its action. On the first Libraries
+step, use “Back to profiles” or “Back to sign-in” when setup has that origin.
+
 ### Linking approved; profiles and servers next
 
 User explicitly locked linking: “locked. time for profile selection, profile pin,
@@ -1057,6 +1089,38 @@ source and capture hashes are bound in
 Adaptive, grouped accessibility and physical Windows validation remain pending.
 Independent review is not specifically recommended.
 
+
+### Manage channels amendment — surfaces 16–19
+
+UX assessment decision, 2026-11-13/14 (Q5, N17, D3, D9). The directory is
+**Manage channels**. A Custom tag follows custom names and replaces the Type
+column. Source is one ellipsized line showing the type and, where known, the
+library. Person source details display the original inventory label where
+available. The filters are All channels, Favourites when populated, source
+types and libraries. In a populated lineup, **Add a custom channel** has
+primary emphasis and **Update lineup…** has secondary emphasis. In an empty
+lineup, **Generate lineup…** is primary and **Add a custom channel** is
+secondary.
+
+Rows open Studio. The row menu opens from the ellipsis, right-click, Shift+F10
+or the keyboard Menu key. Watch receives initial focus, followed by the
+favourite action, Edit or Duplicate as custom, and Delete. Dismissal restores
+row focus. When a favourite removal hides a row, restore focus in visible
+order if it still belongs to the row or its popup, or no control has focus.
+Delete opens the approved surface 19 confirmation.
+
+### Channel identity and Choose channels / Review channels
+
+UX assessment decision, 2026-11-13/14 (Q1b, Q1c, Q11, N12, N13/D10, D11,
+change 13). Channel identity uses the number, an outlined media-kind glyph
+and name, with a quiet library tag when names collide across libraries. The
+existing rail and row sizes apply. Choose channels adds the saved Channel order
+choice under Lineup rules. Empty Playlists is off and disabled. The setup
+header uses Libraries / Channels / Review and the Review roster reports its
+channel count. The November 14 Wave 1 review keeps word wrapping in Channels,
+Move to and Review, with a single-line ellipsis when a word exceeds the
+available name width. Update and add keeps existing channel numbers unless the
+Channel order setting changes.
 
 ## September 9 — surface19 delegated correction brief
 
@@ -1264,6 +1328,16 @@ pass. No push, deployment or publishing is authorized. Future surface families
 start with a fresh Luna worker; reuse is limited to the same family.
 
 
+### Studio amendment — source labels and TV entry
+
+UX assessment decision, 2026-11-13/14 (N18, D9, D12). On TV, a new custom draft
+starts on the programming source choice. It suggests a name from the selected
+source until the user edits the name. Source details use original inventory
+labels for people where available, and the Mini-marathons availability message
+uses plural agreement. Q11 uses the staggered anchor from the verified
+Air Check for New, Duplicate and Save as new custom channel. Studio asks for
+a fresh verification if the playable inventory changes before saving.
+
 ## September 9, 2026 — Guide 25/26 polish proposal
 
 User requested a fresh Luna implementation worker for this family, mock-led
@@ -1319,8 +1393,10 @@ unit was interrupted after its main presentation edits; Astra completed
 integration and fixed rounded-border painting, text-height measurement and
 small-space overflow. Details center when they fit and scroll when necessary.
 The shell keeps a stable Guide PiP region for idle, supported and unavailable
-states, with a Guide-only silent static effect for unavailable playback and
-the existing Retry callback when available. Reduce Motion freezes the effect.
+states, with a Guide-only silent static effect for unavailable playback.
+Reduce Motion freezes the effect. UX assessment decision, 2026-11-13/14:
+the Guide picture offers Retry and Next channel when available. Next channel
+follows the active Guide order and filter and wraps at the end.
 The protected Player views and native owners are unchanged.
 
 Astra inspected three fresh candidate03 1920×1080/DPR1/text100% captures, using
@@ -1406,6 +1482,26 @@ Independent review is not specifically recommended for this presentation pass.
 No push, deployment or publishing was performed.
 
 
+### November Guide refinements
+
+UX assessment decision, 2026-11-13/14: the time marker keeps its position and
+color and paints behind cell text. In the idle picture, the watch prompt sits
+at the bottom left with 24 canvas pixels of padding and a bottom scrim. The
+channel name stays in the adjacent information block. The desktop header shows
+**Back to player** only while playback is active; TV uses the remote Back path.
+
+The toolbar channel filter opens on **All channels** on a fresh launch. Its
+counted entries are All channels, Favourites when present, the available source
+types, and libraries. Applying or removing a filter preserves channel numbers.
+A disappeared selection returns to All channels with a short notice. This
+changes the filter choices in the approved picker position.
+
+Controls alignment candidate (N23, maintainer visual gate): share the rail's
+12 px leading content edge with the date and channel numbers, and fit the
+filter box inside the rail's trailing content edge. The toolbar's right inset
+and the header and picture positions remain unchanged. This candidate requires
+maintainer acceptance of the matched renders (UX assessment decision, 2026-11-13/14).
+
 ## September 12 — surface27 Mini Guide proposal
 
 Astra inspected the rendered mini-guide-edge-blend.html shaped-B reference at
@@ -1482,6 +1578,12 @@ reviewed candidate immediately before commit; no post-approval UI edits.
 captures, targeted analysis and whitespace checks. No new layout tests. Grouped
 adaptive/accessibility and moving footage/physical Windows acceptance remain
 pending. Independent review is not specifically recommended. No push or publish.
+
+UX assessment decision, 2026-11-13/14: episode rows show the series first,
+with episode title and schedule on the support line for both columns. The
+desktop focused row uses the standard focus border; Watching keeps its tint.
+Clipped resting names fade, with static ellipsis retained for overwide words.
+The failure slate is hidden while the Mini Guide is open.
 
 ## September 12 — Player OSD surface28 critique
 
@@ -1635,6 +1737,10 @@ Grouped adaptive/accessibility and physical Windows moving-video checks pending.
 Independent review not specifically recommended.
 
 
+UX assessment decision, 2026-11-13/14: Now Playing uses visible film title
+art instead of repeating the identical title underneath. The text title
+remains when the artwork cannot display.
+
 ## September 12 — surfaces30/31/32 candidate03 awaiting visual approval
 
 User authorized the general first-pass audio/subtitle long-name and timer polish
@@ -1699,6 +1805,12 @@ Settings Appearance; do not reopen30–32.
 
 ## September 12 — Settings surfaces33–39 locked
 
+**UX assessment decision, 2026-11-13/14:** Settings has seven sections. “Settings” is a 16px supporting label and the
+section title is the only headline. Row labels share one left edge; TV row
+focus fill extends 16px beyond the text. TV opens a focused category after
+150ms, Right enters its controls, and Select still works. Desktop retains
+activation by click or Enter.
+
 User requested one representative Account review for the shared Settings family,
 with structural/dead-space correction, removal of decorative rail/action icons,
 restrained accent text, and refinement of the Lineup menu. Root personally
@@ -1741,6 +1853,10 @@ Next surface:40. Do not reopen33–39 without a new user request.
 
 ## September 12 — Lineup menu41 locked
 
+**UX assessment decision, 2026-11-13/14:** The tuned channel and program occupy the first two-line row when available.
+That row returns to the Player. Guide, Manage channels, Settings and the
+profile/server card follow. Route and latency belong in Account and Diagnostics.
+
 User corrected the next surface to41 and explicitly skipped40. Root inspected
 compact anchored A and real production-shell captures, traced all five invokers,
 and verified menu navigation, dismissal, focus return and long-name wrapping.
@@ -1763,6 +1879,13 @@ input/native-video checks remain pending. Independent review not specifically
 recommended. Surface40 stays skipped/unreviewed. Next: Diagnostics42–45.
 
 ## September 12 — Diagnostics42–45 locked; Lineup indicator amendment
+
+**UX assessment decision, 2026-11-13/14:** The idle summary is one sentence pair. Technical details preserve the
+Windows and macOS display rows and show only supported playback facts on
+Android. Copied reports use the same platform display facts. Plex connection
+details include measured route and latency. **Details** on the Player error
+opens Diagnostics with a link back to Player. The Settings entry returns to
+Support.
 
 User approved the Diagnostics direction after root inspected the refined four-group
 A mock, all four frozen states, source owners, event retention/copy behavior and

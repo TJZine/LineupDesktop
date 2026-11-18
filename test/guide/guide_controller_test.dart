@@ -6,6 +6,7 @@ import 'package:flutter/scheduler.dart' show SchedulerPhase;
 import 'package:flutter_test/flutter_test.dart';
 import 'package:lineup_desktop/app/lineup_controller.dart';
 import 'package:lineup_desktop/channels/channel.dart';
+import 'package:lineup_desktop/channels/channel_filter.dart';
 import 'package:lineup_desktop/channels/scheduler.dart';
 import 'package:lineup_desktop/channels/schedule_worker.dart';
 import 'package:lineup_desktop/guide/guide_controller.dart';
@@ -186,6 +187,42 @@ void main() {
       await _settle();
       expect(notifications, 0);
       expect(lineup.requests, ['a', 'a']);
+    },
+  );
+
+  test(
+    'visible Guide snapshot refreshes saved identity without loading again',
+    () async {
+      final old = _channels(1).single;
+      final lineup = _TestLineup([old]);
+      addTearDown(lineup.dispose);
+      var requests = 0;
+      final guide = GuideController(
+        lineup: lineup,
+        loadSchedule: (channel) async {
+          requests++;
+          return _schedule(channel);
+        },
+      );
+      addTearDown(guide.dispose);
+      guide.requestChannels(guide.channels);
+      await _settle();
+      final schedule = guide.row(old.id);
+      expect(schedule.state, GuideLoadState.ready);
+      final changed = Channel.fromJson({
+        ...old.toJson(),
+        'favorite': true,
+        'kind': 'film',
+        'sourceLibraries': {'movies': 'Archive'},
+      });
+      lineup.setChannels([changed]);
+      guide.requestChannels(guide.channels);
+      await _settle();
+      expect(guide.channels.single.favorite, isTrue);
+      expect(guide.channels.single.kind, ChannelKind.film);
+      expect(guide.channels.single.libraryTitle, 'Archive');
+      expect(requests, 1);
+      expect(guide.row(old.id), same(schedule));
     },
   );
 
@@ -2118,6 +2155,7 @@ void main() {
           ],
           interleave: true,
         ),
+        sourceLibraries: const {'library-1': 'Library 1'},
         playbackMode: PlaybackMode.sequential,
         anchor: DateTime.utc(2026),
         shuffleSeed: 1,
@@ -2125,17 +2163,26 @@ void main() {
       final lineup = _TestLineup([...channels, mixed]);
       final guide = GuideController(lineup: lineup);
 
-      guide.setLibraryFilter('library-1');
-      expect(guide.libraryFilterId, 'library-1');
+      guide.setChannelFilter((
+        group: ChannelFilterGroup.library,
+        value: 'library-1',
+      ));
+      expect(guide.channelFilterKey, (
+        group: ChannelFilterGroup.library,
+        value: 'library-1',
+      ));
       expect(guide.channels.map((channel) => channel.id), contains('mixed'));
       expect(guide.channels.map((channel) => channel.number), contains(900));
 
-      guide.setLibraryFilter(null);
-      expect(guide.libraryFilterId, isNull);
+      guide.setChannelFilter(ChannelFilter.all);
+      expect(guide.channelFilterKey, ChannelFilter.all);
       expect(guide.channels, hasLength(3));
 
-      guide.setLibraryFilter('unavailable-library');
-      expect(guide.libraryFilterId, isNull);
+      guide.setChannelFilter((
+        group: ChannelFilterGroup.library,
+        value: 'unavailable-library',
+      ));
+      expect(guide.channelFilterKey, ChannelFilter.all);
       expect(guide.channels, hasLength(3));
 
       guide.dispose();

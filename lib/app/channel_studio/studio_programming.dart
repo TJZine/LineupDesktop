@@ -42,6 +42,7 @@ class _StudioProgramming extends StatefulWidget {
 
 class _StudioProgrammingState extends State<_StudioProgramming> {
   late final _FilterPickerController _picker;
+  final _sourceFocusKey = GlobalKey();
   final _filterKey = GlobalKey<_StudioFilterEditorState>();
   final _manualKey = GlobalKey<_StudioManualEditorState>();
   BuildContext? _programmingContext;
@@ -55,6 +56,14 @@ class _StudioProgrammingState extends State<_StudioProgramming> {
     super.initState();
     _picker = _FilterPickerController(onOpening: _retainProgrammingHeight);
     _picker.addListener(_pickerChanged);
+  }
+
+  void focusSourceChoice() {
+    final sourceContext = _sourceFocusKey.currentContext;
+    if (sourceContext != null &&
+        ModalRoute.of(sourceContext)?.isCurrent != false) {
+      Focus.of(sourceContext).requestFocus();
+    }
   }
 
   @override
@@ -117,6 +126,11 @@ class _StudioProgrammingState extends State<_StudioProgramming> {
     }
     return false;
   }
+
+  Widget _sourceChoiceLabel(StudioSourceChoice choice, String label) => Text(
+    label,
+    key: choice == _session.sourceChoice ? _sourceFocusKey : null,
+  );
 
   void _selectSource(StudioSourceChoice? choice) {
     if (choice == _session.sourceChoice) return;
@@ -198,18 +212,27 @@ class _StudioProgrammingState extends State<_StudioProgramming> {
                         : Axis.horizontal,
                     multiSelectionEnabled: false,
                     emptySelectionAllowed: _session.source is MixedSource,
-                    segments: const [
+                    segments: [
                       ButtonSegment(
                         value: StudioSourceChoice.library,
-                        label: Text('Library'),
+                        label: _sourceChoiceLabel(
+                          StudioSourceChoice.library,
+                          'Library',
+                        ),
                       ),
                       ButtonSegment(
                         value: StudioSourceChoice.playlist,
-                        label: Text('Plex playlist'),
+                        label: _sourceChoiceLabel(
+                          StudioSourceChoice.playlist,
+                          'Plex playlist',
+                        ),
                       ),
                       ButtonSegment(
                         value: StudioSourceChoice.handPicked,
-                        label: Text('Hand-picked'),
+                        label: _sourceChoiceLabel(
+                          StudioSourceChoice.handPicked,
+                          'Hand-picked',
+                        ),
                       ),
                     ],
                     selected: {?_session.sourceChoice},

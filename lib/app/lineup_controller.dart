@@ -19,6 +19,26 @@ part 'lineup_scenario.dart';
 
 enum SetupStage { welcome, linking, profiles, servers, channelSetup, ready }
 
+enum FirstLibrariesOrigin { profiles, signIn }
+
+// Startup can open the first Libraries step without a Back destination.
+enum _FirstLibrariesEntry { startup, profiles, signIn }
+
+/// The current server selection exhausted the available connection routes.
+@immutable
+final class _ServerProbeFailure extends PlexException {
+  _ServerProbeFailure(
+    this.serverId,
+    this._operation,
+    this._scope,
+    PlexException cause,
+  ) : super(cause.code, cause.message);
+
+  final String serverId;
+  final int _operation;
+  final int _scope;
+}
+
 enum ChannelPlanApplyResult { applied, stale }
 
 @immutable
@@ -27,11 +47,13 @@ class _PickerOrigin {
     required this.stage,
     this.restoring = false,
     this.canCancelSetup = false,
+    this.fromFirstLibraries = false,
   });
 
   final SetupStage stage;
   final bool restoring;
   final bool canCancelSetup;
+  final bool fromFirstLibraries;
 }
 
 @immutable
@@ -69,6 +91,11 @@ final class LineupScopeSuperseded implements Exception {
 class ChannelStateConflictException extends FormatException {
   const ChannelStateConflictException()
     : super('The lineup changed. Review the current channels and try again.');
+}
+
+class ChannelScheduleChangedException extends FormatException {
+  const ChannelScheduleChangedException()
+    : super('The schedule changed. Wait for Air Check to verify it again.');
 }
 
 Iterable<String> _playlistIds(ContentSource source) sync* {
@@ -248,6 +275,7 @@ class LineupController extends ChangeNotifier {
   LineupSettings get settings => _settings;
   ScopedLineup _lineup = ScopedLineup.empty;
   List<Channel> get channels => _lineup.channels;
+  ChannelOrder get channelOrder => _lineup.channelOrder;
   String? get currentChannelId => _lineup.currentChannelId;
   PlexAccount? _account;
   PlexAccount? get account => _account;
@@ -314,6 +342,29 @@ class LineupController extends ChangeNotifier {
   bool get restoringSavedLineup => _restoringSavedLineup;
   _PickerOrigin? _profilePickerOrigin;
   _PickerOrigin? _serverPickerOrigin;
+  _FirstLibrariesEntry? _firstLibrariesEntry;
+  bool get _onFirstLibraries =>
+      stage == SetupStage.channelSetup &&
+      !restoringSavedLineup &&
+      _firstLibrariesEntry != null;
+
+  FirstLibrariesOrigin? get firstLibrariesOrigin => !_onFirstLibraries
+      ? null
+      : switch (_firstLibrariesEntry) {
+          _FirstLibrariesEntry.profiles => FirstLibrariesOrigin.profiles,
+          _FirstLibrariesEntry.signIn => FirstLibrariesOrigin.signIn,
+          _ => null,
+        };
+
+  String? _firstLibrariesBackError;
+  String? get firstLibrariesBackError =>
+      firstLibrariesOrigin == FirstLibrariesOrigin.profiles
+      ? _firstLibrariesBackError
+      : null;
+
+  _ServerProbeFailure? _serverProbeFailure;
+  String? get unreachableServerId => _serverProbeFailure?.serverId;
+
   bool _secureCancellationRequired = false;
   bool get secureCancellationRequired => _secureCancellationRequired;
   final _LibraryScanState _scan = _LibraryScanState();
@@ -326,7 +377,7 @@ class LineupController extends ChangeNotifier {
   static const _profileCredentialRecoveryMessage =
       'Lineup could not restore a profile credential. Retry the profile selection or sign out to clear stored credentials.';
   final _unrestoredProfileCredentials = <String>{};
-  String? get error => _error;
+  String? get error => _error ?? _serverProbeFailure?.message;
   String? get profileCredentialRecoveryNotice =>
       _unrestoredProfileCredentials.isEmpty
       ? null
@@ -568,11 +619,13 @@ class LineupController extends ChangeNotifier {
             _profileToken = profileToken;
           }
         }
-        if (profile == null && profiles.length > 1) {
+        if (profile == null &&
+            (profiles.length > 1 ||
+                profiles.any((user) => user.id != restoredAccount.id))) {
           _stage = SetupStage.profiles;
           return;
         }
-        await _discover(operation);
+        await _discover(operation, entry: _FirstLibrariesEntry.startup);
       },
       operation: operation,
       fallbackStage: SetupStage.welcome,
@@ -718,7 +771,7 @@ class LineupController extends ChangeNotifier {
       } else {
         _profileToken = token;
         await _run(
-          () => _discover(operation),
+          () => _discover(operation, entry: _FirstLibrariesEntry.signIn),
           operation: operation,
           fallbackStage: SetupStage.servers,
         );
@@ -776,6 +829,21 @@ class LineupController extends ChangeNotifier {
   /// Returns whether the profile was durably accepted, independently of any
   /// subsequent server discovery or saved-server reconnect outcome.
   Future<bool> selectProfile(PlexHomeUser selected, {String? pin}) async {
+    final entryStage = stage;
+    final fromFirstLibraries =
+        _profilePickerOrigin?.stage == SetupStage.servers &&
+        _serverPickerOrigin?.fromFirstLibraries == true;
+    final entry = switch (entryStage) {
+      SetupStage.linking => _FirstLibrariesEntry.signIn,
+      SetupStage.profiles
+          when fromFirstLibraries ||
+              (_profilePickerOrigin?.stage != SetupStage.ready &&
+                  server == null) =>
+        _FirstLibrariesEntry.profiles,
+      _ => null,
+    };
+    final savedId = _persisted.selectedServerByProfile[selected.id];
+    final firstRun = entry != null && savedId == null;
     final operation = _invalidateOperation();
     _invalidatePmsRefresh();
     _clearServerTarget();
@@ -794,7 +862,12 @@ class LineupController extends ChangeNotifier {
         if (!_isCurrent(operation)) return;
         await _queueStateOperation(operation, () async {
           restoreCancellation = profileSelectionCanCancel;
-          accepted = await _commitProfileSelection(operation, selected, token);
+          accepted = await _commitProfileSelection(
+            operation,
+            selected,
+            token,
+            nextStage: firstRun ? entryStage : SetupStage.servers,
+          );
         });
       },
       operation: operation,
@@ -810,7 +883,7 @@ class LineupController extends ChangeNotifier {
     }
     if (accepted && _isCurrent(operation)) {
       await _run(
-        () => _discover(operation),
+        () => _discover(operation, entry: entry),
         operation: operation,
         fallbackStage: SetupStage.servers,
       );
@@ -823,8 +896,9 @@ class LineupController extends ChangeNotifier {
   Future<bool> _commitProfileSelection(
     int operation,
     PlexHomeUser selected,
-    String token,
-  ) {
+    String token, {
+    required SetupStage nextStage,
+  }) {
     final transaction = _credentialOperations.then((_) async {
       if (!_isCurrent(operation)) return false;
       final previous = await credentials.readProfileToken(selected.id);
@@ -850,7 +924,7 @@ class LineupController extends ChangeNotifier {
         _unrestoredProfileCredentials.remove(selected.id);
         if (_disposed) return false;
         _publishProfileSelection(selection);
-        _stage = SetupStage.servers;
+        _stage = nextStage;
         notifyListeners();
         return true;
       } catch (_) {
@@ -902,9 +976,26 @@ class LineupController extends ChangeNotifier {
     _contentGeneration++;
   }
 
-  Future<void> _discover(int operation, {bool reconnectSaved = true}) async {
+  Future<void> _discover(
+    int operation, {
+    bool reconnectSaved = true,
+    _FirstLibrariesEntry? entry,
+  }) async {
     final token = _profileToken ?? _accountToken;
     if (token == null) return;
+    final profileId = profile?.id ?? account?.id;
+    final savedId = savedServerId;
+    final firstRun = entry != null && savedId == null;
+    if (firstRun || (entry != null && entry != _FirstLibrariesEntry.startup)) {
+      final savedLineup = profileId == null || savedId == null
+          ? ScopedLineup.empty
+          : _persisted.lineupFor(
+              LineupScope(profileKey: profileId, serverId: savedId),
+            );
+      if (savedLineup.libraryIds.isEmpty && savedLineup.channels.isEmpty) {
+        _firstLibrariesEntry = entry;
+      }
+    }
     final discovered = await plex.discoverServers(token);
     if (!_isCurrent(operation)) return;
     final activeAccess = reconnectSaved ? null : _serverAccess[server?.id];
@@ -915,12 +1006,12 @@ class LineupController extends ChangeNotifier {
     _publishServers = List.unmodifiable(
       discovered.map((access) => access.server),
     );
+    if (firstRun && server == null && servers.length == 1) {
+      await selectServer(servers.single);
+      return;
+    }
     _stage = SetupStage.servers;
     if (!reconnectSaved) return;
-    final profileId = profile?.id ?? account?.id;
-    final savedId = profileId == null
-        ? null
-        : _persisted.selectedServerByProfile[profileId];
     final saved = servers
         .where((candidate) => candidate.id == savedId)
         .firstOrNull;
@@ -956,6 +1047,24 @@ class LineupController extends ChangeNotifier {
     _invalidatePmsRefresh();
     _serverTargetId = selected.id;
     _serverTargetOperation = operation;
+    final authorizationScope = _authorizationScope;
+
+    Future<PlexConnection> probe(PlexServer server, String token) async {
+      try {
+        return await plex.selectConnection(server, token);
+      } on PlexException catch (exception) {
+        if (exception.code == 'server-unreachable') {
+          throw _ServerProbeFailure(
+            server.id,
+            operation,
+            authorizationScope,
+            exception,
+          );
+        }
+        rethrow;
+      }
+    }
+
     await _runSelection(
       () async {
         final selectedConnection = await _withPmsAuthorization(
@@ -963,10 +1072,8 @@ class LineupController extends ChangeNotifier {
           selected.id,
           (token, refreshedConnection) => refreshedConnection != null
               ? Future.value(refreshedConnection)
-              : plex.selectConnection(
-                  _serverAccess[selected.id]!.server,
-                  token,
-                ),
+              : probe(_serverAccess[selected.id]!.server, token),
+          recoveryProbe: probe,
         );
         if (!_isCurrent(operation)) return;
         var workingConnection = selectedConnection;
@@ -993,10 +1100,8 @@ class LineupController extends ChangeNotifier {
           final availableIds = loadedLibraries
               .map((library) => library.id)
               .toSet();
-          final lineup = ScopedLineup(
-            libraryIds: saved.libraryIds.intersection(availableIds),
-            channels: saved.channels,
-            currentChannelId: saved.currentChannelId,
+          final lineup = saved.withLibraryIds(
+            saved.libraryIds.intersection(availableIds),
           );
           final base = _persisted
               .withProfile(profile?.id)
@@ -1068,7 +1173,13 @@ class LineupController extends ChangeNotifier {
     _publishLineup(selection.lineup);
     _stage = SetupStage.channelSetup;
     _channelSetupCanCancel = false;
+    final entry = _firstLibrariesEntry;
     _resetSetupDiscovery();
+    if (_isCurrent(operation) &&
+        selection.lineup.libraryIds.isEmpty &&
+        selection.lineup.channels.isEmpty) {
+      _firstLibrariesEntry = entry;
+    }
     // A started successful save still publishes, but obsolete requests cannot
     // create restore work they will never execute.
     _restoringSavedLineup =
@@ -1177,6 +1288,7 @@ class LineupController extends ChangeNotifier {
           ScopedLineup(
             libraryIds: candidate.libraryIds,
             channels: migrated,
+            channelOrder: channelOrder,
             currentChannelId: currentChannelId,
           ),
         );
@@ -1187,11 +1299,13 @@ class LineupController extends ChangeNotifier {
           ScopedLineup(
             libraryIds: candidate.libraryIds,
             channels: migrated,
+            channelOrder: channelOrder,
             currentChannelId: currentChannelId,
           ),
         );
         _recordChannelChanges(previous);
         _scan.didCommit(candidate);
+        _firstLibrariesEntry = null;
         committed = true;
         _contentGeneration++;
         notifyListeners();
@@ -1535,8 +1649,53 @@ class LineupController extends ChangeNotifier {
   Set<String> _requiredPlaylistIds() =>
       channels.expand((channel) => _playlistIds(channel.source)).toSet();
 
+  /// The account remains linked. A profile must be selected again through
+  /// its normal authorization flow, including a fresh PIN when required.
+  Future<void> backToFirstRunProfiles() async {
+    final profileId = profile?.id;
+    if (firstLibrariesOrigin != FirstLibrariesOrigin.profiles ||
+        profileId == null ||
+        busy ||
+        !canSwitchServer) {
+      return;
+    }
+    final operation = _invalidateOperation();
+    await _run(
+      () => _queueStateOperation(operation, () async {
+        if (!_isCurrent(operation)) return;
+        final next = _persisted
+            .withProfile(null)
+            .withoutSelectedServer(profileId);
+        try {
+          await _persistState(next);
+        } catch (_) {
+          if (_isCurrent(operation)) {
+            _firstLibrariesBackError =
+                'Could not return to profiles. Try Back again.';
+          }
+          return;
+        }
+        if (_disposed) return;
+        // Once the save commits, publish its matching scope even if another
+        // operation arrived during the write. Later writes use this snapshot.
+        _persisted = next;
+        _clearServerRuntime();
+        _publishServers = const [];
+        _serverAccess = const {};
+        _profile = null;
+        _profileToken = null;
+        _error = null;
+        _stage = SetupStage.profiles;
+      }),
+      operation: operation,
+      fallbackStage: SetupStage.channelSetup,
+      clearError: false,
+    );
+  }
+
   Future<void> enterChannelSetup() async {
     _scenarioOpen = false;
+    _firstLibrariesEntry = null;
     _channelSetupCanCancel = stage == SetupStage.ready;
     _stage = SetupStage.channelSetup;
     notifyListeners();
@@ -1562,6 +1721,7 @@ class LineupController extends ChangeNotifier {
     _profileSelectionCanCancel = _profilePickerOrigin != null;
     _stage = SetupStage.profiles;
     _error = null;
+    _serverProbeFailure = null;
     notifyListeners();
   }
 
@@ -1597,6 +1757,7 @@ class LineupController extends ChangeNotifier {
               stage: stage,
               restoring: restoringSavedLineup,
               canCancelSetup: channelSetupCanCancel,
+              fromFirstLibraries: _onFirstLibraries,
             );
     }
     cancelLibraryScan();
@@ -1620,6 +1781,7 @@ class LineupController extends ChangeNotifier {
     }
     _serverSelectionCanCancel = false;
     _error = null;
+    _serverProbeFailure = null;
     final origin = _serverPickerOrigin;
     _serverPickerOrigin = null;
     _channelSetupCanCancel = origin?.canCancelSetup ?? false;
@@ -1645,6 +1807,7 @@ class LineupController extends ChangeNotifier {
     _channelSetupCanCancel = false;
     _clearServerTarget();
     _error = null;
+    _serverProbeFailure = null;
     _stage = SetupStage.channelSetup;
     notifyListeners();
     return true;
@@ -1674,6 +1837,8 @@ class LineupController extends ChangeNotifier {
     required ChannelBuildMode mode,
     required List<Channel> expectedBase,
     Set<String> removeChannelIds = const {},
+    ChannelOrder? channelOrder,
+    Map<String, int> reviewedNumbers = const {},
   }) async {
     final operation = _mutationScope;
     final expected = expectedBase
@@ -1683,6 +1848,7 @@ class LineupController extends ChangeNotifier {
       planned.map((channel) => channel.immutableCopy()),
     );
     final removals = Set<String>.unmodifiable(removeChannelIds);
+    final numbers = Map<String, int>.unmodifiable(reviewedNumbers);
     var result = ChannelPlanApplyResult.stale;
     await _queueScopeOperation(operation, () async {
       if (!canonicalChannelValueEquals(
@@ -1711,13 +1877,39 @@ class LineupController extends ChangeNotifier {
           );
         }
       }
-      final next = composeChannelPlan(
+      var next = composeChannelPlan(
         existing: channels
             .where((channel) => !removals.contains(channel.id))
             .toList(),
         planned: plan,
         mode: mode,
       );
+      if (numbers.isNotEmpty) {
+        final generatedIds = {
+          for (final channel in next)
+            if (channel.builderKey != null) channel.id,
+        };
+        if (mode != ChannelBuildMode.merge ||
+            numbers.length != generatedIds.length ||
+            !generatedIds.containsAll(numbers.keys)) {
+          throw const FormatException(
+            'Reviewed numbers must match the generated roster',
+          );
+        }
+        next = [
+          for (final channel in next)
+            if (numbers[channel.id] case final int number
+                when number != channel.number)
+              channel.copyWith(number: number)
+            else
+              channel,
+        ]..sort((a, b) => a.number.compareTo(b.number));
+      }
+      if (channels.isEmpty && next.isEmpty) {
+        throw const FormatException(
+          'Choose at least one channel for your first lineup',
+        );
+      }
       validateChannels(next);
       final validatedSources = <String>{};
       for (final channel in plan) {
@@ -1742,12 +1934,30 @@ class LineupController extends ChangeNotifier {
           throw const FormatException('Channel source has no playable content');
         }
       }
-      await _commitChannelList(next, operation);
+      await _commitChannelList(next, operation, order: channelOrder);
       if (_isCurrentMutationScope(operation)) {
         result = ChannelPlanApplyResult.applied;
       }
     });
     return result;
+  }
+
+  Future<void> setFavorite(String channelId, bool favorite) async {
+    final operation = _mutationScope;
+    await _queueScopeOperation(operation, () async {
+      final channel = channels
+          .where((value) => value.id == channelId)
+          .firstOrNull;
+      if (channel == null) throw const ChannelStateConflictException();
+      if (channel.favorite == favorite) return;
+      await _commitChannelList([
+        for (final current in channels)
+          if (current.id == channelId)
+            current.copyWith(favorite: favorite)
+          else
+            current,
+      ], operation);
+    });
   }
 
   Future<void> deleteChannels({required List<Channel> expectedChannels}) async {
@@ -1805,7 +2015,7 @@ class LineupController extends ChangeNotifier {
         ..sort();
       final next = [
         for (var i = 0; i < order.length; i++)
-          Channel.fromJson({...byId[order[i]]!.toJson(), 'number': numbers[i]}),
+          byId[order[i]]!.copyWith(number: numbers[i]),
       ];
       validateChannels(next);
       await _commitChannelList(next, operation);
@@ -1816,6 +2026,7 @@ class LineupController extends ChangeNotifier {
     List<Channel> next,
     int operation, {
     String? initialCurrentId,
+    ChannelOrder? order,
   }) async {
     next = List.unmodifiable(next.map((channel) => channel.immutableCopy()));
     final previous = channels;
@@ -1826,31 +2037,21 @@ class LineupController extends ChangeNotifier {
         : next.isEmpty
         ? null
         : next[oldIndex.clamp(0, next.length - 1)].id;
-    await _commitLineup(
-      ScopedLineup(
-        libraryIds: selectedLibraryIds,
-        channels: next,
-        currentChannelId: nextCurrent,
-      ),
+    final lineup = ScopedLineup(
+      libraryIds: selectedLibraryIds,
+      channels: next,
+      currentChannelId: nextCurrent,
+      channelOrder: order ?? channelOrder,
     );
+    await _commitLineup(lineup);
     if (!_isCurrentMutationScope(operation)) {
       throw const LineupScopeSuperseded();
     }
-    _publishChannelCommit(next, nextCurrent, previous);
+    _publishChannelCommit(lineup, previous);
   }
 
-  void _publishChannelCommit(
-    List<Channel> next,
-    String? currentId,
-    List<Channel> previous,
-  ) {
-    _publishLineup(
-      ScopedLineup(
-        libraryIds: selectedLibraryIds,
-        channels: next,
-        currentChannelId: currentId,
-      ),
-    );
+  void _publishChannelCommit(ScopedLineup lineup, List<Channel> previous) {
+    _publishLineup(lineup);
     _recordChannelChanges(previous);
     notifyListeners();
   }
@@ -1858,6 +2059,7 @@ class LineupController extends ChangeNotifier {
   void completeChannelSetup() {
     if (stage != SetupStage.channelSetup) return;
     _scenarioOpen = false;
+    _firstLibrariesEntry = null;
     _channelSetupCanCancel = false;
     _error = null;
     _stage = SetupStage.ready;
@@ -1867,6 +2069,7 @@ class LineupController extends ChangeNotifier {
   Future<Channel> saveChannel(
     Channel channel, {
     required Channel? expectedBase,
+    String? verifiedNewScheduleRevision,
   }) async {
     channel = channel.immutableCopy();
     final expected = expectedBase?.immutableCopy().toJson();
@@ -1876,6 +2079,14 @@ class LineupController extends ChangeNotifier {
       final current = channels
           .where((candidate) => candidate.id == channel.id)
           .firstOrNull;
+      if (verifiedNewScheduleRevision != null &&
+          (expectedBase != null ||
+              current != null ||
+              channel.builderKey != null)) {
+        throw ArgumentError(
+          'A verified schedule revision requires a new custom channel.',
+        );
+      }
       if (expectedBase == null) {
         if (current != null) {
           throw const FormatException('Channel already exists');
@@ -1884,9 +2095,18 @@ class LineupController extends ChangeNotifier {
           !canonicalChannelValueEquals(current.toJson(), expected)) {
         throw const ChannelStateConflictException();
       }
-      final savedChannel = _channelForSave(channel, current);
-      savedChannel.validate(channels);
-      _validateResolvedSource(savedChannel.source);
+      if (verifiedNewScheduleRevision != null &&
+          verifiedNewScheduleRevision !=
+              channelScheduleRevision(channel, contentGeneration)) {
+        throw const ChannelScheduleChangedException();
+      }
+      channel.validate(channels);
+      _validateResolvedSource(channel.source);
+      final savedChannel = _channelForSave(
+        channel,
+        current,
+        verifiedNewTiming: verifiedNewScheduleRevision != null,
+      );
       final next = [...channels];
       final index = next.indexWhere(
         (candidate) => candidate.id == savedChannel.id,
@@ -1969,42 +2189,110 @@ class LineupController extends ChangeNotifier {
     return worker.build(channel);
   }
 
-  Channel _channelForSave(Channel incoming, Channel? current) {
-    if (current == null) return incoming;
+  Channel _channelForSave(
+    Channel incoming,
+    Channel? current, {
+    required bool verifiedNewTiming,
+  }) {
+    final sameSource =
+        current != null &&
+        scheduleProgrammingSourceEquals(current.source, incoming.source);
     final sameProgramming =
-        scheduleProgrammingSourceEquals(current.source, incoming.source) &&
+        sameSource &&
         current.playbackMode == incoming.playbackMode &&
         (incoming.playbackMode != PlaybackMode.block ||
             (current.blockSize ?? 3) == (incoming.blockSize ?? 3)) &&
         (incoming.playbackMode != PlaybackMode.block ||
             current.includeSpecials == incoming.includeSpecials);
-    if (!sameProgramming) {
-      return Channel(
-        id: incoming.id,
-        number: incoming.number,
-        name: incoming.name,
-        source: incoming.source,
-        playbackMode: incoming.playbackMode,
-        anchor: incoming.anchor,
-        shuffleSeed: incoming.shuffleSeed,
-        blockSize: incoming.blockSize,
-        builderKey: incoming.builderKey,
-        includeSpecials: incoming.includeSpecials,
-      );
+    final inventory = playableInventory;
+    final libraryIds = channelSourceLibraryIds(incoming.source);
+    final playlistItems = <String, Iterable<ChannelItem>>{};
+    final scannedById = {for (final item in inventory.media) item.id: item};
+    final resolvedItems = <String, ChannelItem>{};
+    var hasPlaylist = false;
+    var playlistProvenanceIncomplete = false;
+    void collectLibraries(ContentSource source) {
+      switch (source) {
+        case LibrarySource():
+          break;
+        case ManualSource(:final items):
+          for (final item in items) {
+            if (inventory.byId[item.id] case final media?) {
+              if (media.libraryId case final id?) libraryIds.add(id);
+              resolvedItems.putIfAbsent(item.id, () => channelItemFor(media));
+            }
+          }
+        case PlaylistSource(:final playlistId):
+          hasPlaylist = true;
+          final items = inventory.playlists
+              .where((playlist) => playlist.id == playlistId)
+              .expand((playlist) => playlist.items)
+              .where((item) => item.isPlayable);
+          playlistItems[playlistId] = items.map(channelItemFor);
+          final membership = playlistLibraryMembership(items, scannedById);
+          playlistProvenanceIncomplete |=
+              membership.incomplete || items.isEmpty;
+          libraryIds.addAll(membership.ids);
+        case MixedSource(:final sources):
+          sources.forEach(collectLibraries);
+      }
     }
-    return Channel(
+
+    collectLibraries(incoming.source);
+    final currentTitles = {
+      for (final library in libraries)
+        if (libraryIds.contains(library.id)) library.id: library.title,
+    };
+    final sourceLibraries = hasPlaylist
+        ? playlistSourceLibraries(
+            currentIds: libraryIds,
+            currentTitles: currentTitles,
+            savedTitles: sameSource ? current.sourceLibraries : const {},
+          )
+        : {if (sameProgramming) ...current.sourceLibraries, ...currentTitles};
+    final saved = Channel(
       id: incoming.id,
       number: incoming.number,
       name: incoming.name,
       source: incoming.source,
       playbackMode: incoming.playbackMode,
-      anchor: current.anchor,
-      shuffleSeed: current.shuffleSeed,
+      anchor: sameProgramming ? current.anchor : incoming.anchor,
+      shuffleSeed: sameProgramming ? current.shuffleSeed : incoming.shuffleSeed,
       blockSize: incoming.blockSize,
       builderKey: incoming.builderKey,
-      includeSpecials: current.includeSpecials,
-      scheduleVersion: current.scheduleVersion,
-      scheduleTransition: current.scheduleTransition,
+      includeSpecials: incoming.includeSpecials,
+      scheduleVersion: sameProgramming
+          ? current.scheduleVersion
+          : incoming.scheduleVersion,
+      scheduleTransition: sameProgramming ? current.scheduleTransition : null,
+      favorite: current?.favorite ?? false,
+      kind: switch (channelKindFor(
+        incoming.source,
+        playlists: playlistItems,
+        resolvedItems: resolvedItems,
+      )) {
+        ChannelKind.unknown when sameProgramming => current.kind,
+        final kind => kind,
+      },
+      sourceLibraries: sourceLibraries,
+      sourceLibrariesIncomplete:
+          hasPlaylist &&
+          (playlistProvenanceIncomplete ||
+              !libraryIds.every(sourceLibraries.containsKey)),
+    );
+    if (current != null || saved.builderKey != null || verifiedNewTiming) {
+      return saved;
+    }
+    return saved.copyWith(
+      anchor: staggeredChannelAnchor(
+        channel: saved,
+        content: resolveContent(
+          incoming.source,
+          inventory.media,
+          inventory.playlists,
+        ),
+        createdAt: _scheduleClock(),
+      ),
     );
   }
 
@@ -2061,6 +2349,7 @@ class LineupController extends ChangeNotifier {
         ScopedLineup(
           libraryIds: selectedLibraryIds,
           channels: migrated,
+          channelOrder: channelOrder,
           currentChannelId: currentChannelId,
         ),
       );
@@ -2069,6 +2358,7 @@ class LineupController extends ChangeNotifier {
           ScopedLineup(
             libraryIds: selectedLibraryIds,
             channels: migrated,
+            channelOrder: channelOrder,
             currentChannelId: currentChannelId,
           ),
         );
@@ -2606,7 +2896,12 @@ class LineupController extends ChangeNotifier {
 
   /// Retires playback-only refresh work without signing out or changing the
   /// selected session. Existing requests cannot recover over a background stop.
-  void cancelPlaybackAuthorization() => _retireAuthorizationScope();
+  void cancelPlaybackAuthorization() {
+    _retireAuthorizationScope();
+    if (_serverProbeFailure == null) return;
+    _serverProbeFailure = null;
+    notifyListeners();
+  }
 
   void _retireAuthorizationScope() {
     _authorizationScope++;
@@ -2677,6 +2972,8 @@ class LineupController extends ChangeNotifier {
     _restoringSavedLineup = false;
     _profilePickerOrigin = null;
     _serverPickerOrigin = null;
+    _firstLibrariesEntry = null;
+    _firstLibrariesBackError = null;
     _scan.reset();
   }
 
@@ -2685,6 +2982,7 @@ class LineupController extends ChangeNotifier {
     String serverId,
     Future<T> Function(String token, PlexConnection? connection) request, {
     PlexConnection? connectionOverride,
+    Future<PlexConnection> Function(PlexServer, String)? recoveryProbe,
   }) async {
     PlexScanBudget.current?.check();
     final access = _serverAccess[serverId];
@@ -2709,7 +3007,13 @@ class LineupController extends ChangeNotifier {
         retryAccess = currentAccess;
         retryConnection = currentConnection;
       } else {
-        retryConnection = await _refreshPmsAccess(operation, serverId);
+        retryConnection = recoveryProbe == null
+            ? await _refreshPmsAccess(operation, serverId)
+            : await _performPmsRefresh(
+                operation,
+                serverId,
+                probe: recoveryProbe,
+              );
         final refreshed = _serverAccess[serverId];
         if (refreshed == null) {
           throw const PlexException(
@@ -2793,6 +3097,7 @@ class LineupController extends ChangeNotifier {
     String serverId, {
     bool Function()? isCurrent,
     bool forPlayback = false,
+    Future<PlexConnection> Function(PlexServer, String)? probe,
   }) async {
     final profileToken = _profileToken ?? _accountToken;
     if (profileToken == null) {
@@ -2815,7 +3120,7 @@ class LineupController extends ChangeNotifier {
         'Plex server authorization is unavailable.',
       );
     }
-    final selectedConnection = await plex.selectConnection(
+    final selectedConnection = await (probe ?? plex.selectConnection)(
       refreshed.server,
       refreshed.token,
     );
@@ -2843,11 +3148,12 @@ class LineupController extends ChangeNotifier {
     required int operation,
     required SetupStage fallbackStage,
     SetupStage? scanLimitFallbackStage,
+    bool clearError = true,
   }) async {
     if (!_isCurrent(operation)) return false;
     _busyOperation = operation;
     _busy = true;
-    _error = null;
+    if (clearError) _error = null;
     notifyListeners();
     try {
       await body();
@@ -2859,9 +3165,18 @@ class LineupController extends ChangeNotifier {
         }
         return false;
       }
-      _error = exception is PlexException
-          ? exception.message
-          : 'Lineup could not complete that request.';
+      if (exception is _ServerProbeFailure) {
+        if (_isCurrentPmsTarget(exception._operation, exception.serverId) &&
+            _isCurrentAuthorizationScope(exception._scope)) {
+          _serverProbeFailure = exception;
+        } else {
+          _error = 'Lineup could not complete that request.';
+        }
+      } else {
+        _error = exception is PlexException
+            ? exception.message
+            : 'Lineup could not complete that request.';
+      }
       _restoringSavedLineup = false;
       _stage = exception is PlexScanLimitException
           ? scanLimitFallbackStage ?? fallbackStage
@@ -2907,6 +3222,8 @@ class LineupController extends ChangeNotifier {
 
   int _invalidateOperation() {
     final operation = ++_epoch;
+    _serverProbeFailure = null;
+    _firstLibrariesBackError = null;
     _selectionPreparation?.complete();
     _selectionPreparation = null;
     _scenarioOpen = false;

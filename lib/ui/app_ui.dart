@@ -73,7 +73,7 @@ class LineupTopBar extends StatelessWidget {
                   Text(
                     'LINEUP',
                     style: TextStyle(
-                      fontFamily: 'Arial',
+                      fontFamily: 'Arimo',
                       fontSize: 22,
                       fontWeight: FontWeight.w400,
                       letterSpacing: 3,
@@ -310,60 +310,64 @@ class LineupSection extends StatelessWidget {
 
 class LineupEmptyState extends StatelessWidget {
   const LineupEmptyState({
-    required this.icon,
+    this.icon,
     required this.title,
     required this.message,
     this.action,
     super.key,
   });
-  final IconData icon;
+  final IconData? icon;
   final String title;
   final String message;
   final Widget? action;
 
   @override
-  Widget build(BuildContext context) => LayoutBuilder(
-    builder: (context, constraints) {
-      return SingleChildScrollView(
-        child: ConstrainedBox(
-          constraints: BoxConstraints(
-            minHeight: constraints.maxHeight.isFinite
-                ? constraints.maxHeight
-                : 0,
-          ),
-          child: Center(
-            child: Card(
-              child: Padding(
-                padding: EdgeInsets.all(32),
-                child: Column(
-                  mainAxisSize: MainAxisSize.min,
-                  children: [
-                    Icon(
-                      icon,
-                      size: 48,
-                      color: Theme.of(context).colorScheme.primary,
-                    ),
-                    SizedBox(height: 16),
-                    Semantics(
-                      header: true,
-                      child: Text(
-                        title,
-                        textAlign: TextAlign.center,
-                        style: Theme.of(context).textTheme.headlineSmall,
-                      ),
-                    ),
-                    SizedBox(height: 8),
-                    Text(message, textAlign: TextAlign.center),
-                    if (action != null) ...[SizedBox(height: 24), action!],
-                  ],
+  Widget build(BuildContext context) {
+    final theme = Theme.of(context);
+    final block = Center(
+      child: Card(
+        child: Padding(
+          padding: const EdgeInsets.all(32),
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              if (icon != null) ...[
+                Icon(icon, size: 48, color: theme.colorScheme.primary),
+                const SizedBox(height: 16),
+              ],
+              Semantics(
+                header: true,
+                child: Text(
+                  title,
+                  textAlign: TextAlign.center,
+                  style: theme.textTheme.titleLarge?.copyWith(fontSize: 24),
                 ),
               ),
-            ),
+              const SizedBox(height: 8),
+              Text(
+                message,
+                textAlign: TextAlign.center,
+                style: theme.textTheme.bodyMedium?.copyWith(
+                  color: LineupTheme.of(context).secondaryText,
+                ),
+              ),
+              if (action != null) ...[const SizedBox(height: 24), action!],
+            ],
           ),
         ),
-      );
-    },
-  );
+      ),
+    );
+    return LayoutBuilder(
+      builder: (context, constraints) => constraints.hasBoundedHeight
+          ? SingleChildScrollView(
+              child: ConstrainedBox(
+                constraints: BoxConstraints(minHeight: constraints.maxHeight),
+                child: block,
+              ),
+            )
+          : block,
+    );
+  }
 }
 
 Future<bool> confirmDestructiveAction(
@@ -563,6 +567,7 @@ class ClearLogoImage extends StatefulWidget {
     this.minimumVisibleSize,
     this.maximumVisibleHeight,
     this.reserveVisibleSlot = false,
+    this.fitVisibleContent = false,
     super.key,
   });
 
@@ -582,16 +587,70 @@ class ClearLogoImage extends StatefulWidget {
   /// for the usability check. The fallback keeps its own dimensions.
   final bool reserveVisibleSlot;
 
+  /// Fit the detected alpha bounds rather than the full padded raster.
+  final bool fitVisibleContent;
+
   @override
   State<ClearLogoImage> createState() => _ClearLogoImageState();
 }
+
+typedef _ClearLogoFit = ({
+  BoxConstraints constraints,
+  double? visibleHeightCap,
+  Size? visibleMinimum,
+  bool reserveVisibleSlot,
+});
 
 typedef _ClearLogoRequest = ({
   Uint8List bytes,
   int width,
   int height,
-  double pixelRatio,
+  ({_ClearLogoFit fit, double pixelRatio})? visibleDecode,
 });
+
+Size? _clearLogoPaintSize(
+  Size intrinsic,
+  Rect fraction,
+  _ClearLogoFit fit, {
+  required bool fitVisibleContent,
+}) {
+  final fitSize = fitVisibleContent
+      ? Size(
+          intrinsic.width * fraction.width,
+          intrinsic.height * fraction.height,
+        )
+      : intrinsic;
+  if (!clearLogoIsUsable(
+    fitSize,
+    fit.constraints,
+    visibleSlotHeight: fit.reserveVisibleSlot ? fit.visibleHeightCap : null,
+  )) {
+    return null;
+  }
+  var painted = applyBoxFit(
+    BoxFit.contain,
+    fitSize,
+    fit.constraints.biggest,
+  ).destination;
+  if (fitVisibleContent) {
+    // Recover the full raster's paint rectangle from the fitted alpha bounds.
+    painted = Size(
+      painted.width / fraction.width,
+      painted.height / fraction.height,
+    );
+  }
+  if (fit.visibleHeightCap case final cap?) {
+    final visibleHeight = painted.height * fraction.height;
+    if (visibleHeight > cap) painted *= cap / visibleHeight;
+  }
+  final minimum = fit.visibleMinimum;
+  if (minimum != null &&
+      (painted.width * fraction.width < minimum.width ||
+          painted.height * fraction.height < minimum.height)) {
+    return null;
+  }
+  return painted;
+}
 
 class _ClearLogoImageState extends State<ClearLogoImage> {
   _ClearLogoRequest? _request;
@@ -618,22 +677,31 @@ class _ClearLogoImageState extends State<ClearLogoImage> {
   }
 
   void _load(_ClearLogoRequest request) {
-    _reset();
+    // Layout changes can request a sharper decode of the same logo. Keep
+    // painting the previous frame until the replacement is ready.
+    if (request.visibleDecode == null ||
+        !identical(_request?.bytes, request.bytes)) {
+      _reset();
+    }
+    final generation = ++_generation;
     _request = request;
     final entry = _clearLogoCacheEntry(request);
     if (entry.completed) {
       // Called from build before `_raster` is read, so no setState is needed.
-      _raster = entry.cloneRaster();
+      _replaceRaster(entry.cloneRaster());
       return;
     }
-    final generation = _generation;
     unawaited(
       entry.done.then((_) {
         if (!mounted || generation != _generation) return;
-        final raster = entry.cloneRaster();
-        if (raster != null) setState(() => _raster = raster);
+        setState(() => _replaceRaster(entry.cloneRaster()));
       }),
     );
+  }
+
+  void _replaceRaster(_ClearLogoRaster? raster) {
+    _raster?.image.dispose();
+    _raster = raster;
   }
 
   // Round down so every bucket still fits the current slot. Changes within a
@@ -662,45 +730,35 @@ class _ClearLogoImageState extends State<ClearLogoImage> {
       // Canvas pixels are scaled by LineupCanvas before reaching the window,
       // so decode at the painted physical size, not canvas size x DPR.
       final ratio = LineupCanvas.physicalPixelRatioOf(context);
+      final fit = (
+        constraints: constraints,
+        visibleHeightCap: widget.maximumVisibleHeight,
+        visibleMinimum: widget.minimumVisibleSize,
+        reserveVisibleSlot: widget.reserveVisibleSlot,
+      );
       final request = (
         bytes: widget.bytes,
         width: _pixelBucket(constraints.maxWidth * ratio),
         height: _pixelBucket(constraints.maxHeight * ratio),
-        pixelRatio: ratio,
+        visibleDecode: widget.fitVisibleContent
+            ? (fit: fit, pixelRatio: ratio)
+            : null,
       );
       if (request != _request) _load(request);
       final raster = _raster;
-      if (raster == null ||
-          !clearLogoIsUsable(
-            raster.intrinsicSize,
-            constraints,
-            visibleSlotHeight: widget.reserveVisibleSlot
-                ? widget.maximumVisibleHeight
-                : null,
-          )) {
-        return widget.fallback;
-      }
+      if (raster == null) return widget.fallback;
       final fraction = raster.visibleFraction;
-      var fitted = applyBoxFit(
-        BoxFit.contain,
+      final fitted = _clearLogoPaintSize(
         raster.intrinsicSize,
-        constraints.biggest,
-      ).destination;
+        fraction,
+        fit,
+        fitVisibleContent: widget.fitVisibleContent,
+      );
+      if (fitted == null) return widget.fallback;
       final crop =
+          widget.fitVisibleContent ||
           widget.minimumVisibleSize != null ||
           widget.maximumVisibleHeight != null;
-      if (crop) {
-        final cap = widget.maximumVisibleHeight;
-        if (cap != null && fitted.height * fraction.height > cap) {
-          fitted *= cap / (fitted.height * fraction.height);
-        }
-        final minimum = widget.minimumVisibleSize;
-        if (minimum != null &&
-            (fitted.width * fraction.width < minimum.width ||
-                fitted.height * fraction.height < minimum.height)) {
-          return widget.fallback;
-        }
-      }
       Widget image = ConstrainedBox(
         constraints: constraints,
         child: RawImage(
@@ -709,7 +767,9 @@ class _ClearLogoImageState extends State<ClearLogoImage> {
           // Preserve the original contain geometry independently of decode size.
           width: fitted.width,
           height: fitted.height,
-          fit: BoxFit.contain,
+          // Visible-fit geometry already preserves the source aspect ratio.
+          // Independent integer decode dimensions can differ by a fraction of a pixel.
+          fit: widget.fitVisibleContent ? BoxFit.fill : BoxFit.contain,
           alignment: Alignment.centerLeft,
         ),
       );
@@ -762,14 +822,12 @@ class _ClearLogoRaster {
 
 const _clearLogoCacheCapacity = 8;
 
-/// One decoded (or failed) logo for a bytes object and pixel bucket. The cache
-/// owns [raster]'s master image; mounted states only ever hold clones of it.
+/// One decoded (or failed) logo for a request. The cache owns the master
+/// image. Mounted states only hold clones.
 class _ClearLogoCacheEntry {
-  _ClearLogoCacheEntry(this.bytes, this.width, this.height);
+  _ClearLogoCacheEntry(this.request);
 
-  final Uint8List bytes;
-  final int width;
-  final int height;
+  final _ClearLogoRequest request;
   late final Future<void> done;
   _ClearLogoRaster? raster;
   bool completed = false;
@@ -792,22 +850,13 @@ class _ClearLogoCacheEntry {
 final List<_ClearLogoCacheEntry> _clearLogoCache = [];
 
 _ClearLogoCacheEntry _clearLogoCacheEntry(_ClearLogoRequest request) {
-  final index = _clearLogoCache.indexWhere(
-    (entry) =>
-        identical(entry.bytes, request.bytes) &&
-        entry.width == request.width &&
-        entry.height == request.height,
-  );
+  final index = _clearLogoCache.indexWhere((entry) => entry.request == request);
   if (index >= 0) {
     final entry = _clearLogoCache.removeAt(index);
     _clearLogoCache.add(entry);
     return entry;
   }
-  final entry = _ClearLogoCacheEntry(
-    request.bytes,
-    request.width,
-    request.height,
-  );
+  final entry = _ClearLogoCacheEntry(request);
   entry.done = _decodeClearLogo(request).then((raster) {
     entry.completed = true;
     if (entry.dropped) {
@@ -903,6 +952,36 @@ Future<_ClearLogoRaster?> _decodeClearLogo(_ClearLogoRequest request) async {
       math.min(image.width, right + 2) / image.width,
       math.min(image.height, bottom + 2) / image.height,
     );
+    if (request.visibleDecode case final visible?) {
+      final painted = _clearLogoPaintSize(
+        intrinsicSize,
+        fraction,
+        visible.fit,
+        fitVisibleContent: true,
+      );
+      if (painted == null) return null;
+      final width = (painted.width * visible.pixelRatio).ceil().clamp(
+        1,
+        descriptor.width,
+      );
+      final height = (painted.height * visible.pixelRatio).ceil().clamp(
+        1,
+        descriptor.height,
+      );
+      if (image.width != width || image.height != height) {
+        // The probe pins the alpha geometry. Decode the final raster at the
+        // full paint size without reading back or rescanning those pixels.
+        image.dispose();
+        image = null;
+        codec.dispose();
+        codec = null;
+        codec = await descriptor.instantiateCodec(
+          targetWidth: width,
+          targetHeight: height,
+        );
+        image = (await codec.getNextFrame()).image;
+      }
+    }
     final result = _ClearLogoRaster(image, intrinsicSize, fraction);
     image = null; // The caller now owns this validated image handle.
     return result;

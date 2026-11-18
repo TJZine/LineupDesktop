@@ -28,7 +28,7 @@ composition only, not Flutter correctness, accessibility or physical Windows pro
 | Review/results | Overview and composition bar above full-width roster; explicit, accurate apply/results |
 | Channels | Full-width directory; search, type filters, bulk deletion and explicit reorder mode |
 | Studio | Programming left, persistent schedule right; compact top settings; full source/draft safeguards |
-| Full Guide | PiP only; five comfortable rows; title-first cells; persistent search/library picker; 2/3/4 hours |
+| Full Guide | PiP only; five comfortable rows; title-first cells; persistent search/channel filter; 2/3/4 hours |
 | Mini Guide | Five nearby channels from top edge; shaped fade; selected-row tickers |
 | Tracks/timer | Right-edge track panels; small explicit playback-stop timer picker |
 | Diagnostics | Four summary groups above wide event list; technical disclosure; redacted report |
@@ -138,17 +138,19 @@ This supersedes earlier references to the configurable Guide past-time decision.
 - Single-click inspects; double-click and Enter/remote Select tune the airing
   program. Past/future entries remain inspection-only. Returning to the currently
   tuned channel must not restart it.
-- Library picker above channel column; one actual Plex library or All libraries.
-  Show a full wrapping removable library label above the schedule. Removing it
-  retains search. No multi-library selection in this package.
-- Search by channel name/number within library scope. Search is always visible
+- Channel filter above the channel column. Show counts for All channels,
+  Favourites when present, the available source types, and libraries. A wrapping
+  removable label identifies the active filter. Removing it retains search.
+  A fresh app launch or a disappeared filter returns to All channels.
+  UX assessment decision, 2026-11-13/14.
+- Search by channel name/number within the selected filter. Search is always visible
   in the approved control strip; no show/hide preference or collapsed mode.
   Ctrl+F focuses the field. Escape in a nonempty field clears its query and
   retains field focus; Escape in an empty field returns focus to the Guide
   without hiding search. That event must not also trigger Guide Back; a subsequent
   Escape follows normal Guide Back behavior. Backspace remains text editing.
-- Preserve session search, library, time and inspection across Guide/Player/
-  Settings. Restart/profile/server change resets transient search/library/time.
+- Preserve session search, filter, time and inspection across Guide/Player/
+  Settings. Restart/profile/server change resets transient search/filter/time.
   Now resets time while retaining filters. Filtering never retunes.
 - Preserve presentation preferences through the existing settings owner, except
   the explicitly retired history/density settings and narrowed time-span choices
@@ -653,13 +655,16 @@ B's integrated narrower roster/editor is not selected. Synthetic comparison:
 preview is partial, not an approved replacement for its complete controls or
 unsaved-draft behavior.
 
-- Number/name/source/playback/type hierarchy, full wrapping names and quiet row
-  dividers. Search by name or number, All/Custom/Generated filters. Row activation
-  opens Studio; remove the redundant open icon. Preserve known issue explanations
-  and list search/filter/scroll/focus on return. No Needs attention filter or new
-  Watch action.
-- Add a custom channel is primary; Generate lineup is secondary for a populated
-  lineup. Empty state reverses that emphasis and avoids duplicate header actions.
+- UX assessment decision, 2026-11-13/14 (Q5, N17, D3, D9). The heading is
+  Manage channels. Preserve wrapping names and quiet row dividers. Use a
+  Custom tag after custom names and one ellipsized Source line for source type
+  and library. Use original person labels in source details when available.
+  Search by name or number or filter by favourites, source type or library.
+  Row activation opens Studio. Preserve known issue explanations and list
+  search, filter, scroll and focus on return.
+- Add a custom channel is primary and Update lineup… is secondary for a
+  populated lineup. Empty state reverses that emphasis and avoids duplicate
+  header actions. Its primary button says Generate lineup….
 - Approved bulk management: quiet Select control reveals checkboxes, selected
   count and Delete selected. Select all matching means current search/filter
   results. Confirmation gives the count and explains removal from the lineup.
@@ -693,8 +698,10 @@ Final selection refinements recorded for implementation:
 - Selection and reorder are separate modes. Keep unrelated mutation controls out
   of selection mode; preserve search/filter access. Repeated activation while a
   deletion is pending cannot launch a second deletion.
-- Generated-channel row menu includes Duplicate as custom, opening a draft while
-  retaining the original. Delete belongs in the secondary row menu.
+- The row menu lists Watch, Favourite or Remove from favourites, Edit or
+  Duplicate as custom, and Delete. Watch receives initial focus. Dismissal
+  returns focus to the row. Open the menu with the ellipsis, right-click,
+  Shift+F10 or the keyboard Menu key.
 - Rename/number and individual programming/playback editing stay in Studio.
   Generated selections are managed through Generate lineup. Deletion does not
   permanently exclude a generated source: later generation can recreate it.
@@ -1388,7 +1395,7 @@ The earlier A/B comparison is superseded by this refined A composition.
 
 ## Settings — organization, layout and account actions locked
 
-The category order is: Appearance, Guide, Playback,
+The category order is: Appearance, Guide, Playback, Subtitles,
 Accessibility, Account, Support. Retain category navigation beside a spacious
 detail pane using the locked A layout.
 Appearance groups theme and artwork treatment; Guide owns presentation and visible
@@ -1406,14 +1413,19 @@ User selected A as the stronger layout: spacious consistent rows with explanatio
 left and controls right, within the shared category shell. B's persistent preview
 pane and a separate pop-out/hover theme preview are excluded. Immediate theme
 changes update the actual Settings surface; the Guide is the place to judge its
-artwork treatment. Do not introduce a duplicate preview renderer.
+artwork treatment. Do not introduce a duplicate theme preview renderer.
+
+UX assessment decision, 2026-11-13/14: “Settings” is a 16px supporting label
+and the selected section supplies the only headline. Information and control
+rows share one leading text edge. Desktop category activation still uses a
+click or Enter.
 
 ### Account actions and sign-out — locked
 
 User accepted this order within Settings > Account:
 1. Plex Home profile: full name and Switch profile, followed by the startup
    profile-picker preference.
-2. Plex Media Server: full name and Switch server.
+2. Plex Media Server: full name, route and measured latency, and Switch server.
 3. Signed-in Plex account: account identity and a visually separated Sign out
    of Plex action. Distinguish the authenticated account from the selected Home
    profile; this replaces the old global-rail sign-out entry.
@@ -1484,15 +1496,12 @@ does not remove PiP or the inspected-program information area. Do not add a butt
 or another header row; final layout must avoid crowding navigation. This concerns
 Guide context only, not the protected Player Now Playing shelf redesign.
 
-### Library picker availability — locked
+### Channel filter availability — locked
 
-Remove the Library filters show/hide preference. Keep the library picker available
-in its approved position above the channel column; All libraries provides the
-unfiltered view. A previously saved disabled preference must not hide the picker
-or disable filtering in the revised Guide. Preserve the approved session filter
-and reset rules. This replaces the previous ability to hide the control and clear
-the active filter by disabling the preference; it does not add multiple-library
-selection or change filtering behavior.
+Keep the channel filter available in its approved position above the channel
+column. All channels provides the unfiltered scope. The former show/hide
+preference does not affect filtering. The counted choices and reset rules are
+documented under Full Guide (UX assessment decision, 2026-11-13/14).
 
 Source basis: SettingsView in `lib/app/lineup_shell.dart` currently groups player
 auto-hide and DVR controls with Guide settings, and separates Appearance,
@@ -1512,14 +1521,15 @@ and save guards. Existing route shortcut numbers are retained.
 
 ### Lineup menu — A and Account shortcut locked
 
-User selected the compact anchored menu A, including the Account shortcut below
-Guide, Player, Channels and Settings. B's full-height panel is rejected. Keep
-full wrapping profile/server names, quiet separation and comfortable targets.
+Keep the compact anchored menu A with wrapping profile/server names,
+quiet separation and comfortable targets. UX assessment decision, 2026-11-13/14:
+put the tuned channel identity and program on separate lines in the optional
+first row, which returns to the Player. Guide, Manage channels, Settings and
+the profile/server shortcut follow. The shortcut opens Settings → Account.
 
 Final refinements accepted: remove the redundant visible
 Current caption while retaining selected-destination styling and accessible
-current-page semantics; keep focus indication distinct. For unavailable Player,
-use the actionable helper Choose a channel in Guide. Anchor to the actual invoking
+current-page semantics; keep focus indication distinct. Anchor to the invoking
 control, align within safe window bounds and reposition inward when needed rather
 than clipping the menu. Support constrained height/enlarged text without truncating
 names or losing navigation actions. Keep focus within the open menu and restore

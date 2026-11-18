@@ -15,6 +15,7 @@ import '../playback/player_coordinator.dart';
 import '../playback/player_view.dart';
 import '../platform/device_profile.dart';
 import '../ui/app_ui.dart';
+import '../ui/channel_identity.dart';
 import '../ui/app_theme.dart';
 import '../ui/lineup_canvas.dart';
 import 'channel_setup_view.dart';
@@ -49,6 +50,13 @@ class _LineupShellState extends State<LineupShell> {
       ? ShellDestination.guide
       : ShellDestination.player;
   ShellDestination? _settingsReturnDestination;
+  bool _desktopDiagnosticsFromPlayer = false;
+  bool get _diagnosticsFromPlayer => widget.profile.isTv
+      ? switch (_tvLocation) {
+          _TvDiagnostics(origin: _TvPlayer()) => true,
+          _ => false,
+        }
+      : _desktopDiagnosticsFromPlayer;
   late final GuideController _guide;
   late final PlayerCoordinator _player;
   final _playerKey = GlobalKey<PlayerViewState>();
@@ -70,6 +78,7 @@ class _LineupShellState extends State<LineupShell> {
   );
   final _channelsKey = GlobalKey<ChannelsViewState>();
   final _guideFocus = FocusNode(debugLabel: 'Guide');
+  final _guideSetupFocus = FocusNode(debugLabel: 'Guide set up channels');
   final _channelsFocus = FocusNode(debugLabel: 'Channels');
   final _settingsFocus = FocusNode(debugLabel: 'Settings');
   final _diagnosticsFocus = FocusNode(debugLabel: 'Diagnostics');
@@ -90,7 +99,7 @@ class _LineupShellState extends State<LineupShell> {
   bool _onboardingSupport = false;
   bool _selectionPending = false;
   bool _keyboardInput = false;
-  ({Rect anchor, FocusNode invokerFocus})? _appMenu;
+  ({Object id, Rect anchor, FocusNode invokerFocus})? _appMenu;
   static const _appMenuChannel = MethodChannel('lineup/app_menu');
   bool _onboardingFromAccount = false;
   SettingsCategory _settingsCategory = SettingsCategory.appearance;
@@ -104,6 +113,7 @@ class _LineupShellState extends State<LineupShell> {
         _lastStage == SetupStage.channelSetup &&
         !widget.controller.restoringSavedLineup;
     HardwareKeyboard.instance.addHandler(_trackKeyboardInput);
+    FocusManager.instance.addEarlyKeyEventHandler(_handleTvMenuKey);
     if (defaultTargetPlatform != TargetPlatform.android) {
       _appMenuChannel.setMethodCallHandler(_handleAppMenuCall);
     }
@@ -139,6 +149,8 @@ class _LineupShellState extends State<LineupShell> {
     _player.authorizationStopPending,
     _player.authorizationTransitionError,
     _player.error,
+    _player.failureCause,
+    _player.failedChannelId,
     _player.canRetry,
     _player.status.state,
     _player.status.message,
@@ -218,6 +230,7 @@ class _LineupShellState extends State<LineupShell> {
   @override
   void dispose() {
     HardwareKeyboard.instance.removeHandler(_trackKeyboardInput);
+    FocusManager.instance.removeEarlyKeyEventHandler(_handleTvMenuKey);
     if (defaultTargetPlatform != TargetPlatform.android) {
       _appMenuChannel.setMethodCallHandler(null);
     }
@@ -226,6 +239,7 @@ class _LineupShellState extends State<LineupShell> {
     _player.dispose();
     _guide.dispose();
     _guideFocus.dispose();
+    _guideSetupFocus.dispose();
     _channelsFocus.dispose();
     _settingsFocus.dispose();
     _diagnosticsFocus.dispose();
@@ -280,7 +294,8 @@ class _LineupShellState extends State<LineupShell> {
   _TvWatch get _tvWatch => _tvLocation.watch;
   _TvSettings get _tvSettings => switch (_tvLocation) {
     final _TvSettings location => location,
-    _TvDiagnostics(:final settings) => settings,
+    _TvDiagnostics(:final origin) =>
+      origin is _TvSettings ? origin : _TvSettings(origin),
     final _TvChannels location => _TvSettings(location),
     final _TvWatch location => _TvSettings(location),
   };
@@ -291,7 +306,10 @@ class _LineupShellState extends State<LineupShell> {
     ShellDestination.player => const _TvPlayer(),
     ShellDestination.channels => _TvChannels(_tvWatch),
     ShellDestination.settings => _tvSettings,
-    ShellDestination.diagnostics => _TvDiagnostics(_tvSettings),
+    ShellDestination.diagnostics => switch (_tvLocation) {
+      final _TvDiagnostics location => location,
+      _ => _TvDiagnostics(_tvSettings),
+    },
   };
 
   _TvLocation _validTvLocation(_TvLocation location) {
@@ -302,9 +320,10 @@ class _LineupShellState extends State<LineupShell> {
         _validTvLocation(origin) as _TvWatch,
       ),
       _TvSettings(:final origin) => _TvSettings(_validTvLocation(origin)),
-      _TvDiagnostics(:final settings) => _TvDiagnostics(
-        _validTvLocation(settings) as _TvSettings,
+      _TvDiagnostics(origin: final _TvSettings origin) => _TvDiagnostics(
+        _validTvLocation(origin),
       ),
+      _TvDiagnostics() => location,
       _TvHome() => location,
     };
   }
@@ -349,9 +368,8 @@ class _LineupShellState extends State<LineupShell> {
       case _TvSettings(:final origin):
         _returnTv(origin);
         return true;
-      case _TvDiagnostics(:final settings):
-        _settingsCategory = SettingsCategory.support;
-        _returnTv(settings);
+      case _TvDiagnostics():
+        _returnFromDiagnostics();
         return true;
     }
     WidgetsBinding.instance.addPostFrameCallback((_) => _restoreRouteFocus());
@@ -366,8 +384,16 @@ class _LineupShellState extends State<LineupShell> {
   Future<void> _select(
     ShellDestination destination, {
     _TvLocation? tvLocation,
+    bool diagnosticsFromPlayer = false,
+    ({Object menuId, String channelId})? tunedRow,
   }) async {
-    if (_selectionPending) return;
+    bool tunedRowIsCurrent() =>
+        tunedRow == null ||
+        (_appMenu?.id == tunedRow.menuId &&
+            _canShowNowPlaying &&
+            _player.currentChannel?.id == tunedRow.channelId);
+
+    if (_selectionPending || !tunedRowIsCurrent()) return;
     final proposed = widget.profile.isTv
         ? tvLocation ?? _tvOpen(destination)
         : null;
@@ -382,7 +408,8 @@ class _LineupShellState extends State<LineupShell> {
     if (destination == ShellDestination.settings && _licensesOpen) {
       _closeLicenses();
     }
-    if (destination == _destination &&
+    if (tunedRow == null &&
+        destination == _destination &&
         (proposed == null || proposed == _tvLocation) &&
         !(destination == ShellDestination.channels &&
             (_channelsKey.currentState?.studioOpen ?? false))) {
@@ -400,7 +427,8 @@ class _LineupShellState extends State<LineupShell> {
         return;
       }
       if (!mounted ||
-          (widget.profile.isTv &&
+          !tunedRowIsCurrent() ||
+          ((widget.profile.isTv || tunedRow != null) &&
               (intent != _routeIntent ||
                   stage != widget.controller.stage ||
                   scope != _scopeStamp))) {
@@ -426,7 +454,9 @@ class _LineupShellState extends State<LineupShell> {
       }
       final committed = proposed == null ? null : _validTvLocation(proposed);
       final routeDestination = committed?.destination ?? destination;
-      if (routeDestination == ShellDestination.guide) {
+      if (tunedRow != null && routeDestination == ShellDestination.player) {
+        _player.returnToPicture();
+      } else if (routeDestination == ShellDestination.guide) {
         _player.showFullGuide();
       } else if (_player.overlay == PlayerOverlay.fullGuide) {
         _player.closeOverlay();
@@ -435,6 +465,9 @@ class _LineupShellState extends State<LineupShell> {
         _licensesOpen = false;
         if (committed != null) _tvLocation = committed;
         _destination = routeDestination;
+        _desktopDiagnosticsFromPlayer =
+            routeDestination == ShellDestination.diagnostics &&
+            diagnosticsFromPlayer;
         _player.setPlayerDestinationVisible(
           routeDestination == ShellDestination.player,
         );
@@ -455,6 +488,45 @@ class _LineupShellState extends State<LineupShell> {
             !_hasPlaybackSurface
       ? ShellDestination.guide
       : _settingsReturnDestination;
+
+  void _openPlayerDiagnostics() => unawaited(
+    _select(
+      ShellDestination.diagnostics,
+      tvLocation: const _TvDiagnostics(_TvPlayer()),
+      diagnosticsFromPlayer: true,
+    ),
+  );
+
+  void _openSupportSettings() {
+    _settingsCategory = SettingsCategory.support;
+    if (widget.profile.isTv) {
+      _returnTv(_tvSettings);
+    } else {
+      unawaited(_select(ShellDestination.settings));
+    }
+  }
+
+  ShellDestination get _diagnosticsBackDestination {
+    if (!_diagnosticsFromPlayer) return ShellDestination.settings;
+    return _hasPlaybackSurface
+        ? ShellDestination.player
+        : ShellDestination.guide;
+  }
+
+  void _returnFromDiagnostics() {
+    final destination = _diagnosticsBackDestination;
+    if (destination == ShellDestination.settings) {
+      _openSupportSettings();
+    } else if (widget.profile.isTv) {
+      _returnTv(
+        destination == ShellDestination.player
+            ? const _TvPlayer()
+            : const _TvHome(),
+      );
+    } else {
+      unawaited(_select(destination));
+    }
+  }
 
   void _returnFromSettings() {
     if (widget.profile.isTv) {
@@ -479,29 +551,8 @@ class _LineupShellState extends State<LineupShell> {
       _player.hasPlaybackIntent &&
       !_player.tuning &&
       _player.error == null &&
+      _player.currentChannel != null &&
       _player.currentProgram != null;
-
-  Future<void> _openNowPlaying() async {
-    if (_selectionPending || !_canShowNowPlaying) return;
-    await _select(ShellDestination.player);
-    if (!mounted ||
-        widget.controller.stage != SetupStage.ready ||
-        _destination != ShellDestination.player ||
-        _appMenu != null ||
-        !_canShowNowPlaying) {
-      return;
-    }
-    _player.showNowPlaying();
-    WidgetsBinding.instance.addPostFrameCallback((_) {
-      if (mounted &&
-          widget.controller.stage == SetupStage.ready &&
-          _destination == ShellDestination.player &&
-          _appMenu == null &&
-          _player.overlay == PlayerOverlay.nowPlaying) {
-        _playerFocus.requestFocus();
-      }
-    });
-  }
 
   void _restoreRouteFocus() {
     if (!mounted ||
@@ -515,7 +566,10 @@ class _LineupShellState extends State<LineupShell> {
       return;
     }
     final target = switch (_destination) {
-      ShellDestination.guide => _guideFocus,
+      ShellDestination.guide =>
+        widget.profile.isTv && _guideSetupFocus.parent != null
+            ? _guideSetupFocus
+            : _guideFocus,
       ShellDestination.channels => _channelsFocus,
       ShellDestination.settings => _settingsFocus,
       ShellDestination.diagnostics => _diagnosticsFocus,
@@ -526,15 +580,65 @@ class _LineupShellState extends State<LineupShell> {
   }
 
   void _openAppMenu(BuildContext invokerContext, FocusNode invokerFocus) {
-    final renderObject = invokerContext.findRenderObject();
-    if (renderObject is! RenderBox || !renderObject.hasSize) return;
-    setState(() {
-      final anchor = MatrixUtils.transformRect(
-        renderObject.getTransformTo(context.findRenderObject()),
-        Offset.zero & renderObject.size,
-      );
-      _appMenu = (anchor: anchor, invokerFocus: invokerFocus);
-    });
+    final anchor = _menuAnchor(invokerContext);
+    if (anchor != null) _showAppMenu(anchor, invokerFocus);
+  }
+
+  Rect? _menuAnchor(BuildContext? anchorContext) {
+    if (anchorContext?.mounted != true) return null;
+    final box = anchorContext!.findRenderObject();
+    if (box is! RenderBox || !box.attached || !box.hasSize) return null;
+    return MatrixUtils.transformRect(
+      box.getTransformTo(context.findRenderObject()),
+      Offset.zero & box.size,
+    );
+  }
+
+  void _showAppMenu(Rect anchor, FocusNode invoker) {
+    setState(
+      () => _appMenu = (id: Object(), anchor: anchor, invokerFocus: invoker),
+    );
+  }
+
+  KeyEventResult _handleTvMenuKey(KeyEvent event) {
+    if (!widget.profile.isTv ||
+        event.logicalKey != LogicalKeyboardKey.contextMenu ||
+        ModalRoute.of(context)?.isCurrent != true ||
+        _onboardingSupport) {
+      return KeyEventResult.ignored;
+    }
+    final ready = widget.controller.stage == SetupStage.ready;
+    if (!ready &&
+        (!_onboardingMenuAvailable || widget.controller.restoringSavedLineup)) {
+      return KeyEventResult.ignored;
+    }
+    // Guide and Player open the menu with their own overlay anchors.
+    final anchorNode = !ready
+        ? _settingsMenuFocus
+        : switch ((_licensesOpen, _destination)) {
+            (true, _) => _licensesMenuFocus,
+            (_, ShellDestination.settings) => _settingsMenuFocus,
+            (_, ShellDestination.diagnostics) => _diagnosticsMenuFocus,
+            (_, ShellDestination.channels) => _channelsMenuFocus,
+            _ => null,
+          };
+    Rect? anchor;
+    if (anchorNode != null) {
+      if (anchorNode.parent == null) return KeyEventResult.ignored;
+      anchor = _menuAnchor(anchorNode.context);
+      if (anchor == null) return KeyEventResult.ignored;
+    }
+    // A held key cannot toggle repeatedly while focus moves between surfaces.
+    if (event is KeyRepeatEvent) return KeyEventResult.handled;
+    if (event is! KeyDownEvent) return KeyEventResult.ignored;
+    _keyboardInput = true;
+    if (_appMenu != null) {
+      _closeAppMenu();
+      return KeyEventResult.handled;
+    }
+    if (anchor == null || anchorNode == null) return KeyEventResult.ignored;
+    _showAppMenu(anchor, FocusManager.instance.primaryFocus ?? anchorNode);
+    return KeyEventResult.handled;
   }
 
   void _closeGuide(BuildContext invokerContext, FocusNode invokerFocus) {
@@ -554,6 +658,16 @@ class _LineupShellState extends State<LineupShell> {
         : _player.tune(channelId);
     await _select(ShellDestination.player);
     await tuning;
+  }
+
+  String? get _nextGuideChannelId => switch (_player.failedChannelId) {
+    final failed? => _guide.successorOf(failed)?.id,
+    null => null,
+  };
+
+  void _tuneNextFromGuide() {
+    final next = _nextGuideChannelId;
+    if (next != null) unawaited(_tuneFromGuide(next));
   }
 
   void _closeAppMenu({bool restoreInvoker = true}) {
@@ -597,6 +711,7 @@ class _LineupShellState extends State<LineupShell> {
 
   void _showOnboardingSupport() {
     setState(() {
+      _appMenu = null;
       _licensesOpen = false;
       _onboardingSupport = true;
       _settingsCategory = SettingsCategory.support;
@@ -726,8 +841,7 @@ class _LineupShellState extends State<LineupShell> {
         (event.logicalKey == LogicalKeyboardKey.escape ||
             event.logicalKey == LogicalKeyboardKey.backspace ||
             event.logicalKey == LogicalKeyboardKey.goBack)) {
-      _settingsCategory = SettingsCategory.support;
-      unawaited(_select(ShellDestination.settings));
+      _returnFromDiagnostics();
       return KeyEventResult.handled;
     }
     if (_destination == ShellDestination.settings &&
@@ -800,6 +914,28 @@ class _LineupShellState extends State<LineupShell> {
     });
   }
 
+  bool _setupActionsBlocked() => !_setupVisible;
+
+  bool _authorizationTransitionPending() =>
+      _player.authorizationTransitionPending;
+
+  void _backFromFirstLibraries() {
+    final controller = widget.controller;
+    if (_player.authorizationTransitionPending ||
+        controller.busy ||
+        !controller.canSwitchServer) {
+      return;
+    }
+    switch (controller.firstLibrariesOrigin) {
+      case FirstLibrariesOrigin.profiles:
+        unawaited(controller.backToFirstRunProfiles());
+      case FirstLibrariesOrigin.signIn:
+        unawaited(_logout());
+      case null:
+        break;
+    }
+  }
+
   Future<void> _requestLogout() async {
     if (_player.authorizationTransitionPending) return;
     final confirmed =
@@ -830,9 +966,10 @@ class _LineupShellState extends State<LineupShell> {
 
   Future<void> _logout() async {
     if (_player.authorizationTransitionPending) return;
+    final channels = _channelsKey.currentState;
     if (_destination == ShellDestination.channels &&
-        !(await (_channelsKey.currentState?.requestLeave() ??
-            Future.value(true)))) {
+        channels != null &&
+        !await channels.requestLeave()) {
       return;
     }
     if (await _player.logout() || !mounted) return;
@@ -890,11 +1027,21 @@ class _LineupShellState extends State<LineupShell> {
         ),
       ),
     );
+    if (!mounted || !widget.profile.isTv || !_setupVisible) return;
+    final setup = _setupKey.currentState;
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (mounted &&
+          _setupVisible &&
+          identical(setup, _setupKey.currentState)) {
+        setup?.restoreNavigationFocus();
+      }
+    });
   }
 
-  Widget _immersiveAppMenu(bool hasPlaybackSurface) {
-    final anchor = _appMenu?.anchor;
-    if (anchor == null) return const SizedBox.shrink();
+  Widget _immersiveAppMenu() {
+    final menu = _appMenu;
+    if (menu == null) return const SizedBox.shrink();
+    final anchor = menu.anchor;
     final roles = LineupTheme.of(context);
     final textTheme = Theme.of(context).textTheme;
     final detailStyle = textTheme.bodyMedium?.copyWith(
@@ -950,46 +1097,20 @@ class _LineupShellState extends State<LineupShell> {
                     mainAxisSize: MainAxisSize.min,
                     crossAxisAlignment: CrossAxisAlignment.stretch,
                     children: [
+                      if (_canShowNowPlaying)
+                        _nowPlayingMenuRow(menu.id, detailStyle),
                       _menuDestination(
                         destination: ShellDestination.guide,
                         label: 'Guide',
                         autofocus: true,
-                        detailStyle: detailStyle,
                       ),
-                      _menuDestination(
-                        destination: ShellDestination.player,
-                        label: 'Player',
-                        enabled: hasPlaybackSurface,
-                        helper: hasPlaybackSurface
-                            ? null
-                            : 'Choose a channel in Guide',
-                        detailStyle: detailStyle,
-                      ),
-                      if (_canShowNowPlaying)
-                        LineupNavigationRow(
-                          key: const Key('app-menu-now-playing'),
-                          selected: false,
-                          onPressed: () => unawaited(_openNowPlaying()),
-                          child: Column(
-                            crossAxisAlignment: CrossAxisAlignment.start,
-                            children: [
-                              const Text('Now Playing'),
-                              _menuDetail(
-                                _player.currentProgram!.scheduled.item.title,
-                                detailStyle,
-                              ),
-                            ],
-                          ),
-                        ),
                       _menuDestination(
                         destination: ShellDestination.channels,
-                        label: 'Channels',
-                        detailStyle: detailStyle,
+                        label: 'Manage channels',
                       ),
                       _menuDestination(
                         destination: ShellDestination.settings,
                         label: 'Settings',
-                        detailStyle: detailStyle,
                       ),
                       Divider(height: 24, thickness: 1.0),
                       Semantics(
@@ -1017,9 +1138,6 @@ class _LineupShellState extends State<LineupShell> {
                                   children: [
                                     Text(profileName ?? accountName),
                                     _menuDetail(serverName, detailStyle),
-                                    LineupConnectionStatus(
-                                      connection: widget.controller.connection,
-                                    ),
                                   ],
                                 ),
                               ),
@@ -1040,9 +1158,48 @@ class _LineupShellState extends State<LineupShell> {
     );
   }
 
-  Widget _menuDetail(String text, TextStyle? style) => Builder(
+  Widget _nowPlayingMenuRow(Object menuId, TextStyle? detailStyle) {
+    final program = _player.currentProgram!.scheduled.item.title;
+    final channel = _player.currentChannel!;
+    final tag = ChannelIdentity.libraryTagFor(
+      channel,
+      widget.controller.channels,
+    );
+    final selected = _destination == ShellDestination.player;
+    return LineupNavigationRow(
+      key: const Key('app-menu-now-playing'),
+      selected: selected,
+      onPressed: () => unawaited(
+        _select(
+          ShellDestination.player,
+          tunedRow: (menuId: menuId, channelId: channel.id),
+        ),
+      ),
+      child: Semantics(
+        label:
+            'Now Playing, ${ChannelIdentity.label(channel, libraryTag: tag)}, $program'
+            '${selected ? ', current page' : ''}',
+        excludeSemantics: true,
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            ChannelIdentity(
+              channel: channel,
+              libraryTag: tag,
+              showSemantics: false,
+            ),
+            _menuDetail(program, detailStyle, maxLines: 1),
+          ],
+        ),
+      ),
+    );
+  }
+
+  Widget _menuDetail(String text, TextStyle? style, {int? maxLines}) => Builder(
     builder: (context) => Text(
       text,
+      maxLines: maxLines,
+      overflow: maxLines == null ? null : TextOverflow.ellipsis,
       style: DeviceProfile.of(context).isTv
           ? style?.copyWith(color: LineupTheme.of(context).secondaryText)
           : style,
@@ -1052,35 +1209,22 @@ class _LineupShellState extends State<LineupShell> {
   Widget _menuDestination({
     required ShellDestination destination,
     required String label,
-    bool enabled = true,
     bool autofocus = false,
-    String? helper,
-    required TextStyle? detailStyle,
   }) {
     final selected = _destination == destination;
-    final semanticLabel = [
-      label,
-      ?helper,
-      if (selected) 'current page',
-    ].join(', ');
+    void select() => unawaited(_select(destination));
     return Semantics(
       excludeSemantics: true,
       selected: selected,
       button: true,
-      enabled: enabled,
-      label: semanticLabel,
-      onTap: enabled ? () => unawaited(_select(destination)) : null,
+      enabled: true,
+      label: selected ? '$label, current page' : label,
+      onTap: select,
       child: LineupNavigationRow(
         selected: selected,
         autofocus: autofocus,
-        onPressed: enabled ? () => unawaited(_select(destination)) : null,
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            Text(label),
-            if (helper != null) _menuDetail(helper, detailStyle),
-          ],
-        ),
+        onPressed: select,
+        child: Text(label, style: LineupTypography.tvLabelStyle(context)),
       ),
     );
   }
@@ -1106,6 +1250,10 @@ class _LineupShellState extends State<LineupShell> {
                       key: _setupKey,
                       controller: widget.controller,
                       onRequestLogout: _requestLogout,
+                      onFirstLibrariesBack: _backFromFirstLibraries,
+                      setupActionsBlocked: _setupActionsBlocked,
+                      authorizationTransitionPending:
+                          _authorizationTransitionPending,
                       onViewLineup: _completeSetup,
                       onAddCustomChannel: _completeSetupAndAdd,
                     ),
@@ -1165,6 +1313,10 @@ class _LineupShellState extends State<LineupShell> {
                     key: _setupKey,
                     controller: controller,
                     onRequestLogout: _requestLogout,
+                    onFirstLibrariesBack: _backFromFirstLibraries,
+                    setupActionsBlocked: _setupActionsBlocked,
+                    authorizationTransitionPending:
+                        _authorizationTransitionPending,
                     onViewLineup: _completeSetup,
                     onAddCustomChannel: _completeSetupAndAdd,
                   )
@@ -1211,7 +1363,7 @@ class _LineupShellState extends State<LineupShell> {
                   ),
                 ),
               ),
-              if (_appMenu != null) _immersiveAppMenu(_hasPlaybackSurface),
+              if (_appMenu != null) _immersiveAppMenu(),
             ],
           ),
         ),
@@ -1226,28 +1378,38 @@ class _LineupShellState extends State<LineupShell> {
           ? () => _returnTv(const _TvHome())
           : null,
       openMenu: _openAppMenu,
+      onOpenDiagnostics: _openPlayerDiagnostics,
     );
     final hasPlaybackSurface = _hasPlaybackSurface;
     final guidePlaybackUnavailable =
         _player.status.state == PlayerState.unsupported ||
         _player.error != null;
+    final failureCause = _player.failureCause;
     final guideHasPicture = hasPlaybackSurface && !guidePlaybackUnavailable;
     final guideView = GuideView(
       controller: _guide,
       watchingChannelId: _player.watchingChannelId,
       focusNode: _guideFocus,
+      setupFocusNode: _guideSetupFocus,
       onClose: _closeGuide,
       onBack: widget.profile.isTv ? _handleTvBack : null,
       onOpenMenu: _openAppMenu,
       pictureInPicture: guideHasPicture
           ? PlayerSurface(controller: _player, showErrors: true)
-          : GuidePlaybackPlaceholder(
-              unavailable: guidePlaybackUnavailable,
-              reduceMotion: controller.settings.reduceMotion,
-              message:
-                  _player.error ??
-                  (guidePlaybackUnavailable ? _player.status.message : null),
-              onRetry: _player.canRetry ? _player.retry : null,
+          : ListenableBuilder(
+              listenable: _guide,
+              builder: (context, _) => GuidePlaybackPlaceholder(
+                unavailable: guidePlaybackUnavailable,
+                reduceMotion: controller.settings.reduceMotion,
+                failureCause: failureCause,
+                message: guidePlaybackUnavailable && failureCause == null
+                    ? _player.error ?? _player.status.message
+                    : null,
+                onRetry: _player.canRetry ? _player.retry : null,
+                onNextChannel: _nextGuideChannelId == null
+                    ? null
+                    : _tuneNextFromGuide,
+              ),
             ),
       onOpenPlayer: guideHasPicture
           ? () => unawaited(_select(ShellDestination.player))
@@ -1311,20 +1473,15 @@ class _LineupShellState extends State<LineupShell> {
       ShellDestination.diagnostics => DiagnosticsView(
         controller: controller,
         playback: _player.diagnosticPlaybackSnapshot,
-        onRecordingSettings: () {
-          _settingsCategory = SettingsCategory.support;
-          widget.profile.isTv
-              ? _returnTv(_tvSettings)
-              : unawaited(_select(ShellDestination.settings));
-        },
+        onRecordingSettings: _openSupportSettings,
         focusNode: _diagnosticsFocus,
         menuFocusNode: _diagnosticsMenuFocus,
         onOpenMenu: _openAppMenu,
-        onBack: () {
-          _settingsCategory = SettingsCategory.support;
-          widget.profile.isTv
-              ? _returnTv(_tvSettings)
-              : unawaited(_select(ShellDestination.settings));
+        onBack: _returnFromDiagnostics,
+        backLabel: switch (_diagnosticsBackDestination) {
+          ShellDestination.player => '‹ Back to Player',
+          ShellDestination.guide => '‹ Back to Guide',
+          _ => '‹ Settings · Support',
         },
       ),
       ShellDestination.player => playerView,
@@ -1397,7 +1554,7 @@ class _LineupShellState extends State<LineupShell> {
                 ),
               ),
             ),
-            if (_appMenu != null) _immersiveAppMenu(hasPlaybackSurface),
+            if (_appMenu != null) _immersiveAppMenu(),
           ],
         ),
       ),
@@ -1457,12 +1614,13 @@ final class _TvSettings extends _TvLocation {
 }
 
 final class _TvDiagnostics extends _TvLocation {
-  const _TvDiagnostics(this.settings);
-  final _TvSettings settings;
+  const _TvDiagnostics(this.origin)
+    : assert(origin is _TvSettings || origin is _TvPlayer);
+  final _TvLocation origin;
   @override
   ShellDestination get destination => ShellDestination.diagnostics;
   @override
-  _TvWatch get watch => settings.watch;
+  _TvWatch get watch => origin.watch;
 }
 
 class _AnchoredMenuLayout extends SingleChildLayoutDelegate {

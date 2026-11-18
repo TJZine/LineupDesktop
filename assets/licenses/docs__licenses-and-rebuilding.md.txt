@@ -7,7 +7,7 @@ Portions of this software are copyright © 1996–2026 The FreeType Project
 The macOS runtime uses mpv, FFmpeg, libplacebo and FriBidi under the
 LGPL-2.1-or-later terms included in their complete license documents. The Native
 runtime section contains every bundled license/notice, including ancillary and
-compiled-file notices. Flutter/package licenses and the font OFLs are separate.
+compiled-file notices. Flutter/package licenses and font licenses are separate.
 This is an engineering description, not a legal sufficiency determination.
 
 You may modify and replace these libraries under their accompanying terms.
@@ -93,3 +93,16 @@ include the small vendor record, delta, hook, config and gate.
 A successful build/gate is not tested OS support. macOS 12.6 startup, application
 support directory restoration, notices and shutdown still need the actual new
 candidate in the guest. Existing signing and source-delivery requirements remain.
+
+## Arimo wordmark
+
+UX assessment decision, 2026-11-13/14 (N20). The LINEUP wordmark bundles the
+unmodified static Arimo Regular font under Apache License 2.0, available in
+**Settings → Support → Open Licenses → Fonts and engine notices → Arimo**.
+Both files come from [Google Fonts, `apache/arimo`](https://github.com/google/fonts/tree/5e49edbd1875f214e0decae1e24b200066780fa8/apache/arimo)
+at commit `5e49edbd1875f214e0decae1e24b200066780fa8`.
+
+| File | SHA-256 |
+| --- | --- |
+| `Arimo-Regular.ttf` | `eafef8c99e94d10f17506c125e24d98a84256e0e665e6c659498eca96b19e148` |
+| `LICENSE.txt` | `cfc7749b96f63bd31c3c42b5c471bf756814053e847c10f3eb003417bc523d30` |

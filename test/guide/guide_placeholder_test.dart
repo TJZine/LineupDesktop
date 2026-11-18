@@ -6,6 +6,7 @@ import 'package:flutter/services.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:lineup_desktop/app/lineup_controller.dart';
 import 'package:lineup_desktop/channels/channel.dart';
+import 'package:lineup_desktop/channels/channel_filter.dart';
 import 'package:lineup_desktop/channels/scheduler.dart';
 import 'package:lineup_desktop/guide/guide_controller.dart';
 import 'package:lineup_desktop/guide/guide_view.dart';
@@ -20,15 +21,17 @@ import '../support/ui_fixture.dart';
 void main() {
   for (final scale in [1.0, 1.3]) {
     testWidgets(
-      'TV library menu keeps complete identifying names at scale=$scale',
+      'TV channel filter keeps identifying words intact at scale=$scale',
       (tester) async {
         await tester.runAsync(loadPinnedTestFonts);
         tester.view
           ..physicalSize = const Size(1920, 1080)
           ..devicePixelRatio = 2;
         final now = DateTime.utc(2026, 10, 23, 12);
+        final longWord = 'Synthetic${'Extraordinary' * 8}';
+        String libraryName(int i) => i == 3 ? longWord : 'Synthetic movies $i';
         final channels = [
-          for (var i = 1; i <= 2; i++)
+          for (var i = 1; i <= (scale == 1.3 ? 3 : 2); i++)
             Channel(
               id: 'library-$i',
               number: i,
@@ -37,6 +40,7 @@ void main() {
                 libraryId: 'movies-$i',
                 libraryType: PlexLibraryType.movie,
               ),
+              sourceLibraries: {'movies-$i': libraryName(i)},
               playbackMode: PlaybackMode.sequential,
               anchor: now,
               shuffleSeed: i,
@@ -47,10 +51,10 @@ void main() {
             stage: SetupStage.ready,
             channels: channels,
             libraries: [
-              for (var i = 1; i <= 2; i++)
+              for (var i = 1; i <= (scale == 1.3 ? 3 : 2); i++)
                 PlexLibrary(
                   id: 'movies-$i',
-                  title: 'Synthetic movies $i',
+                  title: libraryName(i),
                   type: PlexLibraryType.movie,
                 ),
             ],
@@ -99,10 +103,8 @@ void main() {
             ),
           );
           await tester.pumpAndSettle();
-          final picker = find.byKey(const Key('guide-library-picker'));
-          final node = tester
-              .widget<DropdownButton<String?>>(picker)
-              .focusNode!;
+          final picker = find.byKey(const Key('guide-channel-filter'));
+          final node = tester.widget<InkWell>(picker).focusNode!;
           await tester.sendKeyEvent(LogicalKeyboardKey.arrowLeft);
           node.requestFocus();
           await tester.pumpAndSettle();
@@ -112,6 +114,7 @@ void main() {
             final text = find.text('Synthetic movies $i');
             expect(text, findsOneWidget);
             final paragraph = tester.renderObject<RenderParagraph>(text);
+            expect(paragraph.didExceedMaxLines, isFalse);
             final painter = TextPainter(
               text: paragraph.text,
               textDirection: paragraph.textDirection,
@@ -126,7 +129,9 @@ void main() {
             final item = find
                 .ancestor(
                   of: text,
-                  matching: find.byType(DropdownMenuItem<String?>),
+                  matching: find.byWidgetPredicate(
+                    (widget) => widget is PopupMenuEntry<ChannelFilterKey>,
+                  ),
                 )
                 .first;
             expect(
@@ -134,6 +139,14 @@ void main() {
               lessThanOrEqualTo(tester.getRect(item).bottom + .01),
             );
             expect(paragraph.textScaler.scale(18), closeTo(18 * scale, .01));
+          }
+          if (scale == 1.3) {
+            final text = find.text(longWord);
+            final label = tester.widget<Text>(text);
+            final paragraph = tester.renderObject<RenderParagraph>(text);
+            expect(label.maxLines, 1);
+            expect(label.overflow, TextOverflow.ellipsis);
+            expect(paragraph.didExceedMaxLines, isTrue);
           }
           expect(tester.takeException(), isNull);
         } finally {

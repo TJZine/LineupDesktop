@@ -136,9 +136,7 @@ void main() {
     await tester.pumpAndSettle();
     await _routeShortcut(tester, 1);
     _expectDestination('Channels');
-    final actions = find.byWidgetPredicate(
-      (widget) => widget.runtimeType.toString().startsWith('PopupMenuButton'),
-    );
+    final actions = find.byTooltip('Actions for One');
     await tester.ensureVisible(actions);
     await tester.tap(actions);
     await tester.pumpAndSettle();
@@ -191,7 +189,7 @@ void main() {
 
       for (final (key, destination) in routeChords) {
         await _routeShortcut(tester, 1);
-        await tester.tap(find.text('Create a custom channel'));
+        await tester.tap(find.text('Add a custom channel'));
         await tester.pumpAndSettle();
         final name = find.byKey(const Key('studio-name'));
         await tester.enterText(name, 'Retained draft');
@@ -221,7 +219,10 @@ void main() {
     final fixture = UiFixture(
       player: FixturePlayer()
         ..emit(const PlayerStatus(state: PlayerState.ready, message: 'Ready')),
-      scenario: LineupScenario(stage: SetupStage.ready),
+      scenario: LineupScenario(
+        stage: SetupStage.ready,
+        channels: [syntheticGuideChannel()],
+      ),
     );
     await tester.pumpWidget(fixture.build());
     await tester.pumpAndSettle();
@@ -352,13 +353,9 @@ void main() {
     expect(rect.top, greaterThanOrEqualTo(16 * .8));
     expect(rect.right, lessThanOrEqualTo(800 - 16 * .8));
     expect(rect.bottom, lessThanOrEqualTo(420 - 16 * .8 + .001));
-    expect(find.text('Choose a channel in Guide'), findsOneWidget);
-    expect(
-      tester
-          .widget<TextButton>(find.widgetWithText(TextButton, 'Player'))
-          .onPressed,
-      isNull,
-    );
+    expect(find.text('Choose a channel in Guide'), findsNothing);
+    expect(find.widgetWithText(TextButton, 'Player'), findsNothing);
+    expect(find.byKey(const Key('app-menu-now-playing')), findsNothing);
 
     for (var index = 0; index < 8; index++) {
       await tester.sendKeyEvent(LogicalKeyboardKey.tab);
@@ -389,7 +386,7 @@ void main() {
       await tester.pumpAndSettle();
 
       final tops = [
-        for (final label in ['Guide', 'Player', 'Channels', 'Settings'])
+        for (final label in ['Guide', 'Manage channels', 'Settings'])
           tester.getTopLeft(find.text(label).last).dy,
         tester.getTopLeft(find.byKey(const Key('app-menu-account'))).dy,
       ];
@@ -482,7 +479,11 @@ void main() {
     }
   }
 
-  for (final invocation in ['Close', 'Escape', 'root-focus semantics Close']) {
+  for (final invocation in [
+    'Lineup menu',
+    'Escape',
+    'root-focus semantics Lineup menu',
+  ]) {
     testWidgets('Guide $invocation opens the menu on the first '
         'action after sleep expiry', (tester) async {
       final semantics = tester.ensureSemantics();
@@ -510,11 +511,12 @@ void main() {
         expect(nativePlayer.stops, 1);
         expect(player.status.message, 'Playback stopped by timer');
         expect(find.byType(PlayerSurface), findsNothing);
+        expect(find.byKey(const Key('guide-back-to-player')), findsNothing);
         final loads = List<Uri>.of(nativePlayer.loads);
 
         if (invocation == 'Escape') {
           await tester.sendKeyEvent(LogicalKeyboardKey.escape);
-        } else if (invocation == 'root-focus semantics Close') {
+        } else if (invocation == 'root-focus semantics Lineup menu') {
           FocusManager.instance.rootScope.requestScopeFocus();
           FocusManager.instance.applyFocusChangesIfNeeded();
           expect(
@@ -522,14 +524,16 @@ void main() {
             FocusManager.instance.rootScope,
           );
           expect(FocusManager.instance.primaryFocus!.context, isNull);
-          final close = tester.getSemantics(find.byTooltip('Close Guide'));
+          final close = tester.getSemantics(
+            find.byKey(const Key('guide-app-menu')),
+          );
           expect(
             close.getSemanticsData().hasAction(SemanticsAction.tap),
             isTrue,
           );
           close.owner!.performAction(close.id, SemanticsAction.tap);
         } else {
-          await tester.tap(find.byTooltip('Close Guide'));
+          await tester.tap(find.byTooltip('Open Lineup menu'));
         }
         await tester.pumpAndSettle();
 
@@ -538,12 +542,8 @@ void main() {
         _expectDestination('Guide');
         expect(find.byType(PlayerView), findsNothing);
         expect(nativePlayer.loads, orderedEquals(loads));
-        expect(
-          tester
-              .widget<TextButton>(find.widgetWithText(TextButton, 'Player'))
-              .onPressed,
-          isNull,
-        );
+        expect(find.widgetWithText(TextButton, 'Player'), findsNothing);
+        expect(find.byKey(const Key('app-menu-now-playing')), findsNothing);
         await tester.sendKeyEvent(LogicalKeyboardKey.tab);
         await tester.pump();
         expect(
@@ -563,56 +563,43 @@ void main() {
     });
   }
 
-  for (final useEscape in [false, true]) {
-    testWidgets(
-      'Guide ${useEscape ? "Escape" : "Close"} uses live playback before rebuild',
-      (tester) async {
-        final nativePlayer = FixturePlayer()
-          ..emit(
-            const PlayerStatus(state: PlayerState.ready, message: 'Ready'),
-          );
-        final fixture = UiFixture(
-          player: nativePlayer,
-          scenario: LineupScenario(stage: SetupStage.ready),
-        );
-        await tester.pumpWidget(fixture.build());
-        await tester.pumpAndSettle();
-        await _routeShortcut(tester, 4);
-        final player = tester
-            .widget<PlayerView>(find.byType(PlayerView))
-            .controller;
-        await _routeShortcut(tester, 0);
-        final close = tester.widget<IconButton>(
-          find.byWidgetPredicate(
-            (widget) => widget is IconButton && widget.tooltip == 'Close Guide',
-          ),
-        );
-        expect(find.byType(PlayerSurface), findsOneWidget);
-        final loads = List<Uri>.of(nativePlayer.loads);
+  {
+    testWidgets('Guide Escape uses live playback before rebuild', (
+      tester,
+    ) async {
+      final nativePlayer = FixturePlayer()
+        ..emit(const PlayerStatus(state: PlayerState.ready, message: 'Ready'));
+      final fixture = UiFixture(
+        player: nativePlayer,
+        scenario: LineupScenario(
+          stage: SetupStage.ready,
+          channels: [syntheticGuideChannel()],
+        ),
+      );
+      await tester.pumpWidget(fixture.build());
+      await tester.pumpAndSettle();
+      await _routeShortcut(tester, 4);
+      final player = tester
+          .widget<PlayerView>(find.byType(PlayerView))
+          .controller;
+      await _routeShortcut(tester, 0);
+      expect(find.byType(PlayerSurface), findsOneWidget);
+      final loads = List<Uri>.of(nativePlayer.loads);
 
-        await player.stop();
-        expect(player.hasPlaybackIntent, isFalse);
-        expect(player.error, isNull);
-        // Deliberately do not pump: this Guide callback was built while playback
-        // was still available, but the routing decision must read current facts.
-        if (useEscape) {
-          await tester.sendKeyEvent(LogicalKeyboardKey.escape);
-        } else {
-          close.onPressed!();
-        }
-        await tester.pumpAndSettle();
-        expect(find.byKey(const Key('immersive-app-menu')), findsOneWidget);
-        _expectDestination('Guide');
-        expect(
-          tester
-              .widget<TextButton>(find.widgetWithText(TextButton, 'Player'))
-              .onPressed,
-          isNull,
-        );
-        expect(nativePlayer.loads, orderedEquals(loads));
-        await tester.pumpWidget(const SizedBox.shrink());
-      },
-    );
+      await player.stop();
+      expect(player.hasPlaybackIntent, isFalse);
+      expect(player.error, isNull);
+      // Deliberately do not pump: this Guide callback was built while playback
+      // was still available, but the routing decision must read current facts.
+      await tester.sendKeyEvent(LogicalKeyboardKey.escape);
+      await tester.pumpAndSettle();
+      expect(find.byKey(const Key('immersive-app-menu')), findsOneWidget);
+      _expectDestination('Guide');
+      expect(find.widgetWithText(TextButton, 'Player'), findsNothing);
+      expect(find.byKey(const Key('app-menu-now-playing')), findsNothing);
+      expect(nativePlayer.loads, orderedEquals(loads));
+      await tester.pumpWidget(const SizedBox.shrink());
+    });
   }
 
   for (final (index, name) in [(0, 'Guide'), (1, 'Channels'), (4, 'Player')]) {
@@ -663,7 +650,7 @@ void main() {
       await tester.pumpWidget(fixture.build());
       await tester.pumpAndSettle();
       await openDestination(tester, 'Channels');
-      await tester.tap(find.text('Create a custom channel'));
+      await tester.tap(find.text('Add a custom channel'));
       await tester.pumpAndSettle();
       await tester.enterText(
         find.byKey(const Key('studio-name')),
@@ -682,7 +669,7 @@ void main() {
       await tester.tap(find.text('Discard changes'));
       await tester.pumpAndSettle();
       expect(find.byKey(const Key('studio-name')), findsNothing);
-      expect(find.text('Create a custom channel'), findsOneWidget);
+      expect(find.text('Add a custom channel'), findsOneWidget);
     },
   );
 
@@ -797,11 +784,12 @@ void main() {
       expect(find.text('Account'), findsNothing);
       expect(find.byTooltip('Close Lineup menu'), findsNothing);
       expect(find.byType(LineupProfileAvatar), findsOneWidget);
-      expect(find.text('Direct local · 126 ms'), findsOneWidget);
+      expect(find.text('Direct local · 126 ms'), findsNothing);
       expect(find.text('A long synthetic profile name'), findsOneWidget);
       await tester.tap(find.byKey(const Key('app-menu-account')));
       await tester.pumpAndSettle();
       expect(find.text('Plex Home profile'), findsOneWidget);
+      expect(find.text('Direct local · 126 ms'), findsOneWidget);
     },
   );
 
@@ -998,7 +986,7 @@ void main() {
     await tester.pumpWidget(fixture.build());
     await tester.pumpAndSettle();
     await openDestination(tester, 'Channels');
-    await tester.tap(find.text('Create a custom channel'));
+    await tester.tap(find.text('Add a custom channel'));
     await tester.pumpAndSettle();
 
     final name = find.byKey(const Key('studio-name'));

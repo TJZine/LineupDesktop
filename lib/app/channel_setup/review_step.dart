@@ -9,6 +9,7 @@ import '../../channels/channel.dart';
 import '../../channels/channel_builder.dart';
 import '../../ui/app_theme.dart';
 import '../../ui/app_ui.dart';
+import '../../ui/channel_identity.dart';
 import '../setup_review.dart';
 import 'step_scaffold.dart';
 
@@ -31,6 +32,7 @@ class SetupReviewStep extends StatefulWidget {
     required this.onRemovalChanged,
     required this.onRemovalConfirmationChanged,
     required this.onApply,
+    this.orderChanged = false,
     required this.onViewLineup,
     super.key,
   });
@@ -50,6 +52,7 @@ class SetupReviewStep extends StatefulWidget {
   final void Function(String id, bool remove) onRemovalChanged;
   final ValueChanged<bool> onRemovalConfirmationChanged;
   final VoidCallback onApply;
+  final bool orderChanged;
   final VoidCallback onViewLineup;
 
   @override
@@ -83,9 +86,10 @@ class _SetupReviewStepState extends State<SetupReviewStep> {
   }
 
   bool get _primaryEnabled =>
-      !widget.review.counts.hasChanges ||
-      (widget.notice != 'Updating review…' &&
-          (widget.review.counts.removed == 0 || widget.removalConfirmed));
+      !(_firstSetup && widget.review.finalChannels.isEmpty) &&
+      ((!widget.review.counts.hasChanges && !widget.orderChanged) ||
+          (widget.notice != 'Updating review…' &&
+              (widget.review.counts.removed == 0 || widget.removalConfirmed)));
 
   void _rememberRow(String id) {
     _returnId = id;
@@ -287,7 +291,10 @@ class _SetupReviewStepState extends State<SetupReviewStep> {
   @override
   Widget build(BuildContext context) {
     final review = widget.review;
-    final noChanges = !review.counts.hasChanges;
+    final noChanges =
+        !review.counts.hasChanges &&
+        (!widget.orderChanged || review.finalChannels.isEmpty) &&
+        !_firstSetup;
     final body = SetupStage(
       footer: Focus(
         canRequestFocus: false,
@@ -301,7 +308,7 @@ class _SetupReviewStepState extends State<SetupReviewStep> {
               key: const ValueKey('back-to-configure'),
               focusNode: _backFocus,
               onPressed: widget.onBack,
-              child: const Text('Back to configure'),
+              child: const Text('Back to channels'),
             ),
           ],
           summary: DeviceProfile.of(context).isTv && _rosterFocused
@@ -397,7 +404,7 @@ class _SetupReviewStepState extends State<SetupReviewStep> {
 
   List<Channel> get _missingSources =>
       widget.review.mode == ChannelBuildMode.merge
-      ? widget.review.plan.unmatchedGenerated
+      ? widget.review.unmatchedGenerated
             .where(widget.isGeneratedSourceConfirmedGone)
             .toList()
       : const [];
@@ -447,7 +454,7 @@ class _SetupReviewStepState extends State<SetupReviewStep> {
                           widget.onRemovalChanged(channel.id, selected.single),
                     );
                     final title = Text(
-                      '${channel.number} · ${channel.name}',
+                      '${channel.number} • ${channel.name}',
                       style: TextStyle(color: roles.primaryText, fontSize: 18),
                     );
                     if (constraints.maxWidth /
@@ -565,7 +572,7 @@ class _SetupReviewStepState extends State<SetupReviewStep> {
       Text(
         widget.notice == 'Updating review…'
             ? widget.notice!
-            : _modeDescription(widget.review.mode),
+            : _modeDescription(widget.review),
         style: TextStyle(
           color: LineupTheme.of(context).secondaryText,
           fontSize: 18,
@@ -678,7 +685,7 @@ class _SetupReviewStepState extends State<SetupReviewStep> {
               if (review.entries.isNotEmpty)
                 Semantics(
                   label:
-                      '${review.counts.unchanged} unchanged, ${review.counts.updated} updated, ${review.counts.added} added, ${review.counts.removed} removed. ${review.entries.length} review entries including outgoing channels.',
+                      '${review.counts.unchanged} unchanged, ${review.counts.updated} updated, ${review.counts.added} added, ${review.counts.removed} removed. ${review.finalChannels.length} channels after applying.',
                   child: ExcludeSemantics(
                     child: Row(
                       children: [
@@ -902,7 +909,7 @@ class _SetupReviewStepState extends State<SetupReviewStep> {
                 Text(
                   filtered
                       ? '${_capitalized(_filter.name)} · ${entries.length} matching ${entries.length == 1 ? 'channel' : 'channels'}'
-                      : '${entries.length} of ${review.entries.length} review entries',
+                      : '${entries.length} ${entries.length == 1 ? 'channel' : 'channels'}',
                   style: textStyle,
                 ),
                 const SizedBox(height: 12),
@@ -957,7 +964,7 @@ class _SetupReviewStepState extends State<SetupReviewStep> {
     for (final label in [
       'Change',
       'Unchanged',
-      '• Updated',
+      '· Updated',
       '+ Added',
       'Removed',
     ]) {
@@ -1079,38 +1086,59 @@ class _SetupReviewStepState extends State<SetupReviewStep> {
       },
     );
     final changeWidth = _reviewChangeWidth();
-    final content = Row(
-      crossAxisAlignment: CrossAxisAlignment.start,
-      children: [
-        SizedBox(
-          width: 80,
-          child: Text('${entry.channel.number}', style: metaStyle),
-        ),
-        Expanded(flex: 60, child: Text(entry.channel.name, style: nameStyle)),
-        Expanded(
-          flex: 16,
-          child: Text(
-            widget.sourceLabel(entry.channel.source),
-            style: metaStyle,
+    final content = LayoutBuilder(
+      builder: (context, constraints) => Row(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          SizedBox(
+            width:
+                80 +
+                (constraints.maxWidth - changeWidth - 80).clamp(
+                      0.0,
+                      double.infinity,
+                    ) *
+                    60 /
+                    92,
+            child: ChannelIdentity(
+              maxLines: null,
+              channel: entry.channel,
+              libraryTag: ChannelIdentity.libraryTagFor(
+                entry.channel,
+                entry.kind == SetupReviewKind.removed
+                    ? widget.review.base
+                    : widget.review.finalChannels,
+              ),
+              numberWidth: 80,
+              nameStyle: nameStyle,
+              numberStyle: metaStyle,
+              supportStyle: metaStyle,
+            ),
           ),
-        ),
-        Expanded(
-          flex: 16,
-          child: Text(_playbackLabel(entry.channel), style: metaStyle),
-        ),
-        SizedBox(
-          width: changeWidth,
-          child: Text(
-            switch (entry.kind) {
-              SetupReviewKind.added => '+ Added',
-              SetupReviewKind.updated => '• Updated',
-              _ => _capitalized(entry.kind.name),
-            },
-            textAlign: TextAlign.end,
-            style: changeStyle,
+          Expanded(
+            flex: 16,
+            child: Text(
+              widget.sourceLabel(entry.channel.source),
+              style: metaStyle,
+            ),
           ),
-        ),
-      ],
+          Expanded(
+            flex: 16,
+            child: Text(_playbackLabel(entry.channel), style: metaStyle),
+          ),
+          SizedBox(
+            width: changeWidth,
+            child: Text(
+              switch (entry.kind) {
+                SetupReviewKind.added => '+ Added',
+                SetupReviewKind.updated => '· Updated',
+                _ => _capitalized(entry.kind.name),
+              },
+              textAlign: TextAlign.end,
+              style: changeStyle,
+            ),
+          ),
+        ],
+      ),
     );
     final changes = _changedFields(entry.before, entry.channel);
     return DecoratedBox(
@@ -1170,11 +1198,11 @@ String _applyLabel(ChannelBuildMode mode, bool firstSetup) => switch (mode) {
   ChannelBuildMode.merge => 'Apply changes',
 };
 
-String _modeDescription(ChannelBuildMode mode) => switch (mode) {
-  ChannelBuildMode.merge =>
-    'Update matching generated channels, add new ones, and keep the rest.',
-  ChannelBuildMode.replace => 'Replace all generated channels with this selection. Custom channels will be kept.',
-  ChannelBuildMode.append => 'Keep your existing lineup and add channels whose sources are not already in it.',
+String _modeDescription(SetupReview review) => switch (review.mode) {
+  ChannelBuildMode.merge when review.ordering != null => 'Update generated channels and renumber them using the new Channel order. Custom channel numbers stay the same.',
+  ChannelBuildMode.merge => 'Update matching generated channels and add new ones. Existing channel numbers stay the same.',
+  ChannelBuildMode.replace => 'Replace generated channels. Favourites carry over for matching sources. Custom channels stay the same.',
+  ChannelBuildMode.append => 'Keep existing channel numbers. The chosen order applies to the new channels only.',
 };
 
 String _playbackLabel(Channel channel) => switch (channel.playbackMode) {

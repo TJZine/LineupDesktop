@@ -14,6 +14,7 @@ class _StudioStation extends StatefulWidget {
     required this.sourceSummary,
     required this.validateNumber,
     required this.onChanged,
+    required this.onNameChanged,
     required this.onUseNext,
     super.key,
   });
@@ -29,6 +30,7 @@ class _StudioStation extends StatefulWidget {
   final String sourceSummary;
   final String? Function(String?) validateNumber;
   final VoidCallback onChanged;
+  final VoidCallback onNameChanged;
   final VoidCallback onUseNext;
   @override
   State<_StudioStation> createState() => _StudioStationState();
@@ -98,7 +100,7 @@ class _StudioStationState extends State<_StudioStation> {
                               decoration: const InputDecoration(
                                 hintText: 'Required',
                               ),
-                              onChanged: (_) => _changed(),
+                              onChanged: (_) => widget.onNameChanged(),
                               validator: (value) =>
                                   value == null || value.trim().isEmpty
                                   ? 'Enter a channel name.'
@@ -183,7 +185,7 @@ class _StudioStationState extends State<_StudioStation> {
                 key: const Key('studio-mini-marathon-explanation'),
                 focusable: true,
                 child: const Text(
-                  'Mini-marathons is available when this source includes episodes with series information.',
+                  'Mini-marathons are available when this source includes episodes with series information.',
                 ),
               ),
             ),

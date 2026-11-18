@@ -104,10 +104,10 @@ class AirCheckVerification extends ChangeNotifier {
     String? sourceIssue, {
     String sourceLabel = '',
   }) {
-    final nextKey = channelAirCheckSnapshotKey(preview, generation);
+    final nextKey = channelScheduleRevision(preview, generation);
     final originalKey = original == null
         ? null
-        : channelAirCheckSnapshotKey(original, generation);
+        : channelScheduleRevision(original, generation);
     final initial = _targetKey.isEmpty;
     final changed =
         nextKey != _targetKey ||
@@ -495,5 +495,3 @@ class AirCheckSourceIssue {
 bool _isNoContentFailure(Object error) =>
     error is ScheduleBuildException &&
     error.reason == ScheduleFailureReason.noContent;
-String channelAirCheckSnapshotKey(Channel channel, int generation) =>
-    '${canonicalScheduleIdentity(channel)}|$generation';

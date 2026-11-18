@@ -224,10 +224,10 @@ void main() {
             await tester.pumpAndSettle();
             expect(c.scans, 1);
             expect(find.text('Review your libraries'), findsOneWidget);
-            expect(find.text('Shape your lineup'), findsNothing);
+            expect(find.text('Choose channels'), findsNothing);
           } else {
             expect(
-              find.text('Select the Plex libraries to scan for channel ideas.'),
+              find.text('Choose the libraries to build channels from.'),
               findsNothing,
             );
             expect(find.text('Scan again'), findsNothing);
@@ -640,7 +640,7 @@ void main() {
   }
 
   testWidgets(
-    'saved startup to Generate lineup to Continue uses restored inventory without storage reset',
+    'saved startup to Update lineup to Continue uses restored inventory without storage reset',
     (tester) async {
       tester.view.physicalSize = const Size(1920, 1080);
       tester.view.devicePixelRatio = 1;
@@ -671,12 +671,12 @@ void main() {
       await tester.pumpAndSettle();
       expect(c.stage, SetupStage.ready);
       await openDestination(tester, 'Channels');
-      await tester.tap(find.text('Generate lineup'));
+      await tester.tap(find.text('Update lineup…'));
       await tester.pumpAndSettle();
       expect(find.text('Continue with 1 library'), findsOneWidget);
       await tester.tap(find.text('Continue with 1 library'));
       await tester.pumpAndSettle();
-      expect(find.text('Shape your lineup'), findsOneWidget);
+      expect(find.text('Choose channels'), findsOneWidget);
       expect(plex.scans, 1);
       expect(c.channels.single.id, 'saved');
       expect(

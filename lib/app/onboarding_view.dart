@@ -99,8 +99,11 @@ class UpstreamOnboardingViewState extends State<UpstreamOnboardingView>
   Timer? _clock;
   final _navigationFocus = FocusNode(debugLabel: 'Onboarding navigation');
   final _linkActionFocus = FocusNode(debugLabel: 'Retry secure cancellation');
+  final _settingsFocus = FocusNode(debugLabel: 'Onboarding Settings');
   final _profileCancelFocus = FocusNode(debugLabel: 'Cancel profile selection');
   final _serverCancelFocus = FocusNode(debugLabel: 'Cancel server selection');
+  final _firstServerFocus = FocusNode(debugLabel: 'First server action');
+  bool _serverEntryFocused = false;
   final _profileReturnFocus = FocusNode(debugLabel: 'Return to profiles');
   final _profilePinKey = GlobalKey<_ProfilePinStepState>();
   late bool _linkingStopped;
@@ -113,7 +116,9 @@ class UpstreamOnboardingViewState extends State<UpstreamOnboardingView>
   Object? _serverRefresh;
   int _serverAttemptRevision = 0;
   PlexHomeUser? _pinUser;
+  int? _pinContentGeneration;
   String? _invokedProfileId;
+  bool _profileGridHasFocus = false;
   bool _pulse = true;
   FocusNode? _lastControlFocus;
   bool _focusRecoveryScheduled = false;
@@ -188,6 +193,7 @@ class UpstreamOnboardingViewState extends State<UpstreamOnboardingView>
     if (oldWidget.controller == widget.controller) return;
     oldWidget.controller.removeListener(_controllerChanged);
     _serverRefresh = null;
+    _serverEntryFocused = false;
     _linkingStopped = _isLinkingStopped(widget.controller);
     _wasLinking = widget.controller.stage == SetupStage.linking;
     _busy = widget.controller.busy;
@@ -206,13 +212,25 @@ class UpstreamOnboardingViewState extends State<UpstreamOnboardingView>
         controller.stage == SetupStage.linking &&
         controller.pinUsable;
     final becameBusy = !_busy && nextBusy;
+    final acceptedPinOnProfiles =
+        _isTv &&
+        _pinUser != null &&
+        controller.stage == SetupStage.profiles &&
+        _pinContentGeneration != controller.contentGeneration;
     setState(() {
       _linkingStopped = nextLinkingStopped;
       _wasLinking = controller.stage == SetupStage.linking;
       _busy = nextBusy;
-      if (controller.stage != SetupStage.profiles) _pinUser = null;
+      if (controller.stage != SetupStage.profiles ||
+          _pinContentGeneration != controller.contentGeneration) {
+        _pinUser = null;
+      }
+      if (controller.stage != SetupStage.servers) _serverEntryFocused = false;
     });
-    if (retryNeedsFocus || linkNeedsFocus || becameBusy) {
+    if (retryNeedsFocus ||
+        linkNeedsFocus ||
+        becameBusy ||
+        acceptedPinOnProfiles) {
       WidgetsBinding.instance.addPostFrameCallback((_) {
         if (!mounted || widget.controller != controller) return;
         if (linkNeedsFocus &&
@@ -221,6 +239,10 @@ class UpstreamOnboardingViewState extends State<UpstreamOnboardingView>
         }
         final target = retryNeedsFocus || linkNeedsFocus
             ? _linkActionFocus
+            : acceptedPinOnProfiles &&
+                  controller.stage == SetupStage.profiles &&
+                  _actionsBusy
+            ? _settingsFocus
             : _busyCancelFocus;
         if (target != null &&
             target.context?.mounted == true &&
@@ -260,8 +282,10 @@ class UpstreamOnboardingViewState extends State<UpstreamOnboardingView>
     _clock?.cancel();
     _navigationFocus.dispose();
     _linkActionFocus.dispose();
+    _settingsFocus.dispose();
     _profileCancelFocus.dispose();
     _serverCancelFocus.dispose();
+    _firstServerFocus.dispose();
     _profileReturnFocus.dispose();
     super.dispose();
   }
@@ -404,6 +428,7 @@ class UpstreamOnboardingViewState extends State<UpstreamOnboardingView>
 
   @override
   Widget build(BuildContext context) {
+    _scheduleServerEntryFocus();
     final roles = LineupTheme.of(context);
     final refinedStage = switch (widget.controller.stage) {
       SetupStage.linking || SetupStage.profiles || SetupStage.servers => true,
@@ -457,8 +482,14 @@ class UpstreamOnboardingViewState extends State<UpstreamOnboardingView>
                             : Align(
                                 alignment: Alignment.centerRight,
                                 child: TextButton(
+                                  focusNode: _settingsFocus,
                                   onPressed: widget.onOpenSettings,
-                                  child: const Text('Settings'),
+                                  child: Text(
+                                    'Settings',
+                                    style: LineupTypography.tvLabelStyle(
+                                      context,
+                                    ),
+                                  ),
                                 ),
                               ),
                         menuKey: const ValueKey('onboarding-app-menu'),
@@ -509,6 +540,14 @@ class UpstreamOnboardingViewState extends State<UpstreamOnboardingView>
         ? _profilePin(key: key)
         : switch (controller.stage) {
             SetupStage.welcome => _welcome(),
+            SetupStage.linking
+                when widget.controller.activePin == null && _actionsBusy =>
+              Center(
+                child: Semantics(
+                  liveRegion: true,
+                  child: const Text('Connecting to Plex…'),
+                ),
+              ),
             SetupStage.linking => Builder(builder: _linking),
             SetupStage.profiles => _profiles(),
             SetupStage.servers => _servers(),
@@ -535,7 +574,10 @@ class UpstreamOnboardingViewState extends State<UpstreamOnboardingView>
               autofocus: enabled,
               onPressed: enabled ? widget.controller.startLinking : null,
               icon: const Icon(Icons.link),
-              label: const Text('Sign in to Plex'),
+              label: Text(
+                'Sign in to Plex',
+                style: LineupTypography.tvLabelStyle(context),
+              ),
             ),
             _onboardingFeedback(const ValueKey('welcome-feedback-slot')),
           ],
@@ -736,7 +778,10 @@ class UpstreamOnboardingViewState extends State<UpstreamOnboardingView>
               focusNode: isTv ? _linkActionFocus : null,
               onPressed: _openingBrowser ? null : _openBrowser,
               icon: const Icon(Icons.open_in_browser),
-              label: Text(isTv ? 'Open on this TV' : 'Open browser'),
+              label: Text(
+                isTv ? 'Open on this TV' : 'Open browser',
+                style: LineupTypography.tvLabelStyle(context),
+              ),
             ),
           )
         : FilledButton(
@@ -922,7 +967,10 @@ class UpstreamOnboardingViewState extends State<UpstreamOnboardingView>
                     onPressed: controller.busy
                         ? null
                         : controller.cancelLinking,
-                    child: const Text('Cancel'),
+                    child: Text(
+                      'Cancel',
+                      style: LineupTypography.tvLabelStyle(context),
+                    ),
                   ),
               ],
             ),
@@ -994,6 +1042,7 @@ class UpstreamOnboardingViewState extends State<UpstreamOnboardingView>
                                   user: widget
                                       .controller
                                       .profiles[start + column],
+                                  gridHasFocus: _profileGridHasFocus,
                                   active:
                                       widget
                                           .controller
@@ -1024,13 +1073,26 @@ class UpstreamOnboardingViewState extends State<UpstreamOnboardingView>
                 ),
               );
             }
-            return Center(child: Column(children: rows));
+            return Focus(
+              canRequestFocus: false,
+              skipTraversal: true,
+              onFocusChange: (focused) {
+                if (DeviceProfile.of(context).isTv &&
+                    _profileGridHasFocus != focused) {
+                  setState(() => _profileGridHasFocus = focused);
+                }
+              },
+              child: Center(child: Column(children: rows)),
+            );
           },
         ),
         SizedBox(height: 28),
         TextButton(
           onPressed: _actionsBusy ? null : widget.onLogout,
-          child: const Text('Sign out'),
+          child: Text(
+            'Sign out',
+            style: LineupTypography.tvLabelStyle(context),
+          ),
         ),
         if (widget.controller.profileSelectionCanCancel) ...[
           SizedBox(height: 12),
@@ -1081,6 +1143,30 @@ class UpstreamOnboardingViewState extends State<UpstreamOnboardingView>
     );
   }
 
+  bool get _serverEntryCanFocus =>
+      _isTv &&
+      !_serverEntryFocused &&
+      widget.controller.stage == SetupStage.servers &&
+      widget.controller.servers.isNotEmpty &&
+      !_actionsBusy &&
+      !_serverAttempt.pending &&
+      _serverRefresh == null;
+
+  void _scheduleServerEntryFocus() {
+    if (!_serverEntryCanFocus) return;
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (!mounted ||
+          !_serverEntryCanFocus ||
+          ModalRoute.of(context)?.isCurrent != true ||
+          _firstServerFocus.context?.mounted != true ||
+          !_firstServerFocus.canRequestFocus) {
+        return;
+      }
+      _serverEntryFocused = true;
+      _firstServerFocus.requestFocus();
+    });
+  }
+
   Widget _servers() => _HeroContent(
     title: 'Choose a server',
     subtitle: 'Select the Plex server you want to watch from.',
@@ -1105,21 +1191,25 @@ class UpstreamOnboardingViewState extends State<UpstreamOnboardingView>
               );
             },
           ),
-        for (final server in widget.controller.servers)
+        for (final (index, server) in widget.controller.servers.indexed)
           Padding(
             padding: EdgeInsets.only(bottom: 12),
             child: _ServerCard(
               server: server,
+              autofocus: index == 0,
+              focusNode: index == 0 ? _firstServerFocus : null,
               current: widget.controller.server?.id == server.id,
               connection: widget.controller.server?.id == server.id
                   ? widget.controller.connection
                   : null,
+              unreachable: _unreachableServerId == server.id,
               onPressed:
                   _actionsBusy ||
                       (_serverAttempt.pending &&
                           _serverAttempt.serverId == server.id)
                   ? null
-                  : widget.controller.server?.id == server.id
+                  : widget.controller.server?.id == server.id &&
+                        _unreachableServerId != server.id
                   ? () => _continueServer(server)
                   : () => _connectServer(server),
               previouslyUsed: widget.controller.savedServerId == server.id,
@@ -1190,11 +1280,19 @@ class UpstreamOnboardingViewState extends State<UpstreamOnboardingView>
     ),
   );
 
-  /// A server-specific failure and its notice render in that server's row.
+  String? get _unreachableServerId =>
+      widget.authorizationTransitionError?.call() == null &&
+          !_serverAttempt.pending
+      ? widget.controller.unreachableServerId
+      : null;
+
+  /// Probe feedback lives with its row. Other errors keep their recovery copy.
   String? get _serverFeedback => _serverAttempt.serverId != null
       ? null
       : _withRecoveryNotice(
-          _serverAttempt.message ?? _selectionError,
+          _unreachableServerId == null
+              ? _serverAttempt.message ?? _selectionError
+              : null,
           widget.controller.profileCredentialRecoveryNotice,
         );
 
@@ -1210,6 +1308,7 @@ class UpstreamOnboardingViewState extends State<UpstreamOnboardingView>
     setState(() {
       _serverAttempt = const _NoServerAttempt();
       _serverRefresh = refresh;
+      _serverEntryFocused = true;
     });
     try {
       await controller.refreshServers();
@@ -1245,6 +1344,8 @@ class UpstreamOnboardingViewState extends State<UpstreamOnboardingView>
     if (!mounted || attempt != _serverAttemptRevision) return;
     setState(() {
       if (widget.controller.stage == SetupStage.servers &&
+          (widget.authorizationTransitionError?.call() != null ||
+              widget.controller.unreachableServerId != server.id) &&
           _selectionError != null) {
         _serverAttempt = _FailedServerAttempt(server.id, _selectionError!);
       } else {
@@ -1269,6 +1370,7 @@ class UpstreamOnboardingViewState extends State<UpstreamOnboardingView>
     setState(() {
       if (DeviceProfile.of(context).isTv) _invokedProfileId = user.id;
       _pinUser = user;
+      _pinContentGeneration = widget.controller.contentGeneration;
     });
   }
 
@@ -1382,6 +1484,7 @@ class _HeroContent extends StatelessWidget {
 class _ProfileCard extends StatefulWidget {
   const _ProfileCard({
     required this.user,
+    required this.gridHasFocus,
     required this.active,
     required this.autofocus,
     required this.onPressed,
@@ -1389,6 +1492,7 @@ class _ProfileCard extends StatefulWidget {
     super.key,
   });
   final PlexHomeUser user;
+  final bool gridHasFocus;
   final bool active;
   final bool autofocus;
   final VoidCallback? onPressed;
@@ -1464,6 +1568,146 @@ class _ProfileCardState extends State<_ProfileCard> {
   @override
   Widget build(BuildContext context) {
     final user = widget.user;
+    final tv = DeviceProfile.of(context).isTv;
+    final showFocus = tv && LineupFocusScope.visible(context);
+    final focused = showFocus && _focused;
+    final dimmed = showFocus && widget.gridHasFocus && !_focused;
+    final roles = LineupTheme.of(context);
+    final avatar = LineupProfileAvatar(
+      name: user.name,
+      identity: user.id,
+      size: _TvProfileAvatar.size,
+      locked: user.protected,
+      photo: user.thumb?.isAbsolute == true
+          ? NetworkImage(user.thumb.toString())
+          : null,
+    );
+    final button = TextButton(
+      focusNode: _focusNode,
+      autofocus: widget.autofocus,
+      onPressed: widget.onPressed,
+      style: tv
+          ? TextButton.styleFrom(
+              alignment: Alignment.topCenter,
+              padding: const EdgeInsets.symmetric(horizontal: 12),
+            ).copyWith(
+              backgroundColor: const WidgetStatePropertyAll(Colors.transparent),
+              side: const WidgetStatePropertyAll(BorderSide.none),
+              backgroundBuilder: (_, _, child) => child!,
+              foregroundBuilder: (_, _, child) => child!,
+              overlayColor: WidgetStateProperty.resolveWith(
+                (states) =>
+                    states.contains(WidgetState.pressed) ||
+                        states.contains(WidgetState.hovered)
+                    ? roles.primaryText.withValues(alpha: .08)
+                    : Colors.transparent,
+              ),
+            )
+          : TextButton.styleFrom(alignment: Alignment.topCenter),
+      child: Padding(
+        padding: const EdgeInsets.fromLTRB(12, 16, 12, 16),
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            if (tv)
+              _TvProfileAvatar(focused: focused, dimmed: dimmed, child: avatar)
+            else
+              avatar,
+            SizedBox(height: tv ? 16 : 12),
+            SizedBox(
+              width: double.infinity,
+              child: Builder(
+                builder: (context) {
+                  final roles = LineupTheme.of(context);
+                  final nameStyle = LineupTypography.body.copyWith(
+                    color: tv && !focused
+                        ? roles.secondaryText.withValues(alpha: dimmed ? .8 : 1)
+                        : roles.primaryText,
+                    fontWeight: FontWeight.w600,
+                  );
+                  return OverlayPortal(
+                    controller: _nameOverlay,
+                    overlayChildBuilder: (_) => DeviceProfile.of(context).isTv
+                        ? const SizedBox.shrink()
+                        : Positioned(
+                            left: 0,
+                            top: 0,
+                            width: (_nameAnchor.leaderSize?.width ?? 200) + 16,
+                            child: CompositedTransformFollower(
+                              link: _nameAnchor,
+                              showWhenUnlinked: false,
+                              offset: const Offset(-8, -4),
+                              child: IgnorePointer(
+                                child: ExcludeSemantics(
+                                  child: DecoratedBox(
+                                    key: ValueKey(
+                                      'profile-name-full-${user.id}',
+                                    ),
+                                    decoration: BoxDecoration(
+                                      color: roles.elevatedSurface,
+                                      borderRadius: BorderRadius.circular(6),
+                                      border: Border.all(
+                                        color: roles.subtleBorder,
+                                      ),
+                                    ),
+                                    child: Padding(
+                                      padding: const EdgeInsets.symmetric(
+                                        horizontal: 8,
+                                        vertical: 4,
+                                      ),
+                                      child: Text(
+                                        user.name,
+                                        textAlign: TextAlign.center,
+                                        style: nameStyle,
+                                      ),
+                                    ),
+                                  ),
+                                ),
+                              ),
+                            ),
+                          ),
+                    child: CompositedTransformTarget(
+                      link: _nameAnchor,
+                      child: Tooltip(
+                        message: user.name,
+                        child: Semantics(
+                          label: user.name,
+                          child: Text(
+                            user.name,
+                            textAlign: TextAlign.center,
+                            maxLines: 2,
+                            overflow: TextOverflow.ellipsis,
+                            style: nameStyle,
+                          ),
+                        ),
+                      ),
+                    ),
+                  );
+                },
+              ),
+            ),
+            if (user.protected ||
+                user.admin ||
+                user.restricted == true ||
+                widget.active)
+              Padding(
+                padding: EdgeInsets.only(top: 4),
+                child: Wrap(
+                  alignment: WrapAlignment.center,
+                  spacing: 4,
+                  runSpacing: 4,
+                  children: [
+                    if (user.admin) const _ProfileBadge('Admin'),
+                    if (user.restricted == true)
+                      const _ProfileBadge('Restricted'),
+                    if (widget.active) const _ProfileBadge('Current'),
+                  ],
+                ),
+              ),
+          ],
+        ),
+      ),
+    );
     return SizedBox(
       width: double.infinity,
       child: MergeSemantics(
@@ -1471,127 +1715,69 @@ class _ProfileCardState extends State<_ProfileCard> {
           button: true,
           selected: widget.active,
           enabled: widget.onPressed != null,
-          child: LineupRowSurface(
-            selected: widget.active,
-            scaleOnFocus: true,
-            child: TextButton(
-              focusNode: _focusNode,
-              autofocus: widget.autofocus,
-              onPressed: widget.onPressed,
-              style: TextButton.styleFrom(alignment: Alignment.topCenter),
-              child: Padding(
-                padding: EdgeInsets.fromLTRB(12, 16, 12, 16),
-                child: Column(
-                  mainAxisSize: MainAxisSize.min,
-                  children: [
-                    LineupProfileAvatar(
-                      name: user.name,
-                      identity: user.id,
-                      size: 120,
-                      locked: user.protected,
-                      photo: user.thumb?.isAbsolute == true
-                          ? NetworkImage(user.thumb.toString())
-                          : null,
+          child: tv
+              ? LineupFocusReveal(child: button)
+              : LineupRowSurface(
+                  selected: widget.active,
+                  scaleOnFocus: true,
+                  child: button,
+                ),
+        ),
+      ),
+    );
+  }
+}
+
+class _TvProfileAvatar extends StatelessWidget {
+  const _TvProfileAvatar({
+    required this.focused,
+    required this.dimmed,
+    required this.child,
+  });
+
+  static const size = 120.0;
+  static const _focusScale = 1.08;
+  static const _gap = 4.0;
+  static const _largeStroke = 5.0;
+  static const _slot = size * _focusScale + 2 * (_gap + _largeStroke);
+
+  final bool focused;
+  final bool dimmed;
+  final Widget child;
+
+  @override
+  Widget build(BuildContext context) {
+    final roles = LineupTheme.of(context);
+    final reduceMotion = MediaQuery.disableAnimationsOf(context);
+    final stroke = roles.largeFocusIndicators ? _largeStroke : 3.0;
+    return SizedBox(
+      width: _slot,
+      height: _slot,
+      child: TweenAnimationBuilder<double>(
+        tween: Tween(end: focused && !reduceMotion ? _focusScale : 1.0),
+        duration: reduceMotion ? Duration.zero : LineupTheme.fast,
+        child: Opacity(opacity: dimmed ? .8 : 1, child: child),
+        builder: (context, scale, avatar) => Stack(
+          alignment: Alignment.center,
+          clipBehavior: Clip.none,
+          children: [
+            if (focused)
+              SizedBox.square(
+                key: const ValueKey('tv-profile-focus-ring'),
+                dimension: size * scale + 2 * (_gap + stroke),
+                child: DecoratedBox(
+                  decoration: BoxDecoration(
+                    shape: BoxShape.circle,
+                    color: roles.deepBackground,
+                    border: Border.all(
+                      color: roles.focusedSurface,
+                      width: stroke,
                     ),
-                    SizedBox(height: 12),
-                    SizedBox(
-                      width: double.infinity,
-                      child: Builder(
-                        builder: (context) {
-                          final roles = LineupTheme.of(context);
-                          final nameStyle = LineupTypography.body.copyWith(
-                            color: roles.primaryText,
-                            fontWeight: FontWeight.w600,
-                          );
-                          return OverlayPortal(
-                            controller: _nameOverlay,
-                            overlayChildBuilder: (_) =>
-                                DeviceProfile.of(context).isTv
-                                ? const SizedBox.shrink()
-                                : Positioned(
-                                    left: 0,
-                                    top: 0,
-                                    width:
-                                        (_nameAnchor.leaderSize?.width ?? 200) +
-                                        16,
-                                    child: CompositedTransformFollower(
-                                      link: _nameAnchor,
-                                      showWhenUnlinked: false,
-                                      offset: const Offset(-8, -4),
-                                      child: IgnorePointer(
-                                        child: ExcludeSemantics(
-                                          child: DecoratedBox(
-                                            key: ValueKey(
-                                              'profile-name-full-${user.id}',
-                                            ),
-                                            decoration: BoxDecoration(
-                                              color: roles.elevatedSurface,
-                                              borderRadius:
-                                                  BorderRadius.circular(6),
-                                              border: Border.all(
-                                                color: roles.subtleBorder,
-                                              ),
-                                            ),
-                                            child: Padding(
-                                              padding:
-                                                  const EdgeInsets.symmetric(
-                                                    horizontal: 8,
-                                                    vertical: 4,
-                                                  ),
-                                              child: Text(
-                                                user.name,
-                                                textAlign: TextAlign.center,
-                                                style: nameStyle,
-                                              ),
-                                            ),
-                                          ),
-                                        ),
-                                      ),
-                                    ),
-                                  ),
-                            child: CompositedTransformTarget(
-                              link: _nameAnchor,
-                              child: Tooltip(
-                                message: user.name,
-                                child: Semantics(
-                                  label: user.name,
-                                  child: Text(
-                                    user.name,
-                                    textAlign: TextAlign.center,
-                                    maxLines: 2,
-                                    overflow: TextOverflow.ellipsis,
-                                    style: nameStyle,
-                                  ),
-                                ),
-                              ),
-                            ),
-                          );
-                        },
-                      ),
-                    ),
-                    if (user.protected ||
-                        user.admin ||
-                        user.restricted == true ||
-                        widget.active)
-                      Padding(
-                        padding: EdgeInsets.only(top: 4),
-                        child: Wrap(
-                          alignment: WrapAlignment.center,
-                          spacing: 4,
-                          runSpacing: 4,
-                          children: [
-                            if (user.admin) const _ProfileBadge('Admin'),
-                            if (user.restricted == true)
-                              const _ProfileBadge('Restricted'),
-                            if (widget.active) const _ProfileBadge('Current'),
-                          ],
-                        ),
-                      ),
-                  ],
+                  ),
                 ),
               ),
-            ),
-          ),
+            Transform.scale(scale: scale, child: avatar),
+          ],
         ),
       ),
     );
@@ -1620,10 +1806,7 @@ class _ProfileBadge extends StatelessWidget {
               label,
               style: TextStyle(
                 color: label == 'Current'
-                    ? DeviceProfile.of(context).isTv &&
-                              roles.primaryText == roles.onFocus
-                          ? roles.primaryText
-                          : roles.progressFill
+                    ? roles.progressFill
                     : roles.secondaryText,
                 fontSize: 14,
                 fontWeight: FontWeight.w500,
@@ -1646,19 +1829,25 @@ PlexConnection? _measuredConnection(PlexServer server) {
 class _ServerCard extends StatelessWidget {
   const _ServerCard({
     required this.server,
+    required this.autofocus,
     required this.current,
     required this.connection,
     required this.onPressed,
     this.pending = false,
+    this.unreachable = false,
     this.previouslyUsed = false,
+    this.focusNode,
     this.error,
     this.profileCredentialRecoveryNotice,
   });
   final PlexServer server;
+  final bool autofocus;
+  final FocusNode? focusNode;
   final bool current;
   final PlexConnection? connection;
   final VoidCallback? onPressed;
   final bool pending;
+  final bool unreachable;
   final bool previouslyUsed;
   final String? error;
   final String? profileCredentialRecoveryNotice;
@@ -1704,39 +1893,62 @@ class _ServerCard extends StatelessWidget {
           ],
         ),
         SizedBox(height: 4),
-        Text(
-          server.owned ? 'Owned server' : 'Shared server',
-          style: supportStyle,
-        ),
+        Text(server.owned ? 'Yours' : 'Shared with you', style: supportStyle),
         if (previouslyUsed && !current)
           Text('Previously used', style: supportStyle),
-        const SizedBox(height: 8),
-        LineupConnectionStatus(connection: measuredConnection),
+        if (unreachable || measuredConnection?.latency != null) ...[
+          const SizedBox(height: 8),
+          if (unreachable)
+            Semantics(
+              liveRegion: true,
+              child: Text('Unreachable', style: supportStyle),
+            )
+          else
+            LineupConnectionStatus(connection: measuredConnection),
+        ],
       ],
     );
     final buttonLabel = pending
         ? 'Connecting…'
+        : unreachable
+        ? 'Retry'
         : current
         ? 'Continue'
         : error != null
         ? 'Retry'
         : 'Connect';
-    final actionLabel = buttonLabel == 'Connect'
-        ? 'Connect to ${server.name}'
-        : buttonLabel;
+    final actionLabel = switch (buttonLabel) {
+      'Connect' => 'Connect to ${server.name}',
+      'Retry' when unreachable => 'Retry ${server.name}',
+      _ => buttonLabel,
+    };
     final trailing = MergeSemantics(
       child: Semantics(
         label: actionLabel,
         // Only continuing with the connected server is emphasized; list
         // position never promotes a row.
-        child: current
+        child: current && !unreachable
             ? FilledButton(
+                autofocus: autofocus && onPressed != null,
+                focusNode: focusNode,
                 onPressed: onPressed,
-                child: ExcludeSemantics(child: Text(buttonLabel)),
+                child: ExcludeSemantics(
+                  child: Text(
+                    buttonLabel,
+                    style: LineupTypography.tvLabelStyle(context),
+                  ),
+                ),
               )
             : OutlinedButton(
+                autofocus: autofocus && onPressed != null,
+                focusNode: focusNode,
                 onPressed: onPressed,
-                child: ExcludeSemantics(child: Text(buttonLabel)),
+                child: ExcludeSemantics(
+                  child: Text(
+                    buttonLabel,
+                    style: LineupTypography.tvLabelStyle(context),
+                  ),
+                ),
               ),
       ),
     );
@@ -1763,35 +1975,47 @@ class _ServerCard extends StatelessWidget {
                   trailing,
                 ],
               );
-        return Container(
-          width: double.infinity,
-          padding: EdgeInsets.symmetric(vertical: 20),
-          decoration: BoxDecoration(
-            border: Border(
-              bottom: BorderSide(color: LineupTheme.of(context).subtleBorder),
-            ),
-          ),
-          child: Column(
-            crossAxisAlignment: CrossAxisAlignment.stretch,
-            children: [
-              content,
-              if (error != null) ...[
-                SizedBox(height: 12),
-                Semantics(
-                  liveRegion: true,
-                  child: Text(
-                    _withRecoveryNotice(
-                      error,
-                      profileCredentialRecoveryNotice,
-                    )!,
-                    style: TextStyle(
-                      color: Theme.of(context).colorScheme.error,
-                      fontSize: 18,
-                    ),
+        return MouseRegion(
+          cursor: onPressed == null
+              ? MouseCursor.defer
+              : SystemMouseCursors.click,
+          child: GestureDetector(
+            behavior: HitTestBehavior.opaque,
+            excludeFromSemantics: true,
+            onTap: onPressed,
+            child: Container(
+              width: double.infinity,
+              padding: EdgeInsets.symmetric(vertical: 20),
+              decoration: BoxDecoration(
+                border: Border(
+                  bottom: BorderSide(
+                    color: LineupTheme.of(context).subtleBorder,
                   ),
                 ),
-              ],
-            ],
+              ),
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.stretch,
+                children: [
+                  content,
+                  if (error != null) ...[
+                    SizedBox(height: 12),
+                    Semantics(
+                      liveRegion: true,
+                      child: Text(
+                        _withRecoveryNotice(
+                          error,
+                          profileCredentialRecoveryNotice,
+                        )!,
+                        style: TextStyle(
+                          color: Theme.of(context).colorScheme.error,
+                          fontSize: 18,
+                        ),
+                      ),
+                    ),
+                  ],
+                ],
+              ),
+            ),
           ),
         );
       },
@@ -1970,6 +2194,7 @@ class _ProfilePinStepState extends State<_ProfilePinStep> {
                                 widget.profileOriginIsReady
                             ? '‹ Settings · Account'
                             : '‹ Profiles',
+                        style: LineupTypography.tvLabelStyle(context),
                       ),
                     ),
                   ),
@@ -2098,7 +2323,10 @@ class _ProfilePinStepState extends State<_ProfilePinStep> {
                   SizedBox(height: 20),
                   TextButton(
                     onPressed: _submitting ? null : handleBack,
-                    child: const Text('Cancel'),
+                    child: Text(
+                      'Cancel',
+                      style: LineupTypography.tvLabelStyle(context),
+                    ),
                   ),
                 ],
               ),

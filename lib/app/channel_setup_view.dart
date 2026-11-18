@@ -23,6 +23,9 @@ class UpstreamChannelSetupView extends StatefulWidget {
   const UpstreamChannelSetupView({
     required this.controller,
     this.onRequestLogout,
+    this.onFirstLibrariesBack,
+    this.setupActionsBlocked,
+    this.authorizationTransitionPending,
     this.onViewLineup,
     this.onAddCustomChannel,
     super.key,
@@ -30,6 +33,10 @@ class UpstreamChannelSetupView extends StatefulWidget {
 
   final LineupController controller;
   final Future<void> Function()? onRequestLogout;
+  final VoidCallback? onFirstLibrariesBack;
+  // Also checked by callbacks that can outlive the frame that enabled them.
+  final bool Function()? setupActionsBlocked;
+  final bool Function()? authorizationTransitionPending;
   final VoidCallback? onViewLineup;
   final VoidCallback? onAddCustomChannel;
 
@@ -46,6 +53,7 @@ class UpstreamChannelSetupViewState extends State<UpstreamChannelSetupView> {
   final _grouped = <BuilderStrategy>{};
   final _sourceOrder = <BuilderStrategy>[...BuilderStrategy.values];
   late ChannelBuildMode _mode;
+  late ChannelOrder _channelOrder;
   PlaybackMode _playback = PlaybackMode.shuffle;
   int _blockSize = 3;
   bool _includeSpecials = false;
@@ -74,6 +82,15 @@ class UpstreamChannelSetupViewState extends State<UpstreamChannelSetupView> {
 
   bool get _firstSetup => _review?.base.isEmpty ?? true;
 
+  bool get _setupContinuationBlocked =>
+      !mounted || (widget.authorizationTransitionPending?.call() ?? false);
+
+  bool get _setupActionsBlocked =>
+      _setupContinuationBlocked ||
+      (widget.setupActionsBlocked?.call() ?? false);
+
+  bool get _librariesBusy => widget.controller.busy || _setupActionsBlocked;
+
   @override
   void didChangeDependencies() {
     super.didChangeDependencies();
@@ -83,6 +100,7 @@ class UpstreamChannelSetupViewState extends State<UpstreamChannelSetupView> {
   @override
   void initState() {
     super.initState();
+    _channelOrder = widget.controller.channelOrder;
     _mode = widget.controller.channels.isEmpty
         ? ChannelBuildMode.replace
         : ChannelBuildMode.merge;
@@ -152,9 +170,9 @@ class UpstreamChannelSetupViewState extends State<UpstreamChannelSetupView> {
       return false;
     }
     if (controller.libraries.isEmpty) {
-      return !controller.busy && controller.canSwitchServer;
+      return !_librariesBusy && controller.canSwitchServer;
     }
-    return !controller.busy;
+    return !_librariesBusy;
   }
 
   void _clearLibraryEntryFocusIfUnavailable() {
@@ -174,6 +192,7 @@ class UpstreamChannelSetupViewState extends State<UpstreamChannelSetupView> {
 
   /// Claims one contextual Back press for the active setup owner.
   bool handleBack() {
+    if (!mounted) return false;
     if (_step == _SetupStep.libraries) {
       if (_committingLibraries || !widget.controller.canSwitchServer) {
         return true;
@@ -182,11 +201,18 @@ class UpstreamChannelSetupViewState extends State<UpstreamChannelSetupView> {
         widget.controller.cancelLibraryScan();
         return true;
       }
+      if (_setupActionsBlocked) return true;
       if (widget.controller.channelSetupCanCancel) {
         widget.controller.cancelChannelSetup();
         return true;
       }
-      return widget.controller.busy;
+      if (widget.controller.busy) return true;
+      final back = widget.onFirstLibrariesBack;
+      if (widget.controller.firstLibrariesOrigin != null && back != null) {
+        back();
+        return true;
+      }
+      return false;
     }
 
     if (_step == _SetupStep.configure) {
@@ -284,24 +310,16 @@ class UpstreamChannelSetupViewState extends State<UpstreamChannelSetupView> {
     maximumChannels: _maximum,
   );
 
-  ChannelPlanAllocation _allocate(
-    List<Channel> existing, {
-    List<ChannelProposal>? proposals,
-    required ChannelBuildMode mode,
-    required DateTime anchor,
-  }) => ChannelSetupProjection.allocate(
-    proposals ?? _buildProposals(),
-    existing: existing,
-    options: _allocationOptions(mode),
-    anchor: anchor,
-  );
-
   SetupReview _allocateReview(
     List<Channel> existing, {
     required ChannelBuildMode mode,
     required DateTime anchor,
   }) {
     final proposals = _buildProposals();
+    final inventory = widget.controller.playableInventory;
+    final order = _channelOrder;
+    final strategyOrder = List<BuilderStrategy>.of(_sourceOrder);
+    final reorderExisting = order != widget.controller.channelOrder;
     final strategyBySource = <String, BuilderStrategy>{};
     for (final proposal in proposals) {
       strategyBySource.putIfAbsent(
@@ -309,40 +327,53 @@ class UpstreamChannelSetupViewState extends State<UpstreamChannelSetupView> {
         () => proposal.strategy,
       );
     }
+    ChannelPlanAllocation planFactory(
+      ChannelBuildMode nextMode,
+      DateTime nextAnchor,
+      List<Channel> roster,
+      List<Channel> reviewed,
+    ) => ChannelSetupProjection.allocate(
+      proposals,
+      existing: roster,
+      options: _allocationOptions(nextMode),
+      anchor: nextAnchor,
+      order: order,
+      strategyOrder: strategyOrder,
+      items: inventory.media,
+      playlists: inventory.playlists,
+      reorderExisting: reorderExisting,
+      reviewedChannels: reviewed,
+    );
+
     return SetupReview(
       base: existing,
-      plan: _allocate(
-        existing,
-        proposals: proposals,
-        mode: mode,
-        anchor: anchor,
-      ),
+      plan: planFactory(mode, anchor, existing, const []),
       mode: mode,
       strategyBySource: strategyBySource,
-      planFactory: (nextMode, nextAnchor) {
-        final nextProposals = _buildProposals();
-        final nextStrategies = <String, BuilderStrategy>{};
-        for (final proposal in nextProposals) {
-          nextStrategies.putIfAbsent(
-            canonicalSourceIdentity(proposal.source),
-            () => proposal.strategy,
-          );
-        }
-        return (
-          plan: _allocate(
-            existing,
-            proposals: nextProposals,
-            mode: nextMode,
-            anchor: nextAnchor,
-          ),
-          strategyBySource: nextStrategies,
-        );
-      },
+      ordering: _reviewOrdering(existing),
+      planFactory: planFactory,
+      allocationAnchor: anchor,
+      recoverNumberLimitedAdditions:
+          order == ChannelOrder.grouped && !reorderExisting,
+    );
+  }
+
+  SetupReviewOrdering? _reviewOrdering(List<Channel> existing) {
+    if (_channelOrder == widget.controller.channelOrder) {
+      return null;
+    }
+
+    return (
+      order: _channelOrder,
+      strategyOrder: _sourceOrder,
+      sourceCounts: _projection.reviewSourceCounts(existing),
     );
   }
 
   @override
   Widget build(BuildContext context) {
+    final firstLibrariesOrigin = widget.controller.firstLibrariesOrigin;
+    final backError = widget.controller.firstLibrariesBackError;
     final entryEnabled = _libraryEntryTargetIsEnabled;
     if (entryEnabled && !_libraryEntryWasEnabled) {
       _scheduleLibraryEntryFocus();
@@ -372,6 +403,25 @@ class UpstreamChannelSetupViewState extends State<UpstreamChannelSetupView> {
                 child: Column(
                   crossAxisAlignment: CrossAxisAlignment.stretch,
                   children: [
+                    if (!_isTv &&
+                        _step == _SetupStep.libraries &&
+                        widget.onFirstLibrariesBack != null &&
+                        firstLibrariesOrigin != null)
+                      Align(
+                        alignment: Alignment.centerLeft,
+                        child: TextButton.icon(
+                          onPressed: _librariesBusy ? null : handleBack,
+                          icon: const Icon(Icons.chevron_left),
+                          label: Text(switch (firstLibrariesOrigin) {
+                            FirstLibrariesOrigin.profiles => 'Back to profiles',
+                            FirstLibrariesOrigin.signIn => 'Back to sign-in',
+                          }),
+                        ),
+                      ),
+                    if (_step == _SetupStep.libraries && backError != null) ...[
+                      LineupNotice(message: backError),
+                      const SizedBox(height: 12),
+                    ],
                     if (_step != _SetupStep.libraries && !resultState) ...[
                       _header(),
                       const SizedBox(height: 32),
@@ -424,9 +474,7 @@ class UpstreamChannelSetupViewState extends State<UpstreamChannelSetupView> {
     if (_step == _SetupStep.configure) return _configurationHeader();
     if (_step == _SetupStep.review) {
       return _configurationHeader(
-        titleText: _firstSetup
-            ? 'Review your first lineup'
-            : 'Review your lineup',
+        titleText: 'Review channels',
         subtitleText: _firstSetup
             ? 'Check your channels before creating your lineup.'
             : 'Check what changes and what stays.',
@@ -447,7 +495,7 @@ class UpstreamChannelSetupViewState extends State<UpstreamChannelSetupView> {
       children: [
         for (final (index, label) in [
           (_SetupStep.libraries, 'Libraries'),
-          (_SetupStep.configure, 'Configure'),
+          (_SetupStep.configure, 'Channels'),
           (_SetupStep.review, 'Review'),
         ])
           Text(
@@ -466,7 +514,7 @@ class UpstreamChannelSetupViewState extends State<UpstreamChannelSetupView> {
   }
 
   Widget _configurationHeader({
-    String titleText = 'Shape your lineup',
+    String titleText = 'Choose channels',
     String? subtitleText,
   }) => Column(
     key: const ValueKey('channel-setup-header'),
@@ -511,8 +559,9 @@ class UpstreamChannelSetupViewState extends State<UpstreamChannelSetupView> {
       failedPlaylistIds: widget.controller.failedPlaylistIds,
       libraryScanStatus: widget.controller.libraryScanStatus,
       playlistCatalogUnavailable: widget.controller.playlistCatalogUnavailable,
-      busy: widget.controller.busy,
-      canSwitchServer: widget.controller.canSwitchServer,
+      busy: _librariesBusy,
+      canSwitchServer:
+          widget.controller.canSwitchServer && !_setupActionsBlocked,
       channelSetupCanCancel: widget.controller.channelSetupCanCancel,
       error: widget.controller.error,
       profileCredentialRecoveryNotice:
@@ -526,29 +575,37 @@ class UpstreamChannelSetupViewState extends State<UpstreamChannelSetupView> {
       ),
       progress: LibraryScanProgress.fromController(widget.controller),
     ),
-    onSwitchServer: widget.controller.showServers,
-    onCancelSetup: widget.controller.cancelChannelSetup,
+    onSwitchServer: () {
+      if (!_setupActionsBlocked) widget.controller.showServers();
+    },
+    onCancelSetup: () {
+      if (!_setupActionsBlocked) widget.controller.cancelChannelSetup();
+    },
     onCancelScan: widget.controller.cancelLibraryScan,
     selectedLibraryIds: Set.unmodifiable(_selectedLibraries),
     error: _error ?? widget.controller.libraryScanLimitError,
     onScan: _scan,
-    onCommit: _commitLibraries,
-    onToggleLibrary: (id) => setState(() {
-      if (_selectedLibraries.contains(id)) {
-        _selectedLibraries.remove(id);
-      } else {
-        _selectedLibraries.add(id);
-      }
-    }),
-    onToggleAll: () => setState(() {
-      if (_selectedLibraries.length == widget.controller.libraries.length) {
-        _selectedLibraries.clear();
-      } else {
-        _selectedLibraries
-          ..clear()
-          ..addAll(widget.controller.libraries.map((library) => library.id));
-      }
-    }),
+    onCommit: (ready) async {
+      if (!_setupActionsBlocked) await _commitLibraries(ready);
+    },
+    onToggleLibrary: (id) {
+      if (_setupActionsBlocked) return;
+      setState(() {
+        if (!_selectedLibraries.remove(id)) _selectedLibraries.add(id);
+      });
+    },
+    onToggleAll: () {
+      if (_setupActionsBlocked) return;
+      setState(() {
+        if (_selectedLibraries.length == widget.controller.libraries.length) {
+          _selectedLibraries.clear();
+        } else {
+          _selectedLibraries
+            ..clear()
+            ..addAll(widget.controller.libraries.map((library) => library.id));
+        }
+      });
+    },
     entryFocusNode: _libraryEntryFocus,
     onRequestLogout: widget.onRequestLogout,
   );
@@ -558,6 +615,7 @@ class UpstreamChannelSetupViewState extends State<UpstreamChannelSetupView> {
     Set<String>? retryLibraryIds,
     bool advanceWhenReady = true,
   }) async {
+    if (_setupActionsBlocked) return;
     setState(() {
       _error = null;
       _notice = null;
@@ -574,7 +632,7 @@ class UpstreamChannelSetupViewState extends State<UpstreamChannelSetupView> {
               retryFailedOnly: retryFailedOnly,
             )
           : await widget.controller.retryLibraryScan(ids, retryLibraryIds);
-      if (!mounted) return;
+      if (_setupContinuationBlocked) return;
       if (!settled) {
         setState(() {});
         return;
@@ -591,7 +649,7 @@ class UpstreamChannelSetupViewState extends State<UpstreamChannelSetupView> {
         setState(() {});
       }
     } catch (error) {
-      if (mounted) {
+      if (!_setupContinuationBlocked) {
         setState(
           () => _error = safeFormError(error, 'The library scan failed.'),
         );
@@ -600,12 +658,12 @@ class UpstreamChannelSetupViewState extends State<UpstreamChannelSetupView> {
   }
 
   Future<void> _commitLibraries(Set<String> ready) async {
-    if (_committingLibraries) return;
+    if (_committingLibraries || _setupContinuationBlocked) return;
     final revision = ++_libraryCommitRevision;
     _committingLibraries = true;
     try {
       final saved = await widget.controller.commitLibraryScan(ready);
-      if (!mounted) return;
+      if (_setupContinuationBlocked) return;
       if (!saved) {
         setState(() => _error = 'The ready libraries could not be saved.');
         return;
@@ -618,7 +676,7 @@ class UpstreamChannelSetupViewState extends State<UpstreamChannelSetupView> {
         _error = null;
       });
     } catch (error) {
-      if (mounted) {
+      if (!_setupContinuationBlocked) {
         setState(
           () => _error = safeFormError(
             error,
@@ -635,10 +693,18 @@ class UpstreamChannelSetupViewState extends State<UpstreamChannelSetupView> {
 
   Widget _configureStep() {
     _buildProposals();
+    final existing = widget.controller.channels;
     final allocation = _projection.configure(
-      existing: widget.controller.channels,
+      existing: existing,
       options: _allocationOptions(_mode),
+      order: _channelOrder,
+      reorderExisting: _channelOrder != widget.controller.channelOrder,
     );
+    final canSavePreference =
+        existing.isNotEmpty &&
+        (_mode != ChannelBuildMode.replace ||
+            existing.any((channel) => channel.builderKey == null)) &&
+        _channelOrder != widget.controller.channelOrder;
     return SetupConfigureStep(
       allocation: freezeSetupAllocation(allocation),
       section: _configurationSection,
@@ -646,6 +712,7 @@ class UpstreamChannelSetupViewState extends State<UpstreamChannelSetupView> {
           setState(() => _configurationSection = section),
       onBack: _backToLibraries,
       onReview: _prepareReview,
+      orderChanged: canSavePreference,
       hasConfirmedMissingSources:
           _mode == ChannelBuildMode.merge &&
           allocation.unmatchedGenerated.any(
@@ -655,6 +722,7 @@ class UpstreamChannelSetupViewState extends State<UpstreamChannelSetupView> {
         strategies: _strategies,
         grouped: _grouped,
         sourceOrder: _sourceOrder,
+        channelOrder: _channelOrder,
         playback: _playback,
         blockSize: _blockSize,
         includeSpecials: _includeSpecials,
@@ -664,6 +732,9 @@ class UpstreamChannelSetupViewState extends State<UpstreamChannelSetupView> {
         variantBlockSize: _variantBlockSize,
         maximum: _maximum,
         minimum: _minimum,
+      ),
+      hasPlaylists: widget.controller.playableInventory.playlists.any(
+        (playlist) => playlist.items.any((item) => item.isPlayable),
       ),
       selectedLibraryCount: _selectedLibraries.length,
       disabledEligibility: Map.unmodifiable({
@@ -712,6 +783,7 @@ class UpstreamChannelSetupViewState extends State<UpstreamChannelSetupView> {
       }),
       onMaximumChanged: (value) => setState(() => _maximum = value),
       onMinimumChanged: (value) => setState(() => _minimum = value),
+      onChannelOrderChanged: (order) => setState(() => _channelOrder = order),
       onSourceOrderChanged: (order) => setState(() {
         _sourceOrder
           ..clear()
@@ -816,12 +888,15 @@ class UpstreamChannelSetupViewState extends State<UpstreamChannelSetupView> {
   }
 
   void _prepareReview() {
-    final base = List<Channel>.of(widget.controller.channels);
+    final base = widget.controller.channels;
+    final review = _allocateReview(
+      base,
+      mode: _mode,
+      anchor: DateTime.now().toUtc(),
+    );
+    if (base.isEmpty && review.finalChannels.isEmpty) return;
     setState(() {
-      _phase = Reviewing(
-        _allocateReview(base, mode: _mode, anchor: DateTime.now().toUtc()),
-        confirmed: false,
-      );
+      _phase = Reviewing(review, confirmed: false);
       _error = null;
       _notice = null;
       _step = _SetupStep.review;
@@ -853,6 +928,7 @@ class UpstreamChannelSetupViewState extends State<UpstreamChannelSetupView> {
           _phase = Reviewing(current, confirmed: confirmed);
         }
       }),
+      orderChanged: _channelOrder != widget.controller.channelOrder,
       onApply: _applyReview,
       onViewLineup: _viewLineup,
     );
@@ -910,10 +986,12 @@ class UpstreamChannelSetupViewState extends State<UpstreamChannelSetupView> {
         mode: review.mode,
         expectedBase: review.base,
         removeChannelIds: review.removeSourceIds,
+        channelOrder: review.finalChannels.isEmpty ? null : _channelOrder,
+        reviewedNumbers: review.reviewedNumbers,
       );
       if (!mounted) return;
       if (result == ChannelPlanApplyResult.stale) {
-        final base = List<Channel>.of(widget.controller.channels);
+        final base = widget.controller.channels;
         setState(() {
           _phase = Reviewing(
             _allocateReview(

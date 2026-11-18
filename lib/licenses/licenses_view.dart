@@ -256,7 +256,8 @@ class LicensesViewState extends State<LicensesView> {
         label,
         style: roles.focusTreatment == LineupFocusTreatment.fill
             ? TextStyle(color: roles.primaryText)
-            : null,
+                  .merge(LineupTypography.tvLabelStyle(context))
+            : LineupTypography.tvLabelStyle(context),
       );
     },
   );
@@ -434,7 +435,12 @@ class LicensesViewState extends State<LicensesView> {
           onPressed: () => _open(item),
           child: Row(
             children: [
-              Expanded(child: Text(item.title)),
+              Expanded(
+                child: Text(
+                  item.title,
+                  style: LineupTypography.tvLabelStyle(context),
+                ),
+              ),
               const Icon(Icons.chevron_right),
             ],
           ),

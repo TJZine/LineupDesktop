@@ -329,7 +329,7 @@ void main() {
     await tester.pumpAndSettle();
 
     expect(controller.stage, SetupStage.ready);
-    expect(find.text('Channels'), findsWidgets);
+    expect(find.text('Manage channels'), findsOneWidget);
   });
 
   testWidgets('Channel Setup Add custom opens a fresh exhausted draft', (
@@ -554,14 +554,20 @@ void main() {
       LineupBootstrap(player: _PlayingPlayer(), controller: controller),
     );
     await tester.pumpAndSettle();
-    expect(FocusManager.instance.primaryFocus?.debugLabel, 'Guide');
+    expect(
+      FocusManager.instance.primaryFocus?.debugLabel,
+      'Guide set up channels',
+    );
 
     await openDestination(tester, 'Player');
     expect(FocusManager.instance.primaryFocus?.debugLabel, 'Player');
 
     await tester.sendKeyEvent(LogicalKeyboardKey.keyG);
     await tester.pumpAndSettle();
-    expect(FocusManager.instance.primaryFocus?.debugLabel, 'Guide');
+    expect(
+      FocusManager.instance.primaryFocus?.debugLabel,
+      'Guide set up channels',
+    );
 
     await tester.sendKeyEvent(LogicalKeyboardKey.escape);
     await tester.pumpAndSettle();
@@ -589,6 +595,14 @@ void main() {
     expect(find.byKey(const Key('immersive-app-menu')), findsOneWidget);
   });
 
+  void expectSettingsRailFocus(WidgetTester tester, String category) {
+    final rowLabel = find.descendant(
+      of: find.byKey(const Key('settings-category-rail')),
+      matching: find.text(category),
+    );
+    expect(Focus.of(tester.element(rowLabel)).hasPrimaryFocus, isTrue);
+  }
+
   testWidgets('Ctrl destination shortcuts outrank Guide letter shortcuts', (
     tester,
   ) async {
@@ -610,13 +624,16 @@ void main() {
     await tester.pumpAndSettle();
     await tester.sendKeyEvent(LogicalKeyboardKey.keyG);
     await tester.pumpAndSettle();
-    expect(FocusManager.instance.primaryFocus?.debugLabel, 'Settings');
+    expectSettingsRailFocus(tester, 'Appearance');
 
     await tester.sendKeyDownEvent(LogicalKeyboardKey.controlLeft);
     await tester.sendKeyEvent(LogicalKeyboardKey.keyG);
     await tester.sendKeyUpEvent(LogicalKeyboardKey.controlLeft);
     await tester.pumpAndSettle();
-    expect(FocusManager.instance.primaryFocus?.debugLabel, 'Guide');
+    expect(
+      FocusManager.instance.primaryFocus?.debugLabel,
+      'Guide set up channels',
+    );
   });
 
   testWidgets('F3 opens Settings from Guide and Player routes', (tester) async {
@@ -631,11 +648,14 @@ void main() {
     await tester.sendKeyEvent(LogicalKeyboardKey.f3);
     await tester.pumpAndSettle();
     expect(find.byType(DropdownButton<LineupThemeName>), findsOneWidget);
-    expect(FocusManager.instance.primaryFocus?.debugLabel, 'Settings');
+    expectSettingsRailFocus(tester, 'Appearance');
 
     await tester.sendKeyEvent(LogicalKeyboardKey.escape);
     await tester.pumpAndSettle();
-    expect(FocusManager.instance.primaryFocus?.debugLabel, 'Guide');
+    expect(
+      FocusManager.instance.primaryFocus?.debugLabel,
+      'Guide set up channels',
+    );
 
     await tester.sendKeyDownEvent(LogicalKeyboardKey.controlLeft);
     await tester.sendKeyEvent(LogicalKeyboardKey.digit5);
@@ -647,7 +667,7 @@ void main() {
     await tester.pumpAndSettle();
 
     expect(find.byType(DropdownButton<LineupThemeName>), findsOneWidget);
-    expect(FocusManager.instance.primaryFocus?.debugLabel, 'Settings');
+    expectSettingsRailFocus(tester, 'Appearance');
 
     await tester.sendKeyEvent(LogicalKeyboardKey.backspace);
     await tester.pumpAndSettle();
@@ -724,7 +744,7 @@ void main() {
     await tester.tap(find.text('‹ Settings · Account'));
     await tester.pumpAndSettle();
     expect(find.text('Settings'), findsWidgets);
-    expect(FocusManager.instance.primaryFocus?.debugLabel, 'Settings');
+    expectSettingsRailFocus(tester, 'Account');
   });
 
   testWidgets(
@@ -1079,22 +1099,65 @@ void main() {
         currentChannelId: 'channel',
       ),
     );
-    final player = _PlayingPlayer();
+    final player = FakeNativePlayer();
     await tester.pumpWidget(
-      LineupBootstrap(player: player, controller: controller),
+      LineupBootstrap(
+        player: player,
+        controller: controller,
+        profile: desktopProfile,
+      ),
     );
     await tester.pumpAndSettle();
 
-    await openDestination(tester, 'Settings');
+    await tester.sendKeyEvent(LogicalKeyboardKey.enter);
+    await tester.pumpAndSettle();
+    expect(player.loads, hasLength(1));
+    player.emit(
+      const PlayerStatus(state: PlayerState.playing, message: 'Playing'),
+    );
+    await tester.pumpAndSettle();
+
+    expect(
+      tester
+          .widget<PlayerView>(find.byType(PlayerView))
+          .controller
+          .watchingChannelId,
+      'channel',
+    );
+    await tester.sendKeyDownEvent(LogicalKeyboardKey.controlLeft);
+    await tester.sendKeyEvent(LogicalKeyboardKey.digit3);
+    await tester.sendKeyUpEvent(LogicalKeyboardKey.controlLeft);
+    await tester.pumpAndSettle();
+    expect(find.byType(DropdownButton<LineupThemeName>), findsOneWidget);
     await tester.sendKeyDownEvent(LogicalKeyboardKey.controlLeft);
     await tester.sendKeyEvent(LogicalKeyboardKey.keyG);
     await tester.sendKeyUpEvent(LogicalKeyboardKey.controlLeft);
     await tester.pumpAndSettle();
-    await tester.tap(find.byTooltip('Close Guide'));
+    await tester.tap(find.byKey(const Key('guide-back-to-player')));
     await tester.pumpAndSettle();
 
     expect(FocusManager.instance.primaryFocus?.debugLabel, 'Player');
     expect(find.byType(DropdownButton<LineupThemeName>), findsNothing);
+
+    final playback = tester
+        .widget<PlayerView>(find.byType(PlayerView))
+        .controller;
+    await tester.sendKeyDownEvent(LogicalKeyboardKey.controlLeft);
+    await tester.sendKeyEvent(LogicalKeyboardKey.keyG);
+    await tester.sendKeyUpEvent(LogicalKeyboardKey.controlLeft);
+    await tester.pumpAndSettle();
+    final button = tester.widget<TextButton>(
+      find.byKey(const Key('guide-back-to-player')),
+    );
+    await playback.stop();
+    // The last rendered callback must consult live playback before the next
+    // frame hides the button.
+    button.onPressed!();
+    await tester.pumpAndSettle();
+    expect(find.byType(GuideView), findsOneWidget);
+    expect(find.byKey(const Key('guide-back-to-player')), findsNothing);
+    expect(find.byKey(const Key('immersive-app-menu')), findsOneWidget);
+    expect(player.loads, hasLength(1));
   });
 
   testWidgets('onboarding link action is keyboard reachable', (tester) async {
@@ -1654,8 +1717,8 @@ void main() {
     );
     await tester.pumpAndSettle();
 
-    expect(find.text('Owned server'), findsOneWidget);
-    expect(find.text('Shared server'), findsOneWidget);
+    expect(find.text('Yours'), findsOneWidget);
+    expect(find.text('Shared with you'), findsOneWidget);
     expect(find.text('Direct local available'), findsNothing);
     expect(find.text('Direct remote available'), findsNothing);
     expect(find.text('Relay available'), findsNothing);
@@ -2211,6 +2274,7 @@ class _LogoutController extends _FakeController {
   Future<Channel> saveChannel(
     Channel channel, {
     required Channel? expectedBase,
+    String? verifiedNewScheduleRevision,
   }) async {
     final release = _saveRelease;
     if (release != null) await release.future;

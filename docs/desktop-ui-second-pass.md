@@ -593,9 +593,11 @@ Channels directory (approved full-width table kept)
 - Row menu (⋮) uses the theme's raised surface, 8px radius and F5 rows; "Delete…"
   carries an ellipsis because it confirms.
 - Delete confirmation: channel numbers share the names' baseline.
-- Already covered by foundations: Delete selected without coral (F4), Generate
-  lineup without amber text (F4), segmented filter and compact Select/Reorder
-  (F5), search per Q1 (F6), Studio's list-row scaling (F8).
+- Already covered by foundations are Delete selected without coral (F4),
+  compact Select/Reorder (F5), search per Q1 (F6) and Studio list-row scaling (F8).
+  UX assessment decision, 2026-11-13/14 (Q5 and N17) replaces the segmented
+  filter with the shared channel filter and relabels the secondary bulk action
+  Update lineup….
 
 ### Settings — locked October 6
 

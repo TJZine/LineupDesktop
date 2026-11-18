@@ -21,6 +21,7 @@ class DiagnosticsView extends StatefulWidget {
     this.menuFocusNode,
     this.focusNode,
     this.onBack,
+    this.backLabel = '‹ Settings · Support',
     super.key,
   });
 
@@ -31,6 +32,7 @@ class DiagnosticsView extends StatefulWidget {
   final FocusNode? menuFocusNode;
   final FocusNode? focusNode;
   final VoidCallback? onBack;
+  final String backLabel;
 
   @override
   State<DiagnosticsView> createState() => _DiagnosticsViewState();
@@ -151,6 +153,12 @@ class _DiagnosticsViewState extends State<DiagnosticsView> {
 
   @override
   Widget build(BuildContext context) {
+    final noticeStyle = TextStyle(
+      color: LineupTheme.of(context).secondaryText,
+      fontSize: DeviceProfile.of(context).isTv
+          ? LineupTypography.tvTextFloor
+          : 14,
+    );
     final snapshot = _snapshot();
     final telemetry = snapshot.playback.receivedTelemetry;
     final currentEvents = widget.controller.diagnostics.entries;
@@ -185,17 +193,17 @@ class _DiagnosticsViewState extends State<DiagnosticsView> {
                         if (!snapshot.recordingEnabled)
                           SizedBox(
                             height: 180,
-                            child: _emptyEvents(
-                              'Diagnostic recording is off',
-                              'Enable recording in Settings > Support, then reproduce the issue.',
+                            child: LineupEmptyState(
+                              title: 'Diagnostic recording is off',
+                              message: 'Enable recording in Settings > Support, then reproduce the issue.',
                             ),
                           )
                         else if (_visibleEvents.isEmpty)
                           SizedBox(
                             height: 180,
-                            child: _emptyEvents(
-                              'No events recorded yet',
-                              'Reproduce the issue to collect support events.',
+                            child: LineupEmptyState(
+                              title: 'No events recorded yet',
+                              message: 'Reproduce the issue to collect support events.',
                             ),
                           )
                         else
@@ -203,18 +211,12 @@ class _DiagnosticsViewState extends State<DiagnosticsView> {
                         SizedBox(height: 12),
                         Text(
                           'This session only · Up to 250 recent events retained',
-                          style: TextStyle(
-                            color: LineupTheme.of(context).secondaryText,
-                            fontSize: 14,
-                          ),
+                          style: noticeStyle,
                         ),
                         SizedBox(height: 8),
                         Text(
                           'Reports exclude credentials, URLs and private paths. Review before sharing.',
-                          style: TextStyle(
-                            color: LineupTheme.of(context).secondaryText,
-                            fontSize: 14,
-                          ),
+                          style: noticeStyle,
                         ),
                         SizedBox(height: 16),
                       ],
@@ -237,7 +239,14 @@ class _DiagnosticsViewState extends State<DiagnosticsView> {
         FilledButton(
           focusNode: widget.focusNode,
           onPressed: _copying ? null : _copy,
-          child: Text('Copy redacted report', style: TextStyle(fontSize: 18)),
+          child: Text(
+            'Copy redacted report',
+            style: TextStyle(
+              fontSize: DeviceProfile.of(context).isTv
+                  ? LineupTypography.tvTextFloor
+                  : 18,
+            ),
+          ),
         ),
         ConstrainedBox(
           constraints: BoxConstraints(
@@ -265,7 +274,7 @@ class _DiagnosticsViewState extends State<DiagnosticsView> {
         if (widget.onBack != null)
           LineupInlineLink(
             onPressed: widget.onBack,
-            child: const Text('‹ Settings · Support'),
+            child: Text(widget.backLabel),
           ),
         Text(
           'Diagnostics',
@@ -306,6 +315,10 @@ class _DiagnosticsViewState extends State<DiagnosticsView> {
     PlayerTelemetry? telemetry,
   ) {
     final roles = LineupTheme.of(context);
+    final idle = switch (snapshot.playback.state) {
+      PlayerState.idle || PlayerState.stopped || PlayerState.ended => true,
+      _ => false,
+    };
     final facts = [
       (
         'Playback',
@@ -336,32 +349,41 @@ class _DiagnosticsViewState extends State<DiagnosticsView> {
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.stretch,
         children: [
-          Padding(
-            padding: EdgeInsets.fromLTRB(28, 24, 28, 0),
-            child: LayoutBuilder(
-              builder: (context, constraints) {
-                final double gap = 28;
-                final effectiveTextScale = _effectiveTextScale(context);
-                final columns =
-                    constraints.maxWidth >= 1100 * effectiveTextScale
-                    ? 4
-                    : constraints.maxWidth >= 600 * effectiveTextScale
-                    ? 2
-                    : 1;
-                final width = columns == 1
-                    ? constraints.maxWidth
-                    : (constraints.maxWidth - gap * (columns - 1)) / columns;
-                return Wrap(
-                  spacing: gap,
-                  runSpacing: 20,
-                  children: [
-                    for (final fact in facts)
-                      _fact(context, fact.$1, fact.$2, width),
-                  ],
-                );
-              },
+          if (idle)
+            Padding(
+              padding: const EdgeInsets.fromLTRB(28, 24, 28, 0),
+              child: Text(
+                'Nothing is playing. Start a channel to see playback details.',
+                style: TextStyle(color: roles.secondaryText, fontSize: 18),
+              ),
+            )
+          else
+            Padding(
+              padding: EdgeInsets.fromLTRB(28, 24, 28, 0),
+              child: LayoutBuilder(
+                builder: (context, constraints) {
+                  final double gap = 28;
+                  final effectiveTextScale = _effectiveTextScale(context);
+                  final columns =
+                      constraints.maxWidth >= 1100 * effectiveTextScale
+                      ? 4
+                      : constraints.maxWidth >= 600 * effectiveTextScale
+                      ? 2
+                      : 1;
+                  final width = columns == 1
+                      ? constraints.maxWidth
+                      : (constraints.maxWidth - gap * (columns - 1)) / columns;
+                  return Wrap(
+                    spacing: gap,
+                    runSpacing: 20,
+                    children: [
+                      for (final fact in facts)
+                        _fact(context, fact.$1, fact.$2, width),
+                    ],
+                  );
+                },
+              ),
             ),
-          ),
           Padding(
             padding: EdgeInsets.fromLTRB(28, 16, 28, 0),
             child: Divider(height: 1, color: roles.subtleBorder),
@@ -430,6 +452,9 @@ class _DiagnosticsViewState extends State<DiagnosticsView> {
     PlayerTelemetry? telemetry,
   ) {
     final isMacOS = Diagnostics.isMacOSPlatform(snapshot.platform);
+    final isWindows = snapshot.platform == TargetPlatform.windows.name;
+    final isAndroid = snapshot.platform == TargetPlatform.android.name;
+    final hasDesktopOutput = isMacOS || isWindows;
     return LayoutBuilder(
       builder: (context, constraints) {
         final roles = LineupTheme.of(context);
@@ -471,13 +496,14 @@ class _DiagnosticsViewState extends State<DiagnosticsView> {
                   width: columnWidth,
                   child: _technicalGroup(context, 'Video output', [
                     _technicalFact(
-                      'Hardware decoder',
+                      isAndroid ? 'Video decoder' : 'Hardware decoder',
                       telemetry?.hardwareDecoder ?? 'Unavailable',
                     ),
-                    _technicalFact(
-                      'Video output',
-                      telemetry?.videoOutput ?? 'Unavailable',
-                    ),
+                    if (!isAndroid)
+                      _technicalFact(
+                        'Video output',
+                        telemetry?.videoOutput ?? 'Unavailable',
+                      ),
                   ]),
                 ),
                 SizedBox(
@@ -488,22 +514,25 @@ class _DiagnosticsViewState extends State<DiagnosticsView> {
                       'Transfer',
                       telemetry?.gamma ?? 'Unavailable',
                     ),
-                    _technicalFact(
-                      'Pixel format',
-                      telemetry?.pixelFormat ?? 'Unavailable',
-                    ),
+                    if (!isAndroid)
+                      _technicalFact(
+                        'Pixel format',
+                        telemetry?.pixelFormat ?? 'Unavailable',
+                      ),
                     _technicalFact(
                       'Primaries',
                       telemetry?.primaries ?? 'Unavailable',
                     ),
-                    _technicalFact(
-                      'Color matrix',
-                      telemetry?.colorMatrix ?? 'Unavailable',
-                    ),
-                    _technicalFact(
-                      'Reported signal peak',
-                      telemetry?.signalPeak?.toString() ?? 'Unavailable',
-                    ),
+                    if (!isAndroid)
+                      _technicalFact(
+                        'Color matrix',
+                        telemetry?.colorMatrix ?? 'Unavailable',
+                      ),
+                    if (!isAndroid)
+                      _technicalFact(
+                        'Reported signal peak',
+                        telemetry?.signalPeak?.toString() ?? 'Unavailable',
+                      ),
                   ], twoColumns: true),
                 ),
               ],
@@ -511,7 +540,7 @@ class _DiagnosticsViewState extends State<DiagnosticsView> {
             SizedBox(height: 20),
             if (isMacOS)
               _technicalFact('HDR output', Diagnostics.macOSHdrOutputFact)
-            else ...[
+            else if (isWindows) ...[
               _technicalFact(
                 'Windows display',
                 Diagnostics.windowsDisplayFact(snapshot.playback.displayReport),
@@ -521,35 +550,42 @@ class _DiagnosticsViewState extends State<DiagnosticsView> {
                 Diagnostics.hdrMatchingFact(snapshot.playback.displayReport),
               ),
             ],
+            if (hasDesktopOutput) ...[
+              _technicalFact(
+                'Renderer output',
+                Diagnostics.rendererOutputFact(telemetry),
+              ),
+              SizedBox(height: 20),
+              Text.rich(
+                TextSpan(
+                  children: [
+                    TextSpan(
+                      text: 'Per-stream handling · ',
+                      style: TextStyle(color: roles.secondaryText),
+                    ),
+                    TextSpan(
+                      text: 'Unavailable',
+                      style: TextStyle(color: roles.primaryText),
+                    ),
+                  ],
+                ),
+                style: TextStyle(fontSize: 18),
+              ),
+              SizedBox(height: 16),
+              Text(
+                isMacOS
+                    ? Diagnostics.macOSDisplayStateNote
+                    : Diagnostics.windowsDisplayStateNote,
+                style: TextStyle(
+                  color: LineupTheme.of(context).secondaryText,
+                  fontSize: 14,
+                ),
+              ),
+              const SizedBox(height: 20),
+            ],
             _technicalFact(
-              'Renderer output',
-              Diagnostics.rendererOutputFact(telemetry),
-            ),
-            SizedBox(height: 20),
-            Text.rich(
-              TextSpan(
-                children: [
-                  TextSpan(
-                    text: 'Per-stream handling · ',
-                    style: TextStyle(color: roles.secondaryText),
-                  ),
-                  TextSpan(
-                    text: 'Unavailable',
-                    style: TextStyle(color: roles.primaryText),
-                  ),
-                ],
-              ),
-              style: TextStyle(fontSize: 18),
-            ),
-            SizedBox(height: 16),
-            Text(
-              isMacOS
-                  ? Diagnostics.macOSDisplayStateNote
-                  : Diagnostics.windowsDisplayStateNote,
-              style: TextStyle(
-                color: LineupTheme.of(context).secondaryText,
-                fontSize: 14,
-              ),
+              'Plex connection',
+              LineupConnectionStatus.description(widget.controller.connection),
             ),
           ],
         );
@@ -691,7 +727,12 @@ class _DiagnosticsViewState extends State<DiagnosticsView> {
         SizedBox(width: 8),
         Text(
           'Recording ${snapshot.recordingEnabled ? 'on' : 'off'}',
-          style: TextStyle(color: roles.secondaryText, fontSize: 14),
+          style: TextStyle(
+            color: roles.secondaryText,
+            fontSize: DeviceProfile.of(context).isTv
+                ? LineupTypography.tvTextFloor
+                : 14,
+          ),
         ),
       ],
     );
@@ -730,24 +771,6 @@ class _DiagnosticsViewState extends State<DiagnosticsView> {
     );
   }
 
-  Widget _emptyEvents(String title, String message) => Center(
-    child: Column(
-      mainAxisSize: MainAxisSize.min,
-      children: [
-        Text(
-          title,
-          style: TextStyle(fontSize: 20, fontWeight: FontWeight.w500),
-        ),
-        SizedBox(height: 8),
-        Text(
-          message,
-          textAlign: TextAlign.center,
-          style: TextStyle(fontSize: 18),
-        ),
-      ],
-    ),
-  );
-
   String _eventTime(DateTime time) {
     final local = time.toLocal();
     return [
@@ -775,25 +798,28 @@ class _DiagnosticsViewState extends State<DiagnosticsView> {
           title: ExcludeSemantics(
             child: LayoutBuilder(
               builder: (context, constraints) {
+                final isTv = DeviceProfile.of(context).isTv;
                 final eventScale = 1.0 * _effectiveTextScale(context);
                 final double gap = 16 * eventScale;
                 final time = Text(
                   _eventTime(event.time),
                   style: TextStyle(
                     color: LineupTheme.of(context).secondaryText,
-                    fontSize: 14,
+                    fontSize: isTv ? LineupTypography.tvTextFloor : 14,
                   ),
                 );
                 final area = Text(
                   _eventAreaLabel(event.area),
                   style: TextStyle(
                     color: LineupTheme.of(context).secondaryText,
-                    fontSize: 14,
+                    fontSize: isTv ? LineupTypography.tvTextFloor : 14,
                   ),
                 );
                 final message = Text(
                   event.message,
-                  style: TextStyle(fontSize: 18),
+                  style: TextStyle(
+                    fontSize: isTv ? LineupTypography.tvTextFloor : 18,
+                  ),
                 );
                 if (constraints.maxWidth < 520 * eventScale) {
                   return Column(

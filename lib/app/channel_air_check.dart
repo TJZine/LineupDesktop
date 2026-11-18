@@ -11,10 +11,7 @@ import '../ui/app_ui.dart';
 import 'lineup_controller.dart';
 import 'air_check_verification.dart';
 export 'air_check_verification.dart'
-    show
-        ChannelAirCheckValidity,
-        channelAirCheckDebounce,
-        channelAirCheckSnapshotKey;
+    show ChannelAirCheckValidity, channelAirCheckDebounce;
 
 class ChannelAirCheck extends StatefulWidget {
   const ChannelAirCheck({
@@ -161,9 +158,10 @@ class _ChannelAirCheckState extends State<ChannelAirCheck> {
                       Semantics(
                         liveRegion: true,
                         label: 'Calculating schedule',
-                        child: const Text(
+                        child: Text(
                           'Calculating schedule…',
-                          key: Key('air-check-loading'),
+                          key: const Key('air-check-loading'),
+                          style: LineupTypography.tvLabelStyle(context),
                         ),
                       ),
                     )
@@ -201,7 +199,12 @@ class _ChannelAirCheckState extends State<ChannelAirCheck> {
                                   onPressed: _stale
                                       ? null
                                       : widget.verification.extendHorizon,
-                                  child: const Text('Show next 6 hours'),
+                                  child: Text(
+                                    'Show next 6 hours',
+                                    style: LineupTypography.tvLabelStyle(
+                                      context,
+                                    ),
+                                  ),
                                 ),
                             ],
                           ),
@@ -490,7 +493,10 @@ class _ChannelAirCheckState extends State<ChannelAirCheck> {
             onPressed: () =>
                 setState(() => _synopsisExpanded = !_synopsisExpanded),
 
-            child: Text(_synopsisExpanded ? 'Show less' : 'Read more'),
+            child: Text(
+              _synopsisExpanded ? 'Show less' : 'Read more',
+              style: LineupTypography.tvLabelStyle(context),
+            ),
           ),
         ],
         if (current != null && current.id != selected.id)

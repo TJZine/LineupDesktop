@@ -3,14 +3,18 @@ import '../support/test_doubles.dart';
 
 import 'dart:async';
 import 'dart:convert';
+import 'dart:io';
 import 'dart:typed_data';
 
 import 'package:flutter_test/flutter_test.dart';
 import 'package:http/http.dart' as http;
 import 'package:http/testing.dart';
 import 'package:lineup_desktop/app/lineup_controller.dart';
+import 'package:lineup_desktop/app/setup_review.dart';
 import 'package:lineup_desktop/channels/channel.dart';
 import 'package:lineup_desktop/channels/channel_builder.dart';
+import 'package:lineup_desktop/channels/channel_filter.dart';
+import 'package:lineup_desktop/ui/channel_identity.dart';
 import 'package:lineup_desktop/channels/content_resolver.dart';
 import 'package:lineup_desktop/channels/schedule_worker.dart';
 import 'package:lineup_desktop/channels/scheduler.dart';
@@ -3805,12 +3809,14 @@ void main() {
         expectedBase: List.of(controller.channels),
       );
       store.releaseBlockedSave();
-      await editing;
+      final committedEdit = await editing;
       expect(await queuedBehindEdit, ChannelPlanApplyResult.stale);
       expect(store.saveCalls, saves + 1);
 
       store.blockNext();
-      final deleting = controller.deleteChannels(expectedChannels: [edited]);
+      final deleting = controller.deleteChannels(
+        expectedChannels: [committedEdit],
+      );
       await store.blockedSaveStarted.future;
       final queued = controller.applyReviewedChannelPlan(
         [generated],
@@ -5491,6 +5497,551 @@ void main() {
         ),
       );
       expect(controller.channels, hasLength(3));
+    },
+  );
+
+  test('parsed playlist members match scoped inventory in both saved channel types', () async {
+    final server = _server('server');
+    final store = _MemoryStore();
+    const library = PlexLibrary(
+      id: 'movies',
+      title: 'Films',
+      type: PlexLibraryType.movie,
+    );
+    const tv = PlexLibrary(
+      id: 'tv',
+      title: 'TV Shows',
+      type: PlexLibraryType.show,
+    );
+    final playlist = PlexPlaylist(
+      id: 'mix',
+      title: 'Mix',
+      items: [
+        for (final id in ['movie', 'unscanned'])
+          PlexMediaItem(
+            id: id,
+            title: id,
+            type: 'movie',
+            duration: const Duration(minutes: 1),
+            parts: [PlexMediaPart(path: '/item/$id')],
+          ),
+      ],
+    );
+    final controller = LineupController(
+      store: store,
+      credentials: _MemoryCredentials(),
+      plex: _FakePlex(),
+      scenario: LineupScenario(
+        account: const PlexAccount(id: 'owner', name: 'Owner', email: ''),
+        server: server,
+        connection: server.connections.single,
+        libraries: [library, tv],
+        selectedLibraryIds: {'movies'},
+        availableMedia: [_playableMovie],
+        availablePlaylists: [playlist],
+      ),
+    );
+    addTearDown(controller.dispose);
+    List<ChannelProposal> proposals() => buildChannelProposals(
+      libraries: [library, tv],
+      items: controller.playableInventory.media,
+      playlists: controller.playableInventory.playlists,
+      minimumItems: 1,
+      strategies: {BuilderStrategy.playlists},
+    );
+    final plan = materializeChannelPlan(
+      proposals: proposals(),
+      existing: [],
+      mode: ChannelBuildMode.replace,
+    );
+    await controller.applyReviewedChannelPlan(
+      plan.channels,
+      mode: ChannelBuildMode.replace,
+      expectedBase: [],
+    );
+    await controller.saveChannel(
+      Channel(
+        id: 'custom-playlist',
+        number: 2,
+        name: 'Custom mix',
+        source: const PlaylistSource('mix'),
+        playbackMode: PlaybackMode.sequential,
+        anchor: DateTime.utc(2026),
+        shuffleSeed: 1,
+      ),
+      expectedBase: null,
+    );
+    final saved =
+        PersistedState.fromJson(jsonDecode(jsonEncode(store.state.toJson())))
+            .lineupFor(
+              const LineupScope(profileKey: 'owner', serverId: 'server'),
+            )
+            .channels;
+    expect(
+      saved.map((row) => row.sourceLibraries),
+      everyElement({'movies': 'Films'}),
+    );
+    expect(
+      ChannelFilter(saved).entries
+          .singleWhere((entry) => entry.label == 'Films')
+          .count,
+      2,
+    );
+    expect(
+      playlistLibraryMembership(playlist.items.skip(1), {
+        'movie': _playableMovie,
+      }).ids,
+      isEmpty,
+    );
+
+    final related = controller.channels.first;
+    Future<Channel> refresh() async {
+      final existing = controller.channels;
+      final plan = materializeChannelPlan(
+        proposals: proposals(),
+        existing: existing,
+        mode: ChannelBuildMode.merge,
+      );
+      expect(
+        await controller.applyReviewedChannelPlan(
+          plan.channels,
+          mode: ChannelBuildMode.merge,
+          expectedBase: existing,
+        ),
+        ChannelPlanApplyResult.applied,
+      );
+      final disk = PersistedState.fromJson(
+        jsonDecode(jsonEncode(store.state.toJson())),
+      );
+      return disk
+          .lineupFor(const LineupScope(profileKey: 'owner', serverId: 'server'))
+          .channels
+          .singleWhere((channel) => channel.id == related.id);
+    }
+
+    controller.fixtureActor.publishInventory(media: []);
+    final unknown = await refresh();
+    expect(unknown.sourceLibraries, {'movies': 'Films'});
+    expect(unknown.sourceLibrariesIncomplete, isTrue);
+    expect(unknown.libraryTitle, isNull);
+
+    controller.fixtureActor.publishInventory(
+      media: [
+        for (final item in playlist.items)
+          PlexMediaItem(
+            id: item.id,
+            title: item.title,
+            type: 'episode',
+            libraryId: 'tv',
+            duration: item.duration,
+            parts: item.parts,
+          ),
+      ],
+    );
+    final updated = await refresh();
+    expect(updated.sourceLibraries, {'tv': 'TV Shows'});
+    expect(updated.libraryTitle, 'TV Shows');
+
+    final otherSource = materializeChannelPlan(
+      proposals: buildChannelProposals(
+        libraries: [library, tv],
+        items: [],
+        playlists: [
+          PlexPlaylist(id: 'new', title: playlist.title, items: playlist.items),
+        ],
+        minimumItems: 1,
+        strategies: {BuilderStrategy.playlists},
+      ),
+      existing: [updated],
+      mode: ChannelBuildMode.merge,
+    ).channels.single;
+    expect(otherSource.id, isNot(updated.id));
+    expect(otherSource.sourceLibraries, isEmpty);
+  });
+
+  test('custom playlist replaces known provenance and distinguishes partial membership', () async {
+    final store = _MemoryStore();
+    final server = _server('server');
+    const scope = LineupScope(profileKey: 'owner', serverId: 'server');
+    PlexMediaItem item(String id, {String? libraryId}) => PlexMediaItem(
+      id: id,
+      libraryId: libraryId,
+      title: id,
+      type: id == 'episode' ? 'episode' : 'movie',
+      duration: const Duration(minutes: 1),
+      parts: [PlexMediaPart(path: '/synthetic/$id')],
+    );
+    final controller = LineupController(
+      store: store,
+      credentials: _MemoryCredentials(),
+      plex: _FakePlex(),
+      scenario: LineupScenario(
+        account: const PlexAccount(id: 'owner', name: 'Owner', email: ''),
+        server: server,
+        connection: server.connections.single,
+        libraries: const [
+          PlexLibrary(id: 'films', title: 'Films', type: PlexLibraryType.movie),
+          PlexLibrary(id: 'tv', title: 'TV Shows', type: PlexLibraryType.show),
+        ],
+        selectedLibraryIds: {'films', 'tv'},
+        availableMedia: [
+          item('movie', libraryId: 'films'),
+          item('episode', libraryId: 'tv'),
+        ],
+      ),
+    );
+    addTearDown(controller.dispose);
+    const source = PlaylistSource('plex-list');
+    final draft = Channel(
+      id: 'playlist',
+      number: 2,
+      name: 'Drama',
+      source: source,
+      playbackMode: PlaybackMode.sequential,
+      anchor: DateTime.utc(2026),
+      shuffleSeed: 1,
+    );
+    final filmPeer = Channel.fromJson({
+      ...draft.toJson(),
+      'id': 'peer',
+      'number': 3,
+      'sourceLibraries': {'films': 'Films'},
+    });
+    Future<Channel> save(
+      List<PlexMediaItem> items,
+      Channel? previous, {
+      PlaybackMode mode = PlaybackMode.sequential,
+      PlaylistSource playlistSource = source,
+    }) async {
+      controller.fixtureActor.publishInventory(
+        playlists: [
+          PlexPlaylist(
+            id: playlistSource.playlistId,
+            title: 'Drama',
+            items: items,
+          ),
+        ],
+      );
+      await controller.saveChannel(
+        Channel.fromJson({
+          ...draft.toJson(),
+          'playbackMode': mode.name,
+          'source': playlistSource.toJson(),
+        }),
+        expectedBase: previous,
+      );
+      return PersistedState.fromJson(
+        jsonDecode(jsonEncode(store.state.toJson())),
+      ).lineupFor(scope).channels.single;
+    }
+
+    final film = await save([item('movie')], null);
+    expect(film.libraryTitle, 'Films');
+    final tv = await save([item('episode')], film);
+    expect(tv.sourceLibraries, {'tv': 'TV Shows'});
+    expect(tv.kind, ChannelKind.tv);
+    expect(ChannelIdentity.libraryTagFor(tv, [tv, filmPeer]), 'TV Shows');
+
+    final partial = await save([item('episode'), item('unscanned')], tv);
+    expect(partial.sourceLibraries, {'tv': 'TV Shows'});
+    expect(ChannelIdentity.libraryTagFor(partial, [partial, filmPeer]), isNull);
+    final unknown = await save(
+      [item('unscanned')],
+      partial,
+      mode: PlaybackMode.shuffle,
+    );
+    expect(unknown.playbackMode, PlaybackMode.shuffle);
+    expect(unknown.sourceLibraries, {'tv': 'TV Shows'});
+    expect(unknown.libraryTitle, isNull);
+    for (final channel in [tv, partial, unknown]) {
+      final filter = ChannelFilter([channel]);
+      expect(
+        filter.entries.singleWhere((entry) => entry.label == 'TV Shows').count,
+        1,
+      );
+      expect(filter.entries.any((entry) => entry.label == 'Films'), isFalse);
+    }
+    final changed = await save(
+      [item('unscanned')],
+      unknown,
+      mode: PlaybackMode.shuffle,
+      playlistSource: const PlaylistSource('other'),
+    );
+    expect(changed.sourceLibraries, isEmpty);
+  });
+
+  test(
+    'Review saves grouped then mixed numbering for the complete roster',
+    () async {
+      final server = _server('server');
+      final store = _MemoryStore();
+      const library = PlexLibrary(
+        id: 'movies',
+        title: 'Films',
+        type: PlexLibraryType.movie,
+      );
+      Channel generated(
+        String id,
+        int number,
+        LibraryFilter filter,
+        String tag,
+      ) => Channel(
+        id: id,
+        number: number,
+        name: tag,
+        builderKey: id,
+        source: LibrarySource(
+          libraryId: library.id,
+          libraryType: library.type,
+          filters: {
+            filter: [tag],
+          },
+        ),
+        playbackMode: PlaybackMode.shuffle,
+        anchor: DateTime.utc(2026),
+        shuffleSeed: number,
+        favorite: id == 'genre',
+      );
+      final first = generated('first', 1, LibraryFilter.collection, 'First');
+      final genre = generated('genre', 2, LibraryFilter.genre, 'Drama');
+      final last = generated('last', 4, LibraryFilter.collection, 'Last');
+      final custom = _channel('custom').copyWith(number: 3);
+      final controller = LineupController(
+        store: store,
+        credentials: _MemoryCredentials(),
+        plex: _FakePlex(),
+        scenario: LineupScenario(
+          account: const PlexAccount(id: 'owner', name: 'Owner', email: ''),
+          server: server,
+          connection: server.connections.single,
+          libraries: [library],
+          channels: [first, genre, custom, last],
+        ),
+      );
+      addTearDown(controller.dispose);
+      for (final order in ChannelOrder.values.reversed) {
+        final base = controller.channels;
+        // A suppressed source produces no proposal. The ordering still sees its
+        // saved recipe and current count without trying to validate it as new.
+        final plan = materializeChannelPlan(
+          proposals: [],
+          existing: base,
+          mode: ChannelBuildMode.merge,
+        );
+        final ordering = (
+          order: order,
+          strategyOrder: BuilderStrategy.values,
+          sourceCounts: {
+            canonicalSourceIdentity(first.source): 8,
+            canonicalSourceIdentity(last.source): 4,
+          },
+        );
+        final review = SetupReview(
+          base: base,
+          plan: plan,
+          mode: ChannelBuildMode.merge,
+          strategyBySource: {},
+          ordering: ordering,
+        );
+        final expected = order == ChannelOrder.grouped
+            ? ['first', 'last', 'custom', 'genre']
+            : ['first', 'genre', 'custom', 'last'];
+        expect(review.finalChannels.map((row) => row.id), expected);
+        expect(
+          review.plan.unmatchedGenerated.map((row) => row.id),
+          unorderedEquals(['first', 'genre', 'last']),
+        );
+        expect(
+          await controller.applyReviewedChannelPlan(
+            plan.channels,
+            mode: review.mode,
+            expectedBase: review.base,
+            channelOrder: order,
+            reviewedNumbers: review.reviewedNumbers,
+          ),
+          ChannelPlanApplyResult.applied,
+        );
+        expect(controller.channels, channelValues(review.finalChannels));
+        expect(controller.channelOrder, order);
+        expect(
+          controller.channels.singleWhere((row) => row.id == 'custom').number,
+          3,
+        );
+        final savedGenre = controller.channels.singleWhere(
+          (row) => row.id == 'genre',
+        );
+        expect(savedGenre.anchor, genre.anchor);
+        expect(savedGenre.favorite, isTrue);
+      }
+    },
+  );
+
+  test(
+    'startup reads a saved lineup written before channel identity fields',
+    () async {
+      final directory = await Directory.systemTemp.createTemp(
+        'lineup-old-identity',
+      );
+      addTearDown(() => directory.delete(recursive: true));
+      final server = _server('server');
+      const scope = LineupScope(profileKey: 'owner', serverId: 'server');
+      final old = _channel('saved');
+      final state = const PersistedState().withLineup(
+        scope,
+        ScopedLineup(
+          libraryIds: {'movies'},
+          channels: [old],
+          currentChannelId: old.id,
+        ),
+      );
+      final payload = state.toJson();
+      expect(payload.containsKey('channelOrderByProfileServer'), isFalse);
+      expect(old.toJson().containsKey('kind'), isFalse);
+      await File('${directory.path}/state.json')
+          .writeAsString(jsonEncode(payload));
+      final controller = LineupController(
+        store: FileAppStore(directory),
+        credentials: _MemoryCredentials(accountToken: 'test-token'),
+        plex: _FakePlex()
+          ..serversResult = [server]
+          ..connectionResult = server.connections.single
+          ..librariesResult = const [
+            PlexLibrary(
+              id: 'movies',
+              title: 'Films',
+              type: PlexLibraryType.movie,
+            ),
+          ]
+          ..libraryItemsHandler = (_, _, _, _) async => [_playableMovie],
+      );
+      addTearDown(controller.dispose);
+      await controller.initialize();
+      expect(controller.startupRecoveryNotice, isNull);
+      expect(controller.channels.single.id, old.id);
+      expect(controller.channelOrder, ChannelOrder.mixed);
+      expect(controller.channels.single.favorite, isFalse);
+    },
+  );
+
+  test(
+    'favourites and grouped order persist with the lineup and survive update',
+    () async {
+      final store = _CountingMemoryStore();
+      final server = _server('server');
+      const scope = LineupScope(profileKey: 'owner', serverId: 'server');
+      const library = PlexLibrary(
+        id: 'movies',
+        title: 'Films',
+        type: PlexLibraryType.movie,
+      );
+      final controller = LineupController(
+        store: store,
+        credentials: _MemoryCredentials(),
+        plex: _FakePlex(),
+        scenario: LineupScenario(
+          account: const PlexAccount(id: 'owner', name: 'Owner', email: ''),
+          server: server,
+          connection: server.connections.single,
+          libraries: [library],
+          selectedLibraryIds: {library.id},
+          availableMedia: [_playableMovie],
+        ),
+      );
+      addTearDown(controller.dispose);
+
+      final original = _generatedChannel('generated', 1);
+      await controller.applyReviewedChannelPlan(
+        [original],
+        mode: ChannelBuildMode.replace,
+        expectedBase: controller.channels,
+        channelOrder: ChannelOrder.grouped,
+      );
+      store.failNextSave = true;
+      await expectLater(
+        controller.setFavorite(original.id, true),
+        throwsStateError,
+      );
+      expect(controller.channels.single.favorite, isFalse);
+      final saves = store.saveCalls;
+      await Future.wait([
+        controller.setFavorite(original.id, true),
+        controller.setFavorite(original.id, true),
+      ]);
+      expect(store.saveCalls, saves + 1);
+      final favourite = controller.channels.single;
+      expect(favourite.favorite, isTrue);
+
+      await controller.applyReviewedChannelPlan(
+        [favourite],
+        mode: ChannelBuildMode.merge,
+        expectedBase: controller.channels,
+      );
+      final disk = PersistedState.fromJson(
+        jsonDecode(jsonEncode(store.state.toJson())),
+      );
+      expect(disk.lineupFor(scope).channelOrder, ChannelOrder.grouped);
+      expect(disk.lineupFor(scope).channels.single.favorite, isTrue);
+      expect(disk.lineupFor(scope).channels.single.anchor, original.anchor);
+
+      await controller.deleteChannels(expectedChannels: [favourite]);
+      await expectLater(
+        controller.setFavorite(original.id, true),
+        throwsA(isA<ChannelStateConflictException>()),
+      );
+      expect(store.state.lineupFor(scope).channels, isEmpty);
+      expect(store.state.lineupFor(scope).channelOrder, ChannelOrder.grouped);
+    },
+  );
+
+  test(
+    'new Studio save derives kind and fixes the initial phase once',
+    () async {
+      final store = _MemoryStore();
+      final server = _server('server');
+      const scope = LineupScope(profileKey: 'owner', serverId: 'server');
+      const library = PlexLibrary(
+        id: 'movies',
+        title: 'Films',
+        type: PlexLibraryType.movie,
+      );
+      final controller = LineupController(
+        store: store,
+        credentials: _MemoryCredentials(),
+        plex: _FakePlex(),
+        scheduleClock: () => DateTime.utc(2026, 11, 14),
+        scenario: LineupScenario(
+          account: const PlexAccount(id: 'owner', name: 'Owner', email: ''),
+          server: server,
+          connection: server.connections.single,
+          libraries: [library],
+          availableMedia: [_playableMovie],
+          selectedLibraryIds: {library.id},
+        ),
+      );
+      addTearDown(controller.dispose);
+      final draft = _channel('custom');
+      final created = await controller.saveChannel(draft, expectedBase: null);
+      expect(created.name, draft.name);
+      expect(created.kind, ChannelKind.film);
+      expect(created.libraryTitle, 'Films');
+      final savedAt = DateTime.utc(2026, 11, 14);
+      expect(created.anchor.isBefore(savedAt), isTrue);
+      expect(created.anchor.isAfter(draft.anchor), isTrue);
+      expect(
+        savedAt.difference(created.anchor),
+        lessThan(_playableMovie.duration),
+      );
+
+      final renamed = await controller.saveChannel(
+        draft.copyWith(name: 'My station'),
+        expectedBase: created,
+      );
+      expect(renamed.anchor, created.anchor);
+      expect(renamed.name, 'My station');
+      expect(
+        store.state.lineupFor(scope).channels.single.anchor,
+        created.anchor,
+      );
     },
   );
 
@@ -8180,19 +8731,37 @@ void main() {
 
   test('saveChannel enforces create and canonical expected bases', () async {
     final store = _CountingMemoryStore();
+    final savedAt = DateTime.utc(2026, 11, 14);
     final controller = LineupController(
       store: store,
       credentials: _MemoryCredentials(),
       plex: _FakePlex(),
+      scheduleClock: () => savedAt,
     );
     addTearDown(controller.dispose);
     await controller.initialize();
-    final created = _manualChannel('channel', 'Created');
-
-    await controller.saveChannel(created, expectedBase: null);
+    final draft = _manualChannel('channel', 'Created');
+    final created = await controller.saveChannel(draft, expectedBase: null);
+    expect(created.toJson(), draft.copyWith(anchor: savedAt).toJson());
     expect(controller.channels.single.toJson(), created.toJson());
     expect(store.saveCalls, 1);
 
+    await expectLater(
+      controller.saveChannel(
+        created,
+        expectedBase: created,
+        verifiedNewScheduleRevision: 'synthetic revision',
+      ),
+      throwsArgumentError,
+    );
+    await expectLater(
+      controller.saveChannel(
+        _generatedChannel('generated', 2),
+        expectedBase: null,
+        verifiedNewScheduleRevision: 'synthetic revision',
+      ),
+      throwsArgumentError,
+    );
     await expectLater(
       controller.saveChannel(created, expectedBase: null),
       throwsFormatException,
@@ -8214,7 +8783,10 @@ void main() {
     expect(store.saveCalls, 1);
     expect(controller.channels.single.toJson(), created.toJson());
 
-    final edited = _manualChannel('channel', 'Edited');
+    final edited = _manualChannel(
+      'channel',
+      'Edited',
+    ).copyWith(anchor: created.anchor);
     store.failNextSave = true;
     await expectLater(
       controller.saveChannel(edited, expectedBase: created),
@@ -8336,10 +8908,12 @@ void main() {
     'empty live sources fail while retained manual content may save',
     () async {
       final store = _CountingMemoryStore();
+      final savedAt = DateTime.utc(2026, 11, 14);
       final controller = LineupController(
         store: store,
         credentials: _MemoryCredentials(),
         plex: _FakePlex(),
+        scheduleClock: () => savedAt,
         scenario: LineupScenario(
           connection: _server('server').connections.single,
         ),
@@ -8370,7 +8944,10 @@ void main() {
       }
       final retained = _manualChannel('retained', 'Retained');
       await controller.saveChannel(retained, expectedBase: null);
-      expect(controller.channels.single.toJson(), retained.toJson());
+      expect(
+        controller.channels.single.toJson(),
+        retained.copyWith(anchor: savedAt).toJson(),
+      );
       expect(store.saveCalls, 1);
     },
   );
@@ -9607,7 +10184,7 @@ void main() {
       ..homeUsersResult = const [
         PlexHomeUser(id: 'owner', name: 'Owner', protected: false),
       ]
-      ..serversResult = [nextServer]
+      ..serversResult = [oldServer, nextServer]
       ..selectConnectionHandler = (_, _) => probe.future;
     final controller = LineupController(
       store: _MemoryStore(),
@@ -9937,7 +10514,7 @@ void main() {
       store: store,
       credentials: _MemoryCredentials(accountToken: 'token'),
       plex: _FakePlex()
-        ..serversResult = [nextServer]
+        ..serversResult = [oldServer, nextServer]
         ..connectionResult = nextServer.connections.single,
     );
     addTearDown(controller.dispose);

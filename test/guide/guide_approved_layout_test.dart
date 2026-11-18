@@ -7,6 +7,7 @@ import 'package:flutter/rendering.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:lineup_desktop/app/lineup_controller.dart';
 import 'package:lineup_desktop/channels/channel.dart';
+import 'package:lineup_desktop/channels/channel_filter.dart';
 import 'package:lineup_desktop/channels/scheduler.dart';
 import 'package:lineup_desktop/guide/guide_controller.dart';
 import 'package:lineup_desktop/guide/guide_view.dart';
@@ -43,6 +44,28 @@ void main() {
       });
     }
   }
+  test('TV rail caps the base and grows the measured number column', () {
+    const screen = Size(1920, 1080);
+    GuideLayoutPolicy policy(double scale, double numberWidth) =>
+        GuideLayoutPolicy.forSize(
+          screen,
+          hasPicture: true,
+          isTv: true,
+          textScale: scale,
+          numberColumnWidth: numberWidth,
+        );
+
+    final normal = policy(1, 37);
+    expect(normal.channelRailWidth, 303);
+    expect(normal.timelineWidthFor(screen.width), 1616);
+    final enlarged = policy(1.3, 48);
+    expect(enlarged.channelRailWidth, closeTo(350.2, .001));
+    expect(enlarged.timelineWidthFor(screen.width), closeTo(1568.8, .001));
+    final widerNumber = policy(1.3, 68);
+    expect(widerNumber.channelRailWidth, closeTo(370.2, .001));
+    expect(widerNumber.timelineWidthFor(screen.width), closeTo(1548.8, .001));
+  });
+
   for (final scale in [1.0, 1.15, 1.3]) {
     for (final large in [false, true]) {
       testWidgets(
@@ -87,6 +110,106 @@ void main() {
       );
     }
   }
+  testWidgets('Guide speaks tagged library provenance once with its type', (
+    tester,
+  ) async {
+    tester.view
+      ..physicalSize = const Size(1920, 1080)
+      ..devicePixelRatio = 1;
+    addTearDown(tester.view.reset);
+    final semantics = tester.ensureSemantics();
+    final now = DateTime(2026, 10, 25, 6, 40);
+    Channel row(
+      int number,
+      String name,
+      String library,
+      PlexLibraryType type,
+    ) => Channel(
+      id: 'channel-$number',
+      number: number,
+      name: name,
+      source: LibrarySource(libraryId: library, libraryType: type),
+      playbackMode: PlaybackMode.shuffle,
+      anchor: now,
+      shuffleSeed: number,
+      kind: type == PlexLibraryType.movie ? ChannelKind.film : ChannelKind.tv,
+      sourceLibraries: {library: library},
+    );
+
+    final lineup = FixtureController(
+      scenario: LineupScenario(
+        stage: SetupStage.ready,
+        channels: [
+          row(1, 'Drama', 'Feature Films', PlexLibraryType.movie),
+          row(2, 'Drama', 'TV Shows', PlexLibraryType.show),
+          row(3, 'Classics', 'Archive', PlexLibraryType.movie),
+        ],
+        settings: const LineupSettings(
+          guideShowChannelSources: true,
+          reduceMotion: true,
+        ),
+      ),
+    );
+    addTearDown(lineup.dispose);
+    final guide = GuideController(
+      lineup: lineup,
+      clock: () => now,
+      loadSchedule: (channel) async => buildChannelSchedule(channel, const [
+        ChannelItem(
+          id: 'synthetic',
+          title: 'City Stories',
+          duration: Duration(hours: 2),
+        ),
+      ]),
+    );
+    addTearDown(guide.dispose);
+
+    await tester.pumpWidget(
+      DeviceProfileScope(
+        profile: profileFor(false),
+        child: MaterialApp(
+          theme: LineupTheme.forName(LineupThemeName.emberSteel),
+          builder: (context, child) =>
+              LineupCanvas(reduceMotion: true, child: child!),
+          home: GuideView(
+            controller: guide,
+            watchingChannelId: 'channel-2',
+            pictureInPicture: const ColoredBox(color: Color(0xff203747)),
+            onClose: (_, _) {},
+            onOpenPlayer: () {},
+            onTune: (_) async {},
+          ),
+        ),
+      ),
+    );
+    await tester.pumpAndSettle();
+
+    expect(find.text('Feature Films · Movies'), findsOneWidget);
+    final tagged = find.bySemanticsLabel(
+      'Channel 1, Drama, Film, Feature Films library, Movies',
+    );
+    expect(tagged, findsOneWidget);
+    expect(
+      tester
+          .getSemantics(tagged)
+          .getSemanticsData()
+          .hasAction(ui.SemanticsAction.tap),
+      isTrue,
+    );
+    expect(
+      find.bySemanticsLabel(
+        'Channel 2, Drama, TV, TV Shows library, now watching',
+      ),
+      findsOneWidget,
+    );
+    expect(
+      find.bySemanticsLabel('Channel 3, Classics, Film, Archive · Movies'),
+      findsOneWidget,
+    );
+    semantics.dispose();
+    await tester.pumpWidget(const SizedBox.shrink());
+  });
+
   final output = Platform.environment['GUIDE_CAPTURE'];
   final baseline = Platform.environment['GUIDE_BASELINE'] == '1';
   for (final tv in [true, false]) {
@@ -262,7 +385,7 @@ void main() {
                       .first,
                 )
                 .width,
-            'libraryPicker': rect('guide-library-picker'),
+            'channelFilter': rect('guide-channel-filter'),
             'rows': tester.widget<ListView>(list).itemExtent,
             'list': rect('guide-schedule-list'),
             'numberLines': {for (final n in numbers) '$n': lines('$n')},
@@ -287,6 +410,29 @@ void main() {
               expect(lines(n), lessThanOrEqualTo(2));
             }
             expect(find.text('Watching'), findsOneWidget);
+            final semantics = tester.ensureSemantics();
+            await tester.pump();
+            final provenanceVisible = find
+                .text('Manual lineup')
+                .evaluate()
+                .isNotEmpty;
+            final provenanceRow = find.bySemanticsLabel(
+              'Channel 1, ${names.first}${provenanceVisible ? ', Manual lineup' : ''}',
+            );
+            expect(provenanceRow, findsOneWidget);
+            expect(
+              tester
+                  .getSemantics(provenanceRow)
+                  .getSemanticsData()
+                  .hasAction(ui.SemanticsAction.tap),
+              isTrue,
+            );
+            expect(find.bySemanticsLabel('Manual lineup'), findsNothing);
+            expect(
+              find.bySemanticsLabel('Channel 999, ${names[3]}, now watching'),
+              findsOneWidget,
+            );
+            semantics.dispose();
             expect(
               tester.getSize(list).height /
                   tester.widget<ListView>(list).itemExtent!,
@@ -482,6 +628,7 @@ void main() {
                   libraryId: 'library',
                   libraryType: PlexLibraryType.show,
                 ),
+                sourceLibraries: const {'library': 'Library'},
                 playbackMode: original.playbackMode,
                 anchor: original.anchor,
                 shuffleSeed: original.shuffleSeed,
@@ -489,7 +636,10 @@ void main() {
               ...channels.skip(1),
             ]);
             await tester.pumpAndSettle();
-            guide.setLibraryFilter('library');
+            guide.setChannelFilter((
+              group: ChannelFilterGroup.library,
+              value: 'library',
+            ));
             await tester.pumpAndSettle();
             expect(guide.channels, hasLength(1));
             expect(
@@ -497,7 +647,7 @@ void main() {
               numberWidth,
               reason: 'Library filtering must retain the whole-lineup column',
             );
-            guide.setLibraryFilter(null);
+            guide.setChannelFilter(ChannelFilter.all);
             await tester.pumpAndSettle();
             for (final maximum in [999, 1]) {
               await lineup.deleteChannels(

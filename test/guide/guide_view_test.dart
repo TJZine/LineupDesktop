@@ -16,6 +16,7 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:lineup_desktop/ui/lineup_canvas.dart';
 import 'package:lineup_desktop/app/lineup_controller.dart';
 import 'package:lineup_desktop/channels/channel.dart';
+import 'package:lineup_desktop/channels/channel_filter.dart';
 import 'package:lineup_desktop/channels/scheduler.dart';
 import 'package:lineup_desktop/guide/guide_controller.dart';
 import 'package:lineup_desktop/guide/guide_view.dart';
@@ -179,11 +180,7 @@ void main() {
       ),
     );
     await tester.pumpAndSettle();
-    for (final label in [
-      'Close Guide',
-      'Earlier by 30 minutes',
-      'Later by 30 minutes',
-    ]) {
+    for (final label in ['Earlier by 30 minutes', 'Later by 30 minutes']) {
       final node = tester.getSemantics(find.byTooltip(label));
       expect(node.label, label);
       expect(node.getSemanticsData().flagsCollection.isButton, isTrue);
@@ -1221,7 +1218,8 @@ void main() {
       final emptyHeading = find.text('No channels yet');
       expect(
         tester.widget<Text>(emptyHeading).style,
-        Theme.of(tester.element(emptyHeading)).textTheme.titleLarge,
+        Theme.of(tester.element(emptyHeading)).textTheme.titleLarge
+            ?.copyWith(fontSize: 24),
       );
       expect(
         tester
@@ -1331,6 +1329,7 @@ void main() {
       tester.view.devicePixelRatio = 1;
       addTearDown(tester.view.resetPhysicalSize);
       addTearDown(tester.view.resetDevicePixelRatio);
+      var now = DateTime.utc(2026, 1, 15, 3, 28);
       final pending = <String, Completer<Uint8List?>>{};
       final lineup = _Lineup(
         2,
@@ -1359,13 +1358,14 @@ void main() {
               ),
             ]),
             playbackMode: PlaybackMode.sequential,
-            anchor: DateTime.now().subtract(const Duration(hours: 1)),
+            anchor: now.subtract(const Duration(hours: 1)),
             shuffleSeed: i,
           ),
       ]);
       addTearDown(lineup.dispose);
       final guide = GuideController(
         lineup: lineup,
+        clock: () => now,
         loadSchedule: (c) async => _schedule(c),
       );
       addTearDown(guide.dispose);
@@ -1400,6 +1400,25 @@ void main() {
       await tester.pumpAndSettle();
       pending['/backdrop-0']!.complete(_tinyPng);
       await tester.pumpAndSettle();
+      final focusedId = guide.focusedProgramId;
+      for (final state in [
+        AppLifecycleState.inactive,
+        AppLifecycleState.hidden,
+        AppLifecycleState.paused,
+      ]) {
+        tester.binding.handleAppLifecycleStateChanged(state);
+      }
+      now = now.add(const Duration(minutes: 4));
+      for (final state in [
+        AppLifecycleState.hidden,
+        AppLifecycleState.inactive,
+        AppLifecycleState.resumed,
+      ]) {
+        tester.binding.handleAppLifecycleStateChanged(state);
+      }
+      await tester.pumpAndSettle();
+      expect(guide.focusedProgramId, focusedId);
+      expect(find.text('Choose a channel to watch'), findsNothing);
       final idle = tester.widget<Image>(
         find.byKey(const Key('guide-idle-backdrop')),
       );
@@ -1410,7 +1429,14 @@ void main() {
           (image.image as CoverResizeImage).imageProvider as MemoryImage;
       expect(source(idle).bytes, same(_wideLogoPng));
       expect(source(info).bytes, same(source(idle).bytes));
-      expect(find.text('Select to watch · Channel 1'), findsOneWidget);
+      final caption = find.byKey(const Key('guide-idle-caption'));
+      final artwork = find.byKey(const Key('guide-idle-artwork'));
+      expect(tester.widget<Text>(caption).data, 'Select to watch');
+      expect(tester.getTopLeft(caption).dx - tester.getTopLeft(artwork).dx, 24);
+      expect(
+        tester.getBottomRight(artwork).dy - tester.getBottomRight(caption).dy,
+        24,
+      );
       final switcher = find.descendant(
         of: find.byKey(const Key('guide-picture-in-picture')),
         matching: find.byType(AnimatedSwitcher),
@@ -2635,6 +2661,83 @@ void main() {
     expect(lineup.artworkLoads, 1);
   });
 
+  for (final tv in [false, true]) {
+    testWidgets('Guide episode size and tight-cell priority (TV: $tv)', (
+      tester,
+    ) async {
+      tester.view
+        ..physicalSize = const Size(1920, 1080)
+        ..devicePixelRatio = 1;
+      addTearDown(tester.view.reset);
+      final now = DateTime.utc(2026, 11, 15, 17, 18);
+      final lineup = _Lineup(1);
+      addTearDown(lineup.dispose);
+      lineup.fixtureActor.replaceChannels([
+        Channel(
+          id: 'episode-channel',
+          number: 1,
+          name: 'Synthetic channel',
+          source: const ManualSource([
+            ChannelItem(
+              id: 'room',
+              title: 'Episode title',
+              showTitle: 'The Signal Room',
+              duration: Duration(minutes: 70),
+              seasonNumber: 3,
+              episodeNumber: 1,
+            ),
+            ChannelItem(
+              id: 'shift',
+              title: 'A Short Episode',
+              showTitle: 'The Signal Room',
+              duration: Duration(minutes: 8),
+              seasonNumber: 3,
+              episodeNumber: 2,
+            ),
+          ]),
+          playbackMode: PlaybackMode.sequential,
+          anchor: now,
+          shuffleSeed: 1,
+        ),
+      ]);
+      final guide = GuideController(
+        lineup: lineup,
+        clock: () => now,
+        loadSchedule: (channel) async => _schedule(channel),
+      );
+      addTearDown(guide.dispose);
+      await tester.pumpWidget(
+        MaterialApp(
+          theme: LineupTheme.forName(
+            LineupThemeName.emberSteel,
+            formFactor: profileFor(tv).formFactor,
+          ),
+          builder: _guideCanvasBuilderFor(tv),
+          home: GuideView(
+            controller: guide,
+            onClose: (_, _) {},
+            onTune: (_) async {},
+          ),
+        ),
+      );
+      await tester.pumpAndSettle();
+
+      final schedule = find.byKey(const Key('guide-schedule-list'));
+      final visibleCodes = tester.widgetList<Text>(
+        find.descendant(of: schedule, matching: find.text('S03E01')),
+      );
+      expect(visibleCodes, isNotEmpty);
+      expect(
+        visibleCodes.map((text) => text.style?.fontSize),
+        everyElement(tv ? 20 : 14),
+      );
+      expect(
+        find.descendant(of: schedule, matching: find.text('S03E02')),
+        findsNothing,
+      );
+    });
+  }
+
   testWidgets('Guide omits incomplete episode coordinates', (tester) async {
     final lineup = _Lineup(1);
     addTearDown(lineup.dispose);
@@ -2874,11 +2977,18 @@ void main() {
       expect(label(earlier), contains('currently airing'));
       expect(label(next), contains('upcoming'));
       expect(marker(earlier), findsOneWidget);
+      final markerElement = tester.element(marker(earlier));
+      final cellStack = markerElement.findAncestorWidgetOfExactType<Stack>()!;
+      // The marker must be drawn inside the cell, before its content.
+      expect(
+        cellStack.children.map((child) => child.runtimeType.toString()),
+        containsAllInOrder(['_ProgramNowLine', 'Padding']),
+      );
       expect(
         tester
             .widget<Text>(find.byKey(const Key('guide-now-playing-context')))
             .data,
-        '1 · Channel 0 — Earlier 0',
+        '1 • Channel 0 · Earlier 0',
       );
       final oldNowLine = tester
           .getTopLeft(find.byKey(const Key('guide-now-line')))
@@ -2894,7 +3004,7 @@ void main() {
         tester
             .widget<Text>(find.byKey(const Key('guide-now-playing-context')))
             .data,
-        '1 · Channel 0 — Next 0',
+        '1 • Channel 0 · Next 0',
       );
       expect(label(next), contains('currently airing'));
       expect(marker(earlier), findsNothing);
@@ -4563,6 +4673,7 @@ void main() {
               return KeyEventResult.ignored;
             },
             child: GuideView(
+              watchingChannelId: ready.id,
               controller: guide,
               focusNode: grid,
               onClose: (_, _) => closes++,
@@ -4600,7 +4711,7 @@ void main() {
       expect(chords, 1);
       expect(closes, 0);
 
-      await focus(find.byTooltip('Close Guide'));
+      await focus(find.byKey(const Key('guide-back-to-player')));
       await tester.sendKeyEvent(activation);
       await tester.pumpAndSettle();
       expect(closes, 1);
@@ -4614,7 +4725,7 @@ void main() {
       expect(guide.followingLive, isTrue);
       expect(tunes, 0);
 
-      for (final picker in ['guide-hours', 'guide-library-picker']) {
+      for (final picker in ['guide-hours', 'guide-channel-filter']) {
         final control = find.byKey(Key(picker));
         // DropdownButton owns an internal focus node on its InkWell. Focus that
         // actual trigger rather than a selected-item Text inside its stack.
@@ -5128,6 +5239,7 @@ void main() {
           libraryId: libraryId,
           libraryType: PlexLibraryType.show,
         ),
+        sourceLibraries: const {libraryId: libraryId},
         playbackMode: PlaybackMode.sequential,
         anchor: DateTime.now(),
         shuffleSeed: 1,
@@ -5158,17 +5270,20 @@ void main() {
       find.byKey(const Key('guide-channel-search')),
       'Library',
     );
-    guide.setLibraryFilter(libraryId);
+    guide.setChannelFilter((
+      group: ChannelFilterGroup.library,
+      value: libraryId,
+    ));
     await tester.pump();
 
-    final label = find.byKey(const Key('guide-active-library-label'));
+    final label = find.byKey(const Key('guide-active-channel-filter-label'));
     expect(label, findsOneWidget);
-    expect(find.text('Libraries'), findsOneWidget);
+    expect(find.text('Channel filter'), findsOneWidget);
     expect(tester.widget<Text>(label).data, libraryId);
     expect(_drawnSize(tester, label).height, greaterThan(16));
-    await tester.tap(find.byTooltip('Remove library filter'));
+    await tester.tap(find.byTooltip('Remove channel filter'));
     await tester.pump();
-    expect(guide.libraryFilterId, isNull);
+    expect(guide.channelFilterKey, ChannelFilter.all);
     expect(guide.searchQuery, 'library');
 
     guide.dispose();

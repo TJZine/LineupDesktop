@@ -82,7 +82,7 @@ void main() {
       expect(tester.takeException(), isNull);
     },
   );
-  testWidgets('TV Guide raw dropdowns read focused leaf ink', (tester) async {
+  testWidgets('TV Guide pickers read focused leaf ink', (tester) async {
     FocusManager.instance.highlightStrategy =
         FocusHighlightStrategy.alwaysTouch;
     addTearDown(
@@ -91,16 +91,21 @@ void main() {
     );
     final fixture = UiFixture(
       profile: profileFor(true),
-      scenario: const LineupScenario(stage: SetupStage.ready),
+      scenario: LineupScenario(
+        stage: SetupStage.ready,
+        channels: [syntheticGuideChannel()],
+      ),
     );
     await tester.pumpWidget(fixture.build());
     await tester.pumpAndSettle();
-    for (final key in ['guide-library-picker', 'guide-hours']) {
+    for (final key in ['guide-channel-filter', 'guide-hours']) {
       final picker = find.byKey(Key(key));
       final baseSurface = LineupTheme.of(tester.element(picker))
           .elevatedSurface;
       final trigger = tester.widget<InkWell>(
-        find.descendant(of: picker, matching: find.byType(InkWell)).first,
+        key == 'guide-channel-filter'
+            ? picker
+            : find.descendant(of: picker, matching: find.byType(InkWell)).first,
       );
       // Position the component test at the real trigger; subsequent open/close
       // uses keys. Native consumer navigation is checked separately.
@@ -113,12 +118,11 @@ void main() {
           .hitTestable()
           .first;
       expect(_ink(tester, label), const Color(0xFF090806), reason: key);
-      final surface = switch (tester.widget(picker)) {
-        DropdownButton<int>(:final dropdownColor) => dropdownColor,
-        DropdownButton<String?>(:final dropdownColor) => dropdownColor,
-        _ => null,
-      };
-      expect(surface, baseSurface);
+      if (tester.widget(picker) case DropdownButton<int>(
+        :final dropdownColor,
+      )) {
+        expect(dropdownColor, baseSurface);
+      }
       final icon = find.descendant(
         of: picker,
         matching: find.byIcon(Icons.arrow_drop_down),
@@ -127,6 +131,15 @@ void main() {
       await tester.sendKeyEvent(LogicalKeyboardKey.select);
       await tester.pumpAndSettle();
       expect(find.byType(LineupDropdownMenuRow), findsWidgets);
+      if (key == 'guide-channel-filter') {
+        final popupSurface = find.ancestor(
+          of: find.byType(LineupDropdownMenuRow).first,
+          matching: find.byWidgetPredicate(
+            (widget) => widget is Material && widget.type == MaterialType.card,
+          ),
+        );
+        expect(tester.widget<Material>(popupSurface).color, baseSurface);
+      }
       await tester.sendKeyEvent(LogicalKeyboardKey.escape);
       await tester.pumpAndSettle();
     }

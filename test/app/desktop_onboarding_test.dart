@@ -562,7 +562,10 @@ void main() {
         expect(controller.profile?.id, 'protected');
         expect(store.state.profileId, 'protected');
         expect(controller.busy, isTrue);
-        expect(controller.stage, SetupStage.servers);
+        final pendingStage = failure == 'discovery'
+            ? SetupStage.profiles
+            : SetupStage.servers;
+        expect(controller.stage, pendingStage);
         expect(find.byKey(const Key('profile-pin-sheet')), findsNothing);
         if (failure == 'server save') {
           expect(store.serverSaveStarted, isTrue);
@@ -578,7 +581,7 @@ void main() {
             find.byType(UpstreamOnboardingView),
           );
           expect(state.handleBack(), isTrue);
-          expect(controller.stage, SetupStage.servers);
+          expect(controller.stage, pendingStage);
           plex.gate.completeError(
             const PlexException(
               'server-unreachable',
@@ -651,15 +654,9 @@ void main() {
         expect(controller.busy, isFalse);
         expect(controller.error, isNull);
         expect(find.byKey(const Key('profile-pin-sheet')), findsNothing);
-        expect(
-          controller.stage,
-          failure == 'none' ? SetupStage.servers : SetupStage.channelSetup,
-        );
-        if (failure == 'none') {
-          expect(find.text('Synthetic server'), findsWidgets);
-        } else {
-          expect(find.byType(UpstreamOnboardingView), findsNothing);
-        }
+        expect(controller.stage, SetupStage.channelSetup);
+        expect(find.byType(UpstreamOnboardingView), findsNothing);
+        expect(find.text('Choose libraries'), findsOneWidget);
       }
       await tester.pumpWidget(const SizedBox.shrink());
     });
@@ -843,7 +840,7 @@ void main() {
         ),
         theme: LineupTheme.forName(
           themeName,
-          largeFocusIndicators: false,
+          largeFocusIndicators: controller.settings.largeFocusIndicators,
           formFactor: profileFor(isTv).formFactor,
         ),
         home: UpstreamOnboardingView(
@@ -971,6 +968,57 @@ void main() {
     },
   );
 
+  testWidgets('TV PIN Back reveals the invoking profile in a scrolling grid', (
+    tester,
+  ) async {
+    tester.platformDispatcher.textScaleFactorTestValue = 1.75;
+    addTearDown(tester.platformDispatcher.clearTextScaleFactorTestValue);
+    final controller = _AuthorizationController(
+      scenario: LineupScenario(
+        stage: SetupStage.profiles,
+        profiles: [
+          for (var index = 0; index < 15; index++)
+            PlexHomeUser(
+              id: 'viewer-$index',
+              name: 'Viewer ${index + 1}',
+              protected: index == 14,
+            ),
+        ],
+      ),
+    );
+    await tester.pumpWidget(
+      UiFixture(controller: controller, profile: tvProfile).build(),
+    );
+    await tester.pumpAndSettle();
+    final tile = find.widgetWithText(TextButton, 'Viewer 15');
+    final focus = tester.widget<TextButton>(tile).focusNode!;
+    final scrollView = find
+        .ancestor(of: tile, matching: find.byType(SingleChildScrollView))
+        .first;
+    final ring = find.byKey(const ValueKey('tv-profile-focus-ring'));
+    for (var row = 0; row < 7; row++) {
+      await tester.sendKeyEvent(LogicalKeyboardKey.arrowDown);
+      await tester.pumpAndSettle();
+    }
+    expect(focus.hasPrimaryFocus, isTrue);
+    expect(
+      tester.getRect(scrollView).intersect(tester.getRect(ring)),
+      tester.getRect(ring),
+    );
+    await tester.sendKeyEvent(LogicalKeyboardKey.select);
+    await tester.pumpAndSettle();
+    expect(find.byKey(const Key('profile-pin-sheet')), findsOneWidget);
+
+    await tester.binding.handlePopRoute();
+    await tester.pumpAndSettle();
+    expect(tester.widget<TextButton>(tile).focusNode!.hasPrimaryFocus, isTrue);
+    expect(
+      tester.getRect(scrollView).intersect(tester.getRect(ring)),
+      tester.getRect(ring),
+    );
+    expect(tester.takeException(), isNull);
+  });
+
   testWidgets('NAV-I2 submitting PIN Back is claimed by the PIN owner', (
     tester,
   ) async {
@@ -1003,6 +1051,47 @@ void main() {
     expect(find.byKey(const Key('profile-pin-sheet')), findsOneWidget);
     controller.submitGate!.complete();
     await tester.pumpAndSettle();
+  });
+
+  testWidgets('TV opens a protected profile with focus on PIN digit 1', (
+    tester,
+  ) async {
+    final controller = _AuthorizationController(
+      scenario: const LineupScenario(
+        stage: SetupStage.profiles,
+        profiles: [
+          PlexHomeUser(
+            id: 'protected',
+            name: 'Protected viewer',
+            protected: true,
+          ),
+        ],
+      ),
+    );
+    await tester.pumpWidget(
+      UiFixture(controller: controller, profile: tvProfile).build(),
+    );
+    await tester.pumpAndSettle();
+    final profile = tester.widget<TextButton>(
+      find.widgetWithText(TextButton, 'Protected viewer'),
+    );
+    expect(profile.focusNode!.hasPrimaryFocus, isTrue);
+    await tester.sendKeyEvent(LogicalKeyboardKey.select);
+    await tester.pumpAndSettle();
+
+    expect(find.byKey(const Key('profile-pin-sheet')), findsOneWidget);
+    expect(
+      FocusManager.instance.primaryFocus?.debugLabel,
+      'Profile PIN digit 1',
+    );
+    await tester.sendKeyEvent(LogicalKeyboardKey.select);
+    await tester.sendKeyEvent(LogicalKeyboardKey.arrowRight);
+    await tester.sendKeyEvent(LogicalKeyboardKey.select);
+    await tester.sendKeyEvent(LogicalKeyboardKey.digit3);
+    await tester.sendKeyEvent(LogicalKeyboardKey.numpad4);
+    await tester.pumpAndSettle();
+
+    expect(controller.selections, ['profile:1234']);
   });
 
   testWidgets('NAV-I2 desktop picker ignores non-Back navigation keys', (
@@ -1189,24 +1278,9 @@ void main() {
               FocusHighlightMode.touch,
             );
             final focused = LineupTheme.of(tester.element(current));
-            expect(
-              ink('Current'),
-              tv ? focused.primaryText : base.progressFill,
-            );
+            expect(ink('Current'), base.progressFill);
             expect(ink('Admin'), focused.secondaryText);
             expect(ink('Restricted'), focused.secondaryText);
-            if (tv) {
-              final badge = tester.widget<DecoratedBox>(
-                find
-                    .ancestor(of: current, matching: find.byType(DecoratedBox))
-                    .first,
-              );
-              final inset = (badge.decoration as BoxDecoration).color!;
-              expect(inset, focused.elevatedSurface);
-              final light = inset.computeLuminance();
-              final dark = ink('Current').computeLuminance();
-              expect((light + .05) / (dark + .05), greaterThanOrEqualTo(4.7));
-            }
             expect(tester.element(current), same(element));
             otherNode.requestFocus();
             await tester.pumpAndSettle();
@@ -1268,69 +1342,103 @@ void main() {
     );
   }, semanticsEnabled: true);
 
-  testWidgets('Android TV profile focus uses shared fill ink and scale', (
-    tester,
-  ) async {
-    const active = PlexHomeUser(
-      id: 'active',
-      name: 'Active viewer',
-      protected: false,
-    );
-    final controller = FixtureController(
-      scenario: const LineupScenario(
-        stage: SetupStage.profiles,
-        profile: active,
-        profiles: [active],
-      ),
-    );
-    addTearDown(controller.dispose);
+  const tvFocusColors = {
+    LineupThemeName.emberSteel: Color(0xFFE9DCC3),
+    LineupThemeName.slatePine: Color(0xFFD3DECF),
+    LineupThemeName.swiss: Color(0xFFC6EEDB),
+    LineupThemeName.directv: Color(0xFFFFCC00),
+  };
+  for (final (theme, largeFocus, reduceMotion) in [
+    for (final theme in tvFocusColors.keys) ...[
+      (theme, false, false),
+      (theme, true, false),
+    ],
+    (LineupThemeName.emberSteel, false, true),
+  ]) {
+    testWidgets(
+      'TV profile ring follows ${theme.name} and reserves space (large=$largeFocus, reduced=$reduceMotion)',
+      (tester) async {
+        final controller = FixtureController(
+          scenario: LineupScenario(
+            stage: SetupStage.profiles,
+            settings: LineupSettings(
+              theme: theme,
+              largeFocusIndicators: largeFocus,
+              reduceMotion: reduceMotion,
+            ),
+            profiles: const [
+              PlexHomeUser(id: 'one', name: 'First viewer', protected: false),
+              PlexHomeUser(id: 'two', name: 'Second viewer', protected: false),
+            ],
+          ),
+        );
+        addTearDown(controller.dispose);
 
-    await show(tester, controller, isTv: true);
-    await tester.sendKeyEvent(LogicalKeyboardKey.arrowRight);
-    await tester.pump(const Duration(milliseconds: 160));
+        await show(tester, controller, isTv: true, themeName: theme);
+        await tester.pumpAndSettle();
+        final firstName = find.text('First viewer');
+        final secondName = find.text('Second viewer');
+        final firstOrigin = tester.getTopLeft(firstName);
+        final secondOrigin = tester.getTopLeft(secondName);
+        final ring = find.byKey(const ValueKey('tv-profile-focus-ring'));
+        final decoration =
+            tester
+                    .widget<DecoratedBox>(
+                      find.descendant(
+                        of: ring,
+                        matching: find.byType(DecoratedBox),
+                      ),
+                    )
+                    .decoration
+                as BoxDecoration;
+        final roles = LineupTheme.of(tester.element(firstName));
+        final stroke = largeFocus ? 5.0 : 3.0;
+        expect(decoration.color, roles.deepBackground);
+        expect(decoration.border!.top.width, stroke);
+        expect(roles.focusedSurface, tvFocusColors[theme]);
+        expect(decoration.border!.top.color, tvFocusColors[theme]);
+        final avatarSize = reduceMotion ? 120.0 : 120 * 1.08;
+        expect(
+          tester.getSize(ring).width,
+          closeTo(avatarSize + 8 + 2 * stroke, .001),
+        );
+        expect(
+          (firstOrigin.dy - tester.getBottomLeft(ring).dy) /
+              LineupCanvas.scaleOf(tester.element(firstName)),
+          greaterThanOrEqualTo(16 - .001),
+        );
+        expect(tester.widget<Text>(firstName).style!.color, roles.primaryText);
+        expect(
+          tester.widget<Text>(secondName).style!.color,
+          roles.secondaryText.withValues(alpha: .8),
+        );
+        expect(
+          tester.getSize(find.byType(LineupProfileAvatar).first).width,
+          120,
+        );
+        final avatarTransform = find
+            .ancestor(
+              of: find.byType(LineupProfileAvatar).first,
+              matching: find.byType(Transform),
+            )
+            .first;
+        expect(
+          tester.widget<Transform>(avatarTransform).transform.entry(0, 0),
+          closeTo(reduceMotion ? 1 : 1.08, .001),
+        );
 
-    expect(
-      tester
-          .widgetList<AnimatedScale>(find.byType(AnimatedScale))
-          .any((scale) => scale.scale == 1.06),
-      isTrue,
+        await tester.sendKeyEvent(LogicalKeyboardKey.arrowRight);
+        await tester.pumpAndSettle();
+        expect(tester.getTopLeft(firstName), firstOrigin);
+        expect(tester.getTopLeft(secondName), secondOrigin);
+        expect(tester.widget<Text>(secondName).style!.color, roles.primaryText);
+        expect(
+          tester.widget<Text>(firstName).style!.color,
+          roles.secondaryText.withValues(alpha: .8),
+        );
+      },
     );
-    expect(
-      LineupTheme.of(tester.element(find.text('Active viewer').last))
-          .primaryText,
-      const Color(0xFF090806),
-    );
-  });
-
-  testWidgets('Android TV profile focus does not scale under Reduce Motion', (
-    tester,
-  ) async {
-    const active = PlexHomeUser(
-      id: 'active',
-      name: 'Active viewer',
-      protected: false,
-    );
-    final controller = FixtureController(
-      scenario: const LineupScenario(
-        settings: LineupSettings(reduceMotion: true),
-        stage: SetupStage.profiles,
-        profile: active,
-        profiles: [active],
-      ),
-    );
-    addTearDown(controller.dispose);
-
-    await show(tester, controller, isTv: true);
-    await tester.sendKeyEvent(LogicalKeyboardKey.arrowRight);
-    await tester.pump(const Duration(milliseconds: 160));
-
-    expect(
-      tester
-          .widgetList<AnimatedScale>(find.byType(AnimatedScale))
-          .every((scale) => scale.scale == 1.0),
-      isTrue,
-    );
-  });
+  }
 
   testWidgets('profile card clamp accepts a sub-pixel width constraint', (
     tester,
@@ -1841,6 +1949,107 @@ void main() {
     expect(tester.takeException(), isNull);
   });
 
+  testWidgets('TV moves focus to the first server when discovery settles', (
+    tester,
+  ) async {
+    final plex = _ProfileRecoveryPlex('discovery', includeSecondServer: true);
+    final controller = LineupController(
+      store: MemoryAppStore(),
+      credentials: MemoryCredentialStore(accountToken: 'synthetic-account'),
+      plex: plex,
+    );
+    addTearDown(controller.dispose);
+    await controller.initialize();
+    expect(controller.stage, SetupStage.profiles);
+    await tester.pumpWidget(
+      DeviceProfileScope(
+        profile: tvProfile,
+        child: MaterialApp(
+          builder: LineupCanvas.builder,
+          home: LineupShell(
+            controller: controller,
+            player: FixturePlayer(),
+            profile: tvProfile,
+          ),
+        ),
+      ),
+    );
+    await tester.pumpAndSettle();
+    final owner = find.widgetWithText(TextButton, 'Owner');
+    expect(tester.widget<TextButton>(owner).focusNode!.hasPrimaryFocus, isTrue);
+    await tester.sendKeyEvent(LogicalKeyboardKey.select);
+    await tester.pumpAndSettle();
+    expect(plex.gatedRequestStarted, isTrue);
+    expect(find.text('Choose a server'), findsNothing);
+    expect(find.text('Connect'), findsNothing);
+
+    plex.gate.complete();
+    await tester.pumpAndSettle();
+    expect(
+      Focus.of(tester.element(find.text('Connect').first)).hasPrimaryFocus,
+      isTrue,
+    );
+    await tester.sendKeyEvent(LogicalKeyboardKey.select);
+    await tester.pumpAndSettle();
+    expect(controller.server?.id, 'server');
+    expect(find.text('Choose libraries'), findsOneWidget);
+  });
+
+  for (final isTv in [false, true]) {
+    testWidgets('server rows expose one full hit target (TV=$isTv)', (
+      tester,
+    ) async {
+      final controller = _ServerController(
+        scenario: const LineupScenario(
+          stage: SetupStage.servers,
+          servers: [
+            PlexServer(
+              id: 'mine',
+              name: 'Media room',
+              owned: true,
+              connections: [],
+            ),
+            PlexServer(
+              id: 'shared',
+              name: 'Archive',
+              owned: false,
+              connections: [],
+            ),
+          ],
+        ),
+      );
+      addTearDown(controller.dispose);
+      await show(tester, controller, isTv: isTv);
+      await tester.pumpAndSettle();
+      expect(find.text('Yours'), findsOneWidget);
+      expect(find.text('Shared with you'), findsOneWidget);
+      expect(find.text('Not measured yet'), findsNothing);
+      expect(find.text('Unreachable'), findsNothing);
+      final firstAction = find.widgetWithText(OutlinedButton, 'Connect').first;
+      expect(
+        Focus.of(
+          tester.element(
+            find.descendant(of: firstAction, matching: find.text('Connect')),
+          ),
+        ).hasPrimaryFocus,
+        isTrue,
+      );
+
+      controller.selectionFailure =
+          'No reachable connection was found for this server.';
+      await tester.tap(find.text('Media room'));
+      await tester.pumpAndSettle();
+      expect(controller.selectCalls, 1);
+      expect(find.text('Unreachable'), findsNothing);
+      expect(find.text(controller.selectionFailure!), findsOneWidget);
+      controller.selectionFailure = 'Server selection failed.';
+      await tester.tap(find.text('Shared with you'));
+      await tester.pumpAndSettle();
+      expect(controller.selectCalls, 2);
+      expect(find.text('Unreachable'), findsNothing);
+    });
+  }
+
   testWidgets('server action semantics follow pending and error state', (
     tester,
   ) async {
@@ -1915,11 +2124,15 @@ void main() {
     final backFocus = tester.widget<TextButton>(back).focusNode!;
     expect(backFocus.hasFocus, isFalse);
     final gate = plex.refreshGate = Completer<void>();
-
-    await tester.tap(find.text('Refresh servers'));
+    final refresh = find.text('Refresh servers');
+    final refreshFocus = Focus.of(tester.element(refresh));
+    refreshFocus.requestFocus();
     await tester.pump();
+
+    await tester.sendKeyEvent(LogicalKeyboardKey.select);
     await tester.pump();
     expect(controller.busy, isTrue);
+    expect(refreshFocus.hasPrimaryFocus, isTrue);
     expect(backFocus.hasFocus, isFalse);
     await tester.sendKeyEvent(LogicalKeyboardKey.select);
     await tester.pump();
@@ -1928,6 +2141,7 @@ void main() {
     gate.complete();
     await tester.pumpAndSettle();
     expect(controller.busy, isFalse);
+    expect(refreshFocus.hasPrimaryFocus, isTrue);
   }, variant: const TargetPlatformVariant({TargetPlatform.android}));
 
   testWidgets('refresh and profile switch clear stale server errors', (
@@ -1967,6 +2181,50 @@ void main() {
     controller.showServers();
     await tester.pump();
     expect(find.text('Server selection failed.'), findsNothing);
+  });
+
+  testWidgets('Settings Account can switch to another server from its row', (
+    tester,
+  ) async {
+    const current = PlexServer(
+      id: 'current',
+      name: 'Media room',
+      owned: true,
+      connections: [],
+    );
+    const alternate = PlexServer(
+      id: 'alternate',
+      name: 'Archive',
+      owned: false,
+      connections: [],
+    );
+    final controller = _AuthorizationController(
+      scenario: const LineupScenario(
+        stage: SetupStage.ready,
+        account: PlexAccount(id: 'owner', name: 'Owner', email: ''),
+        server: current,
+        servers: [current, alternate],
+      ),
+    );
+    await tester.binding.setSurfaceSize(const Size(1280, 720));
+    addTearDown(() => tester.binding.setSurfaceSize(null));
+    await tester.pumpWidget(UiFixture(controller: controller).build());
+    await tester.pumpAndSettle();
+    await openDestination(tester, 'Settings');
+    await tester.tap(find.text('Account'));
+    await tester.pumpAndSettle();
+    await tester.ensureVisible(find.text('Switch server'));
+    await tester.tap(find.text('Switch server'));
+    await tester.pumpAndSettle();
+    expect(controller.stage, SetupStage.servers);
+    expect(controller.server?.id, current.id);
+    expect(find.text('‹ Settings · Account'), findsOneWidget);
+
+    await tester.tap(find.text('Archive'));
+    await tester.pumpAndSettle();
+    expect(controller.selections, ['server']);
+    expect(controller.server?.id, alternate.id);
+    expect(controller.stage, SetupStage.channelSetup);
   });
 
   testWidgets('current server Continue returns without selecting again', (
@@ -2028,7 +2286,7 @@ void main() {
     );
     expect(find.byType(LineupCompactControls), findsNothing);
     expect(find.text('‹ Settings · Account'), findsOneWidget);
-    expect(find.text('Not measured yet'), findsOneWidget);
+    expect(find.text('Not measured yet'), findsNothing);
     expect(find.text('Direct remote · 126 ms'), findsOneWidget);
 
     await tester.tap(find.widgetWithText(FilledButton, 'Continue'));
@@ -2538,6 +2796,7 @@ class _ServerController extends FixtureController {
 
   Completer<void>? pendingSelection;
   bool failSelection = false;
+  String? selectionFailure;
   bool promoteSelection = false;
   int selectCalls = 0;
 
@@ -2553,9 +2812,11 @@ class _ServerController extends FixtureController {
       await pending.future;
       pendingSelection = null;
     }
-    if (failSelection) {
+    if (failSelection || selectionFailure != null) {
       fixtureActor.present(
-        LineupPresentation(error: ('Server selection failed.',)),
+        LineupPresentation(
+          error: (selectionFailure ?? 'Server selection failed.',),
+        ),
       );
       notifyListeners();
     }
@@ -2718,12 +2979,13 @@ class _InlineScheduleWorker extends ScheduleWorker {
 }
 
 class _ProfileRecoveryPlex extends PlexClient {
-  _ProfileRecoveryPlex(this.failure)
+  _ProfileRecoveryPlex(this.failure, {this.includeSecondServer = false})
     : super(
         clientIdentifier: 'synthetic-client',
         httpClient: testPlexHttpClient(),
       );
   final String failure;
+  final bool includeSecondServer;
   final gate = Completer<void>();
   final scanGate = Completer<PlexLibraryScan>();
   final submittedPins = <String?>[];
@@ -2766,6 +3028,15 @@ class _ProfileRecoveryPlex extends PlexClient {
         ),
         token: 'synthetic-pms',
       ),
+      if (includeSecondServer)
+        PlexServerAccess(
+          server: const PlexServer(
+            id: 'archive',
+            name: 'Archive',
+            connections: [],
+          ),
+          token: 'synthetic-archive',
+        ),
     ];
   }
 

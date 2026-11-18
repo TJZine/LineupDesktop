@@ -6,15 +6,68 @@ Approved items are listed under Maintainer decisions; this document is the singl
 
 The maintainer adopted the October 26 reconciliation (local evidence, not tracked), including item 7: no-change Review Back returns to Configure. Provisional override approvals yield to that reconciliation. Historical diagnoses, options and specimen evidence below retain their original source attribution; the approved rules and revised acceptance requirements govern current implementation.
 
+## November 13–14 visual-system assessment
+
+UX assessment decision, 2026-11-13/14 (N20–N22, D8, N6). The Guide opens on
+**Set up channels** when the lineup is empty. Its content area shows one
+centered empty-state block with neither navigation controls for the schedule
+nor the idle picture prompt. The empty Manage channels directory focuses
+**Generate lineup…** first and offers **Add a custom channel** as a secondary
+action. Studio inventory and Diagnostics recent events also use the shared
+empty state. The Diagnostics idle playback summary stays inline.
+
+UX assessment decision, 2026-11-13/14 (N14, maintainer visual gate).
+Meaning-bearing text has a 20 px floor at 1920×1080 and 1.0 text scale, with
+measured exceptions where the existing geometry cannot accommodate it at 1.0
+or 1.3. The measured fits include Guide episode codes, the setup action and
+the Mini Guide clock, hint and header actions,
+the full Player reader hints, Settings rail, detail selectors and account and
+support actions,
+selected Manage channels, Libraries, setup completion, Studio and onboarding
+actions, and Diagnostics
+copy action, recording status, event row text and footer notices. The settled
+Studio sweep also found room for the schedule loading label and selected
+actions, filter results and match count.
+PIN Back and Cancel, scan and restore actions, the setup applying count,
+Lineup menu destinations, and Licenses navigation and index rows fit.
+The episode code still yields to the title in tight cells.
+
+Profile names and badges retain their sizes because larger sizes ellipsize
+names or move profile rows. Guide toolbar context and Mini Guide column
+headings retain their sizes because larger sizes truncate the context sooner
+or move the schedule rows. The short track popover uses its original hint
+size because increasing it enlarges the anchored popover at both scales.
+Configure and Review keep their footer label sizes because larger text
+disrupts remote focus in their tight 1.3 layouts.
+The residual trials also retain the original scan progress text, copy feedback,
+long Menu account and tuned details, Subtitle values and options, and Studio
+schedule and draft comparison roles where larger type wraps or moves controls.
+The settled Studio column also retains the unavailable-program notice size
+because the raised text adds a line.
+
+Actions and selectors in the same row use the floor together when it fits.
+The Manage channels header, the Libraries footer, and the Studio header
+actions fit at 20 px. The Guide schedule controls, Manage channels filter
+toolbar and reorder footer, server-picker footer, Studio selection toolbar
+and Studio Move dialog footer keep their prior sizes where enlargement moves
+adjacent controls or schedule rows.
+The Package G evidence records the applied and measured held roles by surface.
+
+Use • for channel number and name, and · between metadata items. Use the
+bundled [Arimo Regular](../licenses-and-rebuilding.md#arimo-wordmark) for LINEUP.
+On an active Player recovery slate, closing the Lineup menu returns remote
+focus to the recovery action that opened it.
+
 ## Maintainer decisions (October 26, 2026)
 
 - **2. Composition: option A (desktop parity) is approved.** A bigger picture is only possible by making the info band taller, and that shortens every Guide row (option B). We stay with desktop.
 - **4. Menu/details: M1 is approved, with no chevron.**
-  - Menu always opens the Lineup menu.
+  - Menu opens or closes the Lineup menu on every ready screen, including Studio, Settings, Diagnostics and Licenses (UX assessment decision, 2026-11-13/14). An open channel row-action popup closes first. Confirmation dialogs retain input.
   - Select or Down from hidden opens the compact OSD. Down again expands.
-  - Info, the menu's Now Playing row, and return from More info still expand directly.
+  - Info and return from More info still expand directly. The menu's tuned channel/program row returns to the standard Player (UX assessment decision, 2026-11-13/14).
   - A track drawer returns to where it was opened: the compact OSD or expanded details, with its invoking action focused (clarified November 5, 2026).
   - The chevron can be revisited after the couch check.
+- **Settings (UX assessment decision, 2026-11-13/14):** Seven sections with a small Settings label and a single section headline. Rows align on the same text edge and leave 16px within the focus fill. After 150ms, focused rail items show their sections; Right enters the section and Select opens it immediately.
 - **5. Review footer: R1 is approved.**
   - Right from a read row or disclosure header goes to the footer. Up returns to the remembered row.
   - Hint copy: **"Press right on any channel to jump here"** (maintainer, October 26; replaces "Press ▶ …", because ▶ is the Fire remote's Play/Pause symbol).
@@ -126,10 +179,30 @@ Renders: `short-current/` and `short-A/` (15–45-minute programs); comparisons 
 | 1.15 | 345 → 398 | 1575 → 1522 (−3.4%) | 394 → 381 |
 | 1.3 | 390 → 456 | 1530 → 1464 (−4.3%) | 383 → 366 |
 
-**What changes**
+**November Guide refinement (UX assessment decision, 2026-11-13/14).**
+The channel rail returns surplus enlarged-text width to the timeline while
+preserving the real channel number, separator, icon, and duplicate-name tag
+allocation. At 1920×1080 with up to two-digit numbers, the matched 1.3-scale
+sample narrows from 408 to about 350 canvas pixels. The normal-scale rail is
+already narrower than the cap. The information band, picture size, row geometry,
+series-title order, and right-aligned episode codes retain their approved bounds.
+
+The toolbar's channel filter shows counts and opens with Select. Back or Right
+dismisses the open list; Select applies the highlighted option. At the live
+edge, Left retains the existing rail-focus route. The top bar has no close
+button on TV. Idle artwork uses the bottom watch prompt and scrim. The title
+logo is fitted by its alpha-bearing content within the existing visible slot
+and minimum dimensions. An existing decode stays visible during a resize.
+After a failed tune, **Next channel** follows the current Guide order and
+filter, wrapping to the beginning. From the channel filter, Up reaches the
+picture's recovery actions when available. Returning from a failed, ended
+program restores the current program when the failed occurrence is still
+focused.
+
+**What changed in the earlier number-column comparison**
 - Every time slot narrows by the same small fraction.
 - Titles in short cells truncate about one character earlier: "Coastal Kit…" becomes "Coastal Ki…" at 1.3. 15-minute cells look essentially the same.
-- The "All libraries" filter box follows the rail width, so it gets wider.
+- The then-current library filter box follows the rail width, so it gets wider.
 
 **What does not change**
 - Row heights, five rows, and the top composition.
@@ -206,6 +279,17 @@ Resulting rail widths at 1920:
   - track and Sleep readers.
   - The acceptance matrix below lists them.
 
+### Profile tile exception (Q6)
+
+UX assessment decision, 2026-11-13/14. The maintainer approved the TV profile
+ring with one change in the Wave 1 review on November 14. The 3 px avatar
+ring uses the active theme's TV focus fill color from §3b, with a 4 px canvas
+gap. Large focus indicators use a 5 px ring. The avatar grows 8% over 100 ms, with no growth under Reduce Motion.
+The focused name uses primary text. Other avatars and names dim to 80% while
+a profile has visible focus. The avatar slot reserves the maximum ring size
+and gives the name at least 16 px of clearance. Desktop profile focus retains
+the approved desktop treatment.
+
 ### 3b. Maintainer feedback: cream looks off on some themes
 
 **Approved focused support ink.** On the TV rail, Watching text and its icon use `focusSecondaryText`; provenance uses `focusMutedText`. This preserves the unfocused secondary/muted hierarchy. The approved per-theme tints and Large borders below carry forward unchanged.
@@ -260,6 +344,19 @@ Resulting rail widths at 1920:
 
 **Key fact:** the Fire TV Stick 4K Max remote has **no Info key**. Its keys are D-pad, Select, Back, Home, Menu ≡, ⏪ ⏯ ⏩ and voice. On Fire, therefore, Menu is the only spare key, and Down is the only details gesture.
 
+UX assessment decision, 2026-11-13/14: Mini Guide uses a show title with
+an episode and time support line; movie rows keep their existing layout. The
+TV focus fill is unchanged. On a failed tune, **Choose another channel** opens
+Mini Guide on plain canvas; Back restores the failure slate. **Details**
+opens Diagnostics and Back returns to Player. Diagnostics opened from
+Settings returns to Support.
+
+UX assessment decision, 2026-11-13/14: track lists with at most six choices
+(including subtitle Off) use the same anchored popover as Sleep. Longer track
+lists retain the side panel. The selected choice takes focus in either form,
+and closing returns focus to the invoking OSD action. The Sleep popover
+measures its choices, heading and Close button, up to 720 canvas pixels.
+
 ### Option M1 (recommended): one meaning per key
 
 | Key | Hidden Player | Compact OSD visible | Expanded details | No current program |
@@ -272,12 +369,11 @@ Resulting rail widths at 1920:
 | Back | unchanged leaf-first policy | hide OSD | collapse to compact | — |
 
 - Every ordinary reveal (Select or Down) is compact, so an explicit minimize is respected automatically, with no hidden state and no new setting. Details are always one more Down away.
-- The intentional expanded entries stay as they are:
-  - the Lineup menu's **Now Playing** row;
-  - Info;
-  - return from More info.
+- Info and return from More info expand directly. The tuned channel/program
+  row in the Lineup menu returns to the Player (UX assessment decision,
+  2026-11-13/14).
 - **Track-drawer return** (clarified November 5, 2026, maintainer decision, replacing "track-drawer return" in the list above): closing a drawer returns to the presentation it was opened from, with its invoking action focused. A drawer opened from the compact OSD returns compact, which keeps an explicit minimize; one opened from expanded details returns expanded.
-- **Discoverability:** the Lineup menu already lists Now Playing. Optionally, a quiet "▾ Details" chevron on the compact OSD's bottom edge.
+- **Discoverability:** an optional quiet "▾ Details" chevron on the compact OSD's bottom edge remains unapproved.
   - The chevron is a **change to the protected OSD layout**, so it would need its own render and approval. It is not in M1 by default.
 - Menu → Lineup menu is consistent with Guide (UX-B) and replaces UX-A's Player Menu → Now Playing.
 
@@ -290,6 +386,41 @@ Resulting rail widths at 1920:
 
 - M1 or M2.
 - Whether the details chevron is wanted.
+
+### First-run server selection and Back
+
+UX assessment decision, 2026-11-13/14 (N9, N10). A sole reachable server skips
+the picker on unresolved first run. When the picker opens, a failed probe
+shows one “Unreachable” status with “Retry” on its server row. Contextual
+Back from the first Libraries step goes to Profiles or Plex sign-in according
+to where setup began. Back during a running library scan still cancels that
+scan first. After the first Libraries step, setup uses its usual Back order.
+
+### Setup source rows and channel identity
+
+UX assessment decision, 2026-11-13/14 (Q1b, N12, N13/D10, D11, change 13).
+Choose channels keeps the existing focus fill with at least 16 px between the
+fill boundary and source text. Review channels keeps its roster and footer
+navigation. The Guide, Mini Guide and Player identity keep their existing
+surface widths and heights. Number and media-kind icon remain visible as
+a long channel name truncates or ticks. The November 14 Wave 1 review
+approved the TV, Movie and Video library icons. Measure the name column
+after that prefix. Guide and Mini Guide can use a spare line for the library
+tag, and support lines start at the name.
+
+### Manage channels and Studio
+
+UX assessment decision, 2026-11-13/14 (Q5, N17, N18, D3, D4, D9, D12).
+Select on a Manage channels row opens Studio. Right then Select on the ellipsis,
+or holding Select on the row, opens the row menu with Watch focused. Back closes
+it and restores row focus. The remote Menu button opens the Lineup menu. Use a
+one-line Source and Custom tag, with roughly nine directory rows at 1080p and
+1.3 text scale. Add a custom channel is primary and Update lineup… secondary
+for populated lineups. When empty, Generate lineup… is primary and Add a
+custom channel is secondary.
+
+New custom drafts begin with focus on the Programming source choice. Studio
+suggests a source name until the user edits it.
 
 ## 5. Review Channels: getting between the roster and the footer
 

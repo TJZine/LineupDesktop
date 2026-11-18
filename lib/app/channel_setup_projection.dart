@@ -1,5 +1,6 @@
 import '../channels/channel.dart';
 import '../channels/channel_builder.dart';
+import '../channels/content_resolver.dart';
 import '../plex/plex_models.dart';
 
 typedef ChannelSetupAllocationOptions = ({
@@ -33,7 +34,11 @@ class ChannelSetupProjection {
   List<Channel>? _existing;
   ChannelSetupAllocationOptions? _options;
   ChannelPlanAllocation? _allocation;
+  ChannelOrder? _allocationOrder;
+  bool? _reorderExisting;
   final _disabledEligibility = <BuilderStrategy, int>{};
+  List<Channel>? _retainedLineup;
+  final _retainedSourceCounts = <String, int>{};
 
   List<ChannelProposal> proposals({
     required List<PlexLibrary> libraries,
@@ -45,6 +50,9 @@ class ChannelSetupProjection {
     required Set<BuilderStrategy> crossLibraryStrategies,
     required int minimumItems,
   }) {
+    if (!identical(_items, items) || !identical(_playlists, playlists)) {
+      _retainedSourceCounts.clear();
+    }
     if (!identical(_libraries, libraries) ||
         !identical(_items, items) ||
         !identical(_playlists, playlists) ||
@@ -77,16 +85,54 @@ class ChannelSetupProjection {
   ChannelPlanAllocation configure({
     required List<Channel> existing,
     required ChannelSetupAllocationOptions options,
+    ChannelOrder order = ChannelOrder.mixed,
+    bool reorderExisting = false,
   }) {
     if (_allocation == null ||
+        _allocationOrder != order ||
+        _reorderExisting != reorderExisting ||
         !identical(_existing, existing) ||
         _options != options) {
       _existing = existing;
       _options = options;
-      _allocation = allocate(_proposals, existing: existing, options: options);
+      _allocationOrder = order;
+      _reorderExisting = reorderExisting;
+      _allocation = allocate(
+        _proposals,
+        existing: existing,
+        options: options,
+        order: order,
+        reorderExisting: reorderExisting,
+        strategyOrder: _order,
+      );
       _disabledEligibility.clear();
     }
     return _allocation!;
+  }
+
+  Map<String, int> reviewSourceCounts(List<Channel> existing) {
+    if (!identical(_retainedLineup, existing)) {
+      _retainedLineup = existing;
+      _retainedSourceCounts.clear();
+    }
+    final counts = {
+      for (final proposal in _proposals)
+        canonicalSourceIdentity(proposal.source): proposal.itemCount,
+    };
+    for (final channel in existing.where(
+      (channel) => channel.builderKey != null,
+    )) {
+      final source = channel.source;
+      final key = canonicalSourceIdentity(source);
+      counts.putIfAbsent(
+        key,
+        () => _retainedSourceCounts.putIfAbsent(
+          key,
+          () => resolveContent(source, _items!, _playlists!).length,
+        ),
+      );
+    }
+    return counts;
   }
 
   int disabledEligibility(BuilderStrategy strategy) =>
@@ -100,6 +146,9 @@ class ChannelSetupProjection {
               ),
               existing: _existing!,
               options: _options!,
+              order: _allocationOrder!,
+              reorderExisting: _reorderExisting!,
+              strategyOrder: _order,
             ).eligibleOriginalsByStrategy[strategy] ??
             0,
       );
@@ -123,6 +172,12 @@ class ChannelSetupProjection {
     required List<Channel> existing,
     required ChannelSetupAllocationOptions options,
     DateTime? anchor,
+    ChannelOrder order = ChannelOrder.mixed,
+    List<BuilderStrategy> strategyOrder = BuilderStrategy.values,
+    List<PlexMediaItem> items = const [],
+    List<PlexPlaylist> playlists = const [],
+    bool reorderExisting = false,
+    List<Channel> reviewedChannels = const [],
   }) => materializeChannelPlan(
     proposals: proposals,
     existing: existing,
@@ -135,7 +190,14 @@ class ChannelSetupProjection {
     includeSpecials: options.includeSpecials,
     minimumItems: options.minimumItems,
     maximumChannels: options.maximumChannels,
-    anchor: anchor ?? DateTime.now().toUtc(),
+    anchor: anchor,
+    order: order,
+    strategyOrder: strategyOrder,
+    reorderExisting: reorderExisting,
+    reviewedChannels: reviewedChannels,
+    resolve: anchor == null
+        ? null
+        : (source) => resolveContent(source, items, playlists),
   );
 }
 

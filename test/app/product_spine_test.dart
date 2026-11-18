@@ -47,10 +47,8 @@ void main() {
 
       final child = controller.profiles.last;
       await controller.selectProfile(child, pin: '2468');
-      expect(controller.stage, SetupStage.servers);
-
-      await controller.selectServer(plex.server);
       expect(controller.stage, SetupStage.channelSetup);
+      expect(controller.server?.id, plex.server.id);
       expect(controller.connection?.relay, isFalse);
       expect(controller.connection?.latency, const Duration(milliseconds: 18));
 

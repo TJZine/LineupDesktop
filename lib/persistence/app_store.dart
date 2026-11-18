@@ -23,6 +23,7 @@ class ScopedLineup {
     required Set<String> libraryIds,
     required List<Channel> channels,
     required this.currentChannelId,
+    this.channelOrder = ChannelOrder.mixed,
   }) : libraryIds = Set.unmodifiable(libraryIds),
        channels = List.unmodifiable(
          channels.map((channel) => channel.immutableCopy()),
@@ -33,26 +34,31 @@ class ScopedLineup {
     required this.libraryIds,
     required this.channels,
     required this.currentChannelId,
+    required this.channelOrder,
   });
 
   static const empty = ScopedLineup._owned(
     libraryIds: {},
     channels: [],
     currentChannelId: null,
+    channelOrder: ChannelOrder.mixed,
   );
 
   ScopedLineup withLibraryIds(Set<String> value) => ScopedLineup._owned(
     libraryIds: Set.unmodifiable(value),
     channels: channels,
     currentChannelId: currentChannelId,
+    channelOrder: channelOrder,
   );
 
   ScopedLineup withCurrentChannel(String? value) => ScopedLineup._owned(
     libraryIds: libraryIds,
     channels: channels,
     currentChannelId: value,
+    channelOrder: channelOrder,
   );
 
+  final ChannelOrder channelOrder;
   final Set<String> libraryIds;
   final List<Channel> channels;
   final String? currentChannelId;
@@ -68,6 +74,7 @@ class PersistedState {
     this.selectedLibraryIdsByProfileServer = const {},
     this.channelsByProfileServer = const {},
     this.currentChannelByProfileServer = const {},
+    this.channelOrderByProfileServer = const {},
   });
 
   final LineupSettings settings;
@@ -77,8 +84,12 @@ class PersistedState {
   selectedLibraryIdsByProfileServer;
   final Map<String, Map<String, List<Channel>>> channelsByProfileServer;
   final Map<String, Map<String, String>> currentChannelByProfileServer;
+  final Map<String, Map<String, ChannelOrder>> channelOrderByProfileServer;
 
   ScopedLineup lineupFor(LineupScope scope) => ScopedLineup(
+    channelOrder:
+        channelOrderByProfileServer[scope.profileKey]?[scope.serverId] ??
+        ChannelOrder.mixed,
     libraryIds:
         (selectedLibraryIdsByProfileServer[scope.profileKey]?[scope.serverId] ??
                 const <String>[])
@@ -121,6 +132,18 @@ class PersistedState {
       current.putIfAbsent(scope.profileKey, () => {})[scope.serverId] =
           currentId;
     }
+    final orders = Map.of(channelOrderByProfileServer);
+    final profileOrders = {...?orders[scope.profileKey]};
+    if (lineup.channelOrder == ChannelOrder.mixed) {
+      profileOrders.remove(scope.serverId);
+    } else {
+      profileOrders[scope.serverId] = lineup.channelOrder;
+    }
+    if (profileOrders.isEmpty) {
+      orders.remove(scope.profileKey);
+    } else {
+      orders[scope.profileKey] = profileOrders;
+    }
     return PersistedState(
       settings: settings,
       profileId: profileId,
@@ -131,6 +154,7 @@ class PersistedState {
       selectedLibraryIdsByProfileServer: libraries,
       channelsByProfileServer: channels,
       currentChannelByProfileServer: current,
+      channelOrderByProfileServer: orders,
     );
   }
 
@@ -141,6 +165,7 @@ class PersistedState {
     selectedLibraryIdsByProfileServer: selectedLibraryIdsByProfileServer,
     channelsByProfileServer: channelsByProfileServer,
     currentChannelByProfileServer: currentChannelByProfileServer,
+    channelOrderByProfileServer: channelOrderByProfileServer,
   );
 
   PersistedState withProfile(String? value) => PersistedState(
@@ -150,6 +175,7 @@ class PersistedState {
     selectedLibraryIdsByProfileServer: selectedLibraryIdsByProfileServer,
     channelsByProfileServer: channelsByProfileServer,
     currentChannelByProfileServer: currentChannelByProfileServer,
+    channelOrderByProfileServer: channelOrderByProfileServer,
   );
 
   PersistedState withoutSelectedServer(String profileKey) => PersistedState(
@@ -160,6 +186,7 @@ class PersistedState {
     selectedLibraryIdsByProfileServer: selectedLibraryIdsByProfileServer,
     channelsByProfileServer: channelsByProfileServer,
     currentChannelByProfileServer: currentChannelByProfileServer,
+    channelOrderByProfileServer: channelOrderByProfileServer,
   );
 
   Map<String, Object?> toJson() => {
@@ -177,6 +204,14 @@ class PersistedState {
         },
     },
     'currentChannelByProfileServer': currentChannelByProfileServer,
+    if (channelOrderByProfileServer.isNotEmpty)
+      'channelOrderByProfileServer': {
+        for (final profile in channelOrderByProfileServer.entries)
+          profile.key: {
+            for (final server in profile.value.entries)
+              server.key: server.value.name,
+          },
+      },
   };
 
   factory PersistedState.fromJson(Object? value) {
@@ -191,7 +226,10 @@ class PersistedState {
         'channelsByProfileServer',
         'currentChannelByProfileServer',
       };
-      if (json.keys.toSet().difference(fields).isNotEmpty ||
+      if (json.keys.toSet().difference({
+            ...fields,
+            'channelOrderByProfileServer',
+          }).isNotEmpty ||
           !json.keys.toSet().containsAll(fields)) {
         throw const FormatException('State fields are not canonical.');
       }
@@ -202,6 +240,16 @@ class PersistedState {
       }
       return PersistedState(
         settings: LineupSettings.fromJson(settings),
+        channelOrderByProfileServer: {
+          if (json.containsKey('channelOrderByProfileServer'))
+            for (final profile in _stringSelections(
+              json['channelOrderByProfileServer'],
+            ).entries)
+              profile.key: {
+                for (final server in profile.value.entries)
+                  server.key: ChannelOrder.values.byName(server.value),
+              },
+        },
         profileId: profileId as String?,
         selectedServerByProfile: _flatStringMap(
           json['selectedServerByProfile'],

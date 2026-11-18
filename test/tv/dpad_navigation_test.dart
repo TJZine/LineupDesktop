@@ -355,6 +355,8 @@ void main() {
     final libraryFooter = find.byKey(const ValueKey('setup-switch-server'));
     final footerBounds = tester.getRect(libraryFooter);
     expect(footerBounds.bottom, inInclusiveRange(540 - 48 * .5, 540 - 24 * .5));
+    _focusedIn(tester, find.byKey(const ValueKey('library-row-library-1')));
+    await _keys(tester, [_up]);
     _focusedIn(tester, find.widgetWithText(TextButton, 'Select all'));
     await _keys(tester, [_select]);
     expect(find.text('0 of 8 selected'), findsOneWidget);
@@ -583,8 +585,6 @@ void main() {
     );
     await tester.pumpWidget(fixture.build());
     await tester.pumpAndSettle();
-    _focusedIn(tester, find.widgetWithText(TextButton, 'Select all'));
-    await _keys(tester, [_down]);
     _focusedIn(tester, find.byKey(const ValueKey('library-row-failed')));
     await _keys(tester, [_down]);
     _focusedIn(tester, find.byKey(const ValueKey('retry-library-failed')));

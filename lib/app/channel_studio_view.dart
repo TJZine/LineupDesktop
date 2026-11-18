@@ -6,6 +6,7 @@ import 'package:lineup_desktop/platform/device_profile.dart';
 
 import '../channels/channel.dart';
 import '../channels/content_resolver.dart';
+import '../channels/scheduler.dart' show ScheduleBuildException;
 import '../plex/plex_models.dart';
 import '../ui/app_theme.dart';
 import '../ui/app_ui.dart';
@@ -127,6 +128,11 @@ class ChannelStudioViewState extends State<ChannelStudioView> {
   late final TextEditingController _name;
   late final TextEditingController _number;
   late final ChannelStudioDraft _session;
+  final _personLabels = StudioPersonLabels();
+  bool _suggestionsEnabled = false;
+  bool _nameEdited = false;
+  bool _initialPresentation = true;
+  bool _isTv = false;
   int _sourceRevision = 0;
   _StudioPendingChoice? _pendingProgrammingChoice;
   bool _saving = false;
@@ -173,7 +179,6 @@ class ChannelStudioViewState extends State<ChannelStudioView> {
       clock: _clock,
     );
     _verification.addListener(_verificationChanged);
-    _updateVerification();
   }
 
   void _loadInitial() {
@@ -212,6 +217,73 @@ class ChannelStudioViewState extends State<ChannelStudioView> {
   }
 
   @override
+  void didChangeDependencies() {
+    super.didChangeDependencies();
+    if (!_initialPresentation) return;
+    _initialPresentation = false;
+    _isTv = DeviceProfile.of(context).isTv;
+    _suggestionsEnabled =
+        widget.mode == ChannelStudioMode.createCustom && _isTv;
+    if (_suggestionsEnabled) {
+      if (_session.source is LibrarySource) {
+        _suggestName();
+        _session.acceptBaseline(_draftSignature);
+      }
+      WidgetsBinding.instance.addPostFrameCallback((_) {
+        _programmingKey.currentState?.focusSourceChoice();
+      });
+    }
+    _updateVerification();
+  }
+
+  void _suggestName() {
+    if (!_suggestionsEnabled || _nameEdited || _session.expectedBase != null) {
+      return;
+    }
+    String? suggestion;
+    try {
+      suggestion = switch (_editedSource()) {
+        final LibrarySource library => _suggestLibraryName(library),
+        PlaylistSource(:final playlistId) =>
+          _playableInventory.playlists
+              .where((playlist) => playlist.id == playlistId)
+              .firstOrNull
+              ?.title,
+        ManualSource() => 'Hand-picked',
+        MixedSource() => null,
+      };
+    } on FormatException {
+      // A source without a selection has no name to suggest yet.
+    }
+    final name = suggestion?.trim() ?? '';
+    if (_name.text != name) _name.text = name;
+  }
+
+  String? _suggestLibraryName(LibrarySource source) {
+    final filter = source.filters.entries.singleOrNull;
+    if (filter != null && filter.value.length == 1) {
+      return _personLabels.label(
+        widget.controller,
+        source.libraryId,
+        filter.key,
+        filter.value.single,
+      );
+    }
+    if (source.order == LibraryOrder.addedDescending) return 'Recently Added';
+    return _selectedLibraries
+        .where((library) => library.id == source.libraryId)
+        .firstOrNull
+        ?.title;
+  }
+
+  void _programmingChanged() => _changed(_suggestName);
+
+  void _nameChanged() => _changed(() => _nameEdited = true);
+
+  String _describeSource(ContentSource source) =>
+      _sourceLabel(source, widget.controller, _personLabels);
+
+  @override
   void didUpdateWidget(ChannelStudioView oldWidget) {
     super.didUpdateWidget(oldWidget);
     _updateVerification();
@@ -220,16 +292,24 @@ class ChannelStudioViewState extends State<ChannelStudioView> {
   void _updateVerification() {
     _refreshPlayableInventory();
     final resolution = _session.generated ? null : _resolveDraftContent();
-    final issue = resolution == null ? null : _programmingError(resolution);
-    _session.stageScheduleIdentity(_clock, valid: issue == null);
+    var issue = resolution == null ? null : _programmingError(resolution);
     final source = resolution?.source ?? _session.source;
-    final preview = _session.project(
+    Channel projectPreview() => _session.project(
       name: _name.text,
       number: _number.text,
       programming: source,
       preview: true,
     );
-    _verificationInputKey = channelAirCheckSnapshotKey(
+    final content = resolution?.content;
+    if (issue == null && content != null && _session.expectedBase == null) {
+      try {
+        _session.stageScheduleIdentity(projectPreview(), content, _clock);
+      } on ScheduleBuildException {
+        issue = 'Air Check could not verify the channel’s staggered start.';
+      }
+    }
+    final preview = projectPreview();
+    _verificationInputKey = channelScheduleRevision(
       preview,
       widget.controller.contentGeneration,
     );
@@ -238,7 +318,7 @@ class ChannelStudioViewState extends State<ChannelStudioView> {
       _session.expectedBase,
       widget.controller.contentGeneration,
       issue,
-      sourceLabel: _sourceLabel(source, widget.controller),
+      sourceLabel: _describeSource(source),
     );
   }
 
@@ -394,6 +474,7 @@ class ChannelStudioViewState extends State<ChannelStudioView> {
             canSave: _canSave,
             hasPendingChoice: _hasPendingProgrammingChoice,
             pendingHint: _pendingProgrammingHint,
+            autofocusBack: !_suggestionsEnabled,
             onLeave: _leave,
             onDuplicate: _duplicate,
             onTune: _tune,
@@ -469,10 +550,7 @@ class ChannelStudioViewState extends State<ChannelStudioView> {
                             libraries: widget.controller.libraries,
                             channels: widget.controller.channels,
                             name: _name.text,
-                            sourceLabel: _sourceLabel(
-                              _displaySource,
-                              widget.controller,
-                            ),
+                            sourceLabel: _describeSource(_displaySource),
                             sourceExplanation: sourceExplanation,
                             programmingError: programmingError,
                             inventoryStatus: _StudioInventoryStatus(
@@ -487,7 +565,7 @@ class ChannelStudioViewState extends State<ChannelStudioView> {
                             ),
                             saving: _saving,
                             sourceRevision: _sourceRevision,
-                            onChanged: _changed,
+                            onChanged: _programmingChanged,
                             onPendingChanged: (choice) {
                               if (_pendingProgrammingChoice != choice) {
                                 setState(
@@ -508,12 +586,10 @@ class ChannelStudioViewState extends State<ChannelStudioView> {
                             confirmedMovieOnly: confirmedMovieOnly,
                             hasNumberConflict: _conflictingChannel != null,
                             hasFreeNumber: _lowestFreeNumber() != null,
-                            sourceSummary: _sourceLabel(
-                              _session.source,
-                              widget.controller,
-                            ),
+                            sourceSummary: _describeSource(_session.source),
                             validateNumber: _validateNumber,
                             onChanged: _changed,
+                            onNameChanged: _nameChanged,
                             onUseNext: _useNextAvailable,
                           );
                           final preview = ChannelAirCheck(
@@ -525,10 +601,7 @@ class ChannelStudioViewState extends State<ChannelStudioView> {
                                 constraints.maxWidth /
                                     MediaQuery.textScalerOf(context).scale(1) <
                                 LineupLayout.compact,
-                            inclusionReason: _sourceLabel(
-                              _displaySource,
-                              widget.controller,
-                            ),
+                            inclusionReason: _describeSource(_displaySource),
                             sourceIssue: programmingError,
                             sourceIssueExplained: sourceExplanation != null,
                             playableById: _playableInventory.byId,
@@ -806,7 +879,7 @@ class ChannelStudioViewState extends State<ChannelStudioView> {
   bool get _airCheckCanSave {
     final result = _verification.result;
     return result.revisionKey ==
-            channelAirCheckSnapshotKey(
+            channelScheduleRevision(
               _previewDraft,
               widget.controller.contentGeneration,
             ) &&
@@ -878,6 +951,9 @@ class ChannelStudioViewState extends State<ChannelStudioView> {
       final committed = await widget.controller.saveChannel(
         draft,
         expectedBase: rebasedExpected ?? _session.expectedBase,
+        verifiedNewScheduleRevision: _session.expectedBase == null
+            ? _verification.result.revisionKey
+            : null,
       );
       if (!mounted) return;
       setState(() {
@@ -911,6 +987,7 @@ class ChannelStudioViewState extends State<ChannelStudioView> {
                 'The channel could not be saved. No lineup changes were saved.',
               );
       });
+      if (error is ChannelScheduleChangedException) _updateVerification();
       WidgetsBinding.instance.addPostFrameCallback((_) {
         if (!mounted) return;
         if (_conflict || _baseDeleted) {
@@ -1092,12 +1169,10 @@ class ChannelStudioViewState extends State<ChannelStudioView> {
   }
 }
 
-String channelSourceLabel(ContentSource source, LineupController controller) =>
-    _sourceLabel(source, controller);
-
 String _sourceLabel(
   ContentSource source,
   LineupController controller,
+  StudioPersonLabels people,
 ) => switch (source) {
   LibrarySource(
     :final libraryId,
@@ -1107,19 +1182,17 @@ String _sourceLabel(
   ) =>
     [
       'Library: ${controller.libraries.where((library) => library.id == libraryId).firstOrNull?.title ?? libraryId}',
-      for (final filter in filters.entries) ?_filterFact(filter),
+      for (final filter in filters.entries)
+        '${_facetLabel(filter.key.name)}: ${filter.value.map((value) => people.label(controller, libraryId, filter.key, value)).join(', ')}',
       if (order == LibraryOrder.addedDescending) 'Newest first',
       includeWatched ? 'includes watched' : 'unwatched only',
-    ].join(' • '),
+    ].join(' · '),
   ManualSource(:final items) => '${items.length} hand-picked programs',
   PlaylistSource(:final playlistId) =>
     'Playlist: ${controller.availablePlaylists.where((playlist) => playlist.id == playlistId).firstOrNull?.title ?? playlistId}',
   MixedSource(:final sources, :final interleave) =>
-    '${sources.length}-source mix • ${interleave ? 'interleaved' : 'in sequence'}',
+    '${sources.length}-source mix · ${interleave ? 'interleaved' : 'in sequence'}',
 };
-
-String? _filterFact(MapEntry<LibraryFilter, List<String>> filter) =>
-    '${_facetLabel(filter.key.name)}: ${filter.value.join(', ')}';
 
 LibraryFilter _libraryFilter(String key) =>
     LibraryFilter.values.where((filter) => filter.name == key).first;

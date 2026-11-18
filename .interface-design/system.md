@@ -44,6 +44,12 @@ and semantic states stay predictable.
 Projector amber replaces the earlier brass `#C8A363`. Do not use amber as
 blanket decoration. Focus light and on-air coral retain separate meanings.
 
+UX assessment decision, 2026-11-13/14 (Q6), updated in the Wave 1 review.
+The TV profile picker uses the active theme's TV focus fill color for the
+avatar ring and the canvas color for the gap. The
+[TV profile tile exception](../docs/design/tv-ui-decisions.md#profile-tile-exception-q6)
+records the dimensions and motion.
+
 ## Construction
 
 - Depth comes from warm near-black surface shifts and quiet borders, not drop
@@ -57,10 +63,68 @@ blanket decoration. Focus light and on-air coral retain separate meanings.
 - Inputs are darker than their parent surface.
 - Motion is short and decelerating. Reduce Motion must settle immediately.
 - When the actual Lineup logo and LINEUP wordmark appear together horizontally,
-  place the logo first, then the wordmark. Preserve the approved Arial Regular
-  uppercase/letter-spaced wordmark treatment in the configuration header. This
-  September 9 refinement changes order only; menu hamburger/chevron icons and
-  standalone branding retain their own roles.
+  place the logo first, then the wordmark. Use bundled Arimo Regular for LINEUP
+  only, at 22 px, weight 400, and letter spacing 3. UX assessment decision,
+  2026-11-13/14 (N20). The pinned font and licence are listed in the
+  [font provenance record](../docs/licenses-and-rebuilding.md#arimo-wordmark).
+
+## Separators and empty states
+
+UX assessment decision, 2026-11-13/14 (N21, N22, D8, N6). Use • between a
+channel number and its name. Use · between metadata items. Preserve punctuation
+from authored episode and program titles.
+
+Use the shared `LineupEmptyState` where a surface has no content. It centers a
+24 px heading, one sentence, and up to one action using existing theme tokens.
+The empty Guide fills the content area with **No channels yet** and **Set up
+channels**, focused on entry with a remote. Manage channels keeps **Generate
+lineup…** as the primary action and offers **Add a custom channel** separately.
+Studio offers **Update lineup…** when programming is unavailable. Diagnostics
+uses the shared component for the recent-events area and keeps its idle
+playback summary inline.
+
+## TV typography floor
+
+UX assessment decision, 2026-11-13/14 (N14). The floor for meaning-bearing
+TV text is 20 px on the 1920×1080 design canvas at 1.0 text scale. Verify the
+existing layout at 1.0 and 1.3. Preserve a smaller size where a 20 px trial
+demonstrates wrapping, clipping, overlap, truncation, or movement of existing
+rows or controls. Buttons and selectors in the same action row use the floor
+together when it fits. Retain the group's prior sizes when the shared increase
+exceeds that layout. The Guide's episode code yields to the title in tight cells.
+
+## First-run setup
+
+UX assessment decision, 2026-11-13/14. A sole reachable server opens
+Choose libraries directly on unresolved first run. In the server picker, show
+one “Unreachable” status with “Retry” on the row whose reachability probe
+failed. The first Libraries step uses origin-specific Back copy on desktop
+and the contextual Back action on TV.
+
+## Channel identity and setup
+
+UX assessment decision, 2026-11-13/14. The channel number and outlined
+TV, Film or mixed-media glyph stay visible when the name truncates. A
+single-source library tag disambiguates equal names from different libraries.
+Use supporting ink for the glyph and library tag, along with one accessible
+label. Keep the existing surface geometry. Wrap between words where the
+surface allows multiple lines. Use a one-line ellipsis when a word exceeds
+the name column. Where the Guide or Mini Guide has a spare line, move a
+library tag there when it cannot fit beside the name. Keep the full library
+in the accessible label.
+
+Setup names its steps Libraries, Channels and Review. Choose channels adds
+the saved Channel order choice and retains two-column source rows with at
+least 16 px of TV focus padding.
+
+## Manage channels and Studio
+
+UX assessment decision, 2026-11-13/14 (Q5, N17, N18). Use a quiet Custom tag
+beside the name and a single Source line for the type and library. At TV 1080p
+and 1.3 text scale, the directory aims for about nine visible rows. Add a custom
+channel is the filled action for populated lineups. Generate lineup… fills
+that role when the lineup is empty. In Studio on TV, focus the programming source
+choice at entry for a new custom draft.
 
 ## Guide
 
@@ -82,6 +146,17 @@ fallback. In the non-dense desktop band, `k = clamp((band − 28)/296, 1, 1.4)`
 scales the title, episode line and title art. The synopsis scales by
 `1 + (k − 1)/2`. Use the base title size when the scaled title exceeds one line.
 
+UX assessment decision, 2026-11-13/14: keep the now-line behind cell text.
+Place the idle watch prompt over a bottom gradient, 24 px from the bottom and
+leading edges; keep channel identity in the information block. Keep the
+toolbar filter in place and show counts for All channels, Favourites when
+present, available source types, and libraries. On desktop **Back to player**
+appears only during active playback; TV uses Back. Fit TV title logos using
+their visible content within the approved information slot and keep the previous
+decode visible during a size replacement. In the unavailable picture slot,
+**Retry** uses the failed tune and **Next channel** follows the Guide filter
+and channel order.
+
 ## Player: Protected Baseline
 
 The OSD and its expanded Now Playing state are the approved structural
@@ -94,7 +169,11 @@ Preserve:
 
 - The bottom OSD's safe-area insets, title/status hierarchy, five standard
   actions and optional DVR controls, timing row, full-width progress lane,
-  channel bug, keyboard focus, and auto-hide behavior. The channel bug enters
+  channel badge, keyboard focus, and auto-hide behavior. UX assessment decision,
+  2026-11-13/14: on desktop, a labelled Guide control precedes the five standard
+  actions. The controls adapt to the available width while preserving the
+  title, status and timing stack. The channel badge opens the Mini Guide and
+  reveals aligned channel step controls only on pointer hover. The channel badge enters
   on its own with a fade and small drop (fade only with Reduce Motion), and
   shows with the OSD and for about 4 s after a channel change.
 - Now Playing expands the same bottom panel upward and shares its actions,
@@ -102,8 +181,19 @@ Preserve:
   artwork, single metadata line, format chips, three-line synopsis, and at most
   four cast members with roles in one row. Runtime decoder/dimension facts
   belong in Diagnostics.
+- UX assessment decision, 2026-11-13/14: Subtitles, Audio, and Sleep use an
+  anchored popover for up to six choices (including Subtitle Off). Track lists
+  with seven or more choices use the side panel. Fit the choice labels and
+  key hint up to the width cap, and keep the chosen presentation while the
+  picker is open. Fit Sleep from its choices and header, including Close,
+  within the same cap. Closing returns keyboard focus to its invoking action.
+- UX assessment decision, 2026-11-13/14: channel entry uses the overlay
+  material at the top center, with 48 px digits above a matched 20 px channel
+  identity. The Mini Guide paints a standard desktop focus border separately
+  from Watching and keeps the existing TV fill.
 - The shared themed overlay material, per-level transparency and feather only
   beyond text; preserve spacing, scalable controls and Reduce Motion behavior.
+- On desktop, clicking the program block opens Now Playing.
 - `I` or `Down` expands Now Playing; `I`, `Enter`, Close or Back/Esc collapses it
   to the OSD. Preserve artwork currentness and text/portrait fallbacks.
 
@@ -127,17 +217,34 @@ decision log is silent. The protected Player baseline above reflects the
 separately approved expanded OSD; earlier shelf-specific rules are superseded.
 
 
+## Settings and Lineup menu
+
+UX assessment decision, 2026-11-13/14: Settings has a 16px supporting label
+above its seven-section rail and one section headline. Detail labels share a
+leading edge with 16px clearance within the TV focus fill. TV opens a category
+after a 150ms dwell; Right enters the page, and Select opens it immediately.
+Desktop categories still open on click or Enter.
+
+The menu starts with the tuned channel identity and program title on separate
+lines when available. Guide, Manage channels, Settings, and the profile/server
+card follow. The tuned row opens the Player, and connection measurements belong
+in Account and Diagnostics. TV Menu opens or closes this menu on ready screens.
+On Manage channels it first closes an open row-action popup.
+
 ## September 12 collaborative Diagnostics refinement
 
 Diagnostics42–45 use a local96px header and48px horizontal margins at1080p,
 32px heading and16px supporting/action text. Keep one filled accent action for
 Copy redacted report, with stable feedback space. Present the four summary groups
 Playback, Video, Media signal and Plex before optional grouped technical details
-and recent events. Reported media facts do not establish physical HDR output;
+and recent events. UX assessment decision, 2026-11-13/14: collapse the summary
+when idle. **Details** on the Player failure slate opens Diagnostics with
+**Back to Player**. Settings opens Diagnostics with a link back to Support.
+Show platform-supported facts in technical details and copied reports. Include
+the Plex route and latency in technical details when measured. Reported media facts do not establish physical HDR output;
 unavailable method/stream decisions must remain explicit.
 
-Use one quiet inline “Per-stream handling · Unavailable” while those facts are
-not supplied. Expanded events align beneath the message and lay out labeled facts
+On Windows and macOS, keep one quiet inline “Per-stream handling · Unavailable” while those facts are not supplied. Expanded events align beneath the message and lay out labeled facts
 horizontally with24px gaps/8px wrap spacing, muted labels and brighter16px values.
 Keep event times local with seconds and accessible dates; arriving events must
 not displace the user's current reading before explicit refresh.

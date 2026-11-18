@@ -117,7 +117,7 @@ void main() {
             );
             await key(LogicalKeyboardKey.select);
             final saves = f.store.calls;
-            expect(find.text('Shape your lineup'), findsOneWidget);
+            expect(find.text('Choose channels'), findsOneWidget);
             void rail(int index) {
               final label = find
                   .descendant(
@@ -330,7 +330,7 @@ void main() {
           expect(player.overlay.name, 'none');
           await back(tester, settle: !failed);
         }
-        expect(find.byKey(const Key('guide-channel-search')), findsOneWidget);
+        expect(find.text('No channels yet'), findsOneWidget);
         expect(backgrounds, 0);
         await back(tester, settle: !failed);
         expect(backgrounds, 1);
@@ -550,7 +550,7 @@ void main() {
     f.controller.dispose();
   });
 
-  androidTest('first TV completion primary opens Guide without saving', (
+  androidTest('first TV completion Select opens Guide without saving', (
     tester,
   ) async {
     final f = await _setup();
@@ -570,8 +570,11 @@ void main() {
     await tester.pumpAndSettle();
 
     final saves = f.store.calls;
-    expect(find.text('Open guide'), findsOneWidget);
-    await tester.tap(find.text('Open guide'));
+    final openGuide = tester.widget<FilledButton>(
+      find.widgetWithText(FilledButton, 'Open guide'),
+    );
+    expect(openGuide.focusNode?.hasPrimaryFocus, isTrue);
+    await tester.sendKeyEvent(LogicalKeyboardKey.select);
     await tester.pumpAndSettle();
     expect(f.controller.stage, SetupStage.ready);
     expect(find.byType(GuideView), findsOneWidget);
@@ -682,7 +685,7 @@ void main() {
       expect(before.initialSearch, 'channel');
       expect(before.initialFilter, SetupReviewFilter.unchanged);
       await back(tester);
-      expect(find.text('Shape your lineup'), findsOneWidget);
+      expect(find.text('Choose channels'), findsOneWidget);
       expect(find.byType(GuideView), findsNothing);
       expect(backgrounds, 0);
       expect(f.store.calls, saves);
@@ -765,7 +768,7 @@ void main() {
     await openDestination(tester, 'Channels');
     await strand(tester);
     await back(tester);
-    expect(find.byKey(const Key('guide-channel-search')), findsOneWidget);
+    expect(find.text('No channels yet'), findsOneWidget);
     expect(backgrounds, 0);
     await strand(tester);
     await back(tester);
@@ -817,11 +820,11 @@ void main() {
         isNotNull,
       );
       await back(tester);
-      expect(find.byKey(const Key('guide-channel-search')), findsOneWidget);
+      expect(find.text('No channels yet'), findsOneWidget);
       await back(tester);
       expect(find.byType(PlayerView), findsOneWidget);
       await back(tester);
-      expect(find.byKey(const Key('guide-channel-search')), findsOneWidget);
+      expect(find.text('No channels yet'), findsOneWidget);
       await back(tester);
       expect(backgrounds, 1);
       expect(fixture.player.loads, isEmpty);
@@ -841,7 +844,10 @@ void main() {
       (tester) async {
         final fixture = UiFixture(
           profile: profileFor(true),
-          scenario: const LineupScenario(stage: SetupStage.ready),
+          scenario: LineupScenario(
+            stage: SetupStage.ready,
+            channels: [syntheticGuideChannel()],
+          ),
         );
         await tester.pumpWidget(
           Focus(focusNode: outside, child: fixture.build()),
@@ -889,7 +895,7 @@ void main() {
     await tester.pumpWidget(Focus(focusNode: outside, child: fixture.build()));
     await tester.pumpAndSettle();
     await openDestination(tester, 'Channels');
-    await tester.tap(find.text('Create a custom channel'));
+    await tester.tap(find.text('Add a custom channel'));
     await tester.pumpAndSettle();
     final name = find.byKey(const Key('studio-name'));
     await tester.enterText(name, 'Kept draft');
@@ -911,7 +917,7 @@ void main() {
     await tester.pumpAndSettle();
     expect(find.byType(ChannelsView), findsOneWidget);
     await back(tester);
-    expect(find.byKey(const Key('guide-channel-search')), findsOneWidget);
+    expect(find.text('No channels yet'), findsOneWidget);
     expect(fixture.controller.fixtureStore.savedStates, isEmpty);
     await tester.pumpWidget(const SizedBox.shrink());
   });
@@ -946,7 +952,7 @@ void main() {
     await back(tester);
     expect(player.overlay.name, 'none');
     await back(tester);
-    expect(find.byKey(const Key('guide-channel-search')), findsOneWidget);
+    expect(find.text('No channels yet'), findsOneWidget);
     expect(backgrounds, 0);
     await back(tester);
     expect(backgrounds, 1);
@@ -968,7 +974,7 @@ void main() {
       );
       await tester.pumpAndSettle();
       await openDestination(tester, 'Channels');
-      await tester.tap(find.text('Create a custom channel'));
+      await tester.tap(find.text('Add a custom channel'));
       await tester.pumpAndSettle();
       await tester.enterText(
         find.byKey(const Key('studio-name')),
@@ -1387,7 +1393,7 @@ void main() {
         tester.element(find.byType(UpstreamChannelSetupView)),
         same(element),
       );
-      expect(find.text('Shape your lineup'), findsOneWidget);
+      expect(find.text('Choose channels'), findsOneWidget);
       tester
           .widget<FilledButton>(find.byKey(const ValueKey('review-channels')))
           .onPressed!();

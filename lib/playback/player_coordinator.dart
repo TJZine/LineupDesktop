@@ -28,6 +28,25 @@ enum PlayerOverlay {
   error,
 }
 
+enum PlaybackFailureCause {
+  serverUnreachable("Lineup can't reach your Plex server."),
+  serverTimeout('Your Plex server took too long to respond.'),
+  authorization('Plex needs you to sign in again.'),
+  unsupportedVideo("This video can't play on this device."),
+  unsupportedAudio("This video's audio can't play on this device."),
+  prematureEnd('Playback ended before the program finished.'),
+  unknown('Playback could not start.');
+
+  const PlaybackFailureCause(this.message);
+
+  final String message;
+}
+
+bool _observedPlaybackStart(PlayerState state) => switch (state) {
+  PlayerState.playing || PlayerState.paused => true,
+  _ => false,
+};
+
 class PlayerCoordinator extends ChangeNotifier with WidgetsBindingObserver {
   static const _catchUpTolerance = Duration(seconds: 30);
   static const _prematureEndTolerance = Duration(seconds: 30);
@@ -48,6 +67,7 @@ class PlayerCoordinator extends ChangeNotifier with WidgetsBindingObserver {
     subtitleAppearance.addListener(_subtitleAppearanceChanged);
     _indexChannels();
     _status = player.status;
+    _hasStartedPlayback = _observedPlaybackStart(_status.state);
     _position = player.position;
     _duration = player.duration;
     _telemetry = player.telemetry;
@@ -70,6 +90,7 @@ class PlayerCoordinator extends ChangeNotifier with WidgetsBindingObserver {
     _subscription = player.events.listen(_event);
     lineup.addListener(_lineupChanged);
     guide.addListener(_guideChanged);
+    guide.focus.addListener(_guideFocusChanged);
     if (suspendInBackground) {
       WidgetsBinding.instance.addObserver(this);
       final lifecycle = WidgetsBinding.instance.lifecycleState;
@@ -235,7 +256,24 @@ class PlayerCoordinator extends ChangeNotifier with WidgetsBindingObserver {
   String _channelNumber = '';
   String? _miniGuideChannelId;
   int? _miniGuideWindowStart;
-  String? _error;
+  PlaybackFailureCause? _failureCause;
+  GuideProgram? _failedGuideProgram;
+  String? _operationError;
+  bool _hasStartedPlayback = false;
+
+  String? get _error => _failureCause?.message ?? _operationError;
+  set _error(String? message) {
+    _failureCause = null;
+    _failedGuideProgram = null;
+    _operationError = message;
+  }
+
+  void _setFailureCause(PlaybackFailureCause cause, {GuideProgram? program}) {
+    _failedGuideProgram = program;
+    _failureCause = cause;
+    _operationError = null;
+  }
+
   bool _fullscreen = false;
   bool _cursorVisible = true;
   bool _cursorIdle = false;
@@ -246,6 +284,7 @@ class PlayerCoordinator extends ChangeNotifier with WidgetsBindingObserver {
   bool _sleepPickerOpen = false;
   _TrackConfirmation _trackConfirmation = _TrackConfirmation();
   int _tuneGeneration = 0;
+  int? _terminalNativeFailureTune;
   int? _continuationGeneration;
   bool get _preservePresentation => _continuationGeneration == _tuneGeneration;
   int _controlGeneration = 0;
@@ -354,13 +393,16 @@ class PlayerCoordinator extends ChangeNotifier with WidgetsBindingObserver {
 
   String? get notice => _notice;
   String? get busyLabel => _busyLabel;
-  String get channelNumberLabel {
-    final channel = _channelByNumber[int.tryParse(_channelNumber)];
-    return channel == null
-        ? _channelNumber
-        : '$_channelNumber · ${channel.name}';
-  }
+  String get enteredChannelNumber => _channelNumber;
 
+  Channel? get enteredChannel => _channelByNumber[int.tryParse(_channelNumber)];
+
+  PlaybackFailureCause? get failureCause => _failureCause;
+  String? get failedChannelId =>
+      _failureCause == null || _authorizationPlaybackBlocked
+      ? null
+      : _retryChannelId;
+  bool get hasStartedPlayback => _hasStartedPlayback;
   String? get error => _error;
   bool get fullscreen => _fullscreen;
   bool get cursorVisible => _cursorVisible;
@@ -594,6 +636,7 @@ class PlayerCoordinator extends ChangeNotifier with WidgetsBindingObserver {
       _telemetry.targetPixelFormat,
     ),
     _tracks,
+    _hasStartedPlayback,
     _overlay,
     _overlayPresentationGeneration,
     channelTagWindowActive,
@@ -606,6 +649,7 @@ class PlayerCoordinator extends ChangeNotifier with WidgetsBindingObserver {
     if (_disposed || _backgroundSuspended) return;
     if (event.generation != _activeLoadGeneration) return;
     final load = _activeLoad;
+    if (_observedPlaybackStart(event.status.state)) _hasStartedPlayback = true;
     final terminal = const {
       PlayerState.error,
       PlayerState.ended,
@@ -761,9 +805,19 @@ class PlayerCoordinator extends ChangeNotifier with WidgetsBindingObserver {
         'videoOutput': event.telemetry.videoOutput,
         'hardwareDecoder': event.telemetry.hardwareDecoder,
       });
+      // The terminal event owns the outcome even if stop rejects the pending
+      // load and its tune continuation runs after the native load is retired.
+      if (load != null) _terminalNativeFailureTune = load.tuneGeneration;
+      final failedProgram = _resolvingProgram ?? _active?.program;
       unawaited(_stopQuietly());
       _invalidateAuthorizationRecovery();
-      _error = 'Playback failed. Retry or choose another channel.';
+      _setFailureCause(
+        _causeForFailureCategory(
+          Diagnostics.failureCategory(event.status.failureCode ?? ''),
+          authorizationRejected: _isAuthorizationFailure(event.status),
+        ),
+        program: failedProgram,
+      );
       _tuning = false;
       _canRetry = event.status.recoverable && _retryChannelId != null;
       _releaseActive();
@@ -1012,6 +1066,7 @@ class PlayerCoordinator extends ChangeNotifier with WidgetsBindingObserver {
       announceChannel: endedProgram == null,
     );
     _continuationGeneration = endedProgram == null ? null : generation;
+    if (endedProgram == null) _hasStartedPlayback = false;
     ++_controlGeneration;
     _invalidateAuthorizationRecovery();
     _tuning = true;
@@ -1065,6 +1120,8 @@ class PlayerCoordinator extends ChangeNotifier with WidgetsBindingObserver {
     if (await _expireSleepIfNeeded()) return;
     _clearTransientStatus();
     final generation = _nextTuneGeneration(announceChannel: true);
+    _hasStartedPlayback = false;
+    _error = null;
     ++_controlGeneration;
     try {
       await _load(media);
@@ -1072,10 +1129,14 @@ class PlayerCoordinator extends ChangeNotifier with WidgetsBindingObserver {
     } catch (error) {
       if (_disposed || generation != _tuneGeneration) return;
       await _stopQuietly();
-      if (_disposed || generation != _tuneGeneration) return;
+      if (_disposed ||
+          generation != _tuneGeneration ||
+          generation == _terminalNativeFailureTune) {
+        return;
+      }
       _reportUnexpectedPlaybackFailure(error, 'while loading initial media');
       _recordPlaybackFailure(error);
-      _error = _safePlaybackError(error);
+      _setFailureCause(_failureCauseFor(error));
       _canRetry = false;
       _setOverlay(PlayerOverlay.error, timed: false);
     }
@@ -1100,7 +1161,7 @@ class PlayerCoordinator extends ChangeNotifier with WidgetsBindingObserver {
         _tuning = false;
         _canRetry = true;
         _recordPlaybackFailure(error);
-        _error = _safePlaybackError(error);
+        _setFailureCause(_failureCauseFor(error));
         _setOverlay(PlayerOverlay.error, timed: false);
         return false;
       }
@@ -1116,7 +1177,7 @@ class PlayerCoordinator extends ChangeNotifier with WidgetsBindingObserver {
       }
       _tuning = false;
       _canRetry = true;
-      _error = 'The current program could not be loaded.';
+      _setFailureCause(PlaybackFailureCause.unknown);
       _setOverlay(PlayerOverlay.error, timed: false);
       return false;
     }
@@ -1154,11 +1215,13 @@ class PlayerCoordinator extends ChangeNotifier with WidgetsBindingObserver {
       if (request != null) _releaseActive(ifRequest: request);
       if (replaced != null) _releaseActive(ifRequest: replaced);
       if (request != null) await _stopQuietly();
-      if (!ownsTune()) return false;
+      if (!ownsTune() || generation == _terminalNativeFailureTune) {
+        return false;
+      }
       _tuning = false;
       _canRetry = true;
       _recordPlaybackFailure(error);
-      _error = _safePlaybackError(error);
+      _setFailureCause(_failureCauseFor(error), program: program);
       _setOverlay(PlayerOverlay.error, timed: false);
       return false;
     }
@@ -1219,7 +1282,7 @@ class PlayerCoordinator extends ChangeNotifier with WidgetsBindingObserver {
     } on _PlaybackSuperseded catch (error) {
       return await fail(error);
     } catch (error) {
-      if (ownsTune()) {
+      if (ownsTune() && generation != _terminalNativeFailureTune) {
         _reportUnexpectedPlaybackFailure(error, 'while tuning a channel');
       }
       return await fail(error);
@@ -1664,6 +1727,7 @@ class PlayerCoordinator extends ChangeNotifier with WidgetsBindingObserver {
   }
 
   Future<void> _failTransition(Object error, int tuneGeneration) async {
+    final failedProgram = _resolvingProgram ?? _active?.program;
     final nativeStop = _beginNativeStop();
     _invalidateAuthorizationRecovery();
     if (nativeStop != null) {
@@ -1674,7 +1738,7 @@ class PlayerCoordinator extends ChangeNotifier with WidgetsBindingObserver {
     if (_disposed || tuneGeneration != _tuneGeneration) return;
     _tuning = false;
     _recordPlaybackFailure(error);
-    _error = _safePlaybackError(error);
+    _setFailureCause(_failureCauseFor(error), program: failedProgram);
     _canRetry = true;
     _setOverlay(PlayerOverlay.error, timed: false);
   }
@@ -1718,6 +1782,10 @@ class PlayerCoordinator extends ChangeNotifier with WidgetsBindingObserver {
   Future<void> stop() => _stop();
 
   Future<void> _stop({bool forBackground = false}) async {
+    final keepIdle =
+        forBackground &&
+        _status.state == PlayerState.idle &&
+        !hasPlaybackIntent;
     _subtitleCuesSuppressed = true;
     _clearSubtitleCues();
     if (!forBackground) _resumeAfterBackground = false;
@@ -1746,10 +1814,12 @@ class PlayerCoordinator extends ChangeNotifier with WidgetsBindingObserver {
     final operation = _tuneOperations.then((_) async {
       if (nativeStop != null) await nativeStop;
       if (_disposed || generation != _tuneGeneration) return;
-      _status = const PlayerStatus(
-        state: PlayerState.stopped,
-        message: 'Stopped',
-      );
+      if (!keepIdle) {
+        _status = const PlayerStatus(
+          state: PlayerState.stopped,
+          message: 'Stopped',
+        );
+      }
       notifyListeners();
     });
     _tuneOperations = operation.catchError((_) {});
@@ -2146,6 +2216,12 @@ class PlayerCoordinator extends ChangeNotifier with WidgetsBindingObserver {
   }
 
   void showFullGuide() {
+    if (_failedGuideProgram case final failed?) {
+      if (!guide.isInspecting(failed) ||
+          guide.repairFailedTuneInspection(failed)) {
+        _failedGuideProgram = null;
+      }
+    }
     final selected = miniGuideChannelId;
     if (_overlay == PlayerOverlay.miniGuide && selected != null) {
       final target = guide.channels.indexWhere(
@@ -2234,6 +2310,21 @@ class PlayerCoordinator extends ChangeNotifier with WidgetsBindingObserver {
     _cancelOverlayTimer();
     _presentOverlay(PlayerOverlay.none);
     notifyListeners();
+  }
+
+  /// Closes the current overlay and any parent overlay to show the picture.
+  void returnToPicture() {
+    closeSleepPicker();
+    // Closing a reader normally returns to its parent overlay.
+    switch (overlay) {
+      case PlayerOverlay.programInfo ||
+          PlayerOverlay.audioTracks ||
+          PlayerOverlay.subtitleTracks:
+        closeOverlay();
+      default:
+        break;
+    }
+    if (overlay != PlayerOverlay.none) closeOverlay();
   }
 
   /// Dismiss the sleep picker before another OSD action runs.
@@ -2532,6 +2623,13 @@ class PlayerCoordinator extends ChangeNotifier with WidgetsBindingObserver {
     notifyListeners();
   }
 
+  void _guideFocusChanged() {
+    if (_failedGuideProgram case final failed?
+        when !guide.isInspecting(failed)) {
+      _failedGuideProgram = null;
+    }
+  }
+
   void _guideChanged() {
     if (_overlay == PlayerOverlay.programInfo && currentProgram == null) {
       showOsd();
@@ -2586,6 +2684,7 @@ class PlayerCoordinator extends ChangeNotifier with WidgetsBindingObserver {
     _miniGuideChannelId = null;
     _miniGuideWindowStart = null;
     _retryChannelId = null;
+    _hasStartedPlayback = false;
     _releaseActive();
     _error = null;
     _restoreAuthorizationStopError();
@@ -2679,26 +2778,45 @@ class PlayerCoordinator extends ChangeNotifier with WidgetsBindingObserver {
   }
 
   void _recordPlaybackFailure(Object error, {String operation = 'request'}) {
-    final rawCode = switch (error) {
-      PlexException(:final code) => code,
-      PlayerUnavailable(:final failureCode) => failureCode,
-      _ => 'unexpected',
-    };
-    final code = Diagnostics.failureCategory(rawCode) ?? 'unexpected';
+    final code = _playbackFailureCategory(error) ?? 'unexpected';
     lineup.diagnostics.add(DiagnosticEvent.playbackRequestFailed, {
       if (operation != 'request') 'operation': operation,
       'code': code,
     });
   }
 
-  static String _safePlaybackError(Object error) => switch (error) {
-    PlexException(:final message) => message,
-    PlayerUnavailable(failureCode: 'premature_end') =>
-      'Playback ended before the program finished.',
-    PlayerUnavailable() =>
-      'Playback could not start. Retry or choose another channel.',
-    _ => 'Playback could not start. Retry or choose another channel.',
-  };
+  static String? _playbackFailureCategory(Object error) =>
+      Diagnostics.failureCategory(switch (error) {
+        PlexException(:final code) => code,
+        PlayerUnavailable(:final failureCode) => failureCode,
+        _ => 'unexpected',
+      });
+
+  static PlaybackFailureCause _failureCauseFor(Object error) =>
+      _causeForFailureCategory(_playbackFailureCategory(error));
+
+  static PlaybackFailureCause _causeForFailureCategory(
+    String? category, {
+    bool authorizationRejected = false,
+  }) => authorizationRejected
+      ? PlaybackFailureCause.authorization
+      : switch (category) {
+          'offline' ||
+          'network-unavailable' ||
+          'server-unreachable' ||
+          'network_error' => PlaybackFailureCause.serverUnreachable,
+          'network-timeout' => PlaybackFailureCause.serverTimeout,
+          'auth-denied' ||
+          'auth-required' ||
+          'auth-invalid' ||
+          'access-denied' ||
+          'authorization-unavailable' => PlaybackFailureCause.authorization,
+          'unsupported' ||
+          'video_decode_error' => PlaybackFailureCause.unsupportedVideo,
+          'audio_decode_error' => PlaybackFailureCause.unsupportedAudio,
+          'premature_end' => PlaybackFailureCause.prematureEnd,
+          _ => PlaybackFailureCause.unknown,
+        };
 
   void _indexChannels() {
     _indexedChannels = lineup.channels;
@@ -2737,6 +2855,7 @@ class PlayerCoordinator extends ChangeNotifier with WidgetsBindingObserver {
     _tuning = false;
     lineup.removeListener(_lineupChanged);
     guide.removeListener(_guideChanged);
+    guide.focus.removeListener(_guideFocusChanged);
     unawaited(_cancelPlayerSubscription(_subscription));
     _subscription = null;
     _cancelOverlayTimer();

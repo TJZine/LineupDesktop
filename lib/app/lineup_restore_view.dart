@@ -56,7 +56,12 @@ class LineupRestoreView extends StatelessWidget {
                                   onPressed: controller.canSwitchServer
                                       ? controller.showServers
                                       : null,
-                                  child: const Text('Switch server'),
+                                  child: Text(
+                                    'Switch server',
+                                    style: LineupTypography.tvLabelStyle(
+                                      context,
+                                    ),
+                                  ),
                                 ),
                               ],
                             ),

@@ -8,6 +8,7 @@ import 'package:flutter/services.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:lineup_desktop/app/lineup_controller.dart';
 import 'package:lineup_desktop/channels/channel.dart';
+import 'package:lineup_desktop/channels/channel_filter.dart';
 import 'package:lineup_desktop/channels/scheduler.dart';
 import 'package:lineup_desktop/guide/guide_controller.dart';
 import 'package:lineup_desktop/guide/guide_playback_placeholder.dart';
@@ -131,6 +132,7 @@ void main() {
             id: 'channel-$i',
             number: i + 1,
             name: 'Synthetic channel ${i + 1}',
+            sourceLibraries: library ? const {'library': 'Library'} : const {},
             source: library
                 ? const LibrarySource(
                     libraryId: 'library',
@@ -222,9 +224,14 @@ void main() {
           );
           await tester.pumpAndSettle();
           if (library) {
-            guide.setLibraryFilter('library');
+            guide.setChannelFilter((
+              group: ChannelFilterGroup.library,
+              value: 'library',
+            ));
             await tester.pumpAndSettle();
-            final label = find.byKey(const Key('guide-active-library-label'));
+            final label = find.byKey(
+              const Key('guide-active-channel-filter-label'),
+            );
             expect(label, findsOneWidget);
             expect(
               tester.renderObject<RenderParagraph>(label).didExceedMaxLines,
@@ -513,7 +520,7 @@ void main() {
           );
           final controlRects = <String, Object?>{};
           for (final name in [
-            'guide-library-picker',
+            'guide-channel-filter',
             'guide-channel-search',
             'guide-earlier',
             'guide-now',
@@ -656,8 +663,8 @@ void main() {
           if (configuration.state == 'unavailable') {
             await tester.sendKeyEvent(LogicalKeyboardKey.arrowUp);
             await tester.pumpAndSettle();
-            final picker = tester.widget<DropdownButton<String?>>(
-              find.byKey(const Key('guide-library-picker')),
+            final picker = tester.widget<InkWell>(
+              find.byKey(const Key('guide-channel-filter')),
             );
             for (
               var step = 0;

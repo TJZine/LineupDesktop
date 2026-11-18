@@ -36,12 +36,12 @@ class SetupReviewCounts {
   int get hashCode => Object.hash(unchanged, updated, added, removed);
 }
 
-typedef SetupReviewPlanFactory =
-    ({
-      ChannelPlanAllocation plan,
-      Map<String, BuilderStrategy> strategyBySource,
-    })
-    Function(ChannelBuildMode mode, DateTime anchor);
+typedef SetupReviewPlanFactory = ChannelPlanAllocation Function(
+  ChannelBuildMode mode,
+  DateTime anchor,
+  List<Channel> existing,
+  List<Channel> reviewed,
+);
 
 sealed class SetupPhase {
   const SetupPhase(this.review);
@@ -70,6 +70,12 @@ final class Completed extends SetupPhase {
   const Completed(super.review);
 }
 
+typedef SetupReviewOrdering = ({
+  ChannelOrder order,
+  List<BuilderStrategy> strategyOrder,
+  Map<String, int> sourceCounts,
+});
+
 class SetupReview {
   SetupReview({
     required List<Channel> base,
@@ -77,34 +83,52 @@ class SetupReview {
     required ChannelBuildMode mode,
     required Map<String, BuilderStrategy> strategyBySource,
     SetupReviewPlanFactory? planFactory,
+    DateTime? allocationAnchor,
+    bool recoverNumberLimitedAdditions = false,
+    SetupReviewOrdering? ordering,
     Set<String> removeSourceIds = const {},
   }) : this._(
          base: List.unmodifiable(
            base.map((channel) => channel.immutableCopy()),
          ),
-         plan: freezeSetupAllocation(plan),
+         initialPlan: freezeSetupAllocation(plan),
          mode: mode,
          removeSourceIds: Set.unmodifiable(removeSourceIds),
          strategyBySource: Map.unmodifiable(strategyBySource),
          planFactory: planFactory,
+         allocationAnchor: allocationAnchor,
+         recoverNumberLimitedAdditions: recoverNumberLimitedAdditions,
+         ordering: ordering == null
+             ? null
+             : (
+                 order: ordering.order,
+                 strategyOrder: List.unmodifiable(ordering.strategyOrder),
+                 sourceCounts: Map.unmodifiable(ordering.sourceCounts),
+               ),
        );
 
   SetupReview._({
     required this.base,
-    required this.plan,
+    required ChannelPlanAllocation initialPlan,
+    ChannelPlanAllocation? recoveredPlan,
     required this.mode,
     required this.removeSourceIds,
     required this.strategyBySource,
+    required this.ordering,
     required this._planFactory,
-  }) : finalChannels = _finalChannels(
+    required this._allocationAnchor,
+    required this._recoverNumberLimitedAdditions,
+  }) : _initialPlan = initialPlan,
+       plan = recoveredPlan ?? initialPlan,
+       finalChannels = _finalChannels(
          base: base,
-         planned: plan.channels,
+         planned: (recoveredPlan ?? initialPlan).channels,
          mode: mode,
          removeSourceIds: removeSourceIds,
+         ordering: ordering,
        ) {
     final computedEntries = _reviewEntries(
       base: base,
-      planned: plan.channels,
       finalChannels: finalChannels,
     );
     entries = List.unmodifiable(computedEntries);
@@ -117,22 +141,38 @@ class SetupReview {
   final Set<String> removeSourceIds;
   final Map<String, BuilderStrategy> strategyBySource;
   final List<Channel> finalChannels;
+  final SetupReviewOrdering? ordering;
+
+  Map<String, int> get reviewedNumbers =>
+      mode == ChannelBuildMode.merge && ordering != null
+      ? {
+          for (final channel in finalChannels)
+            if (channel.builderKey != null) channel.id: channel.number,
+        }
+      : const {};
   late final List<SetupReviewEntry> entries;
   late final SetupReviewCounts counts;
   final SetupReviewPlanFactory? _planFactory;
+  final DateTime? _allocationAnchor;
+  final bool _recoverNumberLimitedAdditions;
+  final ChannelPlanAllocation _initialPlan;
+
+  List<Channel> get unmatchedGenerated => _initialPlan.unmatchedGenerated;
 
   SetupReview withMode(ChannelBuildMode mode, DateTime anchor) {
     final factory = _planFactory;
     if (factory == null) {
       throw StateError('A plan factory is required to change setup mode.');
     }
-    final result = factory(mode, anchor);
     return SetupReview(
       base: base,
-      plan: result.plan,
+      plan: factory(mode, anchor, base, const []),
       mode: mode,
-      strategyBySource: result.strategyBySource,
+      strategyBySource: strategyBySource,
       planFactory: factory,
+      allocationAnchor: anchor,
+      recoverNumberLimitedAdditions: _recoverNumberLimitedAdditions,
+      ordering: ordering,
     );
   }
 
@@ -143,13 +183,51 @@ class SetupReview {
     } else {
       next.remove(id);
     }
-    return SetupReview(
+    return SetupReview._(
       base: base,
-      plan: plan,
+      initialPlan: _initialPlan,
+      recoveredPlan: _recoverAdditions(next),
       mode: mode,
-      removeSourceIds: next,
+      removeSourceIds: Set.unmodifiable(next),
       strategyBySource: strategyBySource,
       planFactory: _planFactory,
+      allocationAnchor: _allocationAnchor,
+      recoverNumberLimitedAdditions: _recoverNumberLimitedAdditions,
+      ordering: ordering,
+    );
+  }
+
+  ChannelPlanAllocation? _recoverAdditions(Set<String> removeIds) {
+    final factory = _planFactory;
+    final anchor = _allocationAnchor;
+    if (!_recoverNumberLimitedAdditions ||
+        mode != ChannelBuildMode.merge ||
+        removeIds.isEmpty ||
+        _initialPlan.numberLimitExcluded == 0 ||
+        factory == null ||
+        anchor == null) {
+      return null;
+    }
+    final survivors = base.where((row) => !removeIds.contains(row.id)).toList();
+    final candidate = factory(mode, anchor, survivors, _initialPlan.channels);
+    if (candidate.channels.length < _initialPlan.channels.length) {
+      return null;
+    }
+
+    final priorRecoveries = {
+      for (final row in plan.channels) row.builderKey: row,
+    };
+    final initialIds = _initialPlan.channels.map((row) => row.id).toSet();
+    return freezeSetupAllocation(
+      candidate,
+      channels: [
+        for (final row in candidate.channels)
+          if (priorRecoveries[row.builderKey] case final prior?
+              when !initialIds.contains(row.id))
+            prior.copyWith(name: row.name, number: row.number)
+          else
+            row,
+      ],
     );
   }
 
@@ -158,22 +236,30 @@ class SetupReview {
     required List<Channel> planned,
     required ChannelBuildMode mode,
     required Set<String> removeSourceIds,
-  }) => composeChannelPlan(
-    existing: base
-        .where((channel) => !removeSourceIds.contains(channel.id))
-        .toList(),
-    planned: planned,
-    mode: mode,
-  );
+    required SetupReviewOrdering? ordering,
+  }) {
+    final channels = composeChannelPlan(
+      existing: base
+          .where((channel) => !removeSourceIds.contains(channel.id))
+          .toList(),
+      planned: planned,
+      mode: mode,
+    );
+    if (mode != ChannelBuildMode.merge || ordering == null) return channels;
+    return orderSurvivingChannels(
+      channels: channels,
+      order: ordering.order,
+      strategyOrder: ordering.strategyOrder,
+      sourceCounts: ordering.sourceCounts,
+    );
+  }
 
   static List<SetupReviewEntry> _reviewEntries({
     required List<Channel> base,
-    required List<Channel> planned,
     required List<Channel> finalChannels,
   }) {
     final before = {for (final channel in base) channel.id: channel};
     final finalIds = finalChannels.map((channel) => channel.id).toSet();
-    final plannedIds = planned.map((channel) => channel.id).toSet();
     final entries = <SetupReviewEntry>[
       for (final channel in finalChannels)
         (
@@ -181,11 +267,10 @@ class SetupReview {
           before: before[channel.id],
           kind: before[channel.id] == null
               ? SetupReviewKind.added
-              : plannedIds.contains(channel.id) &&
-                    !canonicalChannelValueEquals(
-                      before[channel.id]!.toJson(),
-                      channel.toJson(),
-                    )
+              : !canonicalChannelValueEquals(
+                  before[channel.id]!.toJson(),
+                  channel.toJson(),
+                )
               ? SetupReviewKind.updated
               : SetupReviewKind.unchanged,
         ),
@@ -220,9 +305,12 @@ class SetupReview {
 
 /// Freeze the allocation at the setup presentation/review boundary. The builder
 /// record itself does not promise ownership of its lists, maps or source data.
-ChannelPlanAllocation freezeSetupAllocation(ChannelPlanAllocation plan) => (
+ChannelPlanAllocation freezeSetupAllocation(
+  ChannelPlanAllocation plan, {
+  List<Channel>? channels,
+}) => (
   channels: List.unmodifiable(
-    plan.channels.map((channel) => channel.immutableCopy()),
+    (channels ?? plan.channels).map((channel) => channel.immutableCopy()),
   ),
   allocatedOriginals: plan.allocatedOriginals,
   excludedOriginals: plan.excludedOriginals,

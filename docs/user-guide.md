@@ -82,11 +82,14 @@ credential state before returning to the welcome screen.
 ### 2. Choose a Plex Home profile
 
 Select the person who is watching. Protected profiles open a four-digit PIN
-keypad and also accept number-row or numpad input.
+keypad and also accept number-row or numpad input. On TV, the focused
+profile has a ring around its avatar in the active theme's focus color.
+Large focus indicators thicken the ring, and Reduce Motion keeps the avatar
+at its resting size.
 
-Profile cards show `PIN`, `Admin`, and `Restricted` only when the current Plex
-Home response establishes those facts. `Active` identifies the currently
-selected profile when the picker is reopened; it is not a focus indicator.
+A lock on the avatar marks a protected profile. The picker shows **Admin**
+and **Restricted** when those labels apply. **Current** identifies the
+selected profile when you reopen the picker.
 
 The profile determines the secure credential scope, selected server, saved
 lineup, and related persisted state. Switching profiles does not intentionally
@@ -94,12 +97,20 @@ reuse another profile's server or lineup.
 
 ### 3. Select a Plex Media Server
 
-Choose a discovered server. Lineup prioritizes usable direct connections before
-relay connections. Each row distinguishes an owned server from a shared one. **Current** marks
-the connected server, while **Previously used** identifies a saved selection. Only the selected server shows its measured path and
-latency; 500 ms or more is labeled **Very slow**, and a relay is labeled
-**Limited** rather than failed. Lower measured latencies show their route and
-value without a Slow warning.
+On first run, if Plex lists a single server and Lineup connects to it, setup
+opens **Choose libraries** automatically. If Plex lists several servers or the
+single server cannot be connected, choose from the server picker. Lineup
+prioritizes usable direct connections before relay connections.
+
+Choose anywhere on a server row to select it. **Yours** and **Shared with you**
+show who owns each server. **Current** marks the connected server, while
+**Previously used** identifies a saved selection. When Lineup has measured a
+connection, the row shows its path and latency. A latency of 500 ms or more is
+labeled **Very slow**, and a relay is labeled **Limited**. A server whose
+connection probe fails shows **Unreachable** with a **Retry** action. You can
+change servers later in **Settings → Account**.
+
+<!-- UX assessment decision, 2026-11-13/14 (N9, N10). -->
 
 Plex supplies each discovered server with its own PMS credential, separate from
 the Plex.tv account or Home-profile credential. Lineup keeps that server
@@ -109,7 +120,7 @@ it is not saved in application state or shown in the interface.
 When no server appears:
 
 - confirm Plex Media Server is running and reachable;
-- select **Retry discovery**;
+- select **Refresh servers**;
 - switch profiles when the expected server belongs to another profile; or
 - select another server. The picker also offers **Sign out** when you need to
   link Plex again; signing out uses a confirmation and stops playback.
@@ -118,12 +129,18 @@ When no server appears:
 
 Channel Setup has three stages:
 
-1. **Choose libraries** and scan their media. You can cancel a running scan,
-   retry only failed libraries, or continue with the ready subset.
-2. **Configure channels** using playlists, collections, recently added content,
-   genres, studios, actors, decades, and directors. Select per-library or grouped
-   sources, playback order, minimum programs, and the generated-channel limit.
-3. **Review** the complete roster and explicitly apply the plan.
+1. **Choose libraries** to build channels from, then scan their media. On TV,
+   focus starts on the first library when the list is available. You can cancel
+   a running scan, retry only failed libraries, or continue with the ready subset.
+   Before you advance, **Back to profiles** returns to the profile picker,
+   where selecting a protected profile again requires its PIN.
+   **Back to sign-in** ends the linked session and returns to Plex sign-in.
+   The available action depends on where you entered setup. On TV, use the
+   remote’s Back button. Back cancels a running scan first.
+2. **Choose channels** from playlists, collections, recently added content,
+   genres, studios, actors, decades, and directors. Choose source grouping,
+   playback order, minimum programs, and the generated-channel limit.
+3. **Review channels** and apply the plan.
 
 Scans report pages, items, and ready, empty, unsupported, cancelled, or failed
 outcomes. Continuing commits the selected ready libraries; cancelled or failed
@@ -145,15 +162,28 @@ If the selected server has no usable movie or show libraries, setup offers
 **Switch server** and a quiet **Sign out** action. Sign out uses the same
 confirmation as the server picker, stops playback, and returns to Plex linking.
 
+Under **Lineup rules**, **Channel order** defaults to **Mixed, like live TV**,
+which interleaves channel types. When building or replacing a lineup,
+**Grouped by type** assigns consecutive numbers in the source order shown,
+with the largest channels first within each type. The choice is saved with the
+lineup. **Update and add** keeps existing numbers, including manual moves,
+unless you change **Channel order**. In Grouped mode, new channels use the
+first free number after the last channel of their type within its block.
+If the block has no room, new channels go after the highest number.
+Custom channel numbers are reserved.
+
 Allocation takes one eligible original from each enabled source in order,
 repeats, and skips exhausted sources. Additional versions are off by default
 and are allocated only after originals. Mini-marathons can include specials
 when enabled, including additional Mini-marathon versions. Exclusions distinguish
-the configured channel limit from exhausted channel numbers.
+the configured channel limit from exhausted channel numbers. Each new channel
+starts at its own point in its schedule, which is saved with the channel.
 
 For an existing lineup, **Update and add** preserves matching generated
-identities, **Replace generated channels** replaces generated programming while
-keeping custom channels, and **Add as new channels** appends new identities.
+identities, schedule anchors, and favourites. **Replace generated channels**
+replaces generated programming while keeping custom channels. **Add as new
+channels** keeps all existing numbers and applies Channel order to the new
+channels only. The saved preference applies to the next generation.
 Review shows current/final counts and unchanged, updated, added, and removed
 entries; search by name or number and filter the change categories. Removals
 require confirmation. A changed lineup invalidates the review and requires a
@@ -165,9 +195,9 @@ Success offers **View lineup** and **Add a custom channel**.
 
 | Destination | Purpose |
 | --- | --- |
-| Guide | Browse the schedule, inspect focused programs, filter by library, jump to now, tune current programs, and open the Player |
+| Guide | Browse the schedule, inspect focused programs, filter by channel group, jump to now, tune current programs, and open the Player |
 | Channels | Generate a lineup or create, inspect, duplicate, edit, and delete individual channels |
-| Settings | Configure appearance, Guide, playback, accessibility, account, and support preferences |
+| Settings | Configure appearance, Guide, playback, subtitles, accessibility, account, and support preferences |
 | Diagnostics | Review bounded, redacted support events from the current session |
 | Player | Watch the tuned channel and use playback, track, channel, sleep, and fullscreen controls |
 
@@ -179,11 +209,11 @@ package wording remains provisional rather than unsupported-by-design.
 
 Guide, Player, Settings, and Diagnostics use immersive surfaces. Activate the
 visible **Open Lineup menu** control on one of those surfaces to open the
-anchored **Lineup** menu. It offers Guide, Player when playback exists, Channels,
-Settings, and **Account**; Account opens Settings with its Account category
-selected. Channels uses the persistent management rail. Settings uses one
-immersive category rail and, when playback is active, keeps the same Player
-surface behind it.
+anchored **Lineup** menu. When a channel is tuned, the first row shows the
+channel and program and returns to the Player. Guide, **Manage channels**, and
+Settings follow. The profile card shows the profile and server and opens
+Settings → Account, where the connection route and latency are listed.
+When playback is active, Settings keeps the same Player surface behind it.
 
 ## Subtitle appearance
 
@@ -256,10 +286,28 @@ active video appears in a responsive picture-in-picture area. PiP is the sole
 full Guide presentation; the retired full-screen Overlay layout is not
 available. The Guide and Player share one playback session.
 
-The Guide toolbar always shows a library picker and channel search. The picker
-offers **All libraries** or one library, and search accepts a channel name or
-number within that scope. **Jump to now** returns the time window and focus to
-the current schedule. While the Guide follows live, its window and focus track
+An empty lineup opens the Guide with **No channels yet** and **Set up channels**
+in the content area. On TV, Select activates **Set up channels** immediately.
+The schedule and its controls appear after channels have been created.
+
+The Guide opens on **All channels** each time you launch Lineup. The toolbar
+filter lists All channels, Favourites when present, the available source types,
+and libraries, with counts. Search accepts a channel name or number within
+the selected filter. Filtering keeps the original channel numbers: direct
+number entry can still reach all channels. If a filter disappears, such as
+when you remove the last favourite, the Guide returns to All channels and
+shows a short notice.
+
+When you see **Select to watch** on the idle picture, activate the airing
+program to tune its channel. On desktop, **Back to player** is available in the
+header while playback is active. **Jump to now** returns the time window and focus to
+the current schedule. After a failed tune, **Next channel** in the Guide
+picture follows the active filter and wraps to the first matching channel.
+When you return to the Guide after the failed program ends, its focused
+occurrence moves to the current program on the same channel. On TV, an idle
+Guide keeps its watch preview when Lineup returns from the background.
+
+While the Guide follows live, its window and focus track
 the presentation clock. Moving to an earlier or later window stops that live
 following and preserves the browsed window and explicitly inspected program
 until you choose **Now** again. When the current time is off screen, the
@@ -292,7 +340,7 @@ line with middle-dot separators when space is compact.
 ## Player
 
 On Windows, **Settings > Playback > Match display HDR in fullscreen** is on
-by default, after **DVR playback controls**. Its subtitle is: "Switch Windows
+by default, after **Pause and seek controls**. Its subtitle is: "Switch Windows
 HDR on for HDR programs and off for SDR programs while fullscreen, then restore
 your display setting."
 
@@ -338,17 +386,17 @@ timeline tier immediately above the edge-to-edge progress line shows
 `current / total • time left` on the left when duration is known and
 `Up next • scheduled start • title` on the right. Metadata and actions are
 restrained, and the progress line is anchored to the absolute bottom. By
-default, the **DVR playback controls** setting is off: transport buttons are
+default, the **Pause and seek controls** setting is off: transport buttons are
 hidden and Player-local pause/play, seek, stop, rewind, and fast-forward
 keyboard/media shortcuts are blocked. Page Up/Page Down channel surfing,
 number entry, Guide/Mini Guide tuning, tracks, sleep, menu, and fullscreen
-remain available. Enabling **DVR playback controls** restores the transport UI
+remain available. Enabling **Pause and seek controls** restores the transport UI
 and those shortcuts; it changes Flutter presentation/input policy only, not
 native or libmpv behavior. It provides:
 
 - current channel and program information;
-- playback position; seeking when DVR playback controls are enabled;
-- previous channel, play/pause, and next channel when DVR playback controls are enabled;
+- playback position; seeking when Pause and seek controls are enabled;
+- previous channel, play/pause, and next channel when Pause and seek controls are enabled;
 - available audio and subtitle tracks;
 - sleep timer state;
 - fullscreen entry and exit.
@@ -388,16 +436,21 @@ When Plex supplies cast facts, up to four actor portraits appear in one row,
 with names and roles beneath them. Full cast facts remain available to
 accessibility. Missing or failed headshots use a neutral person silhouette,
 never fabricated initials, and no cast space is reserved when cast facts are
-absent. Pointer movement leaves the expanded reading surface open. Press `I`,
+absent. On desktop, click the Player’s program title or artwork to open Now
+Playing. Pointer movement leaves the expanded reading surface open. Press `I`,
 `Enter`, `Esc`, or Back, or choose **Close**, to collapse it to the OSD. `A` or
 `C` opens the requested track list directly when that track type is available.
+Subtitles, Audio and Sleep use a popover for six or fewer choices. Longer lists
+use the side panel; Subtitle Off counts as a choice.
 
-The mini Guide displays a bounded group of nearby channels without leaving
-playback. Selecting a row replaces the current tune through the same Player
-owner.
+The Mini Guide displays nearby channels without leaving Player. Episodes show
+the series name first, followed by episode and time. Select a channel to tune
+it. When you enter a channel number, the digits appear at the top center with
+any matching channel below. In Now Playing, visible film title art takes the
+place of duplicate title text.
 
 When one Plex item contains sequential media parts, Lineup continues through
-them under the same tune. When DVR playback controls are enabled, progress and
+them under the same tune. When Pause and seek controls are enabled, progress and
 cross-part seeking use aggregate timing only when the required part durations
 are known; otherwise the Player shows the current part's timing rather than
 estimating missing boundaries.
@@ -411,7 +464,7 @@ whatever is airing now at its live position. A manual tune or **Retry** also
 joins live.
 
 If a stream ends more than 30 seconds before its known duration, Lineup shows
-the existing playback error with **Retry** instead of advancing. Failed
+the playback error with **Try again** when available, instead of advancing. Failed
 continuations do not retry automatically. Player title, progress context, and
 **Up Next** follow the loaded program; the Guide and mini Guide remain on the
 wall-clock schedule. User tune, Stop, sleep-timer expiry, sign-out, and lineup
@@ -421,7 +474,7 @@ The timed OSD remains open while keyboard focus is inside its controls. Leaving
 the active OSD restarts its full timeout. The Mini Guide has no inactivity
 timeout: it stays open while browsing or reading until you tune a row, open the
 full Guide, or close it explicitly. Reduce Motion removes Player overlay
-transition time, and audio/subtitle panels initially focus the selected track
+transition time, and audio/subtitle pickers initially focus the selected track
 (or **Off** when no subtitle is selected). These behaviors are deterministically
 tested in Flutter; physical Windows screen-reader and assistive-technology
 validation remains pending.
@@ -455,9 +508,10 @@ report to Flutter.
 | Player | Open full Guide | `G` or `F2` |
 | Player | Show mini Guide | `Up` |
 | Player | Show OSD / expand Now Playing | `Enter` shows OSD; `I` or `Down` expands Now Playing; `I` or `Enter` collapses it |
-| Player | Seek backward/forward | `Left` or `J` = 10 seconds back; `Right` or `L` = 30 seconds forward (DVR playback controls on) |
-| Player | Play or pause | `Space`, `K`, or Media Play/Pause (DVR playback controls on) |
+| Player | Seek backward/forward | `Left` or `J` = 10 seconds back; `Right` or `L` = 30 seconds forward (Pause and seek controls on) |
+| Player | Play or pause | `Space`, `K`, or Media Play/Pause (Pause and seek controls on) |
 | Player | Previous/next channel | `Page Up` / `Page Down` |
+| Player (desktop) | Open Guide / Mini Guide from the OSD | Choose **Guide** for the full Guide, or activate the channel badge for the Mini Guide. Hover over the badge to step channels. |
 | Player | Enter a channel number | Number keys; confirm with `Enter`, numpad `Enter`, or Select while the entry overlay is open |
 | Player | Audio / subtitle tracks | `A` / `C` |
 | Player | Sleep timer | `S` |
@@ -471,7 +525,7 @@ report to Flutter.
 
 Dedicated media transport keys are context-sensitive. In the Player, Media
 Play, Pause, Stop, Rewind, and Fast Forward are handled when available only with
-**DVR playback controls** enabled. In the Guide, Media Play jumps to the current
+**Pause and seek controls** enabled. In the Guide, Media Play jumps to the current
 time regardless of that setting. Page Up/Page Down, number entry, Guide/Mini
 Guide tuning, tracks, sleep, menu, and fullscreen also do not depend on the
 setting. The timed OSD follows the configured 2–15 second auto-hide duration.
@@ -499,10 +553,10 @@ navigation, so the D-pad can reach the next control.
 | Left / Right | Move through focused Player actions; seek only with DVR enabled and video focused |
 | Up / Down | Hidden Player: Up opens Mini Guide and Down shows the compact OSD; from the compact OSD action row, Down expands details when a program exists; in expanded details, move within the details |
 | Channel Up / Channel Down | Player: previous/next channel; Mini Guide: move seven channels; Guide: move a visible page, like Page Up / Page Down |
-| Guide | Open the full Guide from Player; in Guide, follow its Close Guide action |
+| Guide | Open the full Guide from Player; in Guide, follow its usual return action |
 | Info | Player: expand details from hidden or compact OSD; collapse expanded details to compact OSD; with no current program, show the compact OSD |
-| Menu | Open the Lineup menu from Player or Guide |
-| Play/Pause, Rewind, Fast Forward | Existing Player transport actions when DVR playback controls are enabled |
+| Menu | Open or close the Lineup menu from any in-app destination |
+| Play/Pause, Rewind, Fast Forward | Existing Player transport actions when Pause and seek controls are enabled |
 | Number buttons | Enter a channel number in Player, then Select to confirm |
 
 Guide and Info depend on the remote; Fire TV remotes provide Menu but may not
@@ -516,31 +570,59 @@ When lineup generation completes on TV, **Open guide** goes to Guide. **Add a
 custom channel** goes to Studio; desktop keeps its existing View lineup action.
 
 Up from the Guide's first channel row enters the nearest toolbar control; Down
-returns to the selected grid cell. Player action keys reset the OSD timeout;
-auto-hide returns focus to video. Closing a track drawer or sleep picker returns
-to its invoking action. If playback fails, use the focused Retry action when
-available, or Browse channels.
+returns to the selected grid cell. Move to the channel filter and press Select
+to open it. Select applies the highlighted entry; Back or Right closes the list
+without applying it. Left at the live time edge continues to focus the channel
+rail.
+
+Player action keys reset the OSD timeout; auto-hide returns focus to video.
+Closing a track picker or sleep picker returns to its invoking action. A
+playback failure shows a short cause and offers **Try again** when retry is
+available, or **Choose another channel**. Back closes the Mini Guide and returns
+to the slate. Pressing Menu twice returns focus to the action that was focused
+on the slate. From a newly opened failure, Back dismisses the error overlay; the
+next Back opens Guide.
 
 Use the Player's OSD controls for tracks and sleep. Plex linking uses the code
 and QR shown on the TV; open plex.tv/link on another device when the TV has no
 browser. The Studio manual editor and air check remain reachable but are not
 accepted for remote-only operation in this beta.
 
-## Channels
+## Manage channels
 
-**Generate lineup** is the bulk workflow. It proposes generator-owned channels,
-then lets you replace generated channels, add generated channels, or refresh
-matching generated channels after review. All three modes preserve every custom
-channel. Refresh also preserves a matching generated channel's number, visible
-name, schedule anchor, and shuffle identity while updating its generated
-programming recipe. Before applying, Review shows the full proposed final
-roster. Search it by channel number or name, or filter for protected custom,
-added/updated, or removed entries. Replace keeps its protection confirmation
-visible while you inspect the roster. Completion offers **View lineup** or the
-separate **Add a custom channel** action.
+Select a channel to open it in Studio. Search by name or number, or filter by
+favourites, source type or library. The Source column identifies the programming
+type and library. Studio shows whether watched items are included.
+
+Open **⋮** for **Watch**, **Favourite** or **Remove from favourites**, **Edit**
+for a custom channel or **Duplicate as custom** for a generated channel, and
+**Delete…**. On desktop you can also right-click the row or use Shift+F10 or
+the keyboard Menu key. On TV, press Right from the row and then Select, or hold
+Select on the row. Back closes the row menu and returns focus to the channel.
+Press Menu while the row menu is open to switch to the Lineup menu.
+
+**Update lineup…** opens the bulk workflow. In an empty lineup, choose
+**Generate lineup…** or **Add a custom channel**. The generation workflow
+proposes generator-owned channels and lets you replace, add, or refresh them
+after review. All three modes preserve every custom channel. Refresh preserves a matching generated channel's name, schedule anchor,
+shuffle identity, and favourite status while updating its programming recipe.
+Changing **Channel order** can renumber generated channels. **Replace all**
+keeps favourites for matching generated channels and may reset their schedule
+anchors. **Review channels** shows the proposed roster. Search by channel number or name, or filter by
+change category. If the plan removes channels, its confirmation stays visible
+while you inspect the roster. Completion offers **View lineup** and
+**Add a custom channel**.
+
+Generated names use the source name, such as **Drama**. Channels with that
+name from different libraries show the library beside the name where it fits.
+Additional schedules use numbers such as **Drama 2** or playback labels such
+as **Drama In Order**. TV, film, and mixed channels have distinct icons.
+Custom names stay as entered.
 
 **Add a custom channel** opens the full-page Channel Studio for one custom channel.
-Studio also opens when you edit a custom channel, inspect a generated channel,
+On TV, a new draft starts with focus on its programming source and suggests a
+name based on that source. Once you edit the name it stays as you entered it
+when you switch sources. Studio also opens when you edit a custom channel, inspect a generated channel,
 or choose **Duplicate as custom** from generated inspection. Generated
 programming remains read-only, but its name and number can be saved with **Save
 identity**. Duplication creates a separate custom draft with a new identity and
@@ -562,8 +644,11 @@ Mini-marathons uses blocks of 2 through 5 episodes and requires usable show
 grouping. **Air Check** uses the same content resolver and deterministic
 scheduler as Guide and Player to show what is on now, what follows, cycle and
 timing facts, why content was included, and actionable unavailable or invalid
-states. A new channel saves the same schedule anchor and shuffle identity that
-Air Check previewed. Shuffled schedules canonicalize each media occurrence by
+states. A new or duplicated channel, including **Save as new custom channel**,
+gets a staggered start based on its schedule cycle and saves the same anchor
+that Air Check verified. If playable inventory changes before saving, Air Check
+verifies the new schedule first. Shuffled schedules
+canonicalize each media occurrence by
 its media identity and duration before applying the seed, so a PMS response
 that merely changes input order does not reshuffle the schedule. An existing
 shuffled schedule can make one accepted transition at a schedule-version
@@ -589,10 +674,15 @@ Deletion requires confirmation and cannot be undone.
 | --- | --- |
 | Appearance | A labeled palette chooser for Ember & Steel, Slate & Pine, Mint Noir, and Satellite Blue; three Player overlay-transparency choices; Guide information background (artwork colors, theme, or backdrop); and title artwork preference |
 | Guide | Visible hours of 2, 3, or 4; whether to show channel sources; and whether to show the now-playing channel and program in Guide |
-| Playback | Player controls auto-hide after 2, 4, 6, 8, 10, or 15 seconds; optional DVR playback controls; Match display HDR in fullscreen (default on) |
+| Playback | Player controls auto-hide after 2, 4, 6, 8, 10, or 15 seconds; optional Pause and seek controls; Match display HDR in fullscreen (default on) |
+| Subtitles | Change text subtitle appearance and preview it against the Player frame |
 | Accessibility | Reduce motion across management, Guide, and Player transitions; larger keyboard/controller focus indicators |
 | Account | Switch Plex Home profile, show the profile picker on startup, switch the Plex Media Server, and sign out of Plex |
 | Support | Enable or disable bounded redacted diagnostic recording and open Diagnostics |
+
+On TV, pausing on a section in the Settings rail opens that section. Press Right
+to move into its controls, or Select to open the section immediately. On desktop,
+click a section or focus it and press Enter.
 
 Settings save immediately. The edited control is temporarily disabled while its
 save is pending. When persistence fails, the previous value remains active and
@@ -606,11 +696,17 @@ system is destructive and removes saved local setup and preferences as well.
 
 Diagnostics are disabled by default. Enable **Record redacted diagnostics** in
 **Settings > Support** before reproducing a problem that needs support context.
+Open **Details** from a Player error to view Diagnostics and use **Back to
+Player** to return. When you open Diagnostics from Settings, Back returns to
+Support.
 
-Technical details and the support report include **Windows display**, **HDR
-matching**, and **Renderer output**, with normalized values. Display state is
-reported by Windows; it does not verify the TV's picture. Source HDR metadata,
-renderer output, and Windows display state are separate observations.
+When recent events are empty, Diagnostics explains whether recording is off or
+no events have been recorded yet. When playback is idle, the summary explains how to see playback details.
+**Technical details** includes the Plex connection route and latency when
+measured and shows display and media facts supported by the platform. Copied
+reports use the same platform display facts. Windows display state does not
+verify the TV's picture. Source HDR metadata, renderer
+output, and Windows display state are separate observations.
 
 When diagnostics are enabled, a completed or failed library scan can add the
 numeric **Library scan budget usage** entry with `bytes`, `entries`, `requests`,

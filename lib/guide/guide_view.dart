@@ -10,10 +10,12 @@ import 'package:lineup_desktop/platform/device_profile.dart';
 
 import '../app/navigation_shortcuts.dart';
 import '../channels/channel.dart';
+import '../channels/channel_filter.dart';
 import '../ui/media_badges.dart';
 import '../settings/lineup_settings.dart';
 import '../ui/app_theme.dart';
 import '../ui/app_ui.dart';
+import '../ui/channel_identity.dart';
 import '../ui/lineup_canvas.dart';
 import 'focused_ticker.dart';
 import 'guide_controller.dart';
@@ -21,6 +23,9 @@ import 'guide_playback_placeholder.dart';
 
 const _guideTimelineGutter = 1.0;
 const _guideEdgeContentInset = 12.0;
+// Cap the scaled TV base before applying the measured number-column adjustment.
+// With the reference two-digit column at 130% text, the result is about 350 px.
+const _guideTvRailBaseCap = 332.0;
 const _guidePictureAspectRatio = 16 / 9;
 const _guideReferencePictureHeight = 324.0;
 const _guideSynopsisWidthFloor = 400.0;
@@ -49,6 +54,7 @@ class GuideLayoutPolicy {
     required bool hasPicture,
     double textScale = 1,
     double? numberColumnWidth,
+    bool isTv = false,
     double? timeHeaderHeight,
     double? tvControlsHeight,
     double tvRowFloor = 0,
@@ -187,7 +193,12 @@ class GuideLayoutPolicy {
       compact: compact,
       timeHeaderHeight: timeHeaderHeight ?? 38 * textScale,
       padding: padding,
-      channelRailWidth: baseRailWidth + railGrowth,
+      // Preserve the real number allocation, including wider channel numbers.
+      channelRailWidth:
+          (isTv
+              ? math.min(baseRailWidth, _guideTvRailBaseCap)
+              : baseRailWidth) +
+          railGrowth,
       showcaseHeight: showcaseHeight,
       pictureWidth: pictureWidth,
       rowHeight: rowHeight,
@@ -196,6 +207,9 @@ class GuideLayoutPolicy {
       minimumIdentityWidth: tvControlsHeight == null ? 0 : tvIdentityWidth,
     );
   }
+
+  double timelineWidthFor(double viewportWidth) =>
+      viewportWidth - channelRailWidth - _guideTimelineGutter;
 
   static double toolbarHeight(Size size, {double textScale = 1}) => 80;
 
@@ -369,6 +383,7 @@ class GuideView extends StatefulWidget {
     this.onOpenMenu,
     this.onBack,
     this.onSetUpChannels,
+    this.setupFocusNode,
     this.showIdleArtwork = false,
     this.pictureInPicture,
     this.onOpenPlayer,
@@ -385,6 +400,7 @@ class GuideView extends StatefulWidget {
   final LineupMenuCallback? onOpenMenu;
   final Widget? pictureInPicture;
   final VoidCallback? onSetUpChannels;
+  final FocusNode? setupFocusNode;
   final bool showIdleArtwork;
   final VoidCallback? onOpenPlayer;
   final String? playbackMessage;
@@ -398,23 +414,27 @@ class GuideView extends StatefulWidget {
 class _GuideViewState extends State<GuideView>
     with SingleTickerProviderStateMixin, WidgetsBindingObserver {
   final _retryFocus = FocusNode(debugLabel: 'Guide retry all schedules');
-  final _setupFocus = FocusNode(debugLabel: 'Guide set up channels');
+  final _internalSetupFocus = FocusNode(debugLabel: 'Guide set up channels');
+  FocusNode get _setupFocus => widget.setupFocusNode ?? _internalSetupFocus;
+  bool get _empty => widget.controller.lineup.channels.isEmpty;
   bool _allVisibleFailed = false;
   final _menuFocus = FocusNode(debugLabel: 'Guide Lineup menu');
   final _guideFocus = FocusNode(debugLabel: 'Guide grid');
-  final _libraryFocus = FocusNode(debugLabel: 'Guide library picker');
+  final _channelFilterFocus = FocusNode(debugLabel: 'Guide channel filter');
   final _searchFocus = FocusNode(debugLabel: 'Guide channel search');
   // TooltipVisibility replaces each tooltip's child when the menu opens.
   // Keep these invokers alive so closing the menu can restore exact focus.
-  final _closeFocus = FocusNode(debugLabel: 'Close Guide');
+  final _closeFocus = FocusNode(debugLabel: 'Back to player');
   final _earlierFocus = FocusNode(debugLabel: 'Guide earlier');
   final _nowFocus = FocusNode(debugLabel: 'Guide now');
   final _laterFocus = FocusNode(debugLabel: 'Guide later');
   final _hoursFocus = FocusNode(debugLabel: 'Guide hours picker');
   final _clearSearchFocus = FocusNode(debugLabel: 'Guide clear search');
-  final _removeLibraryFilterFocus = FocusNode(
-    debugLabel: 'Guide remove library filter',
+  final _removeChannelFilterFocus = FocusNode(
+    debugLabel: 'Guide remove channel filter',
   );
+  final _messengerKey = GlobalKey<ScaffoldMessengerState>();
+  bool _filterNoticeScheduled = false;
   final _scheduleKey = GlobalKey(debugLabel: 'Guide schedule');
   final _searchController = TextEditingController();
   late String _observedSearchQuery;
@@ -489,6 +509,7 @@ class _GuideViewState extends State<GuideView>
     _presentationClock = ValueNotifier(widget.controller.now);
     _searchController.text = widget.controller.searchQuery;
     _observedSearchQuery = widget.controller.searchQuery;
+    _scheduleFilterFallbackNotice();
     _searchContentGeneration = widget.controller.lineup.contentGeneration;
     _searchController.addListener(_searchChanged);
     _activityPulse = AnimationController(
@@ -502,6 +523,17 @@ class _GuideViewState extends State<GuideView>
       _refreshClock();
     });
     _scheduleViewportRequest();
+  }
+
+  @override
+  void didUpdateWidget(covariant GuideView oldWidget) {
+    super.didUpdateWidget(oldWidget);
+    if (!_showBackToPlayer && _closeFocus.hasFocus) {
+      final target = widget.onOpenMenu != null
+          ? _menuFocus
+          : widget.focusNode ?? _guideFocus;
+      target.requestFocus();
+    }
   }
 
   void _refreshClock() {
@@ -520,10 +552,10 @@ class _GuideViewState extends State<GuideView>
   void dispose() {
     WidgetsBinding.instance.removeObserver(this);
     _retryFocus.dispose();
-    _setupFocus.dispose();
+    _internalSetupFocus.dispose();
     _menuFocus.dispose();
     _guideFocus.dispose();
-    _libraryFocus.dispose();
+    _channelFilterFocus.dispose();
     _searchFocus.dispose();
     _closeFocus.dispose();
     _earlierFocus.dispose();
@@ -531,7 +563,7 @@ class _GuideViewState extends State<GuideView>
     _laterFocus.dispose();
     _hoursFocus.dispose();
     _clearSearchFocus.dispose();
-    _removeLibraryFilterFocus.dispose();
+    _removeChannelFilterFocus.dispose();
     _searchController
       ..removeListener(_searchChanged)
       ..dispose();
@@ -640,8 +672,35 @@ class _GuideViewState extends State<GuideView>
     return index >= first && index < first + _visibleRows;
   }
 
+  void _scheduleFilterFallbackNotice() {
+    if (_filterNoticeScheduled ||
+        !widget.controller.filterFallbackNoticePending) {
+      return;
+    }
+    _filterNoticeScheduled = true;
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      _filterNoticeScheduled = false;
+      if (!mounted || !widget.controller.filterFallbackNoticePending) return;
+      final messenger = _messengerKey.currentState;
+      if (messenger == null) return;
+      widget.controller.acknowledgeFilterFallbackNotice();
+      messenger.hideCurrentSnackBar();
+      messenger.showSnackBar(
+        const SnackBar(
+          duration: Duration(seconds: 3),
+          content: Text('Filter no longer available. Showing All channels.'),
+        ),
+      );
+    });
+  }
+
   void _changed() {
     if (!mounted) return;
+    _scheduleFilterFallbackNotice();
+    if (widget.controller.channelFilterKey == ChannelFilter.all &&
+        _removeChannelFilterFocus.hasFocus) {
+      _channelFilterFocus.requestFocus();
+    }
     final searchQuery = widget.controller.searchQuery;
     final contentGeneration = widget.controller.lineup.contentGeneration;
     final externalSearchChange =
@@ -777,7 +836,8 @@ class _GuideViewState extends State<GuideView>
         keyboard.isMetaPressed;
     if (key == LogicalKeyboardKey.keyF &&
         commandModifier(keyboard) &&
-        !nativeFullscreenChord) {
+        !nativeFullscreenChord &&
+        !_empty) {
       _searchFocus.requestFocus();
       return KeyEventResult.handled;
     }
@@ -788,7 +848,10 @@ class _GuideViewState extends State<GuideView>
         isAndroidTvMenu &&
         widget.onOpenMenu != null) {
       final invokerContext = _menuFocus.context ?? context;
-      widget.onOpenMenu!(invokerContext, _menuFocus);
+      widget.onOpenMenu!(
+        invokerContext,
+        _setupFocus.hasPrimaryFocus ? _setupFocus : _menuFocus,
+      );
       return KeyEventResult.handled;
     }
     if (_searchFocus.hasFocus && !commandModified) {
@@ -816,6 +879,14 @@ class _GuideViewState extends State<GuideView>
           ? primary
           : node;
       widget.onClose(invoker.context ?? context, invoker);
+      return KeyEventResult.handled;
+    }
+    if (_empty &&
+        DeviceProfile.of(context).isTv &&
+        _setupFocus.hasPrimaryFocus &&
+        key == LogicalKeyboardKey.arrowUp &&
+        _menuFocus.context?.mounted == true) {
+      _menuFocus.requestFocus();
       return KeyEventResult.handled;
     }
     if (!node.hasPrimaryFocus) return KeyEventResult.ignored;
@@ -878,18 +949,21 @@ class _GuideViewState extends State<GuideView>
     return KeyEventResult.handled;
   }
 
-  List<FocusNode> _toolbarFocusOrder() => [
-    _libraryFocus,
-    if (widget.controller.libraryFilterId != null) _removeLibraryFilterFocus,
-    _searchFocus,
-    if (_searchController.text.isNotEmpty) _clearSearchFocus,
-    _earlierFocus,
-    _nowFocus,
-    _laterFocus,
-    _hoursFocus,
-    _menuFocus,
-    _closeFocus,
-  ];
+  List<FocusNode> _toolbarFocusOrder() => _empty
+      ? [_menuFocus]
+      : [
+          _channelFilterFocus,
+          if (widget.controller.channelFilterKey != ChannelFilter.all)
+            _removeChannelFilterFocus,
+          _searchFocus,
+          if (_searchController.text.isNotEmpty) _clearSearchFocus,
+          _earlierFocus,
+          _nowFocus,
+          _laterFocus,
+          _hoursFocus,
+          _menuFocus,
+          if (_showBackToPlayer) _closeFocus,
+        ];
 
   void _focusNearestToolbarControl() {
     Rect? programRect;
@@ -961,9 +1035,12 @@ class _GuideViewState extends State<GuideView>
           enabled: DeviceProfile.of(context).isTv,
         ) ??
         event.logicalKey;
-    final gridFocus = widget.focusNode ?? _guideFocus;
     if (key == LogicalKeyboardKey.arrowDown) {
-      gridFocus.requestFocus();
+      if (_empty && widget.onSetUpChannels == null) {
+        return KeyEventResult.ignored;
+      }
+      final target = _empty ? _setupFocus : widget.focusNode ?? _guideFocus;
+      target.requestFocus();
       return KeyEventResult.handled;
     }
     if (key != LogicalKeyboardKey.arrowLeft &&
@@ -988,10 +1065,13 @@ class _GuideViewState extends State<GuideView>
     return KeyEventResult.handled;
   }
 
-  Widget _toolbar(GuideLayoutPolicy policy) => _Toolbar(
+  bool get _showBackToPlayer =>
+      !DeviceProfile.of(context).isTv && widget.watchingChannelId != null;
+
+  Widget _toolbar() => _Toolbar(
     controller: widget.controller,
     clock: _presentationClock,
-    compact: policy.compact,
+    showBackToPlayer: _showBackToPlayer,
     watchingChannelId: widget.watchingChannelId,
     onClose: widget.onClose,
     onOpenMenu: widget.onOpenMenu,
@@ -1021,6 +1101,11 @@ class _GuideViewState extends State<GuideView>
     ),
   );
 
+  // The controls row already starts at the rail's leading content inset.
+  // Keep both picker edges inside the matching rail content bounds.
+  double _filterPickerWidth(GuideLayoutPolicy policy) =>
+      policy.channelRailWidth - _guideEdgeContentInset * 2;
+
   Widget _schedule(GuideLayoutPolicy policy, List<Channel> channels) {
     final scroll = _scrollFor(policy.rowHeight);
     final sourceRowFloor = DeviceProfile.of(context).isTv
@@ -1042,16 +1127,16 @@ class _GuideViewState extends State<GuideView>
           child: _GuideControls(
             key: const Key('guide-control-content'),
             controller: widget.controller,
-            railWidth: policy.channelRailWidth,
+            pickerWidth: _filterPickerWidth(policy),
             searchController: _searchController,
-            libraryFocus: _libraryFocus,
+            channelFilterFocus: _channelFilterFocus,
             searchFocus: _searchFocus,
             earlierFocus: _earlierFocus,
             nowFocus: _nowFocus,
             laterFocus: _laterFocus,
             hoursFocus: _hoursFocus,
             clearSearchFocus: _clearSearchFocus,
-            removeLibraryFilterFocus: _removeLibraryFilterFocus,
+            removeChannelFilterFocus: _removeChannelFilterFocus,
             onSearchKey: _searchKey,
             onKeyEvent: _toolbarKey,
           ),
@@ -1084,10 +1169,9 @@ class _GuideViewState extends State<GuideView>
                             GuideLoadState.error,
                       );
               _scheduleViewportRequest();
-              final timelineWidth =
-                  constraints.maxWidth -
-                  policy.channelRailWidth -
-                  _guideTimelineGutter;
+              final timelineWidth = policy.timelineWidthFor(
+                constraints.maxWidth,
+              );
               return Stack(
                 children: [
                   ListenableBuilder(
@@ -1137,14 +1221,11 @@ class _GuideViewState extends State<GuideView>
                       ),
                       Expanded(
                         child: channels.isEmpty
-                            ? _NoMatchingChannels(
-                                onSetUpChannels: widget.onSetUpChannels,
-                                setupFocus: _setupFocus,
-                                filtered: widget
-                                    .controller
-                                    .lineup
-                                    .channels
-                                    .isNotEmpty,
+                            ? const Center(
+                                child: Text(
+                                  'No matching channels\nTry another channel name or number.',
+                                  textAlign: TextAlign.center,
+                                ),
                               )
                             : ListView.builder(
                                 key: const Key('guide-schedule-list'),
@@ -1248,29 +1329,53 @@ class _GuideViewState extends State<GuideView>
     _lastNowLabel = _guideNowLabel(widget.controller);
     final roles = LineupTheme.of(context);
     return ScaffoldMessenger(
+      key: _messengerKey,
       child: Scaffold(
         backgroundColor: Colors.transparent,
         body: Focus(
           focusNode: widget.focusNode ?? _guideFocus,
-          autofocus: true,
+          autofocus: !_empty || !DeviceProfile.of(context).isTv,
           onKeyEvent: _key,
           child: Material(
             key: const Key('classic-guide'),
             color: Colors.transparent,
             child: LayoutBuilder(
               builder: (context, outer) {
+                final isTv = DeviceProfile.of(context).isTv;
+                if (_empty) {
+                  return _ClassicGuideSurface(
+                    color: roles.deepBackground,
+                    showcaseHeight: 0,
+                    toolbar: _toolbar(),
+                    showcase: null,
+                    body: LineupEmptyState(
+                      title: 'No channels yet',
+                      message: 'Set up your channels to start watching.',
+                      action: FilledButton(
+                        focusNode: _setupFocus,
+                        autofocus: isTv,
+                        onPressed: widget.onSetUpChannels,
+                        child: Text(
+                          'Set up channels',
+                          style: LineupTypography.tvLabelStyle(context),
+                        ),
+                      ),
+                    ),
+                  );
+                }
                 final numberWidth = _measureNumberColumn(context);
                 var policy = GuideLayoutPolicy.forSize(
                   outer.biggest,
                   hasPicture: widget.pictureInPicture != null,
                   numberColumnWidth: numberWidth,
+                  isTv: isTv,
                   textScale: MediaQuery.textScalerOf(context).scale(1),
                   timeHeaderHeight: _TimeHeader.requiredHeight(
                     context,
                     widget.controller,
                   ),
                 );
-                if (DeviceProfile.of(context).isTv) {
+                if (isTv) {
                   final theme = Theme.of(context);
                   final direction = Directionality.of(context);
                   final retry = theme.textButtonTheme.style!;
@@ -1297,12 +1402,13 @@ class _GuideViewState extends State<GuideView>
                     context,
                     widget.controller,
                     outer.maxWidth - _guideEdgeContentInset * 2,
-                    policy.channelRailWidth,
+                    _filterPickerWidth(policy),
                   );
                   policy = GuideLayoutPolicy.forSize(
                     outer.biggest,
                     hasPicture: widget.pictureInPicture != null,
                     numberColumnWidth: numberWidth,
+                    isTv: isTv,
                     textScale: key.scaler.scale(1),
                     timeHeaderHeight: policy.timeHeaderHeight,
                     tvControlsHeight: controls.height,
@@ -1319,7 +1425,7 @@ class _GuideViewState extends State<GuideView>
                   child: _ClassicGuideSurface(
                     color: roles.deepBackground,
                     showcaseHeight: policy.showcaseHeight,
-                    toolbar: _toolbar(policy),
+                    toolbar: _toolbar(),
                     showcase: _showcase(policy),
                     body: schedule,
                   ),
@@ -1398,7 +1504,7 @@ class _Toolbar extends StatelessWidget {
     required this.controller,
     required this.clock,
     required this.watchingChannelId,
-    required this.compact,
+    required this.showBackToPlayer,
     required this.onClose,
     required this.onOpenMenu,
     required this.menuFocus,
@@ -1408,7 +1514,7 @@ class _Toolbar extends StatelessWidget {
   final GuideController controller;
   final Listenable clock;
   final String? watchingChannelId;
-  final bool compact;
+  final bool showBackToPlayer;
   final LineupMenuCallback onClose;
   final LineupMenuCallback? onOpenMenu;
   final FocusNode menuFocus;
@@ -1418,8 +1524,6 @@ class _Toolbar extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final size = MediaQuery.sizeOf(context);
-    final textScale = MediaQuery.textScalerOf(context).scale(1);
-    final enlargedControls = textScale > 1;
     final roles = LineupTheme.of(context);
     final localizations = MaterialLocalizations.of(context);
     final tunedChannel = controller.lineup.channels
@@ -1427,7 +1531,8 @@ class _Toolbar extends StatelessWidget {
         .firstOrNull;
     final showPlaying =
         tunedChannel != null && controller.lineup.settings.nowWatchingBanner;
-    final showDate = size.width >= 1100;
+    final showDate =
+        size.width >= 1100 && controller.lineup.channels.isNotEmpty;
     final supportingStyle = TextStyle(
       fontSize: 18.0,
       color: roles.secondaryText,
@@ -1454,7 +1559,7 @@ class _Toolbar extends StatelessWidget {
                       tunedChannel.id,
                     );
                     return Text(
-                      '${tunedChannel.number} · ${tunedChannel.name}${tunedProgram == null ? '' : ' — ${tunedProgram.scheduled.item.title}'}',
+                      '${tunedChannel.number} • ${tunedChannel.name}${tunedProgram == null ? '' : ' · ${tunedProgram.scheduled.item.title}'}',
                       key: const Key('guide-now-playing-context'),
                       maxLines: 1,
                       overflow: TextOverflow.ellipsis,
@@ -1478,19 +1583,17 @@ class _Toolbar extends StatelessWidget {
                   );
                 },
               ),
-            SizedBox(width: 8),
-            Builder(
-              builder: (invokerContext) => IconButton(
-                tooltip: 'Close Guide',
-                focusNode: closeFocus,
-                onPressed: () => onClose(invokerContext, closeFocus),
-                constraints: enlargedControls
-                    ? BoxConstraints(minWidth: 48, minHeight: 48)
-                    : null,
-                iconSize: 24,
-                icon: const Icon(Icons.close, semanticLabel: 'Close Guide'),
+            if (showBackToPlayer) ...[
+              const SizedBox(width: 8),
+              Builder(
+                builder: (invokerContext) => TextButton(
+                  key: const Key('guide-back-to-player'),
+                  focusNode: closeFocus,
+                  onPressed: () => onClose(invokerContext, closeFocus),
+                  child: const Text('Back to player'),
+                ),
               ),
-            ),
+            ],
           ],
         ),
       ),
@@ -1509,9 +1612,9 @@ typedef _GuideControlsKey = ({
   TextScaler scaler,
   TextStyle controlStyle,
   String nowLabel,
-  String? libraryLabel,
+  String? channelFilterLabel,
   double width,
-  double railWidth,
+  double pickerWidth,
 });
 
 /// Counts real [_GuideControlsMetrics] measurements for memoization tests.
@@ -1534,9 +1637,9 @@ class _GuideControlsMetrics {
     BuildContext context,
     GuideController controller,
     double width,
-    double railWidth,
+    double pickerWidth,
   ) {
-    final key = _keyFor(context, controller, width, railWidth);
+    final key = _keyFor(context, controller, width, pickerWidth);
     if (key != _lastKey) {
       _last = _GuideControlsMetrics.measure(context, key);
       _lastKey = key;
@@ -1548,10 +1651,10 @@ class _GuideControlsMetrics {
     BuildContext context,
     GuideController controller,
     double width,
-    double railWidth,
+    double pickerWidth,
   ) {
     final theme = Theme.of(context);
-    final selected = controller.libraryFilterId;
+    final selected = controller.selectedChannelFilter;
     return (
       textTheme: theme.textTheme,
       textButtonTheme: theme.textButtonTheme,
@@ -1561,11 +1664,11 @@ class _GuideControlsMetrics {
       scaler: MediaQuery.textScalerOf(context),
       controlStyle: _GuideControls.controlStyle(context),
       nowLabel: _guideNowLabel(controller),
-      libraryLabel: selected == null
+      channelFilterLabel: selected.key == ChannelFilter.all
           ? null
-          : _libraryName(controller, selected),
+          : selected.label,
       width: width,
-      railWidth: railWidth,
+      pickerWidth: pickerWidth,
     );
   }
 
@@ -1577,7 +1680,7 @@ class _GuideControlsMetrics {
     final theme = Theme.of(context);
     final direction = key.direction;
     final width = key.width;
-    final railWidth = key.railWidth;
+    final pickerWidth = key.pickerWidth;
     final controlHeight = GuideLayoutPolicy.controlHeight(
       key.size,
       textScale: key.scaler.scale(1),
@@ -1631,9 +1734,9 @@ class _GuideControlsMetrics {
         math.max(minimum.height, now.height + buttonPadding.vertical),
       ),
     );
-    final label = key.libraryLabel;
+    final label = key.channelFilterLabel;
     final labelStyle = theme.textTheme.bodyMedium!.copyWith(fontSize: 16);
-    final remaining = width - railWidth - 8 - 340 - 8 - navigationWidth;
+    final remaining = width - pickerWidth - 8 - 340 - 8 - navigationWidth;
     var wrap = remaining < 0;
     if (label != null) {
       final painter = TextPainter(
@@ -1648,7 +1751,7 @@ class _GuideControlsMetrics {
     }
     final labelTextWidth = math.max(
       0.0,
-      (wrap ? width - railWidth - 8 : remaining) - iconWidth,
+      (wrap ? width - pickerWidth - 8 : remaining) - iconWidth,
     );
     final labelHeight = label == null
         ? 0.0
@@ -1684,31 +1787,31 @@ class _GuideControls extends StatelessWidget {
   const _GuideControls({
     super.key,
     required this.controller,
-    required this.railWidth,
+    required this.pickerWidth,
     required this.searchController,
-    required this.libraryFocus,
+    required this.channelFilterFocus,
     required this.searchFocus,
     required this.earlierFocus,
     required this.nowFocus,
     required this.laterFocus,
     required this.hoursFocus,
     required this.clearSearchFocus,
-    required this.removeLibraryFilterFocus,
+    required this.removeChannelFilterFocus,
     required this.onSearchKey,
     required this.onKeyEvent,
   });
 
   final GuideController controller;
-  final double railWidth;
+  final double pickerWidth;
   final TextEditingController searchController;
-  final FocusNode libraryFocus;
+  final FocusNode channelFilterFocus;
   final FocusNode searchFocus;
   final FocusNode earlierFocus;
   final FocusNode nowFocus;
   final FocusNode laterFocus;
   final FocusNode hoursFocus;
   final FocusNode clearSearchFocus;
-  final FocusNode removeLibraryFilterFocus;
+  final FocusNode removeChannelFilterFocus;
   final FocusOnKeyEventCallback onSearchKey;
   final FocusOnKeyEventCallback onKeyEvent;
 
@@ -1765,99 +1868,91 @@ class _GuideControls extends StatelessWidget {
     final enlargedControls = textScale > 1;
     final roles = LineupTheme.of(context);
     final menuTheme = DeviceProfile.of(context).isTv ? Theme.of(context) : null;
-    final libraryIds = controller.availableLibraryIds.toList()..sort();
-    final selectedLibrary = controller.libraryFilterId;
-    final selectedLibraryName = selectedLibrary == null
+    final entries = controller.channelFilterEntries;
+    final selected = controller.selectedChannelFilter;
+    final activeLabel = selected.key == ChannelFilter.all
         ? null
-        : _libraryName(controller, selectedLibrary);
+        : selected.label;
     Widget menuItemContent(Widget child) => child;
+    final pickerLabel = activeLabel == null ? selected.label : 'Channel filter';
     final picker = SizedBox(
-      width: railWidth,
+      width: pickerWidth,
       height: controlHeight,
       child: DropdownButtonHideUnderline(
         child: LineupDropdownBox(
           compact: true,
           enabled: true,
-          child: Builder(
-            builder: (context) => DropdownButton<String?>(
-              key: const Key('guide-library-picker'),
-              focusNode: libraryFocus,
-              style: DeviceProfile.of(context).isTv
-                  ? controlStyle.copyWith(
-                      color: LineupTheme.of(context).primaryText,
-                    )
-                  : controlStyle,
-              iconEnabledColor: DeviceProfile.of(context).isTv
-                  ? LineupTheme.of(context).secondaryText
-                  : null,
-              isExpanded: true,
-              isDense: DeviceProfile.of(context).isTv || enlargedControls,
-              padding: EdgeInsets.symmetric(horizontal: _guideEdgeContentInset),
-              iconSize: 24,
-              itemHeight: DeviceProfile.of(context).isTv || enlargedControls
-                  ? null
-                  : controlHeight,
-              value: selectedLibrary,
-              hint: Text(
-                selectedLibrary == null ? 'All libraries' : 'Libraries',
-              ),
-              selectedItemBuilder: (context) => [
-                const Align(
-                  alignment: Alignment.centerLeft,
-                  child: Text('All libraries'),
-                ),
-                for (final _ in libraryIds)
-                  const Align(
-                    alignment: Alignment.centerLeft,
-                    child: Text('Libraries'),
+          child: menuTheme != null
+              ? _TvChannelFilterPicker(
+                  controller: controller,
+                  focusNode: channelFilterFocus,
+                  theme: menuTheme,
+                  surfaceColor: roles.elevatedSurface,
+                  label: pickerLabel,
+                )
+              : DropdownButton<ChannelFilterKey>(
+                  key: const Key('guide-channel-filter'),
+                  focusNode: channelFilterFocus,
+                  style: controlStyle,
+                  isExpanded: true,
+                  isDense: enlargedControls,
+                  padding: EdgeInsets.symmetric(
+                    horizontal: _guideEdgeContentInset,
                   ),
-              ],
-              items: lineupMenuItems(
-                [
-                  DropdownMenuItem(
-                    value: null,
-                    child: menuItemContent(const Text('All libraries')),
-                  ),
-                  for (final id in libraryIds)
-                    DropdownMenuItem(
-                      value: id,
-                      child: menuItemContent(
-                        Text(_libraryName(controller, id)),
+                  iconSize: 24,
+                  itemHeight: null,
+                  menuWidth: math.max(260.0, pickerWidth),
+                  value: selected.key,
+                  selectedItemBuilder: (context) => [
+                    for (final entry in entries)
+                      Align(
+                        alignment: Alignment.centerLeft,
+                        child: Text(
+                          entry.key == ChannelFilter.all
+                              ? entry.label
+                              : 'Channel filter',
+                          maxLines: 1,
+                          overflow: TextOverflow.ellipsis,
+                        ),
                       ),
-                    ),
-                ],
-                selectedLibrary,
-                menuTheme: menuTheme,
-              ),
-              onChanged: controller.setLibraryFilter,
-              dropdownColor: roles.elevatedSurface,
-            ),
-          ),
+                  ],
+                  items: lineupMenuItems([
+                    for (final entry in entries)
+                      DropdownMenuItem(
+                        value: entry.key,
+                        child: _channelFilterOptionLabel(entry),
+                      ),
+                  ], selected.key),
+                  onChanged: (filter) {
+                    if (filter != null) controller.setChannelFilter(filter);
+                  },
+                  dropdownColor: roles.elevatedSurface,
+                ),
         ),
       ),
     );
-    final label = selectedLibraryName == null
+    final label = activeLabel == null
         ? const SizedBox.shrink()
         : Row(
             mainAxisSize: MainAxisSize.min,
             children: [
               Flexible(
                 child: Text(
-                  selectedLibraryName,
-                  key: const Key('guide-active-library-label'),
+                  activeLabel,
+                  key: const Key('guide-active-channel-filter-label'),
                   maxLines: 2,
                   overflow: TextOverflow.ellipsis,
                   style: TextStyle(fontSize: 16, color: roles.mutedText),
                 ),
               ),
               IconButton(
-                tooltip: 'Remove library filter',
-                focusNode: removeLibraryFilterFocus,
-                onPressed: () => controller.setLibraryFilter(null),
+                tooltip: 'Remove channel filter',
+                focusNode: removeChannelFilterFocus,
+                onPressed: () => controller.setChannelFilter(ChannelFilter.all),
                 iconSize: 17,
                 icon: const Icon(
                   Icons.close,
-                  semanticLabel: 'Remove library filter',
+                  semanticLabel: 'Remove channel filter',
                 ),
               ),
             ],
@@ -2084,7 +2179,7 @@ class _GuideControls extends StatelessWidget {
                   context,
                   controller,
                   constraints.maxWidth,
-                  railWidth,
+                  pickerWidth,
                 )
               : null;
           if (measured?.wrap ??
@@ -2130,6 +2225,183 @@ class _GuideControls extends StatelessWidget {
             ),
           );
         },
+      ),
+    );
+  }
+}
+
+Widget _channelFilterOptionLabel(ChannelFilterEntry entry) => Row(
+  children: [
+    Expanded(
+      child: LayoutBuilder(
+        builder: (context, constraints) {
+          final style = DefaultTextStyle.of(context).style;
+          final scaler = MediaQuery.textScalerOf(context);
+          final direction = Directionality.of(context);
+          final overwideWord = entry.label
+              .split(RegExp(r'\s+'))
+              .any(
+                (word) =>
+                    _textWidth(word, style, scaler, direction) >
+                    constraints.maxWidth,
+              );
+          return Text(
+            entry.label,
+            maxLines: overwideWord ? 1 : 2,
+            softWrap: !overwideWord,
+            overflow: TextOverflow.ellipsis,
+          );
+        },
+      ),
+    ),
+    const SizedBox(width: 8),
+    Text('${entry.count}'),
+  ],
+);
+
+class _TvChannelFilterPicker extends StatelessWidget {
+  const _TvChannelFilterPicker({
+    required this.controller,
+    required this.focusNode,
+    required this.theme,
+    required this.surfaceColor,
+    required this.label,
+  });
+
+  final GuideController controller;
+  final FocusNode focusNode;
+  final ThemeData theme;
+  final Color surfaceColor;
+  final String label;
+
+  Future<void> _open(BuildContext context) async {
+    final navigator = Navigator.of(context);
+    final overlay = navigator.overlay!.context.findRenderObject()! as RenderBox;
+    final anchor = context.findRenderObject()! as RenderBox;
+    final bounds =
+        anchor.localToGlobal(Offset.zero, ancestor: overlay) & anchor.size;
+    final filter = await showMenu<ChannelFilterKey>(
+      context: context,
+      position: RelativeRect.fromSize(bounds, overlay.size),
+      initialValue: controller.channelFilterKey,
+      constraints: BoxConstraints.tightFor(
+        width: math.max(260.0, bounds.width),
+      ),
+      color: surfaceColor,
+      requestFocus: true,
+      items: [
+        for (final entry in controller.channelFilterEntries)
+          _TvChannelFilterEntry(
+            entry: entry,
+            selected: entry.key == controller.channelFilterKey,
+            theme: theme,
+          ),
+      ],
+    );
+    if (!context.mounted || filter == null) return;
+    controller.setChannelFilter(filter);
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final roles = LineupTheme.of(context);
+    return Semantics(
+      container: true,
+      button: true,
+      label: 'Channel filter',
+      value: controller.selectedChannelFilter.label,
+      child: InkWell(
+        key: const Key('guide-channel-filter'),
+        focusNode: focusNode,
+        onTap: () => unawaited(_open(context)),
+        child: ExcludeSemantics(
+          child: Padding(
+            padding: const EdgeInsets.symmetric(
+              horizontal: _guideEdgeContentInset,
+            ),
+            child: Row(
+              children: [
+                Expanded(
+                  child: Text(
+                    label,
+                    style: _GuideControls.controlStyle(context)
+                        .copyWith(color: roles.primaryText),
+                    maxLines: 1,
+                    overflow: TextOverflow.ellipsis,
+                  ),
+                ),
+                IconTheme.merge(
+                  data: IconThemeData(color: roles.secondaryText),
+                  child: const Icon(Icons.arrow_drop_down, size: 24),
+                ),
+              ],
+            ),
+          ),
+        ),
+      ),
+    );
+  }
+}
+
+/// A popup row owns the remote keys while its menu route is on top.
+class _TvChannelFilterEntry extends PopupMenuEntry<ChannelFilterKey> {
+  const _TvChannelFilterEntry({
+    required this.entry,
+    required this.selected,
+    required this.theme,
+  });
+
+  final ChannelFilterEntry entry;
+  final bool selected;
+  final ThemeData theme;
+
+  @override
+  double get height => kMinInteractiveDimension;
+
+  @override
+  bool represents(ChannelFilterKey? value) => value == entry.key;
+
+  @override
+  State<_TvChannelFilterEntry> createState() => _TvChannelFilterEntryState();
+}
+
+class _TvChannelFilterEntryState extends State<_TvChannelFilterEntry> {
+  @override
+  Widget build(BuildContext context) {
+    final navigator = Navigator.of(context);
+    return Focus(
+      canRequestFocus: false,
+      onKeyEvent: (_, event) {
+        final key = event.logicalKey;
+        if (key != LogicalKeyboardKey.arrowRight &&
+            key != LogicalKeyboardKey.escape &&
+            key != LogicalKeyboardKey.goBack &&
+            key != LogicalKeyboardKey.backspace) {
+          return KeyEventResult.ignored;
+        }
+        if (event is KeyDownEvent) navigator.pop();
+        return KeyEventResult.handled;
+      },
+      child: Theme(
+        data: widget.theme,
+        child: Semantics(
+          role: ui.SemanticsRole.menuItem,
+          selected: widget.selected,
+          child: InkWell(
+            autofocus: widget.selected,
+            onTap: () => navigator.pop(widget.entry.key),
+            child: ConstrainedBox(
+              constraints: BoxConstraints(minHeight: widget.height),
+              child: LineupDropdownMenuRow(
+                selected: widget.selected,
+                child: DefaultTextStyle(
+                  style: _GuideControls.controlStyle(context),
+                  child: _channelFilterOptionLabel(widget.entry),
+                ),
+              ),
+            ),
+          ),
+        ),
       ),
     );
   }
@@ -2348,13 +2620,27 @@ class _GuideShowcaseState extends State<_GuideShowcase> {
                               fit: StackFit.expand,
                               children: [
                                 image,
-                                ColoredBox(
-                                  color: Colors.black.withValues(alpha: .6),
+                                const DecoratedBox(
+                                  decoration: BoxDecoration(
+                                    gradient: LinearGradient(
+                                      begin: Alignment.topCenter,
+                                      end: Alignment.bottomCenter,
+                                      stops: [.45, 1],
+                                      colors: [
+                                        Colors.transparent,
+                                        Colors.black87,
+                                      ],
+                                    ),
+                                  ),
                                 ),
-                                Center(
+                                const PositionedDirectional(
+                                  start: 24,
+                                  end: 24,
+                                  bottom: 24,
                                   child: Text(
-                                    'Select to watch · ${channel.name}',
-                                    textAlign: TextAlign.center,
+                                    'Select to watch',
+                                    key: Key('guide-idle-caption'),
+                                    style: TextStyle(color: Colors.white),
                                   ),
                                 ),
                               ],
@@ -2376,11 +2662,13 @@ class _GuideShowcaseState extends State<_GuideShowcase> {
       fit: StackFit.expand,
       children: [
         ClipRRect(borderRadius: pictureRadius, child: picture),
-        CustomPaint(
-          key: const Key('guide-picture-corner-mask'),
-          painter: _CornerMaskPainter(
-            color: LineupTheme.of(context).deepBackground,
-            borderRadius: pictureRadius,
+        IgnorePointer(
+          child: CustomPaint(
+            key: const Key('guide-picture-corner-mask'),
+            painter: _CornerMaskPainter(
+              color: LineupTheme.of(context).deepBackground,
+              borderRadius: pictureRadius,
+            ),
           ),
         ),
       ],
@@ -2777,6 +3065,9 @@ class _GuideRow extends StatelessWidget {
     final tunedChannel = watchingChannelId == channel.id;
     final showSource =
         showProvenance && controller.lineup.settings.guideShowChannelSources;
+    final provenance = showSource && !tunedChannel
+        ? _channelProvenance(controller, channel)
+        : null;
     final focusFill = roles.focusedText == roles.onFocus
         ? roles.focusedSurface
         : Color.alphaBlend(
@@ -2797,6 +3088,25 @@ class _GuideRow extends StatelessWidget {
       }
     }
 
+    final libraryTag = ChannelIdentity.libraryTagFor(
+      channel,
+      controller.lineup.channels,
+    );
+    final identityLabel = ChannelIdentity.label(
+      channel,
+      libraryTag: libraryTag,
+    );
+    final supportLabel = switch ((
+      tunedChannel,
+      provenance,
+      libraryTag,
+      channel.source,
+    )) {
+      (true, _, _, _) => 'now watching',
+      (false, String(), String(), LibrarySource(:final libraryType)) =>
+        _librarySourceTypeLabel(libraryType),
+      _ => provenance,
+    };
     return Padding(
       padding: EdgeInsets.symmetric(vertical: 2),
       child: Row(
@@ -2804,8 +3114,7 @@ class _GuideRow extends StatelessWidget {
           Semantics(
             container: true,
             button: true,
-            label:
-                'Channel ${channel.number}, ${channel.name}${tunedChannel ? ', now watching' : ''}',
+            label: [identityLabel, ?supportLabel].join(', '),
             selected: selectedChannel,
             focused: focusedChannel,
             onTap: focusCurrentProgram,
@@ -2834,146 +3143,106 @@ class _GuideRow extends StatelessWidget {
                       ),
                     ),
                   ),
-                  child: Row(
-                    children: [
-                      SizedBox(
-                        width: numberColumnWidth,
-                        child: Text(
-                          '${channel.number}',
-                          textAlign: TextAlign.right,
-                          maxLines: 1,
-                          softWrap: false,
-                          style: TextStyle(
+                  child: LayoutBuilder(
+                    builder: (context, constraints) {
+                      final numberStyle = TextStyle(
+                        color: focusChannelRail
+                            ? roles.focusedText
+                            : roles.secondaryText,
+                        fontSize: largeRail ? 28 : 22,
+                        fontWeight: FontWeight.w500,
+                        fontFeatures: const [ui.FontFeature.tabularFigures()],
+                      );
+                      final nameStyle = DefaultTextStyle.of(context).style
+                          .copyWith(
+                            fontSize: 18,
                             color: focusChannelRail
                                 ? roles.focusedText
-                                : roles.secondaryText,
-                            fontSize: (largeRail ? 28 : 22),
+                                : roles.primaryText,
                             fontWeight: FontWeight.w500,
-                            fontFeatures: const [
-                              ui.FontFeature.tabularFigures(),
-                            ],
-                          ),
-                        ),
-                      ),
-                      SizedBox(
-                        width: 14 * MediaQuery.textScalerOf(context).scale(1),
-                      ),
-                      Expanded(
-                        child: LayoutBuilder(
-                          builder: (context, constraints) {
-                            final nameStyle = DefaultTextStyle.of(context).style
-                                .copyWith(
-                                  fontSize: 18,
-                                  color: focusChannelRail
-                                      ? roles.focusedText
-                                      : roles.primaryText,
-                                  fontWeight: FontWeight.w500,
-                                );
-                            final painter = TextPainter(
-                              text: TextSpan(
-                                text: channel.name,
-                                style: nameStyle,
-                              ),
-                              textDirection: Directionality.of(context),
-                              textScaler: MediaQuery.textScalerOf(context),
-                            )..layout(maxWidth: constraints.maxWidth);
-                            final lineHeight = painter
-                                .computeLineMetrics()
-                                .first
-                                .height;
-                            final supportStyle = DefaultTextStyle.of(context)
-                                .style
-                                .copyWith(
-                                  fontSize: largeRail ? 16 : 14,
-                                  color:
-                                      focusChannelRail &&
-                                          DeviceProfile.of(context).isTv
-                                      ? roles.focusMutedText
-                                      : roles.mutedText,
-                                );
-                            final supportHeight = _textHeight(
-                              supportStyle,
-                              MediaQuery.textScalerOf(context),
-                              Directionality.of(context),
-                            );
-                            final supportLabel = tunedChannel
-                                ? 'Watching'
-                                : _channelProvenance(controller, channel);
-                            final availableLines =
-                                ((constraints.maxHeight -
-                                            ((tunedChannel || showSource)
-                                                ? supportHeight
-                                                : 0)) /
-                                        lineHeight)
-                                    .floor()
-                                    .clamp(1, 2);
-                            painter.dispose();
-                            final showSupport = tunedChannel || showSource;
-                            return Column(
-                              mainAxisAlignment: MainAxisAlignment.center,
-                              crossAxisAlignment: CrossAxisAlignment.start,
+                          );
+                      final scaler = MediaQuery.textScalerOf(context);
+                      final direction = Directionality.of(context);
+                      final lineHeight = _textHeight(
+                        nameStyle,
+                        scaler,
+                        direction,
+                      );
+                      final supportStyle = DefaultTextStyle.of(context).style
+                          .copyWith(
+                            fontSize: largeRail ? 16 : 14,
+                            color:
+                                focusChannelRail &&
+                                    DeviceProfile.of(context).isTv
+                                ? roles.focusMutedText
+                                : roles.mutedText,
+                          );
+                      final supportHeight = _textHeight(
+                        supportStyle,
+                        scaler,
+                        direction,
+                      );
+                      final showSupport = tunedChannel || showSource;
+                      final availableLines =
+                          ((constraints.maxHeight -
+                                      (showSupport ? supportHeight : 0)) /
+                                  lineHeight)
+                              .floor()
+                              .clamp(1, 2);
+                      final watchingColor =
+                          focusChannelRail && DeviceProfile.of(context).isTv
+                          ? roles.focusSecondaryText
+                          : roles.secondaryText;
+                      final secondary = tunedChannel
+                          ? Row(
+                              mainAxisSize: MainAxisSize.min,
                               children: [
-                                Tooltip(
-                                  message: channel.name,
+                                Icon(
+                                  Icons.play_arrow_rounded,
+                                  size: 14,
+                                  color: watchingColor,
+                                ),
+                                const SizedBox(width: 4),
+                                Flexible(
                                   child: Text(
-                                    channel.name,
-                                    softWrap: true,
-                                    maxLines: availableLines,
+                                    'Watching',
+                                    maxLines: 1,
                                     overflow: TextOverflow.ellipsis,
-                                    style: nameStyle,
+                                    style: supportStyle.copyWith(
+                                      color: watchingColor,
+                                    ),
                                   ),
                                 ),
-                                if (showSupport)
-                                  tunedChannel
-                                      ? ExcludeSemantics(
-                                          child: Row(
-                                            mainAxisSize: MainAxisSize.max,
-                                            children: [
-                                              Icon(
-                                                Icons.play_arrow_rounded,
-                                                size: 14,
-                                                color:
-                                                    focusChannelRail &&
-                                                        DeviceProfile.of(
-                                                          context,
-                                                        ).isTv
-                                                    ? roles.focusSecondaryText
-                                                    : roles.secondaryText,
-                                              ),
-                                              SizedBox(width: 4),
-                                              Flexible(
-                                                child: Text(
-                                                  supportLabel,
-                                                  maxLines: 1,
-                                                  overflow:
-                                                      TextOverflow.ellipsis,
-                                                  style: supportStyle.copyWith(
-                                                    color:
-                                                        focusChannelRail &&
-                                                            DeviceProfile.of(
-                                                              context,
-                                                            ).isTv
-                                                        ? roles
-                                                              .focusSecondaryText
-                                                        : roles.secondaryText,
-                                                  ),
-                                                ),
-                                              ),
-                                            ],
-                                          ),
-                                        )
-                                      : Text(
-                                          supportLabel,
-                                          maxLines: 1,
-                                          overflow: TextOverflow.ellipsis,
-                                          style: supportStyle,
-                                        ),
                               ],
-                            );
-                          },
+                            )
+                          : provenance != null
+                          ? Text(
+                              provenance,
+                              maxLines: 1,
+                              overflow: TextOverflow.ellipsis,
+                              style: supportStyle,
+                            )
+                          : null;
+                      return Align(
+                        alignment: AlignmentDirectional.centerStart,
+                        child: ChannelIdentity(
+                          channel: channel,
+                          libraryTag: libraryTag,
+                          nameStyle: nameStyle,
+                          numberStyle: numberStyle,
+                          numberWidth: numberColumnWidth,
+                          numberAlignment: TextAlign.right,
+                          supportStyle: supportStyle,
+                          showSemantics: false,
+                          maxLines: availableLines,
+                          allowTagBelow:
+                              constraints.maxHeight >=
+                              lineHeight + supportHeight,
+                          secondary: secondary,
+                          showNameTooltip: true,
                         ),
-                      ),
-                    ],
+                      );
+                    },
                   ),
                 ),
               ),
@@ -3248,56 +3517,6 @@ class _ScheduleStatus extends StatelessWidget {
   );
 }
 
-class _NoMatchingChannels extends StatelessWidget {
-  const _NoMatchingChannels({
-    required this.filtered,
-    this.onSetUpChannels,
-    this.setupFocus,
-  });
-
-  final bool filtered;
-  final VoidCallback? onSetUpChannels;
-  final FocusNode? setupFocus;
-
-  @override
-  Widget build(BuildContext context) => Center(
-    child: filtered
-        ? const Text(
-            'No matching channels\nTry another channel name or number.',
-            textAlign: TextAlign.center,
-          )
-        : SingleChildScrollView(
-            padding: const EdgeInsets.all(16),
-            child: Column(
-              mainAxisSize: MainAxisSize.min,
-              children: [
-                Semantics(
-                  header: true,
-                  child: Text(
-                    'No channels yet',
-                    style: Theme.of(context).textTheme.titleLarge,
-                    textAlign: TextAlign.center,
-                  ),
-                ),
-                const SizedBox(height: 8),
-                Text(
-                  'Set up your channels to start watching.',
-                  style: Theme.of(context).textTheme.bodyMedium
-                      ?.copyWith(color: LineupTheme.of(context).secondaryText),
-                  textAlign: TextAlign.center,
-                ),
-                const SizedBox(height: 16),
-                FilledButton(
-                  focusNode: setupFocus,
-                  onPressed: onSetUpChannels,
-                  child: const Text('Set up channels'),
-                ),
-              ],
-            ),
-          ),
-  );
-}
-
 class _ProgramCell extends StatefulWidget {
   const _ProgramCell({
     required this.program,
@@ -3463,7 +3682,9 @@ class _ProgramCellContent extends StatelessWidget {
             .copyWith(color: focused ? roles.focusedText : roles.mutedText);
         final tagStyle = Theme.of(context).textTheme.labelSmall?.copyWith(
           height: 1.1,
-          fontSize: 14,
+          fontSize: DeviceProfile.of(context).isTv
+              ? LineupTypography.tvTextFloor
+              : 14,
           color: focused ? roles.focusedText : null,
           fontWeight: FontWeight.w500,
           letterSpacing: 0.2,
@@ -4192,6 +4413,7 @@ class _ProgramDetails extends StatelessWidget {
                 maximumVisibleHeight: logoSlot,
                 minimumVisibleSize: Size(96, unscaledLogoSlot * .4),
                 reserveVisibleSlot: true,
+                fitVisibleContent: isTv,
               )
             else
               fallbackTitle,
@@ -4459,8 +4681,11 @@ String _channelProvenance(
   Channel channel,
 ) => switch (channel.source) {
   LibrarySource(:final libraryId, :final libraryType) =>
-    '${_libraryName(controller, libraryId)} • ${libraryType == PlexLibraryType.movie ? 'Movies' : 'Shows'}',
+    '${channel.libraryTitle ?? _libraryName(controller, libraryId)} · ${_librarySourceTypeLabel(libraryType)}',
   PlaylistSource() => 'Playlist',
   ManualSource() => 'Manual lineup',
   MixedSource() => 'Mixed sources',
 };
+
+String _librarySourceTypeLabel(PlexLibraryType libraryType) =>
+    libraryType == PlexLibraryType.movie ? 'Movies' : 'Shows';

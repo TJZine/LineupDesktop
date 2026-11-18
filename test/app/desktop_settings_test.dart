@@ -157,7 +157,7 @@ void main() {
     expect(store.state.settings.guideShowChannelSources, isTrue);
   });
 
-  testWidgets('fullscreen HDR switch follows DVR playback controls', (
+  testWidgets('fullscreen HDR switch follows Pause and seek controls', (
     tester,
   ) async {
     debugDefaultTargetPlatformOverride = TargetPlatform.windows;
@@ -207,7 +207,7 @@ void main() {
           find.text('Match display HDR in fullscreen'),
           visible ? findsOneWidget : findsNothing,
         );
-        expect(find.text('DVR playback controls'), findsOneWidget);
+        expect(find.text('Pause and seek controls'), findsOneWidget);
         expect(controller.settings.matchDisplayHdr, isTrue);
       }
 
@@ -458,7 +458,7 @@ String _categoryLabel(SettingsCategory category) => switch (category) {
 String _categoryContent(SettingsCategory category) => switch (category) {
   SettingsCategory.appearance => 'Use title artwork',
   SettingsCategory.guide => 'Show now playing in Guide',
-  SettingsCategory.playback => 'DVR playback controls',
+  SettingsCategory.playback => 'Pause and seek controls',
   SettingsCategory.subtitles =>
     'Applies to text subtitles. Image subtitles follow Size and Position only.',
   SettingsCategory.accessibility => 'Large focus indicators',
