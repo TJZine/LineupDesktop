@@ -2368,6 +2368,8 @@ class PlayerCoordinator extends ChangeNotifier with WidgetsBindingObserver {
     _noticeTimer?.cancel();
     _notice = null;
     _numberTimer?.cancel();
+    final channel = enteredChannel;
+    if (channel != null) guide.requestChannels([channel]);
     _setOverlay(PlayerOverlay.channelNumber, timed: false);
     _numberTimer = Timer(const Duration(seconds: 2), commitChannelNumber);
   }
@@ -2638,7 +2640,8 @@ class PlayerCoordinator extends ChangeNotifier with WidgetsBindingObserver {
     } else if (_overlay == PlayerOverlay.miniGuide ||
         _overlay == PlayerOverlay.osd ||
         _overlay == PlayerOverlay.nowPlaying ||
-        _overlay == PlayerOverlay.programInfo) {
+        _overlay == PlayerOverlay.programInfo ||
+        _overlay == PlayerOverlay.channelNumber) {
       notifyListeners();
     }
   }

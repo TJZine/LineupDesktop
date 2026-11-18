@@ -1,32 +1,7 @@
 part of 'settings_view.dart';
 
 bool _subtitleUsesColumns(BuildContext context, double detailWidth) =>
-    !LineupLayout.isCompactWidth(MediaQuery.sizeOf(context).width) &&
-    MediaQuery.textScalerOf(context).scale(1) < 2 &&
-    detailWidth * .54 - 32 >= 560;
-
-({double height, double gap}) _subtitlePreviewCrop({
-  required double availableHeight,
-  required double frameHeight,
-  required double rowHeight,
-  required double clearance,
-  required bool columns,
-  required bool scrollingHeading,
-}) {
-  if (scrollingHeading) return (height: 0, gap: 0);
-  final available = math.max(0.0, availableHeight);
-  final requested = columns
-      ? math.min(math.max(0.0, available - 24), .72 * frameHeight)
-      : .36 * frameHeight;
-  final budget = math.max(0.0, available - rowHeight - clearance);
-  final gap = columns ? 0.0 : math.min(8.0, budget);
-  return (
-    height: columns
-        ? math.min(requested, available)
-        : math.min(requested, math.max(0.0, budget - gap)),
-    gap: gap,
-  );
-}
+    detailWidth >= 1212;
 
 extension _SubtitleSettingsPage on _SettingsViewState {
   FocusNode _subtitleNode(_SettingKey key) =>
@@ -58,9 +33,6 @@ extension _SubtitleSettingsPage on _SettingsViewState {
       feedback: _settingFeedback(key),
       control: control,
       focusNode: _subtitleNode(key),
-      revealToken: _subtitleHeadingScrollRow,
-      onMeasured: (height, focused, align) =>
-          _subtitleMeasured(key, height, focused, align),
     );
     Widget dropdown<T>(
       _SettingKey key,
@@ -142,291 +114,345 @@ extension _SubtitleSettingsPage on _SettingsViewState {
       toggle: true,
     );
     final children = <Widget>[
-      if (android)
-        toggle(
-          _SettingKey.subtitleDevice,
-          'Use device subtitle settings',
-          style.useDeviceStyle,
-          (s, v) => s.copyWith(useDeviceStyle: v),
-          helper: snapshot?.enabled == false
-              ? 'Uses the style from Android settings. Captions are off there; Lineup uses their style anyway.'
-              : 'Uses the caption style from Android settings. Position and Bold stay here.',
-        ),
-      // Custom is a status, never a selectable value. Use the first enabled
-      // preset as the menu anchor while the selected child displays Custom.
-      dropdown(
-        _SettingKey.subtitlePreset,
-        'Style',
-        'Style',
-        style.preset ?? SubtitlePreset.standard,
-        SubtitlePreset.values,
-        (v) => v.label,
-        (s, v) => s.applying(v),
-        enabled: !device,
-        custom: style.preset == null,
-        displayed: style.preset == null ? 'Custom' : null,
-      ),
-      dropdown(
-        _SettingKey.subtitleSize,
-        'Size',
-        'Size',
-        style.size,
-        SubtitleSize.values,
-        (v) => v.label,
-        (s, v) => s.copyWith(size: v),
-        enabled: !device,
-      ),
-      dropdown(
-        _SettingKey.subtitlePosition,
-        'Position',
-        'Position',
-        style.position,
-        SubtitlePosition.values,
-        (v) => v.label,
-        (s, v) => s.copyWith(position: v),
-      ),
-      const _SubtitleGroup('TEXT'),
-      dropdown(
-        _SettingKey.subtitleTextColor,
-        'Color',
-        'Text Color',
-        style.textColor,
-        SubtitleColor.values,
-        (v) => v.label,
-        (s, v) => s.copyWith(textColor: v),
-        enabled: !device,
-      ),
-      dropdown(
-        _SettingKey.subtitleTextOpacity,
-        'Opacity',
-        'Text Opacity',
-        style.textOpacity,
-        SubtitleTextOpacity.values,
-        (v) => v.label,
-        (s, v) => s.copyWith(textOpacity: v),
-        enabled: !device,
-      ),
-      dropdown(
-        _SettingKey.subtitleFont,
-        'Font',
-        'Text Font',
-        style.font,
-        SubtitleFont.values,
-        (v) => v.label,
-        (s, v) => s.copyWith(font: v),
-        enabled: !device,
-        font: true,
-      ),
-      toggle(
-        _SettingKey.subtitleBold,
-        'Bold',
-        style.bold,
-        (s, v) => s.copyWith(bold: v),
-      ),
-      const _SubtitleGroup('EDGES'),
-      dropdown(
-        _SettingKey.subtitleEdge,
-        'Style',
-        'Edge Style',
-        style.edge,
-        SubtitleEdge.values,
-        (v) => v.label,
-        (s, v) => s.copyWith(edge: v),
-        enabled: !device,
-      ),
-      dropdown(
-        _SettingKey.subtitleEdgeColor,
-        'Color',
-        'Edge Color',
-        style.edgeColor,
-        SubtitleColor.values,
-        (v) => v.label,
-        (s, v) => s.copyWith(edgeColor: v),
-        enabled: !device && style.edge != SubtitleEdge.none,
-      ),
-      const _SubtitleGroup('BACKGROUND (BEHIND EACH LINE)'),
-      dropdown(
-        _SettingKey.subtitleBackgroundOpacity,
-        'Opacity',
-        'Background Opacity',
-        style.backgroundOpacity,
-        SubtitleBoxOpacity.values,
-        (v) => v.label,
-        (s, v) => s.copyWith(backgroundOpacity: v),
-        enabled: !device,
-      ),
-      dropdown(
-        _SettingKey.subtitleBackgroundColor,
-        'Color',
-        'Background Color',
-        style.backgroundColor,
-        SubtitleColor.values,
-        (v) => v.label,
-        (s, v) => s.copyWith(backgroundColor: v),
-        enabled: !device && style.backgroundOpacity != SubtitleBoxOpacity.off,
-      ),
-      const _SubtitleGroup('WINDOW (ONE BOX BEHIND THE CAPTION)'),
-      dropdown(
-        _SettingKey.subtitleWindowOpacity,
-        'Opacity',
-        'Window Opacity',
-        style.windowOpacity,
-        SubtitleBoxOpacity.values,
-        (v) => v.label,
-        (s, v) => s.copyWith(windowOpacity: v),
-        enabled: !device,
-      ),
-      dropdown(
-        _SettingKey.subtitleWindowColor,
-        'Color',
-        'Window Color',
-        style.windowColor,
-        SubtitleColor.values,
-        (v) => v.label,
-        (s, v) => s.copyWith(windowColor: v),
-        enabled: !device && style.windowOpacity != SubtitleBoxOpacity.off,
-      ),
-      const _SubtitleGroup('STYLED SUBTITLES'),
-      toggle(
-        _SettingKey.subtitleStyled,
-        'Apply my style to styled subtitles',
-        style.styleStyledSubtitles,
-        (s, v) => s.copyWith(styleStyledSubtitles: v),
-        helper: 'ASS/SSA dialogue uses your style. Signs and author positioning are dropped.',
-      ),
-      row(
-        _SettingKey.subtitleReset,
-        '',
-        OutlinedButton(
-          key: const ValueKey('subtitle-field-subtitleReset'),
-          focusNode: _subtitleNode(_SettingKey.subtitleReset),
-          onPressed:
-              !_saving(_SettingKey.subtitleReset) &&
-                  style.copyWith(useDeviceStyle: false) == const SubtitleStyle()
-              ? null
-              : () => _changeSubtitle(
-                  _SettingKey.subtitleReset,
-                  (s) => SubtitleStyle(useDeviceStyle: s.useDeviceStyle),
-                ),
-          child: const Text('Reset to standard'),
-        ),
-        enabled:
-            _saving(_SettingKey.subtitleReset) ||
-            style.copyWith(useDeviceStyle: false) != const SubtitleStyle(),
-        action: true,
-      ),
-    ];
-    final firstKey = android
-        ? _SettingKey.subtitleDevice
-        : _SettingKey.subtitlePreset;
-    final rowHeight = _subtitleHeights[_focusedSubtitle ?? firstKey] ?? 100;
-    return LayoutBuilder(
-      key: _subtitlePageKey,
-      builder: (context, pageConstraints) {
-        final scrollHeading = _subtitleHeadingScrollRow != null;
-        _subtitleHeadingIsPinned = !scrollHeading;
-        final heading = KeyedSubtree(
-          key: _subtitleHeadingKey,
-          child: _SettingsSection(
-            title: 'Subtitles',
-            trailingGap: 16,
-            description: _SettingsViewState._categoryDescription(
-              SettingsCategory.subtitles,
-            ),
-            children: const [],
+      if (!_subtitleCustomising) ...[
+        if (android)
+          toggle(
+            _SettingKey.subtitleDevice,
+            'Use device subtitle settings',
+            style.useDeviceStyle,
+            (s, v) => s.copyWith(useDeviceStyle: v),
+            helper: snapshot?.enabled == false
+                ? 'Uses the style from Android settings. Captions are off there; Lineup uses their style anyway.'
+                : 'Uses the caption style from Android settings. Position and Bold stay here.',
           ),
-        );
-        return Column(
-          crossAxisAlignment: CrossAxisAlignment.stretch,
-          children: [
-            scrollHeading
-                ? const SizedBox.shrink(
-                    key: ValueKey('subtitle-scrolling-heading'),
-                  )
-                : heading,
-            Expanded(
-              child: LayoutBuilder(
-                builder: (context, constraints) {
-                  final frame = MediaQuery.sizeOf(context).shortestSide;
-                  final wide = _subtitleUsesColumns(
-                    context,
-                    constraints.maxWidth,
-                  );
-                  final clearance = LineupTheme.of(context).largeFocusIndicators
-                      ? LineupFocusFrame.contentClearance * 2
-                      : 0.0;
-                  // Keep the full reference frame; reserve the complete row
-                  // first, then shrink its preview crop and empty gap.
-                  final crop = _subtitlePreviewCrop(
-                    availableHeight: constraints.maxHeight,
-                    frameHeight: frame,
-                    rowHeight: rowHeight,
-                    clearance: clearance,
-                    columns: wide,
-                    scrollingHeading: scrollHeading,
-                  );
-                  final preview = _SubtitlePreview(
-                    height: crop.height,
-                    frameHeight: frame,
-                    appearance: appearance,
-                  );
-                  // Sixteen fixed controls do not need virtualized rows.
-                  // Eager layout keeps their offsets exact while the heading
-                  // moves and text reflows during a viewport change.
-                  final rows = SingleChildScrollView(
-                    key: const ValueKey('subtitle-rows'),
-                    padding: EdgeInsets.symmetric(vertical: clearance / 2),
-                    child: Column(
-                      mainAxisSize: MainAxisSize.min,
-                      crossAxisAlignment: CrossAxisAlignment.stretch,
-                      children: [
-                        if (scrollHeading) heading,
-                        // Preserve the old list's per-row paint boundaries,
-                        // including input borders at fractional canvas scales.
-                        for (final child in children)
-                          RepaintBoundary(
-                            key: child.key == null
-                                ? null
-                                : ValueKey(('subtitle-paint', child.key)),
-                            child: child,
-                          ),
-                        if (_subtitleRepinningSpace > 0)
-                          SizedBox(
-                            key: const ValueKey('subtitle-repinning-space'),
-                            height: _subtitleRepinningSpace,
-                          ),
-                      ],
-                    ),
-                  );
-                  return wide
-                      ? Row(
-                          crossAxisAlignment: CrossAxisAlignment.start,
-                          children: [
-                            SizedBox(
-                              width: constraints.maxWidth * .54 - 32,
-                              height: constraints.maxHeight,
-                              child: rows,
-                            ),
-                            const SizedBox(width: 32),
-                            SizedBox(
-                              width: constraints.maxWidth * .46,
-                              child: preview,
-                            ),
-                          ],
-                        )
-                      : Column(
-                          children: [
-                            preview,
-                            SizedBox(height: crop.gap),
-                            Expanded(child: rows),
-                          ],
-                        );
-                },
+        // Custom is a status, never a selectable value. Use the first enabled
+        // preset as the menu anchor while the selected child displays Custom.
+        dropdown(
+          _SettingKey.subtitlePreset,
+          'Style',
+          'Style',
+          style.preset ?? SubtitlePreset.standard,
+          SubtitlePreset.values,
+          (v) => v.label,
+          (s, v) => s.applying(v),
+          enabled: !device,
+          custom: style.preset == null,
+          displayed: style.preset == null ? 'Custom' : null,
+        ),
+        dropdown(
+          _SettingKey.subtitleSize,
+          'Size',
+          'Size',
+          style.size,
+          SubtitleSize.values,
+          (v) => v.label,
+          (s, v) => s.copyWith(size: v),
+          enabled: !device,
+        ),
+        dropdown(
+          _SettingKey.subtitlePosition,
+          'Position',
+          'Position',
+          style.position,
+          SubtitlePosition.values,
+          (v) => v.label,
+          (s, v) => s.copyWith(position: v),
+        ),
+      ],
+      if (!_subtitleCustomising)
+        Builder(
+          builder: (context) {
+            final tv = DeviceProfile.of(context).isTv;
+            final inset = tv ? _SettingsViewState._rowInset : 0.0;
+            return TextButton(
+              key: const ValueKey('subtitle-field-subtitleCustomise'),
+              focusNode: _subtitleNode(_SettingKey.subtitleCustomise),
+              onPressed: _openSubtitleCustomise,
+              style: TextButton.styleFrom(
+                minimumSize: const Size(0, 72),
+                padding: EdgeInsets.fromLTRB(tv ? inset - 3 : 8, 12, inset, 12),
               ),
+              child: const Row(
+                children: [
+                  Expanded(child: _SubtitleCustomiseLabel()),
+                  SizedBox(width: 24),
+                  Icon(Icons.chevron_right),
+                ],
+              ),
+            );
+          },
+        ),
+      if (_subtitleCustomising) ...[
+        const _SubtitleGroup('TEXT'),
+        dropdown(
+          _SettingKey.subtitleTextColor,
+          'Color',
+          'Text Color',
+          style.textColor,
+          SubtitleColor.values,
+          (v) => v.label,
+          (s, v) => s.copyWith(textColor: v),
+          enabled: !device,
+        ),
+        dropdown(
+          _SettingKey.subtitleTextOpacity,
+          'Opacity',
+          'Text Opacity',
+          style.textOpacity,
+          SubtitleTextOpacity.values,
+          (v) => v.label,
+          (s, v) => s.copyWith(textOpacity: v),
+          enabled: !device,
+        ),
+        dropdown(
+          _SettingKey.subtitleFont,
+          'Font',
+          'Text Font',
+          style.font,
+          SubtitleFont.values,
+          (v) => v.label,
+          (s, v) => s.copyWith(font: v),
+          enabled: !device,
+          font: true,
+        ),
+        toggle(
+          _SettingKey.subtitleBold,
+          'Bold',
+          style.bold,
+          (s, v) => s.copyWith(bold: v),
+        ),
+        const _SubtitleGroup('EDGES'),
+        dropdown(
+          _SettingKey.subtitleEdge,
+          'Style',
+          'Edge Style',
+          style.edge,
+          SubtitleEdge.values,
+          (v) => v.label,
+          (s, v) => s.copyWith(edge: v),
+          enabled: !device,
+        ),
+        dropdown(
+          _SettingKey.subtitleEdgeColor,
+          'Color',
+          'Edge Color',
+          style.edgeColor,
+          SubtitleColor.values,
+          (v) => v.label,
+          (s, v) => s.copyWith(edgeColor: v),
+          enabled: !device && style.edge != SubtitleEdge.none,
+        ),
+        const _SubtitleGroup('BACKGROUND (BEHIND EACH LINE)'),
+        dropdown(
+          _SettingKey.subtitleBackgroundOpacity,
+          'Opacity',
+          'Background Opacity',
+          style.backgroundOpacity,
+          SubtitleBoxOpacity.values,
+          (v) => v.label,
+          (s, v) => s.copyWith(backgroundOpacity: v),
+          enabled: !device,
+        ),
+        dropdown(
+          _SettingKey.subtitleBackgroundColor,
+          'Color',
+          'Background Color',
+          style.backgroundColor,
+          SubtitleColor.values,
+          (v) => v.label,
+          (s, v) => s.copyWith(backgroundColor: v),
+          enabled: !device && style.backgroundOpacity != SubtitleBoxOpacity.off,
+        ),
+        const _SubtitleGroup('WINDOW (ONE BOX BEHIND THE CAPTION)'),
+        dropdown(
+          _SettingKey.subtitleWindowOpacity,
+          'Opacity',
+          'Window Opacity',
+          style.windowOpacity,
+          SubtitleBoxOpacity.values,
+          (v) => v.label,
+          (s, v) => s.copyWith(windowOpacity: v),
+          enabled: !device,
+        ),
+        dropdown(
+          _SettingKey.subtitleWindowColor,
+          'Color',
+          'Window Color',
+          style.windowColor,
+          SubtitleColor.values,
+          (v) => v.label,
+          (s, v) => s.copyWith(windowColor: v),
+          enabled: !device && style.windowOpacity != SubtitleBoxOpacity.off,
+        ),
+      ],
+      if (!_subtitleCustomising) ...[
+        toggle(
+          _SettingKey.subtitleStyled,
+          'Apply my style to styled subtitles',
+          style.styleStyledSubtitles,
+          (s, v) => s.copyWith(styleStyledSubtitles: v),
+          helper: 'ASS/SSA dialogue uses your style. Signs and author positioning are dropped.',
+        ),
+        row(
+          _SettingKey.subtitleReset,
+          '',
+          OutlinedButton(
+            key: const ValueKey('subtitle-field-subtitleReset'),
+            focusNode: _subtitleNode(_SettingKey.subtitleReset),
+            onPressed:
+                !_saving(_SettingKey.subtitleReset) &&
+                    style.copyWith(useDeviceStyle: false) ==
+                        const SubtitleStyle()
+                ? null
+                : () => _changeSubtitle(
+                    _SettingKey.subtitleReset,
+                    (s) => SubtitleStyle(useDeviceStyle: s.useDeviceStyle),
+                  ),
+            child: const Text('Reset to standard'),
+          ),
+          enabled:
+              _saving(_SettingKey.subtitleReset) ||
+              style.copyWith(useDeviceStyle: false) != const SubtitleStyle(),
+          action: true,
+        ),
+      ],
+    ];
+    final heading = _SettingsSection(
+      title: 'Subtitles',
+      trailingGap: 16,
+      description: 'How subtitles look over the picture.',
+      children: [
+        if (_subtitleCustomising)
+          Align(
+            alignment: Alignment.centerLeft,
+            child: TextButton(
+              key: const ValueKey('subtitle-customise-back'),
+              onPressed: _closeSubtitleCustomise,
+              child: const Text('Back'),
             ),
-          ],
-        );
+          ),
+      ],
+    );
+    Widget preview(double width) => Column(
+      crossAxisAlignment: CrossAxisAlignment.stretch,
+      children: [
+        _SubtitlePreview(
+          height: width * 9 / 16,
+          frameHeight: width * 9 / 16,
+          appearance: appearance,
+        ),
+        const SizedBox(height: 12),
+        Text(
+          'Preview. Applies to text subtitles; image subtitles follow Size and Position only.',
+          style: TextStyle(
+            color: LineupTheme.of(context).secondaryText,
+            fontSize: 16,
+            height: 1.4,
+          ),
+        ),
+      ],
+    );
+    Widget rows({Widget? before}) => SingleChildScrollView(
+      key: const ValueKey('subtitle-rows'),
+      padding: EdgeInsets.symmetric(
+        vertical: LineupTheme.of(context).largeFocusIndicators
+            ? LineupFocusFrame.contentClearance
+            : 0,
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.stretch,
+        children: [
+          if (before != null) ...[before, const SizedBox(height: 24)],
+          ...children,
+        ],
+      ),
+    );
+    return Focus(
+      canRequestFocus: false,
+      onKeyEvent: (_, event) {
+        if (_subtitleCustomising &&
+            {
+              LogicalKeyboardKey.escape,
+              LogicalKeyboardKey.goBack,
+              LogicalKeyboardKey.backspace,
+            }.contains(event.logicalKey)) {
+          if (event is KeyDownEvent) _closeSubtitleCustomise();
+          return KeyEventResult.handled;
+        }
+        return KeyEventResult.ignored;
       },
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.stretch,
+        children: [
+          heading,
+          Expanded(
+            child: LayoutBuilder(
+              builder: (context, constraints) {
+                if (_subtitleUsesColumns(context, constraints.maxWidth)) {
+                  final previewWidth = math.min(
+                    800.0,
+                    constraints.maxWidth - 620 - 32,
+                  );
+                  return Row(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      SizedBox(
+                        width: 620,
+                        height: constraints.maxHeight,
+                        child: rows(),
+                      ),
+                      const SizedBox(width: 32),
+                      SizedBox(
+                        width: previewWidth,
+                        child: SingleChildScrollView(
+                          child: preview(previewWidth),
+                        ),
+                      ),
+                    ],
+                  );
+                }
+                return rows(
+                  before: Align(
+                    alignment: Alignment.centerLeft,
+                    child: SizedBox(
+                      width: math.min(800.0, constraints.maxWidth),
+                      child: preview(math.min(800.0, constraints.maxWidth)),
+                    ),
+                  ),
+                );
+              },
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+class _SubtitleCustomiseLabel extends StatelessWidget {
+  const _SubtitleCustomiseLabel();
+
+  @override
+  Widget build(BuildContext context) {
+    final roles = LineupTheme.of(context);
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      mainAxisSize: MainAxisSize.min,
+      children: [
+        Text(
+          'Customise',
+          style: LineupTypography.control.copyWith(height: 1.2),
+        ),
+        const SizedBox(height: 4),
+        Text(
+          'Text, edges, background and window · 10 options',
+          style: LineupTypography.body.copyWith(
+            fontSize: 16,
+            height: 1.4,
+            color: roles.secondaryText,
+          ),
+        ),
+      ],
     );
   }
 }
@@ -464,9 +490,7 @@ class _SubtitleSettingRow extends StatefulWidget {
     required this.feedback,
     required this.enabled,
     required this.toggle,
-    required this.onMeasured,
     required this.focusNode,
-    required this.revealToken,
     this.action = false,
     this.helper,
     super.key,
@@ -479,25 +503,12 @@ class _SubtitleSettingRow extends StatefulWidget {
   final bool toggle;
   final bool action;
   final FocusNode focusNode;
-  final Object? revealToken;
-  final bool Function(
-    double height,
-    bool focused,
-    ValueChanged<double> alignBeforeRepinning,
-  )
-  onMeasured;
   @override
   State<_SubtitleSettingRow> createState() => _SubtitleSettingRowState();
 }
 
 class _SubtitleSettingRowState extends State<_SubtitleSettingRow> {
   double? _lastHeight;
-  @override
-  void didUpdateWidget(covariant _SubtitleSettingRow oldWidget) {
-    super.didUpdateWidget(oldWidget);
-    if (oldWidget.revealToken != widget.revealToken) _measure(reveal: true);
-  }
-
   void _measure({bool reveal = false}) {
     WidgetsBinding.instance.addPostFrameCallback((_) {
       if (!mounted) return;
@@ -505,31 +516,7 @@ class _SubtitleSettingRowState extends State<_SubtitleSettingRow> {
       if (box is! RenderBox || !box.hasSize) return;
       final changed = _lastHeight != box.size.height;
       _lastHeight = box.size.height;
-      final managedReveal = widget.onMeasured(
-        box.size.height,
-        widget.focusNode.hasFocus,
-        (previewExtent) {
-          final position = Scrollable.of(context).position;
-          final clearance = LineupTheme.of(context).largeFocusIndicators
-              ? LineupFocusFrame.contentClearance
-              : 0.0;
-          final viewport = RenderAbstractViewport.of(box);
-          final bottom = box
-              .localToGlobal(Offset(0, box.size.height), ancestor: viewport)
-              .dy;
-          final targetBottom =
-              position.viewportDimension - previewExtent - clearance;
-          // Keep room for the returning preview in current viewport units.
-          position.jumpTo(
-            (position.pixels + bottom - targetBottom).clamp(
-              position.minScrollExtent,
-              position.maxScrollExtent,
-            ),
-          );
-        },
-      );
-      // A heading transition owns its reveal until the new viewport is ready.
-      if (!managedReveal && widget.focusNode.hasFocus && (changed || reveal)) {
+      if (widget.focusNode.hasFocus && (changed || reveal)) {
         final clearance = LineupTheme.of(context).largeFocusIndicators
             ? LineupFocusFrame.contentClearance
             : 0.0;

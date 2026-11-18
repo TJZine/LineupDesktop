@@ -4,7 +4,6 @@ import 'dart:math' as math;
 import 'package:flutter/foundation.dart'
     show TargetPlatform, defaultTargetPlatform, ValueListenable;
 import 'package:flutter/material.dart';
-import 'package:flutter/rendering.dart' show RenderAbstractViewport;
 import 'package:flutter/services.dart';
 
 import '../playback/subtitle_appearance_source.dart';
@@ -84,19 +83,35 @@ class _SettingsViewState extends State<SettingsView> {
       category: FocusNode(debugLabel: 'Settings ${category.name}'),
   };
   final _detailFocus = FocusNode(debugLabel: 'Settings detail');
+  final _themeSwatchesKey = GlobalKey<_ThemeSwatchesState>();
   final _desktopSubtitleRailFocus = FocusNode(debugLabel: 'Subtitles category');
   Timer? _railDwell;
   final _subtitleFocus = <_SettingKey, FocusNode>{};
-  final _subtitleHeights = <_SettingKey, double>{};
-  _SettingKey? _focusedSubtitle;
-  final _subtitlePageKey = GlobalKey();
-  final _subtitleHeadingKey = GlobalKey();
-  double _subtitlePinnedHeadingHeight = 0;
-  bool _subtitleHeadingIsPinned = true;
-  Size? _subtitlePageSize;
-  _SettingKey? _subtitleHeadingScrollRow;
-  Object? _subtitleHeadingExitToken;
-  double _subtitleRepinningSpace = 0;
+  bool _subtitleCustomising = false;
+
+  _SettingKey get _firstSubtitleCustomiseSetting =>
+      defaultTargetPlatform == TargetPlatform.android &&
+          _displaySettings.subtitleStyle.useDeviceStyle
+      ? _SettingKey.subtitleBold
+      : _SettingKey.subtitleTextColor;
+
+  void _openSubtitleCustomise() {
+    setState(() => _subtitleCustomising = true);
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (mounted) {
+        _subtitleFocus[_firstSubtitleCustomiseSetting]?.requestFocus();
+      }
+    });
+  }
+
+  void _closeSubtitleCustomise() {
+    setState(() => _subtitleCustomising = false);
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (mounted) {
+        _subtitleFocus[_SettingKey.subtitleCustomise]?.requestFocus();
+      }
+    });
+  }
 
   bool _saving(_SettingKey key) => _pendingSaves.any((p) => p.key == key);
   final Map<_SettingKey, String> _errors = {};
@@ -126,10 +141,7 @@ class _SettingsViewState extends State<SettingsView> {
     }
     if (oldWidget.category != widget.category &&
         widget.category != SettingsCategory.subtitles) {
-      _focusedSubtitle = null;
-      _subtitleHeadingScrollRow = null;
-      _subtitleHeadingExitToken = null;
-      _subtitleRepinningSpace = 0;
+      _subtitleCustomising = false;
     }
     if (oldWidget.controller == widget.controller) return;
     oldWidget.controller.removeListener(_controllerChanged);
@@ -352,7 +364,18 @@ class _SettingsViewState extends State<SettingsView> {
         }
         return KeyEventResult.ignored;
       },
-      child: _categoryDetail(context),
+      child: Align(
+        alignment: Alignment.topLeft,
+        child: ConstrainedBox(
+          key: const Key('settings-content-column'),
+          constraints: BoxConstraints(
+            maxWidth: _category == SettingsCategory.subtitles
+                ? double.infinity
+                : 1040,
+          ),
+          child: _categoryDetail(context),
+        ),
+      ),
     ),
   );
 
@@ -362,10 +385,7 @@ class _SettingsViewState extends State<SettingsView> {
     setState(() {
       _localCategory = category;
       if (category != SettingsCategory.subtitles) {
-        _focusedSubtitle = null;
-        _subtitleHeadingScrollRow = null;
-        _subtitleHeadingExitToken = null;
-        _subtitleRepinningSpace = 0;
+        _subtitleCustomising = false;
       }
     });
     widget.onCategoryChanged?.call(category);
@@ -398,8 +418,12 @@ class _SettingsViewState extends State<SettingsView> {
   }
 
   void _focusFirstSetting() {
-    if (_category == SettingsCategory.subtitles) {
-      _subtitleFocus[defaultTargetPlatform == TargetPlatform.android
+    if (_category == SettingsCategory.appearance) {
+      _themeSwatchesKey.currentState?.focusFirst();
+    } else if (_category == SettingsCategory.subtitles) {
+      _subtitleFocus[_subtitleCustomising
+              ? _firstSubtitleCustomiseSetting
+              : defaultTargetPlatform == TargetPlatform.android
               ? _SettingKey.subtitleDevice
               : _SettingKey.subtitlePreset]
           ?.requestFocus();
@@ -485,14 +509,10 @@ class _SettingsViewState extends State<SettingsView> {
               ..._settingControl<LineupThemeName>(
                 _SettingKey.theme,
                 (current, item) => current.copyWith(theme: item),
-                (onChanged) => _Dropdown<LineupThemeName>(
-                  'Theme',
-                  'Color and surface treatment throughout Lineup.',
-                  value.theme,
-                  LineupThemeName.values,
-                  (item) => item.label,
-                  onChanged,
-                  first: true,
+                (onChanged) => _ThemeSwatches(
+                  key: _themeSwatchesKey,
+                  value: value.theme,
+                  onChanged: onChanged,
                 ),
               ),
               ..._settingControl<GuideInfoBackgroundMode>(
@@ -634,6 +654,19 @@ class _SettingsViewState extends State<SettingsView> {
             ],
             SettingsCategory.subtitles => const [],
             SettingsCategory.accessibility => [
+              ..._settingControl<LineupTextSize>(
+                _SettingKey.textSize,
+                (current, item) => current.copyWith(textSize: item),
+                (onChanged) => _Dropdown<LineupTextSize>(
+                  'Text size',
+                  'Larger text can show fewer Guide rows.',
+                  value.textSize,
+                  LineupTextSize.values,
+                  (item) => item.label,
+                  onChanged,
+                  first: true,
+                ),
+              ),
               ..._settingControl<bool>(
                 _SettingKey.reduceMotion,
                 (current, item) => current.copyWith(reduceMotion: item),
@@ -644,7 +677,6 @@ class _SettingsViewState extends State<SettingsView> {
                   ),
                   value: value.reduceMotion,
                   onChanged: onChanged,
-                  first: true,
                 ),
               ),
               ..._settingControl<bool>(
@@ -835,122 +867,6 @@ class _SettingsViewState extends State<SettingsView> {
     );
   }
 
-  bool _subtitleMeasured(
-    _SettingKey key,
-    double height,
-    bool focused,
-    ValueChanged<double> alignBeforeRepinning,
-  ) {
-    final page = _subtitlePageKey.currentContext?.findRenderObject();
-    final heading = _subtitleHeadingKey.currentContext?.findRenderObject();
-    final pageSize = page is RenderBox && page.hasSize ? page.size : null;
-    // A scrolling heading may wrap in the narrower A2 rows column. Only its
-    // pinned measurement defines the space the normal layout would reserve.
-    final resizedFullWidthHeading =
-        pageSize != null &&
-        pageSize != _subtitlePageSize &&
-        !_subtitleUsesColumns(context, pageSize.width);
-    final headingHeight =
-        (_subtitleHeadingIsPinned || resizedFullWidthHeading) &&
-            heading is RenderBox &&
-            heading.hasSize
-        ? heading.size.height
-        : _subtitlePinnedHeadingHeight;
-    final geometryChanged =
-        pageSize != _subtitlePageSize ||
-        headingHeight != _subtitlePinnedHeadingHeight;
-    if (geometryChanged &&
-        !focused &&
-        _subtitleHeadingScrollRow != null &&
-        _subtitleFocus.values.any((node) => node.hasFocus)) {
-      // Every row is laid out. Let the focus owner's measurement, rather
-      // than a preceding row's, decide how to leave the expanded viewport.
-      return false;
-    }
-    if (geometryChanged) {
-      _subtitleHeadingExitToken = null;
-      _subtitleRepinningSpace = 0;
-    }
-    var scrollRow = geometryChanged ? null : _subtitleHeadingScrollRow;
-    var managedReveal = focused && _subtitleHeadingExitToken != null;
-    if (focused) {
-      final changingRow = _focusedSubtitle != key;
-      if (changingRow) scrollRow = null;
-      final clearance = _displaySettings.largeFocusIndicators
-          ? LineupFocusFrame.contentClearance * 2
-          : 0.0;
-      if (pageSize != null &&
-          height + clearance > pageSize.height - headingHeight) {
-        _subtitleHeadingExitToken = null;
-        _subtitleRepinningSpace = 0;
-        managedReveal = false;
-        scrollRow = key;
-      } else if ((changingRow || geometryChanged) &&
-          _subtitleHeadingScrollRow != null) {
-        // The old expanded viewport may expose a row above the future pinned
-        // heading. Place its complete context at the shared bottom first;
-        // repinning on the following frame cannot hide or recycle its control.
-        scrollRow = _subtitleHeadingScrollRow;
-        managedReveal = true;
-        final exit = Object();
-        _subtitleHeadingExitToken = exit;
-        final columns = _subtitleUsesColumns(context, pageSize!.width);
-        final preview = _subtitlePreviewCrop(
-          availableHeight: pageSize.height - headingHeight,
-          frameHeight: MediaQuery.sizeOf(context).shortestSide,
-          rowHeight: height,
-          clearance: clearance,
-          columns: columns,
-          scrollingHeading: false,
-        );
-        // Reserve the returning preview at the bottom first. This makes the
-        // expanded and pinned scroll ranges equal, even at the end of the list.
-        _subtitleRepinningSpace = columns ? 0 : preview.height + preview.gap;
-        // Allow a resize or a preceding reveal to finish layout before asking
-        // for another scroll offset. Then repin after that offset is laid out.
-        WidgetsBinding.instance.addPostFrameCallback((_) {
-          if (!mounted || !identical(_subtitleHeadingExitToken, exit)) return;
-          if (!(_subtitleFocus[key]?.hasFocus ?? false)) {
-            setState(() {
-              _subtitleHeadingExitToken = null;
-              _subtitleRepinningSpace = 0;
-            });
-            return;
-          }
-          alignBeforeRepinning(columns ? 0 : preview.height + preview.gap);
-          WidgetsBinding.instance.addPostFrameCallback((_) {
-            if (!mounted || !identical(_subtitleHeadingExitToken, exit)) return;
-            setState(() {
-              _subtitleHeadingExitToken = null;
-              _subtitleRepinningSpace = 0;
-              if (_subtitleFocus[key]?.hasFocus ?? false) {
-                _subtitleHeadingScrollRow = null;
-              }
-            });
-          });
-          WidgetsBinding.instance.scheduleFrame();
-        });
-        WidgetsBinding.instance.scheduleFrame();
-      }
-    }
-    if (_subtitleHeights[key] == height &&
-        (!focused || _focusedSubtitle == key) &&
-        !geometryChanged &&
-        scrollRow == _subtitleHeadingScrollRow) {
-      return managedReveal;
-    }
-    setState(() {
-      _subtitleHeights[key] = height;
-      _subtitlePageSize = pageSize;
-      _subtitlePinnedHeadingHeight = headingHeight;
-      // Once required, retain this mode for the same focused row through
-      // Saving/error removal. Another row or viewport starts a new decision.
-      _subtitleHeadingScrollRow = scrollRow;
-      if (focused) _focusedSubtitle = key;
-    });
-    return managedReveal;
-  }
-
   List<Widget> _settingControl<T>(
     _SettingKey key,
     LineupSettings Function(LineupSettings, T) change,
@@ -1109,6 +1025,236 @@ class _SettingsSection extends StatelessWidget {
         SizedBox(height: trailingGap),
         ...children,
       ],
+    );
+  }
+}
+
+class _ThemeSwatches extends StatefulWidget {
+  const _ThemeSwatches({
+    required this.value,
+    required this.onChanged,
+    super.key,
+  });
+
+  final LineupThemeName value;
+  final ValueChanged<LineupThemeName>? onChanged;
+
+  @override
+  State<_ThemeSwatches> createState() => _ThemeSwatchesState();
+}
+
+class _ThemeSwatchesState extends State<_ThemeSwatches> {
+  final _focus = {
+    for (final theme in LineupThemeName.values)
+      theme: FocusNode(debugLabel: 'Theme ${theme.label}'),
+  };
+
+  void focusFirst() => _focus[LineupThemeName.values.first]!.requestFocus();
+
+  @override
+  void dispose() {
+    for (final node in _focus.values) {
+      node.dispose();
+    }
+    super.dispose();
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final roles = LineupTheme.of(context);
+    final inset = DeviceProfile.of(context).isTv
+        ? _SettingsViewState._rowInset
+        : 0.0;
+    return Padding(
+      padding: EdgeInsets.fromLTRB(inset, 16, inset, 28),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Text(
+            'Theme',
+            style: Theme.of(context).textTheme.titleMedium
+                ?.copyWith(fontSize: 18),
+          ),
+          const SizedBox(height: 6),
+          Text(
+            'Color and surface treatment throughout Lineup.',
+            style: TextStyle(
+              color: roles.secondaryText,
+              fontSize: 18,
+              height: 1.5,
+            ),
+          ),
+          const SizedBox(height: 20),
+          LayoutBuilder(
+            builder: (context, constraints) {
+              const gap = 16.0;
+              final columns = constraints.maxWidth >= 232 * 4 + gap * 3 ? 4 : 2;
+              final width = math.min(
+                232.0,
+                (constraints.maxWidth - gap * (columns - 1)) / columns,
+              );
+              return Wrap(
+                key: const ValueKey('settings-field-Theme'),
+                spacing: gap,
+                runSpacing: 20,
+                children: [
+                  for (final theme in LineupThemeName.values)
+                    SizedBox(
+                      width: width,
+                      child: Builder(
+                        builder: (context) {
+                          final swatch = LineupTheme.forName(theme)
+                              .extension<LineupThemeRoles>()!;
+                          final selected = theme == widget.value;
+                          return Focus(
+                            canRequestFocus: false,
+                            onKeyEvent: (_, event) {
+                              if (!DeviceProfile.of(context).isTv ||
+                                  event is! KeyDownEvent) {
+                                return KeyEventResult.ignored;
+                              }
+                              final delta =
+                                  event.logicalKey ==
+                                      LogicalKeyboardKey.arrowRight
+                                  ? 1
+                                  : event.logicalKey ==
+                                        LogicalKeyboardKey.arrowLeft
+                                  ? -1
+                                  : 0;
+                              final index = theme.index + delta;
+                              if (delta == 0 ||
+                                  index < 0 ||
+                                  index >= LineupThemeName.values.length) {
+                                return KeyEventResult.ignored;
+                              }
+                              _focus[LineupThemeName.values[index]]!
+                                  .requestFocus();
+                              return KeyEventResult.handled;
+                            },
+                            child: Semantics(
+                              button: true,
+                              label: theme.label,
+                              selected: selected,
+                              enabled: widget.onChanged != null,
+                              onTap: widget.onChanged == null
+                                  ? null
+                                  : () => widget.onChanged!(theme),
+                              child: ExcludeSemantics(
+                                child: OutlinedButton(
+                                  focusNode: _focus[theme],
+                                  key: ValueKey('settings-theme-${theme.name}'),
+                                  onPressed: () {
+                                    if (widget.onChanged != null) {
+                                      _focus[theme]!.requestFocus();
+                                      widget.onChanged!(theme);
+                                    }
+                                  },
+                                  style:
+                                      OutlinedButton.styleFrom(
+                                        padding: const EdgeInsets.all(4),
+                                        foregroundColor:
+                                            widget.onChanged == null
+                                            ? roles.mutedText
+                                            : null,
+                                        shape: RoundedRectangleBorder(
+                                          borderRadius: BorderRadius.circular(
+                                            roles.panelRadius,
+                                          ),
+                                        ),
+                                      ).copyWith(
+                                        side: WidgetStateProperty.resolveWith(
+                                          (states) =>
+                                              states.contains(
+                                                WidgetState.focused,
+                                              )
+                                              ? null
+                                              : BorderSide.none,
+                                        ),
+                                      ),
+                                  child: Column(
+                                    crossAxisAlignment:
+                                        CrossAxisAlignment.stretch,
+                                    children: [
+                                      Container(
+                                        key: ValueKey(
+                                          'settings-theme-preview-${theme.name}',
+                                        ),
+                                        height: 132,
+                                        padding: const EdgeInsets.all(24),
+                                        decoration: BoxDecoration(
+                                          color: swatch.deepBackground,
+                                          borderRadius: BorderRadius.circular(
+                                            roles.panelRadius,
+                                          ),
+                                          border: Border.all(
+                                            color: selected
+                                                ? roles.progressFill
+                                                : roles.subtleBorder,
+                                            width: selected ? 3 : 1,
+                                          ),
+                                        ),
+                                        child: Column(
+                                          crossAxisAlignment:
+                                              CrossAxisAlignment.start,
+                                          children: [
+                                            Container(
+                                              width: 100,
+                                              height: 8,
+                                              color: swatch.primaryText,
+                                            ),
+                                            const SizedBox(height: 12),
+                                            Container(
+                                              width: 72,
+                                              height: 6,
+                                              color: swatch.primaryText
+                                                  .withValues(alpha: .55),
+                                            ),
+                                            const Spacer(),
+                                            Row(
+                                              children: [
+                                                Expanded(
+                                                  child: Container(
+                                                    height: 24,
+                                                    color:
+                                                        swatch.elevatedSurface,
+                                                  ),
+                                                ),
+                                                const SizedBox(width: 8),
+                                                Container(
+                                                  width: 48,
+                                                  height: 24,
+                                                  color: swatch.progressFill,
+                                                ),
+                                              ],
+                                            ),
+                                          ],
+                                        ),
+                                      ),
+                                      const SizedBox(height: 10),
+                                      Text(
+                                        theme.label,
+                                        style: TextStyle(
+                                          fontSize: 18,
+                                          fontWeight: selected
+                                              ? FontWeight.w600
+                                              : FontWeight.w400,
+                                        ),
+                                      ),
+                                    ],
+                                  ),
+                                ),
+                              ),
+                            ),
+                          );
+                        },
+                      ),
+                    ),
+                ],
+              );
+            },
+          ),
+        ],
+      ),
     );
   }
 }
@@ -1358,10 +1504,12 @@ enum _SettingKey {
   osdAutoHideSeconds,
   dvrControlsEnabled,
   matchDisplayHdr,
+  textSize,
   reduceMotion,
   largeFocusIndicators,
   profilePickerOnStartup,
   diagnosticsEnabled,
+  subtitleCustomise,
   subtitlePreset,
   subtitleSize,
   subtitlePosition,

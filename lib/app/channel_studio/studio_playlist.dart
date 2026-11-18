@@ -27,8 +27,9 @@ class _StudioPlaylist extends StatelessWidget {
       crossAxisAlignment: CrossAxisAlignment.stretch,
       children: [
         inventoryStatus,
-        const Text(
+        Text(
           'Uses an existing Plex playlist. Manage its contents in Plex.',
+          style: _studioSupportStyle(context),
         ),
 
         LineupField(
@@ -59,7 +60,7 @@ class _StudioPlaylist extends StatelessWidget {
             ListTile(
               contentPadding: EdgeInsets.zero,
               minTileHeight: null,
-              title: Text('${channel.number} • ${channel.name}'),
+              title: Text('${channel.number}  ${channel.name}'),
               trailing: TextButton(
                 onPressed: saving || onOpenChannel == null
                     ? null

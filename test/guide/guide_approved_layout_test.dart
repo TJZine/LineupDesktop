@@ -436,16 +436,12 @@ void main() {
             expect(
               tester.getSize(list).height /
                   tester.widget<ListView>(list).itemExtent!,
-              closeTo(5, .001),
+              closeTo(tv ? 6 : 5, .001),
             );
             if (!tv) {
               expect(
                 (metrics['picture'] as List<double>)[2],
-                closeTo(switch (scale) {
-                  1.15 => 757.87,
-                  1.3 => 747.73,
-                  _ => 768,
-                }, .01),
+                closeTo(768, .01),
               );
             } else {
               expect(

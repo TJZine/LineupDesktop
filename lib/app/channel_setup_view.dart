@@ -534,7 +534,7 @@ class UpstreamChannelSetupViewState extends State<UpstreamChannelSetupView> {
         Text(
           subtitleText ??
               switch (_configurationSection) {
-                0 => 'Choose the channels you want from your libraries.',
+                0 => 'Choose which kinds of channels Lineup builds from your libraries.',
                 1 => 'Choose how your generated channels will play.',
                 _ => 'Choose the size and balance of your generated lineup.',
               },
@@ -594,15 +594,13 @@ class UpstreamChannelSetupViewState extends State<UpstreamChannelSetupView> {
         if (!_selectedLibraries.remove(id)) _selectedLibraries.add(id);
       });
     },
-    onToggleAll: () {
+    onToggleAll: (usableIds) {
       if (_setupActionsBlocked) return;
       setState(() {
-        if (_selectedLibraries.length == widget.controller.libraries.length) {
-          _selectedLibraries.clear();
+        if (_selectedLibraries.containsAll(usableIds)) {
+          _selectedLibraries.removeAll(usableIds);
         } else {
-          _selectedLibraries
-            ..clear()
-            ..addAll(widget.controller.libraries.map((library) => library.id));
+          _selectedLibraries.addAll(usableIds);
         }
       });
     },

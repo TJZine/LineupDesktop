@@ -60,7 +60,9 @@ class SetupReviewStep extends StatefulWidget {
 }
 
 class _SetupReviewStepState extends State<SetupReviewStep> {
-  late SetupReviewFilter _filter = widget.initialFilter;
+  late SetupReviewFilter _filter = _firstSetup
+      ? SetupReviewFilter.all
+      : _tabs.firstOrNull?.$1 ?? SetupReviewFilter.all;
   late final _search = TextEditingController(text: widget.initialSearch);
   final _searchFocus = FocusNode(debugLabel: 'Setup review search');
 
@@ -74,6 +76,19 @@ class _SetupReviewStepState extends State<SetupReviewStep> {
   bool _rosterFocused = false;
   int _revealGeneration = 0;
 
+  List<(SetupReviewFilter, int)> get _tabs => [
+    (SetupReviewFilter.added, widget.review.counts.added),
+    (SetupReviewFilter.removed, widget.review.counts.removed),
+    (SetupReviewFilter.updated, widget.review.counts.updated),
+    (SetupReviewFilter.unchanged, widget.review.counts.unchanged),
+  ].where((tab) => tab.$2 > 0).toList();
+
+  SetupReviewFilter get _selectedFilter => _firstSetup
+      ? SetupReviewFilter.all
+      : _tabs.any((tab) => tab.$1 == _filter)
+      ? _filter
+      : _tabs.firstOrNull?.$1 ?? SetupReviewFilter.all;
+
   List<SetupReviewEntry> get _visibleEntries {
     final query = _search.text.trim().toLowerCase();
     return widget.review.entries.where((entry) {
@@ -81,7 +96,8 @@ class _SetupReviewStepState extends State<SetupReviewStep> {
       return (query.isEmpty ||
               channel.name.toLowerCase().contains(query) ||
               '${channel.number}'.contains(query)) &&
-          (_filter == SetupReviewFilter.all || entry.kind.name == _filter.name);
+          (_selectedFilter == SetupReviewFilter.all ||
+              entry.kind.name == _selectedFilter.name);
     }).toList();
   }
 
@@ -454,7 +470,7 @@ class _SetupReviewStepState extends State<SetupReviewStep> {
                           widget.onRemovalChanged(channel.id, selected.single),
                     );
                     final title = Text(
-                      '${channel.number} • ${channel.name}',
+                      '${channel.number}  ${channel.name}',
                       style: TextStyle(color: roles.primaryText, fontSize: 18),
                     );
                     if (constraints.maxWidth /
@@ -609,25 +625,35 @@ class _SetupReviewStepState extends State<SetupReviewStep> {
                 crossAxisAlignment: WrapCrossAlignment.center,
                 spacing: 14,
                 children: [
-                  Text('${review.base.length} current', style: currentStyle),
+                  Text('${review.base.length} now', style: currentStyle),
                   Icon(
                     Icons.arrow_forward,
                     size: 32,
                     color: roles.secondaryText,
                   ),
-                  Text('$finalCount final', style: totalStyle),
+                  Text('$finalCount after', style: totalStyle),
                 ],
               ),
             ),
           );
-    final filters = Wrap(
-      spacing: 8,
-      runSpacing: 4,
+    final counts = Wrap(
+      spacing: 20,
+      runSpacing: 8,
       children: [
-        _filterChip(SetupReviewFilter.unchanged, review.counts.unchanged),
-        _filterChip(SetupReviewFilter.updated, review.counts.updated),
-        _filterChip(SetupReviewFilter.added, review.counts.added),
-        _filterChip(SetupReviewFilter.removed, review.counts.removed),
+        for (final tab in [
+          (SetupReviewFilter.added, review.counts.added),
+          (SetupReviewFilter.removed, review.counts.removed),
+          (SetupReviewFilter.updated, review.counts.updated),
+          (SetupReviewFilter.unchanged, review.counts.unchanged),
+        ])
+          Row(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              Container(width: 10, height: 10, color: _changeColor(tab.$1)),
+              const SizedBox(width: 8),
+              Text('${tab.$2} ${tab.$1.name}', style: supportingStyle),
+            ],
+          ),
       ],
     );
     final sourceCounts = [
@@ -662,7 +688,7 @@ class _SetupReviewStepState extends State<SetupReviewStep> {
                     crossAxisAlignment: CrossAxisAlignment.center,
                     children: [
                       Expanded(child: total),
-                      filters,
+                      counts,
                     ],
                   );
                 }
@@ -670,7 +696,7 @@ class _SetupReviewStepState extends State<SetupReviewStep> {
                   crossAxisAlignment: CrossAxisAlignment.stretch,
                   children: [
                     total,
-                    if (!_firstSetup) ...[const SizedBox(height: 12), filters],
+                    if (!_firstSetup) ...[const SizedBox(height: 12), counts],
                   ],
                 );
               },
@@ -713,27 +739,6 @@ class _SetupReviewStepState extends State<SetupReviewStep> {
                     ),
                   ),
                 ),
-              const SizedBox(height: 8),
-              Wrap(
-                spacing: 20,
-                runSpacing: 4,
-                children: [
-                  for (final item in [
-                    ('Unchanged', roles.mutedText),
-                    ('Updated', roles.secondaryText),
-                    ('Added', roles.progressFill),
-                    ('Removed', roles.liveAccent),
-                  ])
-                    Row(
-                      mainAxisSize: MainAxisSize.min,
-                      children: [
-                        Container(width: 10, height: 10, color: item.$2),
-                        const SizedBox(width: 8),
-                        Text(item.$1, style: supportingStyle),
-                      ],
-                    ),
-                ],
-              ),
             ],
             const SizedBox(height: 24),
             Divider(height: 1, color: roles.subtleBorder),
@@ -794,18 +799,16 @@ class _SetupReviewStepState extends State<SetupReviewStep> {
     return (byStrategy: byStrategy, other: other);
   }
 
+  Color _changeColor(SetupReviewFilter filter) => switch (filter) {
+    SetupReviewFilter.added => LineupTheme.of(context).progressFill,
+    SetupReviewFilter.removed => LineupTheme.of(context).liveAccent,
+    SetupReviewFilter.updated => LineupTheme.of(context).secondaryText,
+    _ => LineupTheme.of(context).mutedText,
+  };
+
   Widget _filterChip(SetupReviewFilter filter, int count) {
     final roles = LineupTheme.of(context);
-    final selected = _filter == filter;
-    final swatchColor = count == 0
-        ? roles.subtleBorder
-        : switch (filter) {
-            SetupReviewFilter.unchanged => roles.mutedText,
-            SetupReviewFilter.updated => roles.secondaryText,
-            SetupReviewFilter.added => roles.progressFill,
-            SetupReviewFilter.removed => Theme.of(context).colorScheme.error,
-            SetupReviewFilter.all => roles.mutedText,
-          };
+    final selected = _selectedFilter == filter;
     return Semantics(
       selected: selected,
       child: TextButton(
@@ -813,13 +816,22 @@ class _SetupReviewStepState extends State<SetupReviewStep> {
           setState(() => _filter = filter);
           widget.onFilterChanged(filter);
         },
-        child: Row(
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            Container(width: 10, height: 10, color: swatchColor),
-            const SizedBox(width: 10),
-            Text('$count ${_capitalized(filter.name)}'),
-          ],
+        child: Container(
+          padding: const EdgeInsets.symmetric(vertical: 8),
+          decoration: BoxDecoration(
+            border: Border(
+              bottom: BorderSide(
+                color: selected ? roles.progressFill : Colors.transparent,
+                width: 3,
+              ),
+            ),
+          ),
+          child: Text(
+            '${_capitalized(filter.name)} $count',
+            style: TextStyle(
+              fontWeight: selected ? FontWeight.w600 : FontWeight.normal,
+            ),
+          ),
         ),
       ),
     );
@@ -837,7 +849,7 @@ class _SetupReviewStepState extends State<SetupReviewStep> {
         .copyWith(color: roles.primaryText, fontSize: 18, height: 1.4);
     final query = _search.text.trim().toLowerCase();
     final entries = _visibleEntries;
-    final filtered = _filter != SetupReviewFilter.all;
+    final filtered = _selectedFilter != SetupReviewFilter.all;
     return LineupCompactControls(
       child: Focus(
         canRequestFocus: false,
@@ -857,6 +869,24 @@ class _SetupReviewStepState extends State<SetupReviewStep> {
                 Row(
                   crossAxisAlignment: CrossAxisAlignment.center,
                   children: [
+                    if (!_firstSetup) ...[
+                      Expanded(
+                        child: Wrap(
+                          spacing: 8,
+                          runSpacing: 4,
+                          children: [
+                            // Keep tabs after the intro (-1) and before search
+                            // (0), so vertical remote traversal reaches rows.
+                            for (final (index, tab) in _tabs.indexed)
+                              FocusTraversalOrder(
+                                order: NumericFocusOrder(-0.5 + index * 0.1),
+                                child: _filterChip(tab.$1, tab.$2),
+                              ),
+                          ],
+                        ),
+                      ),
+                      const SizedBox(width: 16),
+                    ],
                     Expanded(
                       child: FocusTraversalOrder(
                         order: const NumericFocusOrder(0),
@@ -889,29 +919,15 @@ class _SetupReviewStepState extends State<SetupReviewStep> {
                         ),
                       ),
                     ),
-                    if (!_firstSetup) ...[
-                      const SizedBox(width: 12),
-                      FocusTraversalOrder(
-                        order: const NumericFocusOrder(0),
-                        child: TextButton(
-                          key: const ValueKey('review-show-all'),
-                          onPressed: () {
-                            setState(() => _filter = SetupReviewFilter.all);
-                            widget.onFilterChanged(SetupReviewFilter.all);
-                          },
-                          child: const Text('Show all'),
-                        ),
-                      ),
-                    ],
                   ],
                 ),
-                const SizedBox(height: 8),
-                Text(
-                  filtered
-                      ? '${_capitalized(_filter.name)} · ${entries.length} matching ${entries.length == 1 ? 'channel' : 'channels'}'
-                      : '${entries.length} ${entries.length == 1 ? 'channel' : 'channels'}',
-                  style: textStyle,
-                ),
+                if (_firstSetup) ...[
+                  const SizedBox(height: 8),
+                  Text(
+                    '${entries.length} ${entries.length == 1 ? 'channel' : 'channels'}',
+                    style: textStyle,
+                  ),
+                ],
                 const SizedBox(height: 12),
                 _rosterHeader(),
               ],
@@ -956,6 +972,7 @@ class _SetupReviewStepState extends State<SetupReviewStep> {
   }
 
   double _reviewChangeWidth() {
+    if (!_firstSetup) return 0;
     final style = Theme.of(context).textTheme.bodyMedium!
         .copyWith(fontSize: 18, height: 1.4);
     final scaler = MediaQuery.textScalerOf(context);
@@ -998,14 +1015,15 @@ class _SetupReviewStepState extends State<SetupReviewStep> {
             Expanded(flex: 60, child: Text('Channel', style: headerStyle)),
             Expanded(flex: 16, child: Text('Source', style: headerStyle)),
             Expanded(flex: 16, child: Text('Playback', style: headerStyle)),
-            SizedBox(
-              width: changeWidth,
-              child: Text(
-                'Change',
-                textAlign: TextAlign.end,
-                style: headerStyle,
+            if (_firstSetup)
+              SizedBox(
+                width: changeWidth,
+                child: Text(
+                  'Change',
+                  textAlign: TextAlign.end,
+                  style: headerStyle,
+                ),
               ),
-            ),
           ],
         ),
       ),
@@ -1021,17 +1039,14 @@ class _SetupReviewStepState extends State<SetupReviewStep> {
               ? 'No matching channels'
               : 'No channels in this filter',
         ),
-        LineupInlineLink(
-          onPressed: () => setState(() {
-            if (query.isNotEmpty) _search.clear();
-            if (filtered) {
-              _filter = SetupReviewFilter.all;
-              widget.onFilterChanged(SetupReviewFilter.all);
-            }
-            if (query.isNotEmpty) widget.onSearchChanged('');
-          }),
-          child: Text(query.isNotEmpty ? 'Clear search' : 'Show all'),
-        ),
+        if (query.isNotEmpty || _firstSetup)
+          LineupInlineLink(
+            onPressed: () => setState(() {
+              if (query.isNotEmpty) _search.clear();
+              if (query.isNotEmpty) widget.onSearchChanged('');
+            }),
+            child: Text(query.isNotEmpty ? 'Clear search' : 'Show all'),
+          ),
       ],
     ),
   );
@@ -1125,18 +1140,19 @@ class _SetupReviewStepState extends State<SetupReviewStep> {
             flex: 16,
             child: Text(_playbackLabel(entry.channel), style: metaStyle),
           ),
-          SizedBox(
-            width: changeWidth,
-            child: Text(
-              switch (entry.kind) {
-                SetupReviewKind.added => '+ Added',
-                SetupReviewKind.updated => '· Updated',
-                _ => _capitalized(entry.kind.name),
-              },
-              textAlign: TextAlign.end,
-              style: changeStyle,
+          if (_firstSetup)
+            SizedBox(
+              width: changeWidth,
+              child: Text(
+                switch (entry.kind) {
+                  SetupReviewKind.added => '+ Added',
+                  SetupReviewKind.updated => '· Updated',
+                  _ => _capitalized(entry.kind.name),
+                },
+                textAlign: TextAlign.end,
+                style: changeStyle,
+              ),
             ),
-          ),
         ],
       ),
     );

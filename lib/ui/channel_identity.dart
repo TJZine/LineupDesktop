@@ -94,9 +94,7 @@ class ChannelIdentity extends StatelessWidget {
           numberText ?? '${channel.number}',
           name.merge(numberStyle),
         );
-    return number +
-        _textWidth(context, '•', base.merge(supportStyle)) +
-        scaledSize * (hasIcon ? .75 + .9 : .5);
+    return number + scaledSize * (hasIcon ? .5 + .9 : .25);
   }
 
   @override
@@ -183,8 +181,6 @@ class ChannelIdentity extends StatelessWidget {
               SizedBox(width: width, child: number)
             else
               number,
-            SizedBox(width: gap),
-            Text('•', style: support, maxLines: 1),
             if (icon != null) ...[
               SizedBox(width: gap),
               Icon(icon, size: scaledSize * .9, color: support.color),

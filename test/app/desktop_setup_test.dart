@@ -21,6 +21,7 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:lineup_desktop/ui/lineup_canvas.dart';
 import 'package:lineup_desktop/app/channel_setup_view.dart';
 import 'package:lineup_desktop/app/channel_setup/review_step.dart';
+import 'package:lineup_desktop/app/channel_setup/configure_step.dart';
 import 'package:lineup_desktop/app/lineup_controller.dart';
 import 'package:lineup_desktop/channels/channel.dart';
 import 'package:lineup_desktop/channels/channel_builder.dart';
@@ -32,6 +33,121 @@ import '../support/ui_fixture.dart';
 import '../support/golden_test_support.dart';
 
 void main() {
+  for (final tv in [false, true]) {
+    for (final status in LibraryScanStatus.values) {
+      testWidgets(
+        'U library status $status TV=$tv preserves selection and disables unusable row',
+        (tester) async {
+          final controller = _SetupController()
+            ..ready = {
+              if (status == LibraryScanStatus.complete) 'movies',
+              'shows',
+            }
+            ..facts = {
+              'movies': LibraryScanFact(status: status),
+              'shows': const LibraryScanFact(
+                status: LibraryScanStatus.complete,
+              ),
+              'archive': const LibraryScanFact(status: LibraryScanStatus.empty),
+            }
+            ..fixtureActor.reportScan(status: status);
+          addTearDown(controller.dispose);
+          await _pump(tester, controller, isTv: tv);
+          await tester.pumpAndSettle();
+          expect(find.text('Choose libraries'), findsOneWidget);
+          final row = find.byKey(const ValueKey('library-row-movies'));
+          final checkbox = tester.widget<Checkbox>(
+            find.descendant(of: row, matching: find.byType(Checkbox)),
+          );
+          final unusable = [
+            LibraryScanStatus.empty,
+            LibraryScanStatus.unsupported,
+            LibraryScanStatus.transientFailure,
+          ].contains(status);
+          if (unusable) {
+            expect(checkbox.value, isFalse);
+            expect(checkbox.onChanged, isNull);
+            expect(tester.widget<InkWell>(row).onTap, isNull);
+          }
+          expect(controller.commitCalls, 0);
+          final scanning = status == LibraryScanStatus.scanning;
+          if (scanning) {
+            // A running scan has no committable libraries yet. The completed
+            // Shows row is unchecked while the pending Movies row stays checked.
+            final shows = find.descendant(
+              of: find.byKey(const ValueKey('library-row-shows')),
+              matching: find.byType(Checkbox),
+            );
+            expect(tester.widget<Checkbox>(shows).value, isFalse);
+            expect(checkbox.value, isTrue);
+          }
+          expect(
+            find.text(
+              unusable || scanning ? '1 of 1 selected' : '2 of 2 selected',
+            ),
+            findsOneWidget,
+          );
+          expect(find.text("Won't be used"), findsNothing);
+          if (status == LibraryScanStatus.transientFailure) {
+            expect(
+              find.byKey(const ValueKey('retry-library-movies')),
+              findsOneWidget,
+            );
+          }
+          expect(tester.takeException(), isNull);
+        },
+      );
+    }
+    testWidgets('U sources put available first and keep saved choices TV=$tv', (
+      tester,
+    ) async {
+      final controller = _SetupController();
+      addTearDown(controller.dispose);
+      await _pump(tester, controller, isTv: tv);
+      await _advanceToConfigure(tester);
+      final step = tester.widget<SetupConfigureStep>(
+        find.byType(SetupConfigureStep),
+      );
+      final sourceTiles = tester
+          .widgetList<CheckboxListTile>(find.byType(CheckboxListTile))
+          .toList();
+      final available = sourceTiles
+          .where((tile) => tile.onChanged != null)
+          .toList();
+      final disabled = sourceTiles
+          .where((tile) => tile.onChanged == null)
+          .toList();
+      expect(available, isNotEmpty);
+      expect(disabled, isNotEmpty);
+      expect(sourceTiles.take(available.length), available);
+      expect(disabled.every((tile) => tile.value == false), isTrue);
+      expect(
+        step.configuration.strategies,
+        contains(BuilderStrategy.collections),
+      );
+      expect(
+        find.text(
+          'Choose which kinds of channels Lineup builds from your libraries.',
+        ),
+        findsOneWidget,
+      );
+      expect(
+        find.text(
+          'Use one channel across libraries when they share a genre or studio.',
+        ),
+        findsNothing,
+      );
+      expect(
+        find.descendant(
+          of: find.byKey(const ValueKey('configuration-allocation-summary')),
+          matching: find.textContaining('channels from'),
+        ),
+        findsOneWidget,
+      );
+      expect(tester.takeException(), isNull);
+    });
+  }
+
   const reviewEvidence = String.fromEnvironment('REVIEW_EVIDENCE');
   for (final scale in [1.0, 1.3]) {
     testWidgets('R1 full production Review hint render at TV $scale', (
@@ -1394,7 +1510,7 @@ void main() {
         await tester.sendKeyEvent(LogicalKeyboardKey.arrowLeft);
         rowFocus.requestFocus();
         await tester.pumpAndSettle();
-        expect(ink(status), tv ? const Color(0xFF090806) : baseError);
+        expect(ink(status), baseError);
         final retry = find.byKey(const ValueKey('retry-library-archive'));
         final retryLeaf = find.descendant(
           of: retry,
@@ -1407,92 +1523,6 @@ void main() {
         FocusManager.instance.primaryFocus?.unfocus();
         await tester.pumpAndSettle();
         expect(ink(status), baseError);
-      } finally {
-        await tester.pumpWidget(const SizedBox.shrink());
-        controller.dispose();
-        tester.view.reset();
-        debugDefaultTargetPlatformOverride = null;
-      }
-    });
-    testWidgets('Removed review leaf keeps focused contrast: $platform', (
-      tester,
-    ) async {
-      debugDefaultTargetPlatformOverride = platform;
-      final tv = platform == TargetPlatform.android;
-      final controller = _SetupController(channels: [_missingChannel]);
-      try {
-        await tester.runAsync(loadPinnedTestFonts);
-        await _pump(tester, controller, isTv: tv);
-        tester.view.physicalSize = const Size(1920, 1080);
-        await tester.pumpAndSettle();
-        await _advanceToReview(tester);
-        final search = find.byKey(
-          const ValueKey('channel-setup-review-search'),
-        );
-        await tester.ensureVisible(search);
-        await tester.enterText(search, 'Retired collection');
-        await tester.pumpAndSettle();
-        final choice = find.byKey(
-          const ValueKey('missing-source-choice-missing'),
-        );
-        await tester.scrollUntilVisible(
-          choice,
-          200,
-          scrollable: find
-              .descendant(
-                of: find.byKey(const ValueKey('channel-setup-review-roster')),
-                matching: find.byType(Scrollable),
-              )
-              .first,
-        );
-        // Removal interaction has its own coverage below. Initialize this paint
-        // case through the existing choice callback, without depending on its
-        // position in the separate missing-source scroll region.
-        tester.widget<LineupSegmentedControl<bool>>(choice).onSelectionChanged!(
-          {true},
-        );
-        await tester.pumpAndSettle();
-        final row = find.byKey(const ValueKey('review-channel-missing'));
-        await tester.scrollUntilVisible(
-          row,
-          200,
-          scrollable: find
-              .descendant(
-                of: find.byKey(const ValueKey('channel-setup-review-roster')),
-                matching: find.byType(Scrollable),
-              )
-              .first,
-        );
-        await tester.pumpAndSettle();
-        final removed = find.descendant(
-          of: row,
-          matching: find.text('Removed'),
-        );
-        final element = tester.element(removed);
-        final baseError = Theme.of(element).colorScheme.error;
-        Color? ink() => tester
-            .widget<RichText>(
-              find.descendant(of: removed, matching: find.byType(RichText)),
-            )
-            .text
-            .style
-            ?.color;
-        expect(ink(), baseError);
-        if (tv) {
-          await tester.sendKeyEvent(LogicalKeyboardKey.arrowLeft);
-          Focus.of(element).requestFocus();
-          await tester.pumpAndSettle();
-          expect(ink(), const Color(0xFF090806));
-          expect(
-            (const Color(0xFFE9DCC3).computeLuminance() + .05) /
-                (ink()!.computeLuminance() + .05),
-            greaterThan(4.5),
-          );
-        }
-        expect(tester.element(removed), same(element));
-        FocusManager.instance.primaryFocus?.unfocus();
-        await tester.pumpAndSettle();
-        expect(ink(), baseError);
       } finally {
         await tester.pumpWidget(const SizedBox.shrink());
         controller.dispose();
@@ -2327,7 +2357,7 @@ void main() {
         await _pump(tester, controller);
         await tester.tap(find.byKey(const ValueKey('scan-selected-libraries')));
         await tester.pumpAndSettle();
-        expect(find.text('Review your libraries'), findsOneWidget);
+        expect(find.text('Choose libraries'), findsOneWidget);
         expect(
           find.textContaining(
             'Reduce the collection inventory in Plex before rescanning',
@@ -2629,13 +2659,13 @@ void main() {
       expect(find.textContaining('1 of 2 libraries is ready'), findsOneWidget);
       expect(find.text('Ready · 6 items checked'), findsOneWidget);
       expect(find.text('Couldn’t scan · Try again.'), findsOneWidget);
-      expect(find.text('Retry failed scans'), findsOneWidget);
-      expect(find.text("Won't be used"), findsOneWidget);
+      expect(find.text('Retry failed scans'), findsNothing);
+      expect(find.text("Won't be used"), findsNothing);
       await tester.tap(find.byKey(const ValueKey('retry-library-archive')));
       await tester.pumpAndSettle();
       expect(controller.rowRetryIds, {'archive'});
       expect(controller.rowRetryInventory, {'movies', 'archive'});
-      expect(find.text('2 of 3 selected'), findsOneWidget);
+      expect(find.text('1 of 2 selected'), findsOneWidget);
       expect(
         find.byKey(const ValueKey('continue-ready-libraries')),
         findsOneWidget,
@@ -2655,6 +2685,71 @@ void main() {
       expect(find.byKey(const ValueKey('configure-section-0')), findsOneWidget);
     },
   );
+
+  testWidgets(
+    'Select all toggles only usable libraries and scan keeps hidden selections',
+    (tester) async {
+      final controller = _SetupController(mixedScan: true);
+      addTearDown(controller.dispose);
+      await _pump(tester, controller);
+      await tester.tap(find.byKey(const ValueKey('scan-selected-libraries')));
+      await tester.pumpAndSettle();
+
+      final check = find.byKey(const ValueKey('select-all-libraries'));
+      expect(find.text('2 of 2 selected'), findsOneWidget);
+      expect(tester.widget<Checkbox>(check).value, isTrue);
+      await tester.tap(find.text('Select all'));
+      await tester.pumpAndSettle();
+      expect(find.text('0 of 2 selected'), findsOneWidget);
+      expect(
+        find.text('Choose the libraries to build channels from.'),
+        findsOneWidget,
+      );
+      expect(tester.widget<Checkbox>(check).value, isFalse);
+      expect(
+        find.byKey(const ValueKey('continue-ready-libraries')),
+        findsNothing,
+      );
+
+      await tester.tap(find.text('Select all'));
+      await tester.pumpAndSettle();
+      expect(find.text('2 of 2 selected'), findsOneWidget);
+      expect(tester.widget<Checkbox>(check).value, isTrue);
+      expect(
+        find.text(
+          '1 of 3 libraries is ready. Continuing builds from Movies only.',
+        ),
+        findsOneWidget,
+      );
+      await tester.tap(find.byKey(const ValueKey('retry-library-archive')));
+      await tester.pumpAndSettle();
+      expect(controller.rowRetryInventory, {'movies', 'shows', 'archive'});
+      await tester.tap(find.byKey(const ValueKey('continue-ready-libraries')));
+      await tester.pumpAndSettle();
+      expect(controller.committedIds, {'movies'});
+    },
+  );
+
+  testWidgets('failed libraries retain their recovery summary', (tester) async {
+    final controller = _SetupController()
+      ..retry = {for (final library in _libraries) library.id}
+      ..facts = {
+        for (final library in _libraries)
+          library.id: const LibraryScanFact(
+            status: LibraryScanStatus.transientFailure,
+          ),
+      }
+      ..fixtureActor.reportScan(status: LibraryScanStatus.transientFailure);
+    addTearDown(controller.dispose);
+    await _pump(tester, controller);
+    expect(find.text('0 of 0 selected'), findsOneWidget);
+    expect(
+      find.text(
+        'No libraries are ready. Retry failed scans or change your selection.',
+      ),
+      findsOneWidget,
+    );
+  });
 
   for (final required in [false, true]) {
     testWidgets(
@@ -2707,14 +2802,18 @@ void main() {
         expect(find.text('Scan again'), findsOneWidget);
         if (required) {
           expect(
-            find.text(
-              'No libraries are ready. Retry failed scans or change your selection.',
-            ),
+            find.text('Choose the libraries to build channels from.'),
             findsOneWidget,
           );
-          expect(find.text("Won't be used"), findsOneWidget);
+          expect(find.text("Won't be used"), findsNothing);
         }
-        await tester.tap(find.byKey(const ValueKey('retry-failed-libraries')));
+        await tester.tap(
+          find.byKey(
+            ValueKey(
+              required ? 'retry-failed-libraries' : 'retry-library-movies',
+            ),
+          ),
+        );
         await tester.pumpAndSettle();
         expect(c.footerRetries, 1);
         expect(c.committedIds, {'movies'});
@@ -2786,7 +2885,7 @@ void main() {
       find.byKey(const ValueKey('continue-ready-libraries')),
       findsNothing,
     );
-    expect(find.text('3 of 3 selected'), findsOneWidget);
+    expect(find.text('2 of 2 selected'), findsOneWidget);
     expect(find.textContaining('Cancelled', skipOffstage: false), findsWidgets);
     expect(
       find.byKey(const ValueKey('scan-selected-libraries')),
@@ -3833,24 +3932,22 @@ void main() {
     },
   );
   testWidgets(
-    'Remove updates final count, removed summary, and channel table label',
+    'Review tabs default to Added, scope search and update after removal',
     (tester) async {
-      await tester.runAsync(loadPinnedTestFonts);
       final controller = _SetupController(channels: [_missingChannel]);
       addTearDown(controller.dispose);
       await _pump(tester, controller);
-      tester.view.physicalSize = const Size(1920, 1080);
-      await tester.pumpAndSettle();
       await _advanceToReview(tester);
-      expect(find.text('7 final'), findsOneWidget);
-      expect(find.text('0 Removed'), findsOneWidget);
-      final search = find.byKey(const ValueKey('channel-setup-review-search'));
-      await tester.ensureVisible(search);
-      await tester.enterText(search, 'Retired collection');
-      await tester.pumpAndSettle();
-      final row = find.byKey(const ValueKey('review-channel-missing'));
-      await tester.scrollUntilVisible(
-        row,
+      expect(find.text('7 after'), findsOneWidget);
+      expect(find.text('0 removed'), findsOneWidget);
+      expect(find.text('Show all'), findsNothing);
+      expect(find.text('Change'), findsNothing);
+      final reviewStep = tester.widget<SetupReviewStep>(
+        find.byType(SetupReviewStep),
+      );
+      expect(reviewStep.review.counts.added, 6);
+      Future<void> reveal(Finder target) => tester.scrollUntilVisible(
+        target,
         200,
         scrollable: find
             .descendant(
@@ -3859,36 +3956,37 @@ void main() {
             )
             .first,
       );
+      final search = find.byKey(const ValueKey('channel-setup-review-search'));
+      await reveal(search);
+      await tester.enterText(search, 'Retired collection');
+      await tester.pumpAndSettle();
+      expect(find.text('No matching channels'), findsOneWidget);
+      await tester.tap(find.text('Unchanged 1'));
+      await tester.pumpAndSettle();
+      final row = find.byKey(const ValueKey('review-channel-missing'));
+      await reveal(row);
+      expect(row, findsOneWidget);
       expect(
         find.descendant(of: row, matching: find.text('Unchanged')),
-        findsOneWidget,
+        findsNothing,
       );
       final choice = find.byKey(
         const ValueKey('missing-source-choice-missing'),
       );
-      await tester.ensureVisible(choice);
+      await reveal(choice);
       await tester.tap(
         find.descendant(of: choice, matching: find.text('Remove')),
       );
       await tester.pumpAndSettle();
-      expect(find.text('6 final'), findsOneWidget);
-      expect(find.text('1 Removed'), findsOneWidget);
-      await tester.scrollUntilVisible(
-        row,
-        200,
-        scrollable: find
-            .descendant(
-              of: find.byKey(const ValueKey('channel-setup-review-roster')),
-              matching: find.byType(Scrollable),
-            )
-            .first,
-      );
+      expect(find.text('6 after'), findsOneWidget);
+      expect(find.text('1 removed'), findsOneWidget);
+      await reveal(search);
+      await tester.tap(find.text('Removed 1'));
+      await tester.pumpAndSettle();
+      await reveal(row);
+      expect(row, findsOneWidget);
       expect(
         find.descendant(of: row, matching: find.text('Removed')),
-        findsOneWidget,
-      );
-      expect(
-        find.descendant(of: row, matching: find.text('Unchanged')),
         findsNothing,
       );
     },
@@ -3908,7 +4006,28 @@ Container _cardPaint(WidgetTester tester, Finder card) =>
 
 void _expectLibraryEntryPaint(WidgetTester tester) {
   final row = find.byKey(const ValueKey('library-row-movies'));
-  final node = tester.widget<InkWell>(row).focusNode!;
+  final rowNode = tester.widget<InkWell>(row).focusNode;
+  if (rowNode == null) {
+    final primary = find.byWidgetPredicate(
+      (widget) =>
+          widget is FilledButton &&
+          widget.focusNode?.debugLabel == 'Setup libraries entry',
+    );
+    expect(primary, findsOneWidget);
+    final node = tester.widget<FilledButton>(primary).focusNode!;
+    expect(node.hasPrimaryFocus, isTrue);
+    expect(
+      tester
+          .getRect(primary)
+          .overlaps(
+            Offset.zero &
+                tester.view.physicalSize / tester.view.devicePixelRatio,
+          ),
+      isTrue,
+    );
+    return;
+  }
+  final node = rowNode;
   expect(node.hasPrimaryFocus, isTrue);
   expect(node.canRequestFocus, isTrue);
   expect(node.context?.mounted, isTrue);

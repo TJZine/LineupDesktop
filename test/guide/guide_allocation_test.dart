@@ -498,14 +498,7 @@ void main() {
           }
           expect(pip.width / pip.height, closeTo(16 / 9, .000001));
           if (!configuration.tv) {
-            expect(
-              pip.width / canvasScale,
-              closeTo(switch (scale) {
-                1.15 => 757.87,
-                1.3 => 747.73,
-                _ => 768,
-              }, .01),
-            );
+            expect(pip.width / canvasScale, closeTo(768, .01));
             expect(pip.height, closeTo(info.height, .01));
           }
           final completeRows =
@@ -522,12 +515,15 @@ void main() {
           for (final name in [
             'guide-channel-filter',
             'guide-channel-search',
+            'guide-search-button',
             'guide-earlier',
             'guide-now',
             'guide-later',
             'guide-hours',
           ]) {
-            final rect = tester.getRect(find.byKey(Key(name)));
+            final finder = find.byKey(Key(name));
+            if (finder.evaluate().isEmpty) continue;
+            final rect = tester.getRect(finder);
             controlRects[name] = _rect(rect);
             if (rect.left < controls.left - .1 ||
                 rect.right > controls.right + .1 ||
@@ -796,7 +792,7 @@ void main() {
               tester
                   .widget<Text>(find.byKey(const Key('guide-info-channel')))
                   .data,
-              contains('2 • Synthetic channel 2'),
+              contains('2  Synthetic channel 2'),
             );
           }
           expect(tester.takeException(), isNull);

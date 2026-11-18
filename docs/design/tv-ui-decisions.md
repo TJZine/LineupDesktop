@@ -53,10 +53,31 @@ and Studio Move dialog footer keep their prior sizes where enlargement moves
 adjacent controls or schedule rows.
 The Package G evidence records the applied and measured held roles by surface.
 
-Use • for channel number and name, and · between metadata items. Use the
+UI audit 2 decision, 2026-11-16: omit the channel-identity bullet; keep number,
+kind icon, name and optional library tag in order. Plain-text number/name
+identities use two spaces. Keep · between metadata items. Use the
 bundled [Arimo Regular](../licenses-and-rebuilding.md#arimo-wordmark) for LINEUP.
 On an active Player recovery slate, closing the Lineup menu returns remote
 focus to the recovery action that opened it.
+
+UI audit 2 decision, 2026-11-16: Player follows Package P's refined type and component
+targets, inset timing/progress row, five 84-high Mini Guide rows with inset radius 6 and
+inline Watching/library, no Mini Guide or track-picker hints, English language names and
+duplicate-only subtitle support, and enlarged number entry with current program/time
+left. The standard TV focus fill and overlay setting/opacity remain. Physical Fire TV
+must confirm crisp picker edges.
+
+Use a shared right-aligned number column with a 46 reference floor, scaled by platform
+text settings and expanded only to the actual largest rendered number extent plus one
+pixel when needed; keep type, style and icon/name gaps unchanged (UI audit 2 decision,
+2026-11-16; Astra P-D3 measured-fit interpretation, 2026-11-17).
+
+At short window heights, expanded Now Playing reserves the actual resting channel badge
+bottom plus at least 8 logical pixels above the header and full Close hit region, using
+the same badge text/scaler/padding/safe-inset metrics. Keep bottom anchoring, fixed
+controls and timing/progress; reduce only the existing scrolling details allocation when
+needed. The constraint is inert where the approved content already fits. UI audit 2
+decision, 2026-11-16; Astra P-D4 adaptive-clearance decision, 2026-11-17.
 
 ## Maintainer decisions (October 26, 2026)
 
@@ -163,7 +184,8 @@ focus to the recovery action that opened it.
 - The support line (source or ▸ Watching) is reserved first.
 - The name gets at most **2** whole-word lines, with an ellipsis at the end of line 2.
 - A single token wider than the line breaks at character boundaries. This is unavoidable, and it is the only case where a mid-word break happens.
-- The full name stays available in the inspected-identity eyebrow (`123 • Name`) when the row is focused, and in semantics.
+- The full name stays available in the inspected-identity eyebrow (`123  Name`) when the
+  row is focused, and in semantics (UI audit 2 decision, 2026-11-16).
 - No marquee and no auto-scroll. Arbitrary input is not promised to fit.
 - Fix included: today the support label is dropped whenever the *unbounded* name is taller than the row. The specimen keeps the support line and clamps the name instead.
 
@@ -181,8 +203,9 @@ Renders: `short-current/` and `short-A/` (15–45-minute programs); comparisons 
 
 **November Guide refinement (UX assessment decision, 2026-11-13/14).**
 The channel rail returns surplus enlarged-text width to the timeline while
-preserving the real channel number, separator, icon, and duplicate-name tag
-allocation. At 1920×1080 with up to two-digit numbers, the matched 1.3-scale
+preserving the real channel number, kind icon, and duplicate-name tag
+allocation; the channel-identity bullet is removed (UI audit 2 decision, 2026-11-16). At
+1920×1080 with up to two-digit numbers, the matched 1.3-scale
 sample narrows from 408 to about 350 canvas pixels. The normal-scale rail is
 already narrower than the cap. The information band, picture size, row geometry,
 series-title order, and right-aligned episode codes retain their approved bounds.
@@ -198,6 +221,24 @@ filter, wrapping to the beginning. From the channel filter, Up reaches the
 picture's recovery actions when available. Returning from a failed, ended
 program restores the current program when the failed occurrence is still
 focused.
+
+UI audit 2 decision, 2026-11-16. The current Guide merges its controls into the 72 px
+top bar when they fit and retains the 80 px header plus wrapping controls otherwise. TV
+row count is clamp(floor(rowArea / minimumRowHeight), 5, 6), preserving the existing TV
+picture/information allocation. The G reference has six rows at 1.0 and 1.3 and five at
+1.69. Current cells omit the airing dot, put episode codes 8 px after the title, use a
+19 px second line, and mask both now-lines with effective opaque text backings. A
+centered h:mm pill suppresses overlapping half-hour labels. These current rules
+supersede the earlier fixed five-row and right-aligned-code geometry while historical
+evidence retains its original claims.
+
+G-D1, Astra adjudication for UI audit 2 decision, 2026-11-16: in merged TV mode, Up from
+the channel filter enters visible unavailable-picture Retry, or its existing Next
+channel action when Retry is absent. Recovery Left/Right moves between the actions, Up
+returns to the filter and Down returns to the remembered grid selection. This deliberate
+wrap shortcut preserves the old filter-Up access without changing first-row Up to the
+nearest toolbar control or bar Down to the grid. Fallback, desktop, open menus and text
+editing retain their prior ownership.
 
 **What changed in the earlier number-column comparison**
 - Every time slot narrows by the same small fraction.
@@ -391,7 +432,8 @@ measures its choices, heading and Close button, up to 720 canvas pixels.
 
 UX assessment decision, 2026-11-13/14 (N9, N10). A sole reachable server skips
 the picker on unresolved first run. When the picker opens, a failed probe
-shows one “Unreachable” status with “Retry” on its server row. Contextual
+shows one alert-colored “Unreachable” status directly before “Retry” on
+its server row (UI audit 2 decision, 2026-11-16). Contextual
 Back from the first Libraries step goes to Profiles or Plex sign-in according
 to where setup began. Back during a running library scan still cancels that
 scan first. After the first Libraries step, setup uses its usual Back order.
@@ -408,19 +450,43 @@ approved the TV, Movie and Video library icons. Measure the name column
 after that prefix. Guide and Mini Guide can use a spare line for the library
 tag, and support lines start at the name.
 
+UI audit 2 decision, 2026-11-16. Unusable libraries and empty source kinds
+display unchecked, muted and disabled without changing their underlying saved
+choices. Available source kinds precede empty kinds in the existing relative
+order. Updating Review shows nonempty Added, Removed, Updated and Unchanged
+tabs in that order, scopes search to the selected tab, and omits its Change
+column and separate roster count. Consent, missing-source choices and roster/
+footer remote navigation remain.
+
 ### Manage channels and Studio
 
 UX assessment decision, 2026-11-13/14 (Q5, N17, N18, D3, D4, D9, D12).
 Select on a Manage channels row opens Studio. Right then Select on the ellipsis,
 or holding Select on the row, opens the row menu with Watch focused. Back closes
-it and restores row focus. The remote Menu button opens the Lineup menu. Use a
-one-line Source and Custom tag, with roughly nine directory rows at 1080p and
-1.3 text scale. Add a custom channel is primary and Update lineup… secondary
+it and restores row focus. The remote Menu button opens the Lineup menu. UI audit 2
+decision, 2026-11-16. Channel order keeps a one-line Source;
+Channel cells show the name, applicable plain library label, outlined Custom
+tag and filled accent favourite star without increasing the existing row
+height. Long names ellipsize within that row capacity; the roughly nine-row target at
+1080p and 1.3 remains. Grouped by source is an
+optional session view: Custom first/open, remaining source groups collapsed
+in lineup source order. Select toggles a header, Up/Down travels headers and
+rows, and rows show current program/time left instead of Source. Existing
+recovery text preserves its state-dependent height. Add a custom channel is primary and Update lineup… secondary
 for populated lineups. When empty, Generate lineup… is primary and Add a
 custom channel is secondary.
 
 New custom drafts begin with focus on the Programming source choice. Studio
 suggests a source name until the user edits it.
+
+UI audit 2 decision, 2026-11-16. Studio shows one outlined Draft, Unsaved changes
+or Saved tag beside the channel name. Filter values apply as they are chosen and
+stay when the picker closes; an open picker never blocks Save or Tune in. The
+schedule preview starts with the ON NOW row and shows the detail block only for a
+later program the user selects. Its list scrolls inside a bounded panel whose
+footer stays visible; when too little height remains below the fields, the panel
+takes one viewport height and the page scrolls to it. Program rows show small
+artwork with a neutral placeholder.
 
 ## 5. Review Channels: getting between the roster and the footer
 

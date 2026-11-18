@@ -91,12 +91,13 @@ A source that supplies only a count is labeled conservatively, such as
 
 The following decisions are fixed:
 
-- Use recognizable language self-names such as `Español`, `Français`, and
-  `Deutsch`. The approved October 7 polish plan's P3 supersedes the original
-  always-regional primary label: show a supplied regional qualifier in primary
-  text only when it distinguishes same-language tracks of the same type with
-  differing supplied regions. Otherwise retain the region as a secondary fact
-  in the drawer. Compact OSD labels use the same policy.
+- Use English language names from `language_code.englishName`, such as `Spanish`,
+  `French`, `German` and `Japanese` (UI audit 2 decision, 2026-11-16; English-name
+  decision confirmed 2026-11-17). Show a supplied regional qualifier in primary text
+  only when it distinguishes same-language tracks of the same type with differing
+  supplied regions. Otherwise retain the region in complete tooltip/semantic facts;
+  subtitle picker support appears only when equal first lines require it. Compact OSD
+  labels use the same primary-label policy.
 - Language leads when present. A meaningful native title is an editorial
   qualifier; it does not replace language.
 - Explicit accessibility and purpose facts outrank codec details.
@@ -520,7 +521,7 @@ authorities, or command identities.
 - If all human-facing facts are absent, use `Audio track N` or
   `Subtitle track N`.
 
-### Language self-names
+### English language names
 
 The implementation must resolve the actual code shapes observed at the evidence
 gate, including relevant ISO 639-1, ISO 639-2 terminology/bibliographic aliases,
@@ -531,7 +532,7 @@ Before adding a package, compare candidate data sources against the captured cod
 matrix. A candidate must allow Lineup's resolver to:
 
 - be pure Dart or Flutter and work on Windows and macOS;
-- supply self-names, not only English exonyms;
+- supply English language names from the existing offline language-code data (UI audit 2 decision, 2026-11-16);
 - cover the observed two-letter, three-letter, and regional forms or permit a
   small explicit alias layer;
 - have an acceptable license, active maintenance, bounded transitive cost, and

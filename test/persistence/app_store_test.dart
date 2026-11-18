@@ -224,6 +224,7 @@ void main() {
       final expected = Map<String, Object?>.from(old)
         ..['settings'] = {
           ...old['settings'] as Map,
+          'textSize': 'standard',
           'guideShowChannelSources': false,
           'overlayTransparency': 'standard',
           'matchDisplayHdr': true,
@@ -287,6 +288,7 @@ void main() {
       final expected = Map<String, Object?>.from(old)
         ..['settings'] = {
           ...old['settings'] as Map,
+          'textSize': 'standard',
           'overlayTransparency': 'standard',
           'matchDisplayHdr': true,
           'subtitleStyle': const LineupSettings().subtitleStyle.toJson(),

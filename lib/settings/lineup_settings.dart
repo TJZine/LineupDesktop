@@ -10,6 +10,16 @@ enum OverlayTransparency {
   final String label;
 }
 
+enum LineupTextSize {
+  standard('Standard', 1.0),
+  large('Large', 1.15),
+  larger('Larger', 1.3);
+
+  const LineupTextSize(this.label, this.multiplier);
+  final String label;
+  final double multiplier;
+}
+
 enum GuideInfoBackgroundMode { bleed, themeDefault, artwork }
 
 enum LineupThemeName {
@@ -39,6 +49,7 @@ class LineupSettings {
     this.matchDisplayHdr = true,
     this.nowWatchingBanner = true,
     this.osdAutoHideSeconds = 4,
+    this.textSize = LineupTextSize.standard,
     this.reduceMotion = false,
     this.largeFocusIndicators = false,
     this.profilePickerOnStartup = false,
@@ -56,6 +67,7 @@ class LineupSettings {
   final bool matchDisplayHdr;
   final bool nowWatchingBanner;
   final int osdAutoHideSeconds;
+  final LineupTextSize textSize;
   final bool reduceMotion;
   final bool largeFocusIndicators;
   final bool profilePickerOnStartup;
@@ -73,6 +85,7 @@ class LineupSettings {
     bool? matchDisplayHdr,
     bool? nowWatchingBanner,
     int? osdAutoHideSeconds,
+    LineupTextSize? textSize,
     bool? reduceMotion,
     bool? largeFocusIndicators,
     bool? profilePickerOnStartup,
@@ -91,6 +104,7 @@ class LineupSettings {
     matchDisplayHdr: matchDisplayHdr ?? this.matchDisplayHdr,
     nowWatchingBanner: nowWatchingBanner ?? this.nowWatchingBanner,
     osdAutoHideSeconds: osdAutoHideSeconds ?? this.osdAutoHideSeconds,
+    textSize: textSize ?? this.textSize,
     reduceMotion: reduceMotion ?? this.reduceMotion,
     largeFocusIndicators: largeFocusIndicators ?? this.largeFocusIndicators,
     profilePickerOnStartup:
@@ -111,6 +125,7 @@ class LineupSettings {
     'nowWatchingBanner': nowWatchingBanner,
     'osdAutoHideSeconds': osdAutoHideSeconds,
     'audioSetupComplete': true,
+    'textSize': textSize.name,
     'reduceMotion': reduceMotion,
     'largeFocusIndicators': largeFocusIndicators,
     'profilePickerOnStartup': profilePickerOnStartup,
@@ -142,6 +157,7 @@ class LineupSettings {
       'nowWatchingBanner',
       'osdAutoHideSeconds',
       'audioSetupComplete',
+      'textSize',
       'reduceMotion',
       'largeFocusIndicators',
       'profilePickerOnStartup',
@@ -161,6 +177,7 @@ class LineupSettings {
       'matchDisplayHdr',
       'guideShowChannelSources',
       'subtitleStyle',
+      'textSize',
       ...retiredFields,
     });
     if (!keys.containsAll(requiredFields) ||
@@ -256,6 +273,11 @@ class LineupSettings {
         'osdAutoHideSeconds',
         osdAutoHideSecondsOptions,
       ),
+      textSize:
+          LineupTextSize.values
+              .where((size) => size.name == json['textSize'])
+              .firstOrNull ??
+          LineupTextSize.standard,
       reduceMotion: boolean('reduceMotion'),
       largeFocusIndicators: boolean('largeFocusIndicators'),
       profilePickerOnStartup: boolean('profilePickerOnStartup'),
