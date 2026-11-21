@@ -8926,22 +8926,22 @@ void main() {
       fixture.lineup.notifyListeners();
       expect(await fixture.player.tune(original.id), isTrue);
       fixture.player.showMiniGuide();
-      for (final (size, scale) in const [
-        (Size(1920, 1080), 1.0),
-        (Size(1920, 1080), 1.3),
-        (Size(1280, 720), 2.0),
+      for (final (size, scale, tv, columnWidth) in const [
+        (Size(1920, 1080), 1.0, true, 365.0),
+        (Size(1920, 1080), 1.3, true, 365.0),
+        (Size(1280, 720), 2.0, false, 250.0),
       ]) {
         tester.view.physicalSize = size;
         await tester.pumpWidget(
           MaterialApp(
             theme: LineupTheme.forName(
               LineupThemeName.emberSteel,
-              formFactor: tvProfile.formFactor,
+              formFactor: profileFor(tv).formFactor,
             ),
             builder: (context, child) => MediaQuery(
               data: MediaQuery.of(context)
                   .copyWith(textScaler: TextScaler.linear(scale)),
-              child: _playerTvCanvasBuilder(context, child),
+              child: _playerCanvasBuilderFor(tv)(context, child),
             ),
             home: PlayerView(controller: fixture.player, openGuide: () {}),
           ),
@@ -8975,7 +8975,7 @@ void main() {
           matching: find.byIcon(Icons.tv_outlined),
         );
         final ticker = find.byKey(const Key('mini-guide-channel-channel'));
-        final name = size.width == 1920
+        final name = tv
             ? ticker
             : find.descendant(
                 of: row,
@@ -8992,14 +8992,19 @@ void main() {
           matching: find.text('Watching'),
         );
         expect(watching, findsOneWidget);
+        final channelColumn = find
+            .ancestor(of: watching, matching: find.byType(Row))
+            .first;
+        expect(tester.getSize(channelColumn).width, columnWidth);
+        final canvasScale = LineupCanvas.scaleOf(tester.element(row));
         final statusRect = _drawnRect(tester, watching);
         expect(statusRect.left, greaterThan(nameRect.right));
         expect(
           statusRect.center.dy,
-          closeTo(nameRect.center.dy, 2 * size.width / 1920),
+          closeTo(nameRect.center.dy, 2 * canvasScale),
         );
-        expect(nameRect.width, greaterThan(18 * scale * size.width / 1920));
-        expect(statusRect.width, greaterThan(18 * scale * size.width / 1920));
+        expect(nameRect.width, greaterThan(18 * scale * canvasScale));
+        expect(statusRect.width, greaterThan(18 * scale * canvasScale));
         expect(tester.takeException(), isNull);
       }
       await tester.pumpWidget(const SizedBox.shrink());
