@@ -151,6 +151,17 @@ class _ChannelAirCheckState extends State<ChannelAirCheck> {
           outer.position.maxScrollExtent,
         ),
       );
+      final backToNow = fromRemote && _backToNowFocus.parent != null
+          ? _backToNowFocus.context?.findRenderObject()
+          : null;
+      if (backToNow != null) {
+        _backToNowFocus.requestFocus();
+        _scheduleScroll.position.ensureVisible(
+          backToNow,
+          alignmentPolicy: ScrollPositionAlignmentPolicy.keepVisibleAtEnd,
+        );
+        return;
+      }
       final selection = _selectionAnchor.currentContext?.findRenderObject();
       final inner = _scheduleScroll.position.context.storageContext
           .findRenderObject();
@@ -167,9 +178,6 @@ class _ChannelAirCheckState extends State<ChannelAirCheck> {
         _scheduleScroll.jumpTo(
           target.clamp(0.0, _scheduleScroll.position.maxScrollExtent),
         );
-      }
-      if (fromRemote && _backToNowFocus.parent != null) {
-        _backToNowFocus.requestFocus();
       }
     });
   }

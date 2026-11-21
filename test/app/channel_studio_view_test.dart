@@ -5992,11 +5992,19 @@ void main() {
         ..physicalSize = const Size(1920, 1080)
         ..devicePixelRatio = 1;
       addTearDown(tester.view.reset);
+      final genres = [
+        for (var i = 0; i < 160; i++) 'Selected library genre ${i + 1}',
+      ];
+      const programCount = 18;
       final media = [
-        for (var i = 0; i < 18; i++)
+        for (var i = 0; i < programCount; i++)
           _media(
             'remote-$i',
-            title: 'Program $i',
+            title: 'Program ${i.toString().padLeft(2, '0')}',
+            libraryId: 'movies',
+            genres: [
+              for (var j = i; j < genres.length; j += programCount) genres[j],
+            ],
             duration: const Duration(minutes: 15),
           ),
       ];
@@ -6004,10 +6012,25 @@ void main() {
         id: 'remote-schedule',
         number: 4,
         name: 'Remote schedule',
-        source: ManualSource(media.map(channelItemFor).toList()),
+        source: LibrarySource(
+          libraryId: 'movies',
+          libraryType: PlexLibraryType.movie,
+          filters: {LibraryFilter.genre: genres},
+        ),
       );
       final controller = _RecordingSaveController(
-        scenario: LineupScenario(channels: [channel], availableMedia: media),
+        scenario: LineupScenario(
+          channels: [channel],
+          libraries: const [
+            PlexLibrary(
+              id: 'movies',
+              title: 'Movies',
+              type: PlexLibraryType.movie,
+            ),
+          ],
+          selectedLibraryIds: const {'movies'},
+          availableMedia: media,
+        ),
       );
       addTearDown(controller.dispose);
       await tester.pumpWidget(
@@ -6055,8 +6078,14 @@ void main() {
         find.descendant(of: detail, matching: find.text('Program 12')),
         findsOneWidget,
       );
+      expect(
+        tester.getSize(detail).height,
+        greaterThan(tester.getSize(schedule).height),
+      );
       expect(find.text('Read more'), findsNothing);
-      expect(find.text('Back to now').hitTestable(), findsOneWidget);
+      final backToNow = find.text('Back to now');
+      expect(backToNow.hitTestable(), findsOneWidget);
+      expect(Focus.of(tester.element(backToNow)).hasPrimaryFocus, isTrue);
       final inspectedFocus = expectVisibleScheduleFocus();
       await _studioKey(tester, LogicalKeyboardKey.arrowDown);
       expect(expectVisibleScheduleFocus(), isNot(same(inspectedFocus)));
