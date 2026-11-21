@@ -1354,6 +1354,63 @@ void main() {
     expect(find.text('Review channels'), findsWidgets);
   });
 
+  testWidgets(
+    'Back to review restores the tab and search after a failed save',
+    (tester) async {
+      final controller = _SetupController(
+        channels: [_missingChannel],
+        failApply: true,
+      );
+      addTearDown(controller.dispose);
+      await _pump(tester, controller);
+      await _advanceToReview(tester);
+
+      Future<void> reveal(Finder target) => tester.scrollUntilVisible(
+        target,
+        200,
+        scrollable: find
+            .descendant(
+              of: find.byKey(const ValueKey('channel-setup-review-roster')),
+              matching: find.byType(Scrollable),
+            )
+            .first,
+      );
+      final search = find.byKey(const ValueKey('channel-setup-review-search'));
+      await reveal(search);
+      await tester.enterText(search, '90');
+      await tester.pumpAndSettle();
+      expect(find.text('No matching channels'), findsOneWidget);
+      final unchanged = find.text('Unchanged 1');
+      await tester.tap(unchanged);
+      await tester.pumpAndSettle();
+      final row = find.byKey(const ValueKey('review-channel-missing'));
+      await reveal(row);
+      expect(row, findsOneWidget);
+
+      await tester.tap(find.byKey(const ValueKey('apply-reviewed-lineup')));
+      await tester.pumpAndSettle();
+      expect(find.text('We couldn’t update your lineup'), findsOneWidget);
+      expect(controller.applyCalls, 1);
+      await tester.tap(find.text('Back to review'));
+      await tester.pumpAndSettle();
+      await reveal(search);
+
+      final tab = find
+          .ancestor(
+            of: unchanged,
+            matching: find.byWidgetPredicate(
+              (widget) =>
+                  widget is Semantics && widget.properties.selected != null,
+            ),
+          )
+          .first;
+      expect(tester.widget<Semantics>(tab).properties.selected, isTrue);
+      expect(tester.widget<TextField>(search).controller!.text, '90');
+      await reveal(row);
+      expect(row, findsOneWidget);
+    },
+  );
+
   for (final tv in [false, true]) {
     testWidgets(
       'Library explicit footer action labels follow focus ink TV=$tv',
@@ -2366,6 +2423,21 @@ void main() {
         );
         expect(find.textContaining('100000'), findsOneWidget);
         expect(find.text('Rescan after Plex changes'), findsWidgets);
+        final movies = find.byKey(const ValueKey('library-row-movies'));
+        final movieCheckbox = find.descendant(
+          of: movies,
+          matching: find.byType(Checkbox),
+        );
+        expect(tester.widget<Checkbox>(movieCheckbox).value, isFalse);
+        expect(tester.widget<Checkbox>(movieCheckbox).onChanged, isNull);
+        expect(
+          find.descendant(of: movies, matching: find.text('6 items checked')),
+          findsOneWidget,
+        );
+        expect(
+          find.descendant(of: movies, matching: find.textContaining('Ready')),
+          findsNothing,
+        );
         expect(controller.channels.single.id, _missingChannel.id);
         expect(
           controller.isGeneratedSourceConfirmedGone(_missingChannel),
@@ -2385,6 +2457,17 @@ void main() {
         );
         expect(find.text('Choose channels'), findsOneWidget);
         expect(controller.channels.single.id, _missingChannel.id);
+        await tester.tap(find.text('Back to libraries'));
+        await tester.pumpAndSettle();
+        expect(
+          find.descendant(
+            of: movies,
+            matching: find.text('Ready · 6 items checked'),
+          ),
+          findsOneWidget,
+        );
+        expect(tester.widget<Checkbox>(movieCheckbox).value, isTrue);
+        expect(tester.widget<Checkbox>(movieCheckbox).onChanged, isNotNull);
       },
     );
   }
@@ -3215,8 +3298,153 @@ void main() {
         find.descendant(of: recent, matching: find.textContaining('included')),
         findsNothing,
       );
+      final summary = find.byKey(
+        const ValueKey('configuration-allocation-summary'),
+      );
+      expect(
+        find.descendant(of: summary, matching: find.text('3')),
+        findsOneWidget,
+      );
+      expect(
+        find.descendant(
+          of: summary,
+          matching: find.text('channels from 1 source'),
+        ),
+        findsOneWidget,
+      );
     },
   );
+
+  for (final deselected in [false, true]) {
+    testWidgets(
+      'Combine reaches eligible Genres after separate falls short, deselected=$deselected',
+      (tester) async {
+        final controller = _SetupController(
+          scenario: const LineupScenario(
+            selectedLibraryIds: {'movies', 'archive'},
+          ),
+          media: [
+            ..._media.where((item) => item.libraryId == 'movies').take(3),
+            ..._media.where((item) => item.libraryId == 'archive').take(3),
+          ],
+        );
+        addTearDown(controller.dispose);
+        await _pump(tester, controller);
+        await _advanceToConfigure(tester);
+
+        final sources = find.byKey(const ValueKey('configure-section-0'));
+        final rules = find.byKey(const ValueKey('configure-section-2'));
+        final minimum = find.byKey(const ValueKey('rules-minimum'));
+        final genres = find.widgetWithText(CheckboxListTile, 'Genres');
+        final empty = find.widgetWithText(CheckboxListTile, 'Studios');
+        final grouping = find.byKey(const ValueKey('source-grouping-genres'));
+        final summary = find.byKey(
+          const ValueKey('configuration-allocation-summary'),
+        );
+        final order = find.byKey(const ValueKey('source-order-genres'));
+        final review = find.byKey(const ValueKey('review-channels'));
+
+        Future<void> tap(Finder finder) async {
+          await tester.ensureVisible(finder);
+          await tester.pumpAndSettle();
+          await tester.tap(finder);
+          await tester.pumpAndSettle();
+        }
+
+        if (deselected) {
+          await tap(rules);
+          await tap(minimum);
+          await tap(find.text('1').last);
+          await tap(sources);
+          expect(tester.widget<CheckboxListTile>(genres).value, isTrue);
+          await tap(genres);
+          await tap(rules);
+          await tap(minimum);
+          await tap(find.text('5').last);
+          await tap(sources);
+        }
+
+        expect(tester.widget<CheckboxListTile>(genres).value, !deselected);
+        expect(tester.widget<CheckboxListTile>(genres).onChanged, isNotNull);
+        expect(tester.widget<CheckboxListTile>(empty).value, isFalse);
+        expect(tester.widget<CheckboxListTile>(empty).onChanged, isNull);
+        expect(
+          tester
+              .widgetList<CheckboxListTile>(find.byType(CheckboxListTile))
+              .first,
+          same(tester.widget<CheckboxListTile>(genres)),
+        );
+        expect(
+          find.descendant(of: genres, matching: find.text('0 channels')),
+          findsOneWidget,
+        );
+        expect(
+          find.descendant(
+            of: empty,
+            matching: find.text('None in your libraries'),
+          ),
+          findsOneWidget,
+        );
+        expect(
+          find.descendant(of: summary, matching: find.text('0')),
+          findsOneWidget,
+        );
+        expect(
+          find.descendant(
+            of: summary,
+            matching: find.text('channels from 0 sources'),
+          ),
+          findsOneWidget,
+        );
+        expect(tester.widget<FilledButton>(review).onPressed, isNull);
+        expect(
+          tester.widget<DropdownButton<bool>>(grouping).onChanged,
+          deselected ? isNull : isNotNull,
+        );
+
+        if (deselected) {
+          await tap(genres);
+          expect(tester.widget<CheckboxListTile>(genres).value, isTrue);
+        }
+        await tap(rules);
+        expect(
+          find.descendant(
+            of: order,
+            matching: find.textContaining('Genres  Off', findRichText: true),
+          ),
+          findsOneWidget,
+        );
+        await tap(sources);
+        await tap(grouping);
+        await tap(find.text('Combine matching genres').last);
+
+        expect(
+          find.descendant(of: genres, matching: find.text('1 channel')),
+          findsOneWidget,
+        );
+        expect(
+          find.descendant(of: summary, matching: find.text('1')),
+          findsOneWidget,
+        );
+        expect(
+          find.descendant(
+            of: summary,
+            matching: find.text('channel from 1 source'),
+          ),
+          findsOneWidget,
+        );
+        expect(tester.widget<FilledButton>(review).onPressed, isNotNull);
+        await tap(rules);
+        expect(
+          find.descendant(
+            of: order,
+            matching: find.textContaining('Genres  Off', findRichText: true),
+          ),
+          findsNothing,
+        );
+      },
+    );
+  }
 
   testWidgets('stale replacement resets the contained removal confirmation', (
     tester,

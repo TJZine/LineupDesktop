@@ -1847,6 +1847,61 @@ void main() {
     expect(find.text('Yours'), findsOneWidget);
   });
 
+  testWidgets('slow relay status and Continue fit at narrow width and 2×', (
+    tester,
+  ) async {
+    tester.view
+      ..physicalSize = const Size(640, 560)
+      ..devicePixelRatio = 1;
+    addTearDown(tester.view.reset);
+    final connection = PlexConnection(
+      uri: Uri.parse('https://example.invalid'),
+      local: false,
+      relay: true,
+      latency: const Duration(milliseconds: 1200),
+    );
+    final server = PlexServer(
+      id: 'relay',
+      name: 'Synthetic server',
+      owned: true,
+      connections: [connection],
+    );
+    final controller = FixtureController(
+      scenario: LineupScenario(
+        stage: SetupStage.servers,
+        server: server,
+        connection: connection,
+        servers: [server],
+      ),
+    );
+    addTearDown(controller.dispose);
+    await show(tester, controller, textScale: 2);
+    await tester.pumpAndSettle();
+
+    final status = find.text('Relay · Limited · Very slow · 1200 ms');
+    final action = find.widgetWithText(FilledButton, 'Continue');
+    await tester.ensureVisible(action);
+    await tester.pumpAndSettle();
+    final card = find
+        .ancestor(
+          of: find.text('Yours'),
+          matching: find.byType(GestureDetector),
+        )
+        .first;
+    final cardRect = tester.getRect(card);
+    final statusRect = tester.getRect(status);
+    final actionRect = tester.getRect(action);
+    expect(statusRect.left, greaterThanOrEqualTo(cardRect.left));
+    expect(statusRect.right, lessThan(actionRect.left));
+    expect(actionRect.right, lessThanOrEqualTo(cardRect.right));
+    expect(action.hitTestable(), findsOneWidget);
+    expect(tester.takeException(), isNull);
+
+    await tester.tap(action);
+    await tester.pump();
+    expect(controller.stage, SetupStage.channelSetup);
+  });
+
   for (final tv in [false, true]) {
     for (final state in ['fresh', 'near expiry', 'expired', 'failed']) {
       testWidgets('U sign-in paired panels and actions $state TV=$tv', (
@@ -1856,14 +1911,16 @@ void main() {
           ..physicalSize = tv ? const Size(1920, 1080) : const Size(1280, 720)
           ..devicePixelRatio = 1;
         addTearDown(tester.view.reset);
+        final now = DateTime.utc(2026, 10, 15, 12);
         final controller = FixtureController(
+          clock: () => now,
           scenario: LineupScenario(
             stage: SetupStage.linking,
             settings: const LineupSettings(reduceMotion: true),
             activePin: PlexPin(
               id: 1,
               code: 'ABCD',
-              expiresAt: DateTime.now().add(
+              expiresAt: now.add(
                 Duration(
                   seconds: state == 'expired'
                       ? -1

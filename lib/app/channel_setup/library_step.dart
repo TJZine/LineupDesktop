@@ -621,7 +621,7 @@ class SetupLibraryStep extends StatelessWidget {
                 crossAxisAlignment: WrapCrossAlignment.center,
                 children: [
                   Text(
-                    _scanDetail(fact),
+                    _scanDetail(fact, blocked: _settled && unavailable),
                     style: statusStyle.copyWith(
                       color: _scanColor(context, fact.status),
                     ),
@@ -751,7 +751,10 @@ class SetupLibraryStep extends StatelessWidget {
     return focusedTv ? roles.primaryText : Theme.of(context).colorScheme.error;
   }
 
-  String _scanDetail(LibraryScanFact fact) => switch (fact.status) {
+  String _scanDetail(
+    LibraryScanFact fact, {
+    required bool blocked,
+  }) => switch (fact.status) {
     LibraryScanStatus.idle => 'Waiting to scan',
     LibraryScanStatus.scanning => switch (fact.phase) {
       PlexLibraryScanPhase.items =>
@@ -760,7 +763,7 @@ class SetupLibraryStep extends StatelessWidget {
       PlexLibraryScanPhase.showGenres => 'Loading show details',
     },
     LibraryScanStatus.complete =>
-      'Ready · ${fact.completedItems} ${fact.completedItems == 1 ? 'item' : 'items'} checked',
+      '${blocked ? '' : 'Ready · '}${fact.completedItems} ${fact.completedItems == 1 ? 'item' : 'items'} checked',
     LibraryScanStatus.empty => 'No media found',
     LibraryScanStatus.unsupported => 'No playable media found',
     LibraryScanStatus.transientFailure => 'Couldn’t scan · Try again.',

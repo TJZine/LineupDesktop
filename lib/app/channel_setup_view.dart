@@ -65,6 +65,7 @@ class UpstreamChannelSetupViewState extends State<UpstreamChannelSetupView> {
   int _minimum = 5;
   SetupPhase? _phase;
   SetupReviewFilter _reviewFilter = SetupReviewFilter.all;
+  bool _restoreReviewFilter = false;
   String _reviewSearch = '';
   bool _discoveryRetry = false;
   String? _notice;
@@ -275,6 +276,7 @@ class UpstreamChannelSetupViewState extends State<UpstreamChannelSetupView> {
     if (!mounted) return;
     setState(() {
       _step = _SetupStep.review;
+      _restoreReviewFilter = phase is Failed;
       _phase = Reviewing(
         phase.review,
         confirmed: phase is Failed && phase.confirmed,
@@ -740,6 +742,12 @@ class UpstreamChannelSetupViewState extends State<UpstreamChannelSetupView> {
           if (_configurationSection == 0 && !_strategies.contains(strategy))
             strategy: _projection.disabledEligibility(strategy),
       }),
+      eligibleAlternateGrouping: Set.unmodifiable({
+        for (final strategy in BuilderStrategy.values)
+          if (_configurationSection == 0 &&
+              _projection.hasEligibleAlternateGrouping(strategy))
+            strategy,
+      }),
       discoveryFailures: Map.unmodifiable({
         for (final strategy in BuilderStrategy.values)
           strategy: ?_discoveryFailure(strategy),
@@ -895,6 +903,7 @@ class UpstreamChannelSetupViewState extends State<UpstreamChannelSetupView> {
     if (base.isEmpty && review.finalChannels.isEmpty) return;
     setState(() {
       _phase = Reviewing(review, confirmed: false);
+      _restoreReviewFilter = false;
       _error = null;
       _notice = null;
       _step = _SetupStep.review;
@@ -912,6 +921,7 @@ class UpstreamChannelSetupViewState extends State<UpstreamChannelSetupView> {
       sourceOrder: List.unmodifiable(_sourceOrder),
       sourceLabel: _reviewSourceLabel,
       initialFilter: _reviewFilter,
+      restoreInitialFilter: _restoreReviewFilter,
       initialSearch: _reviewSearch,
       onFilterChanged: (filter) => setState(() => _reviewFilter = filter),
       onSearchChanged: (search) => setState(() => _reviewSearch = search),
@@ -991,6 +1001,7 @@ class UpstreamChannelSetupViewState extends State<UpstreamChannelSetupView> {
       if (result == ChannelPlanApplyResult.stale) {
         final base = widget.controller.channels;
         setState(() {
+          _restoreReviewFilter = false;
           _phase = Reviewing(
             _allocateReview(
               base,

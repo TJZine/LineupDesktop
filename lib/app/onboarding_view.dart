@@ -1925,33 +1925,35 @@ class _ServerCard extends StatelessWidget {
               ),
       ),
     );
-    final trailing = Row(
-      mainAxisSize: MainAxisSize.min,
-      children: [
-        if (unreachable || measuredConnection?.latency != null) ...[
-          if (unreachable)
-            Semantics(
-              liveRegion: true,
-              child: Text(
-                'Unreachable',
-                style: supportStyle.copyWith(
-                  color: Theme.of(context).colorScheme.error,
-                ),
+    final status = unreachable
+        ? Semantics(
+            liveRegion: true,
+            child: Text(
+              'Unreachable',
+              style: supportStyle.copyWith(
+                color: Theme.of(context).colorScheme.error,
               ),
-            )
-          else
-            LineupConnectionStatus(connection: measuredConnection),
-          const SizedBox(width: 16),
-        ],
-        action,
-      ],
-    );
+            ),
+          )
+        : measuredConnection?.latency != null
+        ? LineupConnectionStatus(connection: measuredConnection)
+        : null;
 
     return LayoutBuilder(
       builder: (context, constraints) {
         final stacked =
             constraints.maxWidth < 520 ||
             MediaQuery.textScalerOf(context).scale(1) >= 1.6;
+        final trailing = Row(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            if (status != null) ...[
+              if (stacked) Flexible(child: status) else status,
+              const SizedBox(width: 16),
+            ],
+            action,
+          ],
+        );
         final content = stacked
             ? Column(
                 crossAxisAlignment: CrossAxisAlignment.start,

@@ -23,6 +23,7 @@ class SetupReviewStep extends StatefulWidget {
     required this.sourceOrder,
     required this.sourceLabel,
     required this.initialFilter,
+    this.restoreInitialFilter = false,
     required this.initialSearch,
     required this.onFilterChanged,
     required this.onSearchChanged,
@@ -43,6 +44,7 @@ class SetupReviewStep extends StatefulWidget {
   final List<BuilderStrategy> sourceOrder;
   final String Function(ContentSource source) sourceLabel;
   final SetupReviewFilter initialFilter;
+  final bool restoreInitialFilter;
   final String initialSearch;
   final ValueChanged<SetupReviewFilter> onFilterChanged;
   final ValueChanged<String> onSearchChanged;
@@ -60,7 +62,9 @@ class SetupReviewStep extends StatefulWidget {
 }
 
 class _SetupReviewStepState extends State<SetupReviewStep> {
-  late SetupReviewFilter _filter = _firstSetup
+  late SetupReviewFilter _filter = widget.restoreInitialFilter
+      ? widget.initialFilter
+      : _firstSetup
       ? SetupReviewFilter.all
       : _tabs.firstOrNull?.$1 ?? SetupReviewFilter.all;
   late final _search = TextEditingController(text: widget.initialSearch);
@@ -348,7 +352,16 @@ class _SetupReviewStepState extends State<SetupReviewStep> {
               : FilledButton(
                   key: const ValueKey('apply-reviewed-lineup'),
                   focusNode: _primaryFocus,
-                  onPressed: _primaryEnabled ? widget.onApply : null,
+                  onPressed: _primaryEnabled
+                      ? () {
+                          // The visible tab may be the fallback after an edit.
+                          final filter = _selectedFilter;
+                          if (filter != widget.initialFilter) {
+                            widget.onFilterChanged(filter);
+                          }
+                          widget.onApply();
+                        }
+                      : null,
                   child: Text(_applyLabel(review.mode, _firstSetup)),
                 ),
         ),
