@@ -28,7 +28,7 @@ class ChannelSetupProjection {
   List<BuilderStrategy> _order = const [];
   int? _minimum;
   List<PlexLibrary> _sourceLibraries = const [];
-  final _disabledProposals = <BuilderStrategy, List<ChannelProposal>>{};
+  final _sourceProposals = <(BuilderStrategy, bool), List<ChannelProposal>>{};
   Set<BuilderStrategy>? _enabled;
   List<ChannelProposal> _proposals = const [];
   List<Channel>? _existing;
@@ -36,7 +36,7 @@ class ChannelSetupProjection {
   ChannelPlanAllocation? _allocation;
   ChannelOrder? _allocationOrder;
   bool? _reorderExisting;
-  final _disabledEligibility = <BuilderStrategy, int>{};
+  final _sourceEligibility = <(BuilderStrategy, bool), int>{};
   List<Channel>? _retainedLineup;
   final _retainedSourceCounts = <String, int>{};
 
@@ -70,14 +70,14 @@ class ChannelSetupProjection {
       _sourceLibraries = libraries
           .where((library) => selectedLibraries.contains(library.id))
           .toList();
-      _disabledProposals.clear();
+      _sourceProposals.clear();
       _enabled = null;
     }
     if (_enabled == null || !_sameSet(_enabled!, strategies)) {
       _enabled = Set.of(strategies);
       _proposals = _build(strategies, strategyOrder: _order);
       _allocation = null;
-      _disabledEligibility.clear();
+      _sourceEligibility.clear();
     }
     return _proposals;
   }
@@ -105,7 +105,7 @@ class ChannelSetupProjection {
         reorderExisting: reorderExisting,
         strategyOrder: _order,
       );
-      _disabledEligibility.clear();
+      _sourceEligibility.clear();
     }
     return _allocation!;
   }
@@ -136,33 +136,60 @@ class ChannelSetupProjection {
   }
 
   int disabledEligibility(BuilderStrategy strategy) =>
-      _disabledEligibility.putIfAbsent(
-        strategy,
-        () =>
-            allocate(
-              _disabledProposals.putIfAbsent(
-                strategy,
-                () => _build({strategy}),
+      _eligibleOriginals(strategy, _grouped.contains(strategy));
+
+  bool hasEligibleAlternateGrouping(BuilderStrategy strategy) {
+    if (!supportsGrouping(strategy) || _sourceLibraries.length < 2) {
+      return false;
+    }
+    final currentEligibility = _enabled!.contains(strategy)
+        ? _allocation!.eligibleOriginalsByStrategy[strategy] ?? 0
+        : disabledEligibility(strategy);
+    return currentEligibility == 0 &&
+        _eligibleOriginals(strategy, !_grouped.contains(strategy)) > 0;
+  }
+
+  static bool supportsGrouping(BuilderStrategy strategy) => const {
+    BuilderStrategy.genres,
+    BuilderStrategy.studios,
+    BuilderStrategy.actors,
+    BuilderStrategy.directors,
+  }.contains(strategy);
+
+  int _eligibleOriginals(BuilderStrategy strategy, bool grouped) {
+    final key = (strategy, grouped);
+    return _sourceEligibility.putIfAbsent(
+      key,
+      () =>
+          allocate(
+            _sourceProposals.putIfAbsent(
+              key,
+              () => _build(
+                {strategy},
+                crossLibraryStrategies: {if (grouped) strategy},
               ),
-              existing: _existing!,
-              options: _options!,
-              order: _allocationOrder!,
-              reorderExisting: _reorderExisting!,
-              strategyOrder: _order,
-            ).eligibleOriginalsByStrategy[strategy] ??
-            0,
-      );
+            ),
+            existing: _existing!,
+            options: _options!,
+            order: _allocationOrder!,
+            reorderExisting: _reorderExisting!,
+            strategyOrder: _order,
+          ).eligibleOriginalsByStrategy[strategy] ??
+          0,
+    );
+  }
 
   List<ChannelProposal> _build(
     Set<BuilderStrategy> strategies, {
     List<BuilderStrategy> strategyOrder = BuilderStrategy.values,
+    Set<BuilderStrategy>? crossLibraryStrategies,
   }) => buildChannelProposals(
     libraries: _sourceLibraries,
     items: _items!,
     playlists: _playlists!,
     strategies: strategies,
     strategyOrder: strategyOrder,
-    crossLibraryStrategies: _grouped,
+    crossLibraryStrategies: crossLibraryStrategies ?? _grouped,
     minimumItems: _minimum!,
     maximumChannels: null,
   );
