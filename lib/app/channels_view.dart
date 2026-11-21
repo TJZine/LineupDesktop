@@ -2229,7 +2229,8 @@ class _DirectoryChannelIdentity extends StatelessWidget {
               );
           final nameRoom = constraints.maxWidth - identity.nameIndent(context);
           var libraryWidth = 0.0;
-          if (library != null) {
+          var libraryGap = markerGap;
+          if (library != null && library.isNotEmpty) {
             final customWidth = custom
                 ? markerGap +
                       customPadding.horizontal +
@@ -2237,15 +2238,34 @@ class _DirectoryChannelIdentity extends StatelessWidget {
                       measure('Custom', baseStyle.merge(customStyle))
                 : 0.0;
             final starWidth = favourite ? markerGap + starSize : 0.0;
-            // Preserve a readable prefix for long names and fit shorter names
-            // in full when the remaining width allows it.
-            final nameWidth = math.min(
-              measure(identity.channel.name, nameStyle),
-              4 * textScaler.scale(nameStyle.fontSize ?? 14),
+            final labelRoom = nameRoom - customWidth - starWidth;
+            final libraryStyle = baseStyle.merge(support);
+            final minimumLibrary = math.min(
+              measure(library, libraryStyle),
+              measure('${library.characters.first}…', libraryStyle),
             );
-            libraryWidth =
-                (nameRoom - customWidth - starWidth - nameWidth - markerGap)
-                    .clamp(0.0, constraints.maxWidth * .3);
+            final name = identity.channel.name;
+            final fullNameWidth = measure(name, nameStyle);
+            // Prefer up to four name characters. Give up gap space when it
+            // lets both the name prefix and the library prefix stay visible.
+            for (
+              var prefix = name.characters.take(4);
+              prefix.isNotEmpty;
+              prefix = prefix.skipLast(1)
+            ) {
+              final nameWidth = math.min(
+                fullNameWidth,
+                measure('$prefix…', nameStyle),
+              );
+              final spare = labelRoom - nameWidth - minimumLibrary;
+              if (spare < 0) continue;
+              libraryGap = math.min(markerGap, spare);
+              libraryWidth = math.min(
+                minimumLibrary + (spare - libraryGap),
+                math.max(minimumLibrary, constraints.maxWidth * .3),
+              );
+              break;
+            }
           }
           int lines;
           if (constraints.hasBoundedHeight) {
@@ -2287,7 +2307,7 @@ class _DirectoryChannelIdentity extends StatelessWidget {
                 ),
               ),
               if (library != null && libraryWidth > 0) ...[
-                const SizedBox(width: markerGap),
+                SizedBox(width: libraryGap),
                 ConstrainedBox(
                   constraints: BoxConstraints(maxWidth: libraryWidth),
                   child: Text(

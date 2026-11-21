@@ -320,6 +320,15 @@ void main() {
   testWidgets(
     'grouped selection leaves room for a colliding channel name at 2×',
     (tester) async {
+      // Use the shipped row typography without changing other tests' font metrics.
+      const rowFont = 'Inter directory fixture';
+      await tester.runAsync(() async {
+        await (FontLoader(rowFont)..addFont(
+              rootBundle.load('assets/fonts/inter/Inter[opsz,wght].ttf'),
+            ))
+            .load();
+      });
+      final theme = LineupTheme.forName(LineupThemeName.emberSteel);
       tester.view
         ..physicalSize = const Size(854, 1500)
         ..devicePixelRatio = 1;
@@ -363,7 +372,16 @@ void main() {
       addTearDown(menuFocus.dispose);
       await tester.pumpWidget(
         MaterialApp(
-          theme: LineupTheme.forName(LineupThemeName.emberSteel),
+          theme: theme.copyWith(
+            textTheme: theme.textTheme.copyWith(
+              titleMedium: theme.textTheme.titleMedium!.copyWith(
+                fontFamily: rowFont,
+              ),
+              bodyMedium: theme.textTheme.bodyMedium!.copyWith(
+                fontFamily: rowFont,
+              ),
+            ),
+          ),
           home: Scaffold(
             body: ChannelsView(
               controller: controller,
@@ -390,17 +408,29 @@ void main() {
       final title = inRow(find.text(name));
       final tag = inRow(find.text(library));
       final star = inRow(find.byIcon(Icons.star));
-      final paragraph = tester.renderObject<RenderParagraph>(title);
-      final visibleName = paragraph.getBoxesForSelection(
-        const TextSelection(baseOffset: 0, extentOffset: 3),
-      );
-      final prefixWidth = TextPainter.computeWidth(
-        text: TextSpan(text: 'Ree', style: paragraph.text.style),
-        textDirection: paragraph.textDirection,
-        textScaler: paragraph.textScaler,
-      );
-      expect(visibleName, hasLength(1));
-      expect(visibleName.single.toRect().width, closeTo(prefixWidth, .5));
+      void expectRenderedPrefix(Finder label, String prefix) {
+        final paragraph = tester.renderObject<RenderParagraph>(label);
+        final boxes = paragraph.getBoxesForSelection(
+          TextSelection(baseOffset: 0, extentOffset: prefix.length),
+        );
+        double measure(String text) => TextPainter.computeWidth(
+          text: TextSpan(text: text, style: paragraph.text.style),
+          textDirection: paragraph.textDirection,
+          textScaler: paragraph.textScaler,
+        );
+        expect(boxes, hasLength(1));
+        // The last visible character's selection box can include the ellipsis.
+        expect(
+          boxes.single.toRect().width,
+          anyOf(
+            closeTo(measure(prefix), .75),
+            closeTo(measure('$prefix…'), .75),
+          ),
+        );
+      }
+
+      expectRenderedPrefix(title, 'Ree');
+      expectRenderedPrefix(tag, 'S');
       expect(
         tester.getTopRight(number).dx,
         lessThan(tester.getTopLeft(glyph).dx),
@@ -409,7 +439,9 @@ void main() {
         tester.getTopRight(glyph).dx,
         lessThan(tester.getTopLeft(title).dx),
       );
-      expect(tester.getTopRight(title).dx, lessThan(tester.getTopLeft(tag).dx));
+      final nameTagGap =
+          tester.getTopLeft(tag).dx - tester.getTopRight(title).dx;
+      expect(nameTagGap, inExclusiveRange(0, 8));
       expect(tester.getTopRight(tag).dx, lessThan(tester.getTopLeft(star).dx));
       expect(
         tester.renderObject<RenderParagraph>(tag).didExceedMaxLines,
@@ -423,6 +455,24 @@ void main() {
         expect(rect.bottom, lessThanOrEqualTo(bounds.bottom));
       }
       expect(tester.getSize(row).height, 68);
+      expect(
+        tester.getSemantics(title).label,
+        contains('Channel 12, $name, Film, $library library, Favourite'),
+      );
+      // Selection review keeps the grouped row columns at narrower widths.
+      await tester.tap(row);
+      await tester.pumpAndSettle();
+      await tester.tap(find.text('1 selected'));
+      await tester.pumpAndSettle();
+      tester.view.physicalSize = const Size(800, 1500);
+      await tester.pumpAndSettle();
+      expectRenderedPrefix(title, 'R');
+      expectRenderedPrefix(tag, 'S');
+
+      tester.view.physicalSize = const Size(745, 1500);
+      await tester.pumpAndSettle();
+      expectRenderedPrefix(title, 'R');
+      expect(tag, findsNothing);
       expect(
         tester.getSemantics(title).label,
         contains('Channel 12, $name, Film, $library library, Favourite'),
