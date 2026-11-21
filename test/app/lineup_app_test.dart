@@ -47,12 +47,16 @@ void main() {
                 .scale(20) /
             20;
         expect(scale(), closeTo(1.2, .001));
-        for (final size in LineupTextSize.values) {
+        for (final (size, factor) in const [
+          (LineupTextSize.standard, 1.0),
+          (LineupTextSize.large, 1.15),
+          (LineupTextSize.larger, 1.3),
+        ]) {
           await controller.updateSettings(
             (current) => current.copyWith(textSize: size),
           );
           await tester.pumpAndSettle();
-          expect(scale(), closeTo(1.2 * size.multiplier, .001));
+          expect(scale(), closeTo(1.2 * factor, .001));
         }
         TextScaler scaler() =>
             MediaQuery.textScalerOf(tester.element(find.byType(GuideView)));
@@ -65,6 +69,9 @@ void main() {
         expect(identical(after, before), isFalse);
         expect(after, before);
         expect(after.hashCode, before.hashCode);
+        await controller.updateSettings(
+          (current) => current.copyWith(textSize: LineupTextSize.larger),
+        );
         tester.platformDispatcher.textScaleFactorTestValue = 1.8;
         await tester.pumpAndSettle();
         expect(scale(), closeTo(2.0, .001));

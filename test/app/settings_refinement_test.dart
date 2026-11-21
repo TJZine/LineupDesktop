@@ -180,6 +180,14 @@ void main() {
         findsOneWidget,
       );
       expect(preview, findsOneWidget);
+      if (!config.columns) {
+        await tester.drag(rows, const Offset(0, 1600));
+        await tester.pumpAndSettle();
+        expect(
+          tester.getRect(preview).top,
+          closeTo(tester.getRect(rows).top, .1),
+        );
+      }
       await tester.sendKeyEvent(LogicalKeyboardKey.escape);
       await tester.pumpAndSettle();
       expect(
@@ -190,6 +198,10 @@ void main() {
         FocusManager.instance.primaryFocus?.debugLabel,
         'subtitleCustomise',
       );
+      final viewport = tester.getRect(rows);
+      final restored = tester.getRect(customise);
+      expect(restored.top, greaterThanOrEqualTo(viewport.top - .1));
+      expect(restored.bottom, lessThanOrEqualTo(viewport.bottom + .1));
       if (config.tv) {
         final helper = find.text(
           'Text, edges, background and window · 10 options',
