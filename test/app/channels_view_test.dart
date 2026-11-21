@@ -317,6 +317,122 @@ void main() {
     );
   }
 
+  testWidgets(
+    'grouped selection leaves room for a colliding channel name at 2×',
+    (tester) async {
+      tester.view
+        ..physicalSize = const Size(854, 1500)
+        ..devicePixelRatio = 1;
+      addTearDown(tester.view.reset);
+      addTearDown(tester.platformDispatcher.clearTextScaleFactorTestValue);
+      const name = 'Reel channel';
+      const library = 'Synthetic film library with a long label';
+      final controller = _GroupedScheduleController(
+        scenario: LineupScenario(
+          stage: SetupStage.ready,
+          channels: [
+            _channel(
+              'marked',
+              12,
+              name,
+              kind: ChannelKind.film,
+              sourceLibraries: const {'one': library},
+            ).copyWith(favorite: true),
+            _channel(
+              'other',
+              13,
+              name,
+              kind: ChannelKind.film,
+              sourceLibraries: const {'two': 'Other film library'},
+            ),
+          ],
+        ),
+      );
+      final guide = GuideController(lineup: controller);
+      final native = FixturePlayer();
+      final player = PlayerCoordinator(
+        player: native,
+        lineup: controller,
+        guide: guide,
+      );
+      final menuFocus = FocusNode();
+      addTearDown(controller.dispose);
+      addTearDown(guide.dispose);
+      addTearDown(native.dispose);
+      addTearDown(player.dispose);
+      addTearDown(menuFocus.dispose);
+      await tester.pumpWidget(
+        MaterialApp(
+          theme: LineupTheme.forName(LineupThemeName.emberSteel),
+          home: Scaffold(
+            body: ChannelsView(
+              controller: controller,
+              player: player,
+              onOpenPlayer: () {},
+              onOpenMenu: (_, _) {},
+              menuFocusNode: menuFocus,
+            ),
+          ),
+        ),
+      );
+      await tester.pumpAndSettle();
+      await _chooseDirectoryView(tester, 'Grouped by source');
+      await tester.tap(find.text('Select'));
+      await tester.pumpAndSettle();
+      tester.platformDispatcher.textScaleFactorTestValue = 2;
+      await tester.pumpAndSettle();
+
+      final row = find.byKey(const ValueKey('channel-row-marked'));
+      Finder inRow(Finder matching) =>
+          find.descendant(of: row, matching: matching);
+      final number = inRow(find.text('12'));
+      final glyph = inRow(find.byIcon(Icons.movie_outlined));
+      final title = inRow(find.text(name));
+      final tag = inRow(find.text(library));
+      final star = inRow(find.byIcon(Icons.star));
+      final paragraph = tester.renderObject<RenderParagraph>(title);
+      final visibleName = paragraph.getBoxesForSelection(
+        const TextSelection(baseOffset: 0, extentOffset: 3),
+      );
+      final prefixWidth = TextPainter.computeWidth(
+        text: TextSpan(text: 'Ree', style: paragraph.text.style),
+        textDirection: paragraph.textDirection,
+        textScaler: paragraph.textScaler,
+      );
+      expect(visibleName, hasLength(1));
+      expect(visibleName.single.toRect().width, closeTo(prefixWidth, .5));
+      expect(
+        tester.getTopRight(number).dx,
+        lessThan(tester.getTopLeft(glyph).dx),
+      );
+      expect(
+        tester.getTopRight(glyph).dx,
+        lessThan(tester.getTopLeft(title).dx),
+      );
+      expect(tester.getTopRight(title).dx, lessThan(tester.getTopLeft(tag).dx));
+      expect(tester.getTopRight(tag).dx, lessThan(tester.getTopLeft(star).dx));
+      expect(
+        tester.renderObject<RenderParagraph>(tag).didExceedMaxLines,
+        isTrue,
+      );
+      final bounds = tester.getRect(row);
+      for (final part in [number, glyph, title, tag, star]) {
+        final rect = tester.getRect(part);
+        expect(bounds.contains(rect.topLeft), isTrue);
+        expect(rect.right, lessThanOrEqualTo(bounds.right));
+        expect(rect.bottom, lessThanOrEqualTo(bounds.bottom));
+      }
+      expect(tester.getSize(row).height, 68);
+      expect(
+        tester.getSemantics(title).label,
+        contains('Channel 12, $name, Film, $library library, Favourite'),
+      );
+      expect(tester.takeException(), isNull);
+      await tester.pumpWidget(const SizedBox());
+    },
+    semanticsEnabled: true,
+  );
+
   for (final isTv in [false, true]) {
     for (final scale in [1.0, 1.3]) {
       testWidgets(
@@ -536,7 +652,7 @@ void main() {
         tester.getTopLeft(studios).dy,
         lessThan(tester.getTopLeft(genres).dy),
       );
-      expect(find.text('1 channels'), findsNWidgets(3));
+      expect(find.text('1 channel'), findsNWidgets(3));
       await tester.tap(genres);
       await tester.pumpAndSettle();
       expect(find.byKey(const ValueKey('channel-row-genre')), findsOneWidget);
@@ -602,7 +718,7 @@ void main() {
     );
     await tester.enterText(find.byKey(const Key('channels-search')), 'Keep');
     await tester.pumpAndSettle();
-    expect(find.text('1 channels'), findsNWidgets(2));
+    expect(find.text('1 channel'), findsNWidgets(2));
     expect(
       tester.getTopLeft(collections).dy,
       lessThan(tester.getTopLeft(genres).dy),
@@ -617,17 +733,35 @@ void main() {
         ..devicePixelRatio = 1;
       addTearDown(tester.view.reset);
       final now = DateTime.utc(2026, 1, 1, 0, 5);
+      final longTitle = 'A long synthetic program title ' * 8;
       var clock = now;
       final controller = _GroupedScheduleController(
         scenario: LineupScenario(
           stage: SetupStage.ready,
           channels: [
             for (var i = 0; i < 200; i++)
-              _channel('lazy-$i', i + 1, 'Station $i'),
+              _channel(
+                'lazy-$i',
+                i + 1,
+                'Station $i',
+                source: i == 0
+                    ? ManualSource([
+                        ChannelItem(
+                          id: 'lazy-0-program',
+                          title: longTitle,
+                          duration: const Duration(minutes: 30),
+                        ),
+                      ])
+                    : null,
+              ),
           ],
         ),
       );
-      final guide = GuideController(lineup: controller, clock: () => clock);
+      final guide = GuideController(
+        lineup: controller,
+        clock: () => clock,
+        loadSchedule: controller.loadDirectorySchedule,
+      );
       final native = FixturePlayer();
       final player = PlayerCoordinator(
         player: native,
@@ -666,11 +800,39 @@ void main() {
       expect(find.text('—'), findsWidgets);
       controller.release.complete();
       await tester.pumpAndSettle();
-      expect(find.text('Station 0 program · 25m left'), findsOneWidget);
+      void expectOnNow(String id, String title, int minutes) {
+        final cell = find.byKey(ValueKey('channel-on-now-$id'));
+        final countdown = ' · ${minutes}m left';
+        final timeLeft = find.descendant(
+          of: cell,
+          matching: find.text(countdown),
+        );
+        final program = find.descendant(of: cell, matching: find.text(title));
+        expect(program, findsOneWidget);
+        expect(
+          tester.renderObject<RenderParagraph>(program).didExceedMaxLines,
+          title == longTitle,
+        );
+        expect(
+          tester.renderObject<RenderParagraph>(timeLeft).didExceedMaxLines,
+          isFalse,
+        );
+        expect(
+          tester.getTopRight(timeLeft).dx,
+          lessThanOrEqualTo(tester.getTopRight(cell).dx),
+        );
+        expect(
+          tester.getSemantics(timeLeft).label,
+          contains('$title$countdown'),
+        );
+      }
+
+      expectOnNow('lazy-0', longTitle, 25);
       clock = now.add(const Duration(minutes: 2));
       await tester.pump(const Duration(seconds: 30));
       await tester.pump();
-      expect(find.text('Station 0 program · 23m left'), findsOneWidget);
+      expectOnNow('lazy-0', longTitle, 23);
+      final requestedBeforeDrag = controller.requests.toSet();
       await tester.drag(
         find.byKey(const PageStorageKey('channels-directory-grouped')),
         const Offset(0, -800),
@@ -678,8 +840,22 @@ void main() {
       await tester.pumpAndSettle();
       expect(controller.requests.toSet().length, greaterThan(8));
       expect(controller.requests.toSet().length, lessThan(60));
+      final newlyVisible = controller.requests
+          .toSet()
+          .difference(requestedBeforeDrag)
+          .where(
+            (id) => find
+                .byKey(ValueKey('channel-row-$id'))
+                .hitTestable()
+                .evaluate()
+                .isNotEmpty,
+          );
+      expect(newlyVisible, isNotEmpty);
+      final id = newlyVisible.first;
+      expectOnNow(id, 'Station ${id.substring('lazy-'.length)} program', 23);
       await tester.pumpWidget(const SizedBox());
     },
+    semanticsEnabled: true,
   );
 
   testWidgets('grouped failed schedules keep a quiet placeholder', (
@@ -713,7 +889,9 @@ void main() {
     );
   });
 
-  testWidgets('grouped rows retain Select and Delete selected', (tester) async {
+  testWidgets('grouped selection review includes rows from collapsed groups', (
+    tester,
+  ) async {
     tester.view
       ..physicalSize = const Size(1920, 1080)
       ..devicePixelRatio = 1;
@@ -722,8 +900,9 @@ void main() {
       scenario: LineupScenario(
         stage: SetupStage.ready,
         channels: [
-          _channel('first', 1, 'First'),
-          _channel('second', 2, 'Second'),
+          _channel('first', 1, 'First station'),
+          _channel('second', 2, 'Second station'),
+          _sourceChannel('genre', 3, 'Genre station', LibraryFilter.genre),
         ],
       ),
     );
@@ -731,11 +910,52 @@ void main() {
     await tester.pumpAndSettle();
     await openDestination(tester, 'Channels');
     await _chooseDirectoryView(tester, 'Grouped by source');
+    final search = find.byKey(const Key('channels-search'));
+    await tester.enterText(search, 'station');
+    await tester.pumpAndSettle();
+    final genreHeader = find.byKey(const ValueKey('channel-group-genres'));
+    final genreRow = find.byKey(const ValueKey('channel-row-genre'));
+    expect(genreHeader, findsOneWidget);
+    expect(genreRow, findsNothing);
     await tester.tap(find.text('Select'));
     await tester.pumpAndSettle();
-    await tester.tap(find.byKey(const ValueKey('channel-row-first')));
-    await tester.tap(find.byKey(const ValueKey('channel-row-second')));
+    await tester.tap(find.text('Select all matching'));
     await tester.pumpAndSettle();
+    await tester.tap(find.text('3 selected'));
+    await tester.pumpAndSettle();
+    expect(genreHeader, findsNothing);
+    expect(genreRow, findsOneWidget);
+    expect(find.text('On now'), findsOneWidget);
+    await tester.tap(genreRow);
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('Delete selected'));
+    await tester.pumpAndSettle();
+    expect(
+      find.byKey(const ValueKey('delete-dialog-row-first')),
+      findsOneWidget,
+    );
+    expect(
+      find.byKey(const ValueKey('delete-dialog-row-second')),
+      findsOneWidget,
+    );
+    expect(find.byKey(const ValueKey('delete-dialog-row-genre')), findsNothing);
+    await tester.tap(
+      find.descendant(of: find.byType(Dialog), matching: find.text('Cancel')),
+    );
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('Back to results'));
+    await tester.pumpAndSettle();
+    expect(genreHeader, findsOneWidget);
+    expect(genreRow, findsNothing);
+    expect(
+      tester
+          .widget<EditableText>(
+            find.descendant(of: search, matching: find.byType(EditableText)),
+          )
+          .controller
+          .text,
+      'station',
+    );
     await tester.tap(find.text('Delete selected'));
     await tester.pumpAndSettle();
     await tester.tap(find.text('Delete 2 channels'));
@@ -762,13 +982,28 @@ void main() {
     await openDestination(tester, 'Channels');
     await _chooseDirectoryView(tester, 'Grouped by source');
     final header = find.byKey(const ValueKey('channel-group-custom'));
+    void expectDisclosure(Tristate expanded) {
+      final nodes = tester.semantics.simulatedAccessibilityTraversal().where(
+        (node) =>
+            node.label.contains('Custom') && node.label.contains('1 channel'),
+      );
+      expect(nodes, hasLength(1));
+      final data = nodes.single.getSemanticsData();
+      expect(data.hasAction(SemanticsAction.tap), isTrue);
+      expect(data.flagsCollection.isButton, isTrue);
+      expect(data.flagsCollection.isExpanded, expanded);
+    }
+
     tester.widget<TextButton>(header).focusNode!.requestFocus();
     await tester.pump();
+    expectDisclosure(Tristate.isTrue);
     await tester.sendKeyEvent(LogicalKeyboardKey.select);
     await tester.pumpAndSettle();
     expect(find.byKey(const ValueKey('channel-row-custom')), findsNothing);
+    expectDisclosure(Tristate.isFalse);
     await tester.sendKeyEvent(LogicalKeyboardKey.select);
     await tester.pumpAndSettle();
+    expectDisclosure(Tristate.isTrue);
     await tester.sendKeyEvent(LogicalKeyboardKey.arrowDown);
     await tester.pumpAndSettle();
     expect(
@@ -778,7 +1013,7 @@ void main() {
     await tester.sendKeyEvent(LogicalKeyboardKey.arrowUp);
     await tester.pumpAndSettle();
     expect(tester.widget<TextButton>(header).focusNode!.hasFocus, isTrue);
-  });
+  }, semanticsEnabled: true);
 
   for (final isTv in [true, false]) {
     testWidgets(
@@ -2786,6 +3021,7 @@ Channel _channel(
   int number,
   String name, {
   bool generated = false,
+  ChannelKind kind = ChannelKind.unknown,
   ContentSource? source,
   Map<String, String> sourceLibraries = const {},
 }) => Channel(
@@ -2805,6 +3041,7 @@ Channel _channel(
   anchor: DateTime.utc(2026),
   shuffleSeed: number,
   builderKey: generated ? 'generated:$id' : null,
+  kind: kind,
   sourceLibraries: sourceLibraries,
 );
 
@@ -2926,15 +3163,15 @@ class _GroupedScheduleController extends FixtureController {
   final requests = <String>[];
   final release = Completer<void>();
 
-  @override
-  Future<ScheduleIndex> loadScheduleFor(Channel channel) async {
+  Future<ScheduleIndex> loadDirectorySchedule(Channel channel) async {
     requests.add(channel.id);
     await release.future;
-    return buildChannelSchedule(
-      channel,
-      (channel.source as ManualSource).items,
-    );
+    return loadScheduleFor(channel);
   }
+
+  @override
+  Future<ScheduleIndex> loadScheduleFor(Channel channel) async =>
+      buildChannelSchedule(channel, (channel.source as ManualSource).items);
 }
 
 class _FailedScheduleController extends FixtureController {
