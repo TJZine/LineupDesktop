@@ -1,6 +1,7 @@
 import 'dart:typed_data';
 
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart' show LogicalKeyboardKey;
 import 'package:lineup_desktop/platform/device_profile.dart';
 
 import '../channels/channel.dart';
@@ -51,6 +52,7 @@ class _ChannelAirCheckState extends State<ChannelAirCheck> {
   bool _selectionFollowsNow = true;
   bool _synopsisExpanded = false;
   final _scheduleScroll = ScrollController();
+  final _backToNowFocus = FocusNode(debugLabel: 'Air Check Back to now');
   final _selectionAnchor = GlobalKey();
   final _headerAnchor = GlobalKey();
   final _firstRowAnchor = GlobalKey();
@@ -130,7 +132,7 @@ class _ChannelAirCheckState extends State<ChannelAirCheck> {
     });
   }
 
-  void _revealInspectedProgram() {
+  void _revealInspectedProgram({required bool fromRemote}) {
     WidgetsBinding.instance.addPostFrameCallback((_) {
       if (!mounted) return;
       _scheduleScroll.jumpTo(0);
@@ -149,6 +151,17 @@ class _ChannelAirCheckState extends State<ChannelAirCheck> {
           outer.position.maxScrollExtent,
         ),
       );
+      final backToNow = fromRemote && _backToNowFocus.parent != null
+          ? _backToNowFocus.context?.findRenderObject()
+          : null;
+      if (backToNow != null) {
+        _backToNowFocus.requestFocus();
+        _scheduleScroll.position.ensureVisible(
+          backToNow,
+          alignmentPolicy: ScrollPositionAlignmentPolicy.keepVisibleAtEnd,
+        );
+        return;
+      }
       final selection = _selectionAnchor.currentContext?.findRenderObject();
       final inner = _scheduleScroll.position.context.storageContext
           .findRenderObject();
@@ -164,6 +177,25 @@ class _ChannelAirCheckState extends State<ChannelAirCheck> {
             : top;
         _scheduleScroll.jumpTo(
           target.clamp(0.0, _scheduleScroll.position.maxScrollExtent),
+        );
+      }
+    });
+  }
+
+  void _backToNow(GuideProgram current) {
+    setState(() {
+      _selectedId = current.id;
+      _selectionFollowsNow = true;
+      _synopsisExpanded = false;
+    });
+    _scheduleScroll.jumpTo(0);
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (!mounted || !_scheduleScroll.hasClients) return;
+      final row = _firstRowAnchor.currentContext?.findRenderObject();
+      if (row != null) {
+        _scheduleScroll.position.ensureVisible(
+          row,
+          alignmentPolicy: ScrollPositionAlignmentPolicy.keepVisibleAtEnd,
         );
       }
     });
@@ -220,6 +252,7 @@ class _ChannelAirCheckState extends State<ChannelAirCheck> {
   void dispose() {
     widget.verification.removeListener(_verificationChanged);
     _scheduleScroll.dispose();
+    _backToNowFocus.dispose();
     super.dispose();
   }
 
@@ -300,6 +333,14 @@ class _ChannelAirCheckState extends State<ChannelAirCheck> {
                                     const SizedBox(height: 10),
                                     if (preview != null) ...[
                                       _facts(preview),
+                                      if (error != null)
+                                        Text(
+                                          'Previous schedule · ${preview.sourceLabel}',
+                                          style: TextStyle(
+                                            color: LineupTheme.of(context)
+                                                .secondaryText,
+                                          ),
+                                        ),
                                       const SizedBox(height: 8),
                                     ],
                                   ],
@@ -447,7 +488,7 @@ class _ChannelAirCheckState extends State<ChannelAirCheck> {
               ),
           ],
         ),
-        if (_error == null)
+        if (_error == null && !_comparisonFailed)
           Text(
             _stale
                 ? 'Updating…'
@@ -533,7 +574,7 @@ class _ChannelAirCheckState extends State<ChannelAirCheck> {
         final program = programs[index];
         final current = program.isCurrentAt(now);
         final selected = program.id == _selectedId;
-        void activate() {
+        void activate({bool fromRemote = false}) {
           setState(() {
             _selectedId = program.id;
             _selectionFollowsNow = false;
@@ -541,7 +582,7 @@ class _ChannelAirCheckState extends State<ChannelAirCheck> {
           });
           // The detail lives above this lazy list; reveal it when inspected.
           _scheduleScroll.jumpTo(0);
-          _revealInspectedProgram();
+          _revealInspectedProgram(fromRemote: fromRemote);
         }
 
         final row = Semantics(
@@ -650,7 +691,15 @@ class _ChannelAirCheckState extends State<ChannelAirCheck> {
         );
         return KeyedSubtree(
           key: index == 0 ? _firstRowAnchor : null,
-          child: row,
+          child: DeviceProfile.of(context).isTv
+              ? CallbackShortcuts(
+                  bindings: {
+                    const SingleActivator(LogicalKeyboardKey.select): () =>
+                        activate(fromRemote: true),
+                  },
+                  child: row,
+                )
+              : row,
         );
       },
     );
@@ -734,11 +783,8 @@ class _ChannelAirCheckState extends State<ChannelAirCheck> {
           Align(
             alignment: Alignment.centerLeft,
             child: LineupInlineLink(
-              onPressed: () => setState(() {
-                _selectedId = current.id;
-                _selectionFollowsNow = true;
-                _synopsisExpanded = false;
-              }),
+              focusNode: _backToNowFocus,
+              onPressed: () => _backToNow(current),
               child: const Text('Back to now'),
             ),
           ),
@@ -882,14 +928,20 @@ class _StudioProgramArtworkState extends State<StudioProgramArtwork> {
     width: widget.width,
     height: widget.height,
     child: FutureBuilder<Uint8List?>(
+      key: ObjectKey(_future),
       future: _future,
-      builder: (context, snapshot) => switch (snapshot.data) {
-        final bytes? => Image.memory(
-          bytes,
-          fit: BoxFit.cover,
-          gaplessPlayback: true,
-        ),
-        null => ColoredBox(color: LineupTheme.of(context).elevatedSurface),
+      builder: (context, snapshot) {
+        final placeholder = ColoredBox(
+          color: LineupTheme.of(context).elevatedSurface,
+        );
+        final bytes = snapshot.data;
+        return bytes == null
+            ? placeholder
+            : Image.memory(
+                bytes,
+                fit: BoxFit.cover,
+                errorBuilder: (_, _, _) => placeholder,
+              );
       },
     ),
   );

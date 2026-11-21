@@ -20,6 +20,7 @@ import 'package:lineup_desktop/channels/content_resolver.dart';
 import 'package:lineup_desktop/channels/scheduler.dart';
 import 'package:lineup_desktop/plex/plex_models.dart';
 import 'package:lineup_desktop/playback/native_player.dart';
+import 'package:lineup_desktop/playback/player_view.dart';
 import 'package:lineup_desktop/guide/guide_view.dart';
 import 'package:lineup_desktop/guide/guide_controller.dart';
 import 'package:lineup_desktop/settings/lineup_settings.dart';
@@ -213,8 +214,16 @@ void main() {
             ..physicalSize = configuration.size
             ..devicePixelRatio = 1;
           addTearDown(tester.view.reset);
+          final expandSynopsis = configuration.name == 'stacked' && manual;
           final items = [
-            for (var i = 0; i < 10; i++) _media('fit-$i', libraryId: 'movies'),
+            for (var i = 0; i < 10; i++)
+              _media(
+                'fit-$i',
+                libraryId: 'movies',
+                summary: expandSynopsis
+                    ? 'A long program synopsis. ' * 60
+                    : null,
+              ),
           ];
           final original = _channel(
             id: 'viewport',
@@ -254,6 +263,9 @@ void main() {
               controller,
               ChannelStudioMode.editCustom,
               channel: original,
+              clock: expandSynopsis
+                  ? () => DateTime.utc(2026, 1, 1, 0, 10)
+                  : null,
               profile: profileFor(configuration.tv),
               textScaler: TextScaler.linear(configuration.text),
             ),
@@ -363,9 +375,30 @@ void main() {
           expect(previewViewport.contains(detail.bottomRight), isTrue);
           expect(find.text('Back to now').hitTestable(), findsOneWidget);
           expectFooterVisible();
-          await tester.tap(find.text('Back to now'));
+          final backToNow = find.text('Back to now');
+          if (expandSynopsis) {
+            await tester.tap(find.text('Read more'));
+            await tester.pumpAndSettle();
+            await tester
+                .state<ScrollableState>(inner)
+                .position
+                .ensureVisible(tester.renderObject(backToNow), alignment: 1);
+            await tester.pumpAndSettle();
+            expect(find.text('Show less'), findsOneWidget);
+            expect(backToNow.hitTestable(), findsOneWidget);
+            expect(find.text('ON NOW').hitTestable(), findsNothing);
+          }
+          await tester.tap(backToNow);
           await tester.pumpAndSettle();
           expect(find.byKey(const Key('air-check-selection')), findsNothing);
+          if (expandSynopsis) {
+            final live = find.text('ON NOW').hitTestable();
+            expect(live, findsOneWidget);
+            expect(
+              tester.getRect(inner).contains(tester.getCenter(live)),
+              isTrue,
+            );
+          }
           if (configuration.name != 'stacked') {
             outerState.position.jumpTo(0);
             tester.view.physicalSize = configuration.tv
@@ -1707,8 +1740,8 @@ void main() {
     }
 
     expect(player.generation, 1);
-    expect(find.text('Inspect generated channel'), findsNothing);
-    expect(find.text('Edit custom channel'), findsNothing);
+    expect(find.byType(PlayerView), findsOneWidget);
+    expect(find.byType(ChannelStudioView), findsNothing);
   });
 
   for (final destination in ['Settings', 'Guide']) {
@@ -5813,48 +5846,92 @@ void main() {
   testWidgets(
     'Air Check shows compact artwork and extends valid coverage in place',
     (tester) async {
-      final item = ChannelItem(
-        id: 'artwork-program',
-        title: 'Artwork program',
-        duration: const Duration(hours: 1),
-        poster: Uri.parse('/library/metadata/1/thumb'),
-      );
+      tester.view
+        ..physicalSize = const Size(1280, 720)
+        ..devicePixelRatio = 1;
+      addTearDown(tester.view.reset);
+      final media = [
+        _media(
+          'valid-artwork',
+          title: 'Artwork program',
+          thumbPath: '/library/metadata/1/thumb',
+        ),
+        _media('missing-artwork', thumbPath: '/library/metadata/2/thumb'),
+        _media('invalid-artwork', thumbPath: '/library/metadata/3/thumb'),
+      ];
       final channel = _channel(
         id: 'artwork-channel',
         number: 44,
         name: 'Artwork channel',
-        source: ManualSource([item]),
+        source: ManualSource(media.map(channelItemFor).toList()),
       );
-      final controller = _ArtworkController(
-        scenario: LineupScenario(
-          channels: [channel],
-          availableMedia: [
-            _media(
-              'artwork-program',
-              title: 'Artwork program',
-              duration: const Duration(hours: 1),
-              thumbPath: '/library/metadata/1/thumb',
-            ),
-          ],
-        ),
-      );
+      final controller =
+          _ArtworkController(
+              scenario: LineupScenario(
+                channels: [channel],
+                availableMedia: media,
+              ),
+            )
+            ..responses[Uri.parse('/library/metadata/2/thumb')] = Future.value(
+              null,
+            )
+            ..responses[Uri.parse('/library/metadata/3/thumb')] = Future.value(
+              Uint8List(4),
+            );
       addTearDown(controller.dispose);
       await tester.pumpWidget(
         _studio(
           controller,
           ChannelStudioMode.editCustom,
           channel: channel,
-          clock: () => DateTime.utc(2026, 1, 1, 1, 30),
+          clock: () => DateTime.utc(2026, 1, 1, 0, 10),
         ),
       );
       await _settleAirCheck(tester);
+      await _revealStudioPreview(tester);
 
       expect(
-        find.byWidgetPredicate(
-          (widget) => widget is Image && widget.image is MemoryImage,
+        find.descendant(
+          of: find.byKey(const Key('air-check-schedule-list')),
+          matching: find.byWidgetPredicate(
+            (widget) =>
+                widget is Image &&
+                widget.image is MemoryImage &&
+                identical(
+                  (widget.image as MemoryImage).bytes,
+                  _ArtworkController.posterBytes,
+                ),
+          ),
         ),
         findsWidgets,
       );
+      final rows = find.descendant(
+        of: find.byKey(const Key('air-check-schedule-list')),
+        matching: find.byType(LineupNavigationRow),
+      );
+      for (final title in ['missing-artwork', 'invalid-artwork']) {
+        final program = find.descendant(of: rows, matching: find.text(title));
+        expect(program, findsWidgets);
+        await tester.ensureVisible(program.first);
+        await tester.pumpAndSettle();
+        final row = find.ancestor(
+          of: program.first,
+          matching: find.byType(LineupNavigationRow),
+        );
+        final artwork = find.descendant(
+          of: row,
+          matching: find.byType(StudioProgramArtwork),
+        );
+        expect(
+          find.descendant(of: artwork, matching: find.byType(ColoredBox)),
+          findsOneWidget,
+        );
+        expect(
+          find.descendant(of: artwork, matching: find.byType(RawImage)),
+          findsNothing,
+        );
+      }
+      expect(tester.takeException(), isNull);
       final coverage = tester
           .widget<Text>(find.textContaining('Schedule through'))
           .data;
@@ -5866,6 +5943,152 @@ void main() {
         isNot(coverage),
       );
       expect(find.text('Artwork program'), findsWidgets);
+    },
+  );
+
+  testWidgets('Studio keeps artwork only for the current request', (
+    tester,
+  ) async {
+    final controller = _ArtworkController();
+    addTearDown(controller.dispose);
+    final first = Uri.parse('/first');
+    final second = Uri.parse('/second');
+    final replacement = Completer<Uint8List?>();
+    controller.responses[second] = replacement.future;
+    Widget artwork(Uri path) => MaterialApp(
+      home: Center(
+        child: StudioProgramArtwork(controller: controller, path: path),
+      ),
+    );
+
+    final image = find.byType(Image);
+    await tester.pumpWidget(artwork(first));
+    await tester.pumpAndSettle();
+    MemoryImage displayed() => tester.widget<Image>(image).image as MemoryImage;
+    expect(displayed().bytes, same(_ArtworkController.posterBytes));
+    final mountedImage = tester.element(image);
+    await tester.pumpWidget(artwork(first));
+    expect(tester.element(image), same(mountedImage));
+    expect(displayed().bytes, same(_ArtworkController.posterBytes));
+
+    await tester.pumpWidget(artwork(second));
+    expect(image, findsNothing);
+    final placeholder = find.descendant(
+      of: find.byType(StudioProgramArtwork),
+      matching: find.byType(ColoredBox),
+    );
+    expect(placeholder, findsOneWidget);
+    final replacementBytes = Uint8List.fromList(_ArtworkController.posterBytes);
+    replacement.complete(replacementBytes);
+    await tester.pumpAndSettle();
+    expect(displayed().bytes, same(replacementBytes));
+    expect(placeholder, findsNothing);
+  });
+
+  _studioTvTest(
+    'Air Check remote Select leaves visible focus and D-pad navigation',
+    (tester) async {
+      tester.view
+        ..physicalSize = const Size(1920, 1080)
+        ..devicePixelRatio = 1;
+      addTearDown(tester.view.reset);
+      final genres = [
+        for (var i = 0; i < 160; i++) 'Selected library genre ${i + 1}',
+      ];
+      const programCount = 18;
+      final media = [
+        for (var i = 0; i < programCount; i++)
+          _media(
+            'remote-$i',
+            title: 'Program ${i.toString().padLeft(2, '0')}',
+            libraryId: 'movies',
+            genres: [
+              for (var j = i; j < genres.length; j += programCount) genres[j],
+            ],
+            duration: const Duration(minutes: 15),
+          ),
+      ];
+      final channel = _channel(
+        id: 'remote-schedule',
+        number: 4,
+        name: 'Remote schedule',
+        source: LibrarySource(
+          libraryId: 'movies',
+          libraryType: PlexLibraryType.movie,
+          filters: {LibraryFilter.genre: genres},
+        ),
+      );
+      final controller = _RecordingSaveController(
+        scenario: LineupScenario(
+          channels: [channel],
+          libraries: const [
+            PlexLibrary(
+              id: 'movies',
+              title: 'Movies',
+              type: PlexLibraryType.movie,
+            ),
+          ],
+          selectedLibraryIds: const {'movies'},
+          availableMedia: media,
+        ),
+      );
+      addTearDown(controller.dispose);
+      await tester.pumpWidget(
+        _studio(
+          controller,
+          ChannelStudioMode.editCustom,
+          channel: channel,
+          clock: () => DateTime.utc(2026, 1, 1, 0, 10),
+          profile: tvProfile,
+        ),
+      );
+      await _settleAirCheck(tester);
+      await _revealStudioPreview(tester);
+
+      final schedule = find.byKey(const Key('air-check-schedule-list'));
+      Finder inSchedule(Finder finder) =>
+          find.descendant(of: schedule, matching: finder);
+      final now = inSchedule(find.text('ON NOW'));
+      final distant = inSchedule(find.text('Program 12'));
+      expect(now.hitTestable(), findsOneWidget);
+      expect(distant.hitTestable(), findsNothing);
+      Focus.of(tester.element(now)).requestFocus();
+      await tester.pumpAndSettle();
+      for (var i = 0; i < 12; i++) {
+        await _studioKey(tester, LogicalKeyboardKey.arrowDown);
+      }
+      expect(distant.hitTestable(), findsOneWidget);
+      expect(Focus.of(tester.element(distant)).hasPrimaryFocus, isTrue);
+      expect(now.hitTestable(), findsNothing);
+
+      FocusNode expectVisibleScheduleFocus() {
+        final primary = FocusManager.instance.primaryFocus!;
+        expect(
+          inSchedule(
+            find.byElementPredicate((element) => element == primary.context),
+          ).hitTestable(),
+          findsOneWidget,
+        );
+        return primary;
+      }
+
+      await _studioKey(tester, LogicalKeyboardKey.select);
+      final detail = find.byKey(const Key('air-check-selection'));
+      expect(
+        find.descendant(of: detail, matching: find.text('Program 12')),
+        findsOneWidget,
+      );
+      expect(
+        tester.getSize(detail).height,
+        greaterThan(tester.getSize(schedule).height),
+      );
+      expect(find.text('Read more'), findsNothing);
+      final backToNow = find.text('Back to now');
+      expect(backToNow.hitTestable(), findsOneWidget);
+      expect(Focus.of(tester.element(backToNow)).hasPrimaryFocus, isTrue);
+      final inspectedFocus = expectVisibleScheduleFocus();
+      await _studioKey(tester, LogicalKeyboardKey.arrowDown);
+      expect(expectVisibleScheduleFocus(), isNot(same(inspectedFocus)));
     },
   );
 
@@ -6979,6 +7202,22 @@ void main() {
     await _studioKey(tester, LogicalKeyboardKey.escape);
     expect(find.byKey(const Key('studio-filter-picker-genre')), findsNothing);
     expect(find.text('Genre: Drama, Comedy'), findsOneWidget);
+    expect(focused('Genre: Drama, Comedy'), isTrue);
+
+    await _studioKey(tester, LogicalKeyboardKey.select);
+    await _studioKey(tester, LogicalKeyboardKey.arrowDown);
+    expect(focused('Comedy'), isTrue);
+    await _studioKey(tester, LogicalKeyboardKey.select);
+    await _studioKey(tester, LogicalKeyboardKey.arrowUp);
+    expect(focused('1 selected'), isTrue);
+    await _studioKey(tester, LogicalKeyboardKey.arrowRight);
+    expect(focused('Clear selection'), isTrue);
+    await _studioKey(tester, LogicalKeyboardKey.select);
+    await _studioKey(tester, LogicalKeyboardKey.escape);
+    expect(find.byKey(const Key('studio-filter-picker-genre')), findsNothing);
+    expect(find.byKey(const Key('studio-applied-genre')), findsNothing);
+    expect(find.text('+ Filter').hitTestable(), findsOneWidget);
+    expect(focused('+ Filter'), isTrue);
   });
 
   _studioTvTest('new Studio focuses the source and respects edited names', (
@@ -7308,6 +7547,7 @@ PlexMediaItem _media(
   String type = 'movie',
   String? showTitle,
   String? showThumb,
+  String? summary,
   List<String> genres = const [],
   List<String> collections = const [],
   List<String> actors = const [],
@@ -7328,6 +7568,7 @@ PlexMediaItem _media(
   libraryId: libraryId,
   grandparentTitle: showTitle,
   grandparentThumbPath: showThumb,
+  summary: summary,
   thumbPath: thumbPath,
   parts: [PlexMediaPart(path: '/$id')],
   genres: genres,
@@ -7374,16 +7615,17 @@ Channel _channel({
 class _ArtworkController extends _RecordingSaveController {
   _ArtworkController({super.scenario});
 
+  static final posterBytes = base64Decode(
+    'iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mNk+A8AAQUBAScY42YAAAAASUVORK5CYII=',
+  );
+  final responses = <Uri, Future<Uint8List?>>{};
+
   @override
   Future<Uint8List?> programArtworkForPath(
     Uri path, {
     required int width,
     required int height,
-  }) async => Uint8List.fromList(
-    base64Decode(
-      'iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mNk+A8AAQUBAScY42YAAAAASUVORK5CYII=',
-    ),
-  );
+  }) => responses[path] ?? Future.value(posterBytes);
 }
 
 class _FailingSaveController extends FixtureController {
