@@ -410,7 +410,7 @@ void main() {
   testWidgets('midnight date remains visible beside an overlapping marker', (
     tester,
   ) async {
-    var now = DateTime(2026, 11, 16, 22, 48);
+    var now = DateTime(2026, 5, 19, 22, 48);
     final guide = await _mount(tester, clock: () => now);
     guide.moveWindow(2);
     await tester.pumpAndSettle();
@@ -424,7 +424,7 @@ void main() {
       isNot(tester.widget<Text>(windowDate).data),
     );
 
-    now = DateTime(2026, 11, 17);
+    now = DateTime(2026, 5, 20);
     await tester.pump(const Duration(minutes: 1));
     final marker = find.byKey(const Key('guide-now-marker'));
     expect(
@@ -440,7 +440,26 @@ void main() {
       isFalse,
       reason: '$dateRect / $markerRect',
     );
-    expect(guide.windowStart.toLocal(), DateTime(2026, 11, 16, 23, 30));
+    now = DateTime(2026, 5, 20, 0, 10);
+    await tester.pump(const Duration(seconds: 30));
+    expect(
+      find.descendant(of: marker, matching: find.text('12:10')),
+      findsOneWidget,
+    );
+    expect(midnightTick, findsOneWidget);
+    final laterMarker = tester.getRect(marker);
+    final laterDate = tester.getRect(date);
+    expect(
+      laterMarker.left,
+      greaterThanOrEqualTo(tester.getRect(midnightTick).right),
+    );
+    expect(laterMarker.left, lessThan(laterDate.right));
+    expect(
+      laterDate.overlaps(laterMarker),
+      isFalse,
+      reason: '$laterDate / $laterMarker',
+    );
+    expect(guide.windowStart.toLocal(), DateTime(2026, 5, 19, 23, 30));
   });
   for (final sample in const [
     (name: 'film', title: 'Feature Film', show: null, range: true),

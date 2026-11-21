@@ -3211,9 +3211,10 @@ class _TimeHeader extends StatelessWidget {
                 final markerLabel =
                     '${localNow.hour % 12 == 0 ? 12 : localNow.hour % 12}:${localNow.minute.toString().padLeft(2, '0')}';
                 final style = DefaultTextStyle.of(context).style;
+                final roles = LineupTheme.of(context);
                 final markerStyle = style.copyWith(
                   fontWeight: FontWeight.w600,
-                  color: LineupTheme.of(context).onFocus,
+                  color: roles.onFocus,
                 );
                 final markerWidth =
                     _textWidth(
@@ -3227,17 +3228,36 @@ class _TimeHeader extends StatelessWidget {
                 final markerRight = markerLeft + markerWidth;
                 final scaler = MediaQuery.textScalerOf(context);
                 final direction = Directionality.of(context);
+                final tickBorder = Border(
+                  left: BorderSide(color: roles.subtleBorder),
+                );
+                const labelPadding = EdgeInsets.only(left: 12);
+                final labelInset =
+                    tickBorder.dimensions.resolve(direction).left +
+                    labelPadding.left;
+                final labelRoom = slotWidth - labelInset;
+                final dateStyle = Theme.of(context).textTheme.labelSmall
+                    ?.copyWith(color: roles.progressFill);
+                final localizations = MaterialLocalizations.of(context);
                 DateTime tickAt(int index) => controller.windowStart
                     .add(Duration(minutes: 30 * index))
                     .toLocal();
                 bool isMidnight(DateTime tick) =>
                     tick.hour == 0 && tick.minute == 0;
-                bool overlapsMarker(int index, String label) {
-                  final left = index * slotWidth + 12;
-                  return showMarker &&
-                      left < markerRight &&
-                      left + _textWidth(label, style, scaler, direction) >
-                          markerLeft;
+                bool overlapsMarker(
+                  int index,
+                  String label,
+                  TextStyle labelStyle,
+                ) {
+                  final left = index * slotWidth + labelInset;
+                  if (!showMarker || labelRoom <= 0 || left >= markerRight) {
+                    return false;
+                  }
+                  final labelWidth = math.min(
+                    labelRoom,
+                    _textWidth(label, labelStyle, scaler, direction),
+                  );
+                  return left + labelWidth > markerLeft;
                 }
 
                 var midnightCollision = false;
@@ -3245,7 +3265,12 @@ class _TimeHeader extends StatelessWidget {
                   for (var index = 0; index < slots; index += stride) {
                     final tick = tickAt(index);
                     if (isMidnight(tick) &&
-                        overlapsMarker(index, _time(context, tick))) {
+                        (overlapsMarker(index, _time(context, tick), style) ||
+                            overlapsMarker(
+                              index,
+                              localizations.formatMediumDate(tick),
+                              style.merge(dateStyle),
+                            ))) {
                       midnightCollision = true;
                       break;
                     }
@@ -3260,13 +3285,7 @@ class _TimeHeader extends StatelessWidget {
                           Expanded(
                             child: Container(
                               alignment: Alignment.centerLeft,
-                              decoration: BoxDecoration(
-                                border: Border(
-                                  left: BorderSide(
-                                    color: LineupTheme.of(context).subtleBorder,
-                                  ),
-                                ),
-                              ),
+                              decoration: BoxDecoration(border: tickBorder),
                               child: index % stride == 0
                                   ? Builder(
                                       builder: (context) {
@@ -3276,16 +3295,16 @@ class _TimeHeader extends StatelessWidget {
                                         final hideTime = overlapsMarker(
                                           index,
                                           label,
+                                          style,
                                         );
                                         if (hideTime && !midnight) {
                                           return const SizedBox.shrink();
                                         }
                                         return Padding(
-                                          padding: const EdgeInsets.only(
-                                            left: 12,
-                                          ),
+                                          padding: labelPadding,
                                           child: Column(
-                                            mainAxisAlignment: hideTime
+                                            mainAxisAlignment:
+                                                midnight && midnightCollision
                                                 ? MainAxisAlignment.end
                                                 : MainAxisAlignment.center,
                                             crossAxisAlignment:
@@ -3302,21 +3321,13 @@ class _TimeHeader extends StatelessWidget {
                                                 ),
                                               if (midnight)
                                                 Text(
-                                                  MaterialLocalizations.of(
-                                                    context,
-                                                  ).formatMediumDate(tick),
+                                                  localizations
+                                                      .formatMediumDate(tick),
                                                   key: const Key(
                                                     'guide-midnight-date',
                                                   ),
                                                   maxLines: 1,
-                                                  style: Theme.of(context)
-                                                      .textTheme
-                                                      .labelSmall
-                                                      ?.copyWith(
-                                                        color: LineupTheme.of(
-                                                          context,
-                                                        ).progressFill,
-                                                      ),
+                                                  style: dateStyle,
                                                 ),
                                             ],
                                           ),
