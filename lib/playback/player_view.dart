@@ -3187,7 +3187,7 @@ class _CastFallback extends StatelessWidget {
   }
 }
 
-class _MiniGuide extends StatelessWidget {
+class _MiniGuide extends StatefulWidget {
   const _MiniGuide({
     required this.controller,
     required this.active,
@@ -3198,7 +3198,22 @@ class _MiniGuide extends StatelessWidget {
   final VoidCallback openGuide;
 
   @override
+  State<_MiniGuide> createState() => _MiniGuideState();
+}
+
+class _MiniGuideState extends State<_MiniGuide> {
+  final _scroll = ScrollController();
+  final _footerKey = GlobalKey(debugLabel: 'Mini Guide footer');
+
+  @override
+  void dispose() {
+    _scroll.dispose();
+    super.dispose();
+  }
+
+  @override
   Widget build(BuildContext context) {
+    final controller = widget.controller;
     final channels = controller.miniGuideChannels;
     final roles = LineupTheme.of(context);
     final size = MediaQuery.sizeOf(context);
@@ -3222,6 +3237,7 @@ class _MiniGuide extends StatelessWidget {
         : EdgeInsets.fromLTRB(contentInset, 12, contentInset, 16);
     final rowInset = (large ? 18.0 : 12.0);
     const fadeTail = 55.0;
+    const footerGap = 8.0;
     final theme = Theme.of(context);
     // Keep one aligned number column for the five built rows. The reference
     // floor grows with platform text, and actual glyphs may require more room.
@@ -3255,7 +3271,9 @@ class _MiniGuide extends StatelessWidget {
                     controller.lineup.settings.overlayTransparency ==
                     OverlayTransparency.moreTransparent,
                 tailHeight: fadeTail,
-                footerExtent: 8 + 48 + contentPadding.bottom,
+                scroll: _scroll,
+                footerKey: _footerKey,
+                footerInsets: footerGap + contentPadding.bottom,
               ),
               child: Container(
                 key: const Key('mini-guide-shelf'),
@@ -3270,6 +3288,7 @@ class _MiniGuide extends StatelessWidget {
                     label: 'Mini Guide',
                     child: SingleChildScrollView(
                       key: const Key('mini-guide-scroll'),
+                      controller: _scroll,
                       child: Listener(
                         behavior: HitTestBehavior.opaque,
                         onPointerSignal: (event) {
@@ -3328,7 +3347,7 @@ class _MiniGuide extends StatelessWidget {
                                     TextButton(
                                       onPressed: () {
                                         controller.showFullGuide();
-                                        openGuide();
+                                        widget.openGuide();
                                       },
                                       child: Row(
                                         mainAxisSize: MainAxisSize.min,
@@ -3423,13 +3442,14 @@ class _MiniGuide extends StatelessWidget {
                                 channelColumnWidth: channelColumnWidth,
                                 numberColumnWidth: numberColumnWidth,
                                 columnGap: columnGap,
-                                active: active,
+                                active: widget.active,
                                 large: large,
                                 rowInset: rowInset,
                                 isLast: index == channels.length - 1,
                               ),
-                            SizedBox(height: 8),
+                            const SizedBox(height: footerGap),
                             Wrap(
+                              key: _footerKey,
                               alignment: WrapAlignment.spaceBetween,
                               crossAxisAlignment: WrapCrossAlignment.center,
                               spacing: 12,
@@ -3605,15 +3625,40 @@ class _MiniGuideRow extends StatelessWidget {
                   );
                 },
               );
-              final inlineIdentity = Row(
-                children: [
-                  Flexible(child: channelIdentity),
-                  if (tuned) ...[
-                    const SizedBox(width: 8),
-                    Text('Watching', style: metadataStyle),
-                  ],
-                ],
-              );
+              final inlineIdentity = tuned
+                  ? LayoutBuilder(
+                      builder: (context, constraints) {
+                        const gap = 8.0;
+                        final nameAndStatusRoom = math.max(
+                          0.0,
+                          constraints.maxWidth -
+                              channelIdentity.nameIndent(context) -
+                              gap,
+                        );
+                        final nameRoom = math.min(
+                          2.5 * MediaQuery.textScalerOf(context).scale(18),
+                          nameAndStatusRoom / 2,
+                        );
+                        return Row(
+                          children: [
+                            Flexible(child: channelIdentity),
+                            const SizedBox(width: gap),
+                            ConstrainedBox(
+                              constraints: BoxConstraints(
+                                maxWidth: nameAndStatusRoom - nameRoom,
+                              ),
+                              child: Text(
+                                'Watching',
+                                maxLines: 1,
+                                overflow: TextOverflow.ellipsis,
+                                style: metadataStyle,
+                              ),
+                            ),
+                          ],
+                        );
+                      },
+                    )
+                  : channelIdentity;
               final row = controller.guide.row(channel.id);
               final unavailable = row.state == GuideLoadState.error;
               final currentText = unavailable
@@ -3778,22 +3823,35 @@ class _MiniGuideRow extends StatelessWidget {
 }
 
 class _MiniGuideFadePainter extends CustomPainter {
-  const _MiniGuideFadePainter({
+  _MiniGuideFadePainter({
     required this.scrim,
     required this.tailHeight,
     required this.lighter,
-    required this.footerExtent,
-  });
+    required this.scroll,
+    required this.footerKey,
+    required this.footerInsets,
+  }) : super(repaint: scroll);
 
-  final double footerExtent;
+  final ScrollController scroll;
+  final GlobalKey footerKey;
+  final double footerInsets;
   final Color scrim;
   final double tailHeight;
   final bool lighter;
 
   @override
   void paint(Canvas canvas, Size size) {
-    final fadeStart = math.max(0.0, size.height - footerExtent + 24);
-    final content = Rect.fromLTWH(0, 0, size.width, fadeStart);
+    final footer = footerKey.currentContext!.findRenderObject()! as RenderBox;
+    final position = scroll.position;
+    // The footer scrolls with the rows. Include the content beyond the
+    // viewport so a clipped shelf keeps its visible rows under the scrim.
+    final rowsBottom =
+        size.height +
+        position.maxScrollExtent -
+        position.pixels -
+        footerInsets -
+        footer.size.height;
+    final fadeStart = math.max(0.0, rowsBottom + 24);
     final paint = Paint()..color = scrim;
     if (lighter) {
       paint.shader = LinearGradient(
@@ -3806,9 +3864,13 @@ class _MiniGuideFadePainter extends CustomPainter {
           scrim.withValues(alpha: .52),
         ],
         stops: const [0, .4, .85, 1],
-      ).createShader(content);
+      ).createShader(Rect.fromLTWH(0, 0, size.width, fadeStart));
     }
-    canvas.drawRect(content, paint);
+    canvas.drawRect(
+      Rect.fromLTWH(0, 0, size.width, math.min(fadeStart, size.height)),
+      paint,
+    );
+    if (fadeStart >= size.height) return;
     final tail = Rect.fromLTWH(0, fadeStart, size.width, tailHeight);
     canvas.drawRect(
       tail,
@@ -3825,11 +3887,9 @@ class _MiniGuideFadePainter extends CustomPainter {
   }
 
   @override
-  bool shouldRepaint(covariant _MiniGuideFadePainter oldDelegate) =>
-      scrim != oldDelegate.scrim ||
-      lighter != oldDelegate.lighter ||
-      tailHeight != oldDelegate.tailHeight ||
-      footerExtent != oldDelegate.footerExtent;
+  // Row heights and footer layout can change while the shelf stays clipped
+  // to the same size.
+  bool shouldRepaint(covariant _MiniGuideFadePainter oldDelegate) => true;
 }
 
 // Lay out the OSD first so the picker can use the actual button bounds on

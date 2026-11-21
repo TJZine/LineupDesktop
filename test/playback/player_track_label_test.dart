@@ -3,6 +3,28 @@ import 'package:lineup_desktop/playback/native_player.dart';
 import 'package:lineup_desktop/playback/player_track_label.dart';
 
 void main() {
+  test(
+    'subtitle tracks named Off have visible and spoken distinguishing facts',
+    () {
+      for (final (codec, support) in [
+        ('subrip', 'SRT (text)'),
+        (null, 'Track 7'),
+      ]) {
+        final track = _track(
+          id: 7,
+          type: PlayerTrackType.subtitle,
+          title: 'Off',
+          codec: codec,
+        );
+        final projection = PlayerTrackDisplayProjection([track]);
+        final display = projection.displayFor(track);
+        expect(display.primaryText, 'Off');
+        expect(projection.pickerSecondaryFactsFor(track), [support]);
+        expect(display.semanticsText, 'Select Subtitle track: Off, $support.');
+      }
+    },
+  );
+
   test('picker subtitle support only distinguishes equal first lines', () {
     final unique = _track(
       id: 1,

@@ -92,16 +92,22 @@ class PlayerTrackDisplayProjection {
   ) {
     final compactKey = _compactKey(facts);
     final titleKey = _equivalenceKey(base.titleText);
+    final needsOffDiscriminator =
+        track.type == PlayerTrackType.subtitle &&
+        _equivalenceKey(base.primaryText) == 'off' &&
+        base.secondaryFacts.isEmpty;
     return _display(
       track,
       facts,
       base,
-      needsTrackDiscriminator: _tracks.indexed.any(
-        (entry) =>
-            entry.$2.type == track.type &&
-            entry.$2.id != track.id &&
-            _bases[entry.$1].visibleKey == base.visibleKey,
-      ),
+      needsTrackDiscriminator:
+          needsOffDiscriminator ||
+          _tracks.indexed.any(
+            (entry) =>
+                entry.$2.type == track.type &&
+                entry.$2.id != track.id &&
+                _bases[entry.$1].visibleKey == base.visibleKey,
+          ),
       sameCompact: _tracks.indexed.any(
         (entry) =>
             entry.$2.type == track.type &&
@@ -133,12 +139,14 @@ class PlayerTrackDisplayProjection {
     final track = _tracks[index];
     final display = _displays[index];
     if (track.type != PlayerTrackType.subtitle) return display.secondaryFacts;
+    final primaryKey = _equivalenceKey(display.primaryText);
+    // The synthetic Off action has no supporting facts.
+    if (primaryKey == 'off') return display.secondaryFacts;
     final peers = [
       for (final (peerIndex, other) in _tracks.indexed)
         if (other.type == track.type &&
             other.id != track.id &&
-            _equivalenceKey(_displays[peerIndex].primaryText) ==
-                _equivalenceKey(display.primaryText))
+            _equivalenceKey(_displays[peerIndex].primaryText) == primaryKey)
           _displays[peerIndex],
     ];
     if (peers.isEmpty) return const [];

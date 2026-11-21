@@ -247,40 +247,95 @@ void main() {
       final paintFinder = find
           .ancestor(of: shelf, matching: find.byType(CustomPaint))
           .first;
-      final custom = tester.widget<CustomPaint>(paintFinder);
-      final size = tester.getSize(paintFinder);
       final last = _drawnRect(
         tester,
         find.byKey(const Key('mini-guide-row-channel-4')),
       );
       final shelfRect = _drawnRect(tester, paintFinder);
       final solidEnd = last.bottom - shelfRect.top + 24;
-      final recorder = ui.PictureRecorder();
-      custom.painter!.paint(Canvas(recorder), size);
-      final picture = recorder.endRecording();
-      final bytes = await tester.runAsync(() async {
-        final image = await picture.toImage(
-          size.width.ceil(),
-          (size.height + 55).ceil(),
-        );
-        final bytes = await image.toByteData(
-          format: ui.ImageByteFormat.rawRgba,
-        );
-        image.dispose();
-        return bytes!;
-      });
-      picture.dispose();
-      final alphaBefore = bytes!.getUint8(
-        ((solidEnd - 2).floor() * size.width.ceil()) * 4 + 3,
-      );
-      final alphaAfter = bytes.getUint8(
-        ((solidEnd + 30).floor() * size.width.ceil()) * 4 + 3,
+      final [alphaBefore, alphaAfter] = await _miniGuideScrimAlpha(
+        tester,
+        paintFinder,
+        [solidEnd - 2, solidEnd + 30],
       );
       expect(alphaBefore, closeTo(255 * .78, 1));
       expect(alphaAfter, lessThan(alphaBefore));
       await tester.pumpWidget(const SizedBox.shrink());
     },
   );
+
+  testWidgets('short desktop Mini Guide keeps the fade below visible rows', (
+    tester,
+  ) async {
+    await tester.runAsync(loadPinnedTestFonts);
+    const window = Size(960, 540);
+    tester.view
+      ..devicePixelRatio = 1
+      ..physicalSize = window;
+    addTearDown(tester.view.reset);
+    final now = DateTime.utc(2026, 11, 16, 12, 18);
+    final fixture = _Fixture(
+      PlayerState.playing,
+      channelCount: 5,
+      shortPrograms: true,
+      guideClock: () => now,
+    );
+    addTearDown(fixture.dispose);
+    const textSize = LineupTextSize.larger;
+    fixture.lineup.fixtureActor.publishSettings(
+      const LineupSettings(textSize: textSize, reduceMotion: true),
+    );
+    fixture.player.showMiniGuide();
+    await tester.pumpWidget(
+      MaterialApp(
+        theme: LineupTheme.forName(LineupThemeName.emberSteel),
+        builder: (context, child) => MediaQuery(
+          data: MediaQuery.of(context)
+              .copyWith(textScaler: TextScaler.linear(textSize.multiplier)),
+          child: _playerDesktopCanvasBuilder(context, child),
+        ),
+        home: PlayerView(controller: fixture.player, openGuide: () {}),
+      ),
+    );
+    await tester.pumpAndSettle();
+
+    final shelf = find.byKey(const Key('mini-guide-shelf'));
+    final paint = find
+        .ancestor(of: shelf, matching: find.byType(CustomPaint))
+        .first;
+    final scroll = find.byKey(const Key('mini-guide-scroll'));
+    final position = tester
+        .state<ScrollableState>(
+          find.descendant(of: scroll, matching: find.byType(Scrollable)),
+        )
+        .position;
+    final last = find.byKey(const Key('mini-guide-row-channel-4'));
+    expect(find.byKey(const Key('mini-guide-next-channel-4')), findsOneWidget);
+    expect(position.maxScrollExtent, greaterThan(0));
+    final viewport = _drawnRect(tester, scroll);
+    final scrim = tester.renderObject<RenderBox>(paint);
+    double scrimY(double y) => scrim.globalToLocal(Offset(0, y)).dy;
+    expect(_drawnRect(tester, last).bottom, greaterThan(viewport.bottom));
+    final [initialAlpha] = await _miniGuideScrimAlpha(tester, paint, [
+      scrimY(viewport.bottom) - 2,
+    ]);
+    expect(initialAlpha, closeTo(255 * .78, 1));
+
+    position.jumpTo(position.maxScrollExtent);
+    await tester.pumpAndSettle();
+    final solidEnd = scrimY(_drawnRect(tester, last).bottom) + 24;
+    expect(solidEnd + 16, lessThan(scrimY(viewport.bottom)));
+    final [rowAlpha, extensionAlpha, fadeAlpha] = await _miniGuideScrimAlpha(
+      tester,
+      paint,
+      [solidEnd - 25, solidEnd - 2, solidEnd + 16],
+    );
+    expect(rowAlpha, closeTo(initialAlpha, 1));
+    expect(extensionAlpha, closeTo(initialAlpha, 1));
+    expect(fadeAlpha, lessThan(extensionAlpha));
+    expect(tester.takeException(), isNull);
+    await tester.pumpWidget(const SizedBox.shrink());
+  });
 
   testWidgets(
     'surface subtitles stay above native video and can be hidden for Settings',
@@ -5750,6 +5805,7 @@ void main() {
         contains(expected),
       );
       if (duration == Duration.zero) {
+        expect(find.byKey(const Key('player-osd-remaining')), findsNothing);
         expect(
           tester.widget<Text>(find.byKey(const Key('player-osd-timing'))).data,
           isNot(contains('left')),
@@ -7037,7 +7093,12 @@ void main() {
     final fixture = _Fixture(
       PlayerState.playing,
       tracks: const [
-        PlayerTrack(id: 3, type: PlayerTrackType.subtitle, selected: false),
+        PlayerTrack(
+          id: 3,
+          type: PlayerTrackType.subtitle,
+          selected: false,
+          title: 'Off',
+        ),
       ],
     );
     fixture.player.showTracks(PlayerTrackType.subtitle);
@@ -7051,6 +7112,17 @@ void main() {
 
     final offFinder = find.bySemanticsLabel('Select subtitle track: Off.');
     expect(offFinder, findsOneWidget);
+    final trackFinder = find.bySemanticsLabel(
+      'Select Subtitle track: Off, Track 3.',
+    );
+    expect(trackFinder, findsOneWidget);
+    expect(
+      find.descendant(
+        of: find.byKey(const Key('playback-track-subtitle-3')),
+        matching: find.text('Track 3'),
+      ),
+      findsOneWidget,
+    );
     final off = tester.getSemantics(offFinder);
     final data = off.getSemanticsData();
     expect(data.flagsCollection.isButton, isTrue);
@@ -8075,21 +8147,21 @@ void main() {
       expect(rail.inflate(.1).contains(list.topLeft), isTrue);
       expect(rail.inflate(.1).contains(list.bottomRight), isTrue);
 
-      for (final track in scenario.tracks) {
-        final row = _drawnRect(
-          tester,
-          find.byKey(Key('playback-track-${scenario.type.name}-${track.id}')),
-        );
-        final visible = row.intersect(list);
-        if (!visible.isEmpty) {
-          expect(rail.inflate(.1).contains(visible.bottomRight), isTrue);
-        }
-      }
-
       for (var index = 0; index < 5; index++) {
         await tester.sendKeyEvent(LogicalKeyboardKey.arrowDown);
         await tester.pump();
       }
+      await tester.pumpAndSettle();
+      final focusedRow = _drawnRect(
+        tester,
+        find.byKey(
+          Key(
+            'playback-track-${scenario.type.name}-${scenario.tracks.last.id}',
+          ),
+        ),
+      );
+      expect(list.inflate(.1).contains(focusedRow.topLeft), isTrue);
+      expect(list.inflate(.1).contains(focusedRow.bottomRight), isTrue);
       final prefix = scenario.type == PlayerTrackType.audio
           ? 'English · Long shared archival presentation title ending in '
           : 'English · Long shared restored subtitle presentation ending in ';
@@ -8852,8 +8924,14 @@ void main() {
         other,
       ]);
       fixture.lineup.notifyListeners();
+      expect(await fixture.player.tune(original.id), isTrue);
       fixture.player.showMiniGuide();
-      for (final scale in [1.0, 1.3]) {
+      for (final (size, scale) in const [
+        (Size(1920, 1080), 1.0),
+        (Size(1920, 1080), 1.3),
+        (Size(1280, 720), 2.0),
+      ]) {
+        tester.view.physicalSize = size;
         await tester.pumpWidget(
           MaterialApp(
             theme: LineupTheme.forName(
@@ -8896,13 +8974,32 @@ void main() {
           of: row,
           matching: find.byIcon(Icons.tv_outlined),
         );
-        final name = find.byKey(const Key('mini-guide-channel-channel'));
+        final ticker = find.byKey(const Key('mini-guide-channel-channel'));
+        final name = size.width == 1920
+            ? ticker
+            : find.descendant(
+                of: row,
+                matching: find.text('Four digit channel'),
+              );
         final numberRect = _drawnRect(tester, number);
         final iconRect = _drawnRect(tester, icon);
         final nameRect = _drawnRect(tester, name);
         expect(numberRect.right, lessThan(iconRect.left));
         expect(iconRect.right, lessThan(nameRect.left));
         expect(_drawnRect(tester, row).contains(nameRect.bottomRight), isTrue);
+        final watching = find.descendant(
+          of: row,
+          matching: find.text('Watching'),
+        );
+        expect(watching, findsOneWidget);
+        final statusRect = _drawnRect(tester, watching);
+        expect(statusRect.left, greaterThan(nameRect.right));
+        expect(
+          statusRect.center.dy,
+          closeTo(nameRect.center.dy, 2 * size.width / 1920),
+        );
+        expect(nameRect.width, greaterThan(18 * scale * size.width / 1920));
+        expect(statusRect.width, greaterThan(18 * scale * size.width / 1920));
         expect(tester.takeException(), isNull);
       }
       await tester.pumpWidget(const SizedBox.shrink());
@@ -10796,6 +10893,29 @@ class _Native implements NativePlayer {
     await _displayReports.close();
     await _fullscreenChanges.close();
   }
+}
+
+Future<List<int>> _miniGuideScrimAlpha(
+  WidgetTester tester,
+  Finder finder,
+  List<double> sampleY,
+) async {
+  final custom = tester.widget<CustomPaint>(finder);
+  final size = tester.getSize(finder);
+  final recorder = ui.PictureRecorder();
+  custom.painter!.paint(Canvas(recorder), size);
+  final picture = recorder.endRecording();
+  final alpha = await tester.runAsync(() async {
+    final width = size.width.ceil();
+    final image = await picture.toImage(width, (size.height + 55).ceil());
+    final bytes = await image.toByteData(format: ui.ImageByteFormat.rawRgba);
+    image.dispose();
+    return [
+      for (final y in sampleY) bytes!.getUint8(y.floor() * width * 4 + 3),
+    ];
+  });
+  picture.dispose();
+  return alpha!;
 }
 
 Rect _drawnRect(WidgetTester tester, Finder finder) {
