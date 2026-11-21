@@ -990,8 +990,10 @@ void main() {
       final controller = _AirController(controlled: true);
       addTearDown(controller.dispose);
       final first = _channel(items: [_item('one')]);
-      final changed = _channel(items: [_item('two')]);
-      await tester.pumpWidget(_airCheck(controller, first));
+      final changed = _channel(items: [_item('two'), _item('three')]);
+      await tester.pumpWidget(
+        _airCheck(controller, first, inclusionReason: 'Original source'),
+      );
       controller.completeNext();
       await tester.pump();
 
@@ -1006,7 +1008,9 @@ void main() {
       expect(find.byKey(const Key('air-check-state-note')), findsNothing);
       expect(find.text('One'), findsWidgets);
 
-      await tester.pumpWidget(_airCheck(controller, changed));
+      await tester.pumpWidget(
+        _airCheck(controller, changed, inclusionReason: 'Replacement source'),
+      );
       await tester.pump(
         channelAirCheckDebounce + const Duration(milliseconds: 1),
       );
@@ -1016,6 +1020,26 @@ void main() {
       expect(find.byKey(const Key('air-check-state-note')), findsNothing);
       expect(find.text('One'), findsWidgets);
       expect(find.textContaining('could not verify'), findsOneWidget);
+      const label = 'Previous schedule · Original source';
+      expect(find.text(label), findsOneWidget);
+      expect(find.bySemanticsLabel(label), findsOneWidget);
+      expect(find.textContaining('Replacement source'), findsNothing);
+
+      await tester.tap(find.text('Retry Air Check'));
+      await tester.pump(
+        channelAirCheckDebounce + const Duration(milliseconds: 1),
+      );
+      controller.completeNext();
+      await tester.pumpAndSettle();
+      expect(find.text(label), findsNothing);
+      expect(find.text('One'), findsNothing);
+      expect(find.text('Two'), findsWidgets);
+      expect(find.text('Updates as you edit'), findsOneWidget);
+      final upcoming = find.text('Three').first;
+      await _revealAirProgram(tester, upcoming);
+      await tester.tap(upcoming);
+      await tester.pumpAndSettle();
+      expect(find.text('30m · Replacement source'), findsOneWidget);
     },
   );
 
@@ -1040,7 +1064,9 @@ void main() {
         ),
       );
       await tester.pump();
-      expect(find.byKey(const Key('air-check-retained-source')), findsNothing);
+      const label = 'Previous schedule · Original source';
+      expect(find.text(label), findsOneWidget);
+      expect(find.bySemanticsLabel(label), findsOneWidget);
       final selectedFacts = find.descendant(
         of: find.byKey(const Key('air-check-selection')),
         matching: find.text('30m · Original source'),
@@ -1084,7 +1110,7 @@ void main() {
       );
       await tester.pump();
       expect(find.textContaining('Ch 4 · 1 playable'), findsOneWidget);
-      expect(find.byKey(const Key('air-check-retained-source')), findsNothing);
+      expect(find.text(label), findsOneWidget);
       expect(selectedFacts, findsNothing);
       expect(
         tester
@@ -1458,6 +1484,8 @@ void main() {
       );
       expect(find.text('Retry comparison'), findsOneWidget);
       expect(find.text('Updating…'), findsNothing);
+      expect(find.byKey(const Key('air-check-state-note')), findsNothing);
+      expect(find.textContaining('Previous schedule ·'), findsNothing);
       expect(validity, ChannelAirCheckValidity.unknown);
       expect(controller.requests, 2);
 
@@ -1475,6 +1503,7 @@ void main() {
       await tester.pump();
 
       expect(find.textContaining('could not compare this draft'), findsNothing);
+      expect(find.text('Updates as you edit'), findsOneWidget);
       expect(find.byKey(const Key('air-check-on-now-warning')), findsOneWidget);
       expect(validity, ChannelAirCheckValidity.valid);
       expect(controller.requests, 4);

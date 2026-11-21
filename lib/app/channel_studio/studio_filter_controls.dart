@@ -144,9 +144,14 @@ mixin _StudioFilterControls<T extends StatefulWidget> on State<T> {
 
   void _restoreFilterFocus(String key) {
     WidgetsBinding.instance.addPostFrameCallback((_) {
-      if (mounted) {
-        (_filterControlFocus[key] ?? _filterControlFocus['choose'])
-            ?.requestFocus();
+      if (!mounted) return;
+      final opener = _filterControlFocus[key];
+      final target =
+          opener != null && opener.parent != null && opener.canRequestFocus
+          ? opener
+          : _filterControlFocus['choose'];
+      if (target != null && target.parent != null && target.canRequestFocus) {
+        target.requestFocus();
       }
     });
   }
