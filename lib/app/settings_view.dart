@@ -107,9 +107,12 @@ class _SettingsViewState extends State<SettingsView> {
   void _closeSubtitleCustomise() {
     setState(() => _subtitleCustomising = false);
     WidgetsBinding.instance.addPostFrameCallback((_) {
-      if (mounted) {
-        _subtitleFocus[_SettingKey.subtitleCustomise]?.requestFocus();
-      }
+      if (!mounted) return;
+      final focus = _subtitleFocus[_SettingKey.subtitleCustomise];
+      final context = focus?.context;
+      if (focus == null || context == null || !context.mounted) return;
+      focus.requestFocus();
+      context.findRenderObject()?.showOnScreen();
     });
   }
 
@@ -1106,6 +1109,7 @@ class _ThemeSwatchesState extends State<_ThemeSwatches> {
                           final swatch = LineupTheme.forName(theme)
                               .extension<LineupThemeRoles>()!;
                           final selected = theme == widget.value;
+                          final focus = _focus[theme]!;
                           return Focus(
                             canRequestFocus: false,
                             onKeyEvent: (_, event) {
@@ -1131,21 +1135,32 @@ class _ThemeSwatchesState extends State<_ThemeSwatches> {
                                   .requestFocus();
                               return KeyEventResult.handled;
                             },
-                            child: Semantics(
-                              button: true,
-                              label: theme.label,
-                              selected: selected,
-                              enabled: widget.onChanged != null,
-                              onTap: widget.onChanged == null
-                                  ? null
-                                  : () => widget.onChanged!(theme),
+                            child: ListenableBuilder(
+                              listenable: focus,
+                              builder: (context, child) => Semantics(
+                                button: true,
+                                label: theme.label,
+                                selected: selected,
+                                enabled: widget.onChanged != null,
+                                focusable: focus.canRequestFocus,
+                                focused: focus.canRequestFocus
+                                    ? focus.hasPrimaryFocus
+                                    : null,
+                                onFocus: focus.canRequestFocus
+                                    ? focus.requestFocus
+                                    : null,
+                                onTap: widget.onChanged == null
+                                    ? null
+                                    : () => widget.onChanged!(theme),
+                                child: child,
+                              ),
                               child: ExcludeSemantics(
                                 child: OutlinedButton(
-                                  focusNode: _focus[theme],
+                                  focusNode: focus,
                                   key: ValueKey('settings-theme-${theme.name}'),
                                   onPressed: () {
                                     if (widget.onChanged != null) {
-                                      _focus[theme]!.requestFocus();
+                                      focus.requestFocus();
                                       widget.onChanged!(theme);
                                     }
                                   },

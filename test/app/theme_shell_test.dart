@@ -127,9 +127,12 @@ void main() {
 
     final swatch = themeSwatch(LineupThemeName.slatePine);
     await chooseTheme(tester, LineupThemeName.slatePine);
+    final swatchMaterial = find.descendant(
+      of: swatch,
+      matching: find.byType(Material),
+    );
     BorderSide swatchSide() =>
-        Theme.of(tester.element(swatch)).outlinedButtonTheme.style!.side!
-            .resolve({WidgetState.focused})!;
+        (tester.widget<Material>(swatchMaterial).shape! as OutlinedBorder).side;
     expect(controller.settings.theme, LineupThemeName.emberSteel);
     expect(
       Theme.of(tester.element(swatch)).colorScheme.primary,
@@ -195,6 +198,25 @@ void main() {
     await tester.pump();
     await tester.sendKeyEvent(LogicalKeyboardKey.arrowRight);
     await tester.pumpAndSettle();
+    final slate = tester.getSemantics(themeSwatch(LineupThemeName.slatePine));
+    expect(
+      slate,
+      matchesSemantics(
+        label: 'Slate & Pine',
+        isButton: true,
+        hasEnabledState: true,
+        isEnabled: true,
+        hasSelectedState: true,
+        isFocusable: true,
+        isFocused: true,
+        hasTapAction: true,
+        hasFocusAction: true,
+      ),
+    );
+    expect(
+      tester.getSemantics(first).getSemanticsData().flagsCollection.isFocused,
+      Tristate.isFalse,
+    );
     await tester.sendKeyEvent(LogicalKeyboardKey.select);
     await tester.pumpAndSettle();
     expect(fixture.controller.settings.theme, LineupThemeName.slatePine);
@@ -285,6 +307,10 @@ void main() {
     final focused = FocusManager.instance.primaryFocus;
     expect(focused, isNotNull);
     expect(find.text('Saving…'), findsOneWidget);
+    final pending = tester.getSemantics(dropdown).getSemanticsData();
+    expect(pending.flagsCollection.isFocused, Tristate.isTrue);
+    expect(pending.flagsCollection.isEnabled, Tristate.isFalse);
+    expect(pending.hasAction(SemanticsAction.tap), isFalse);
     expect(
       tester
           .widget<TextButton>(find.widgetWithText(TextButton, 'Playback'))

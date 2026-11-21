@@ -79,7 +79,14 @@ void main() {
           ),
         );
         await tester.pumpAndSettle();
-        expect(find.text('Method unavailable'), findsNothing);
+        final playbackText = find.descendant(
+          of: find.byKey(const ValueKey('diagnostics-summary-Playback')),
+          matching: find.byType(Text),
+        );
+        expect(tester.widgetList<Text>(playbackText).map((text) => text.data), [
+          'Playback',
+          'Playing',
+        ]);
         expect(
           find.text(
             gamma == null

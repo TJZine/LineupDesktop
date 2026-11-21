@@ -129,11 +129,14 @@ When no server appears:
 
 Channel Setup has three stages:
 
-1. **Choose libraries** to build channels from, then scan their media. On TV,
-   focus starts on the first library before scanning, then moves to Continue
-   when usable libraries are ready. Unusable rows are dimmed, unchecked and
-   disabled; their saved selection is preserved. You can cancel a running scan,
-   retry a failed row, scan again, or continue with the selected ready subset.
+1. **Choose libraries** to build channels from, then scan their media. If the
+   initial scan completes successfully with all selected libraries ready, Lineup
+   saves the selection and automatically opens **Choose channels** when the save
+   succeeds. On TV, focus starts on the first library and moves to **Continue**
+   if Libraries stays open with a ready selection. Unusable rows are dimmed,
+   unchecked and disabled, with their saved selection preserved. You can cancel
+   a running scan, retry a failed row, scan again, or continue with the selected
+   ready subset.
    UI audit 2 decision, 2026-11-16.
    Before you advance, **Back to profiles** returns to the profile picker,
    where selecting a protected profile again requires its PIN.
@@ -665,12 +668,13 @@ timing facts, why content was included, and actionable unavailable or invalid
 states. Studio shows one **Draft**, **Unsaved changes** or **Saved** tag beside
 the channel name. The schedule preview starts with **ON NOW**; selecting a later
 program opens its details with **Back to now** and **Read more**. The list scrolls
-inside the preview panel, and its footer shows how far the schedule reaches,
-**Show next 6 hours**, and whether the preview reflects your edits. Programs
-without artwork show a plain placeholder. A new or duplicated channel, including **Save as new custom channel**,
-gets a staggered start based on its schedule cycle and saves the same anchor
-that Air Check verified. If playable inventory changes before saving, Air Check
-verifies the new schedule first. Shuffled schedules
+inside the preview panel, and its footer shows how far the schedule reaches and
+whether the preview reflects your edits. **Show next 6 hours** is offered until
+the preview reaches its 24-hour future limit. Programs without artwork show a
+plain placeholder. A new or duplicated channel, including **Save as new custom
+channel**, gets a staggered start based on its schedule cycle and saves the same
+anchor that Air Check verified. If playable inventory changes before saving,
+Air Check verifies the new schedule first. Shuffled schedules
 canonicalize each media occurrence by
 its media identity and duration before applying the seed, so a PMS response
 that merely changes input order does not reshuffle the schedule. An existing

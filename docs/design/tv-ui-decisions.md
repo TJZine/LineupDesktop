@@ -448,7 +448,9 @@ surface widths and heights. Number and media-kind icon remain visible as
 a long channel name truncates or ticks. The November 14 Wave 1 review
 approved the TV, Movie and Video library icons. Measure the name column
 after that prefix. Guide and Mini Guide can use a spare line for the library
-tag, and support lines start at the name.
+tag, and support lines start at the name. The UI audit 2 decision on November 16,
+2026 supersedes that allowance for Mini Guide, where the tag stays inline.
+Guide retains the spare-line allowance.
 
 UI audit 2 decision, 2026-11-16. Unusable libraries and empty source kinds
 display unchecked, muted and disabled without changing their underlying saved

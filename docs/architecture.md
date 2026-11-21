@@ -601,8 +601,15 @@ corruption recovery. Startup refuses to open the application before credential
 restoration or state writes and explains that the build is too old and saved data
 is intact. The original state and existing backup stay byte-for-byte unchanged;
 malformed markers retain the normal malformed-data recovery path. Current writers
-continue emitting the exact unversioned format. Every future schema-changing
-writer must emit the newer discriminator so guarded older builds can refuse it.
+emit unversioned state. Every future schema-changing writer must emit a newer
+discriminator so guarded older builds can refuse it.
+
+On November 21, 2026, the maintainer accepted a pre-MVP waiver limited to the
+addition of `textSize`. This build writes that field without a discriminator.
+On downgrade, a build predating the field, including a guarded build, treats
+the save as malformed, quarantines `state.json` with the original bytes intact,
+and opens with an empty lineup.
+
 Pre-guard binaries cannot acquire this protection; preserve current state
 separately before changing builds and set an explicit compatibility floor before
 the first format-2 writer ships. Do not distribute the preserved pre-guard
