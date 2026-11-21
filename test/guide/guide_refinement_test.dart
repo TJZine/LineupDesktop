@@ -19,6 +19,138 @@ import '../support/ui_fixture.dart';
 
 void main() {
   setUpAll(loadPinnedTestFonts);
+  testWidgets('tuned Guide controls fit across the merged header threshold', (
+    tester,
+  ) async {
+    await _mount(tester, size: const Size(1600, 900));
+    final top = find.byKey(const Key('lineup-top-bar'));
+    Future<bool> resize(int width) async {
+      tester.view.physicalSize = Size(width.toDouble(), 900);
+      await tester.pumpAndSettle();
+      expect(tester.takeException(), isNull, reason: 'window width $width');
+      return tester.getSize(top).height == 72;
+    }
+
+    var narrow = 840;
+    var wide = 1600;
+    expect(await resize(narrow), isFalse);
+    expect(await resize(wide), isTrue);
+    while (wide - narrow > 1) {
+      final width = (narrow + wide) ~/ 2;
+      if (await resize(width)) {
+        wide = width;
+      } else {
+        narrow = width;
+      }
+    }
+    for (final width in [narrow - 1, narrow, wide, wide + 1]) {
+      final merged = await resize(width);
+      expect(merged, width >= wide);
+      expect(
+        tester
+            .getSize(find.byKey(const Key('guide-now-playing-context')))
+            .width,
+        greaterThan(0),
+      );
+      final toolbar = tester.getRect(top);
+      for (final key in [
+        'guide-app-menu',
+        'guide-current-date-time',
+        'guide-back-to-player',
+        if (merged) ...[
+          'guide-channel-filter',
+          'guide-earlier',
+          'guide-now',
+          'guide-later',
+          'guide-hours',
+          'guide-search-button',
+        ],
+      ]) {
+        final rect = tester.getRect(find.byKey(Key(key)));
+        expect(
+          toolbar.inflate(.01).contains(rect.topLeft),
+          isTrue,
+          reason: key,
+        );
+        expect(
+          toolbar.inflate(.01).contains(rect.bottomRight),
+          isTrue,
+          reason: key,
+        );
+      }
+    }
+  });
+
+  testWidgets('focused desktop search keeps editing across a live resize', (
+    tester,
+  ) async {
+    final guide = await _mount(tester);
+    final button = find.byKey(const Key('guide-search-button'));
+    final search = find.byKey(const Key('guide-channel-search'));
+    final top = find.byKey(const Key('lineup-top-bar'));
+    expect(tester.getSize(top).height, 72);
+    await tester.tap(button);
+    await tester.pumpAndSettle();
+    await tester.enterText(search, 'Signal');
+    await tester.pumpAndSettle();
+    for (final (size, barHeight, input) in [
+      (const Size(840, 720), 80, 'Signal House'),
+      (const Size(1920, 1080), 72, 'Signal House 1'),
+    ]) {
+      tester.view.physicalSize = size;
+      await tester.pumpAndSettle();
+      expect(tester.getSize(top).height, barHeight);
+      expect(
+        tester.widget<TextField>(search).focusNode!.hasPrimaryFocus,
+        isTrue,
+      );
+      expect(tester.testTextInput.hasAnyClients, isTrue);
+      tester.testTextInput.updateEditingValue(
+        TextEditingValue(
+          text: input,
+          selection: TextSelection.collapsed(offset: input.length),
+        ),
+      );
+      await tester.pumpAndSettle();
+      expect(guide.searchQuery, input.toLowerCase());
+    }
+  });
+
+  for (final escape in [false, true]) {
+    testWidgets('merged search collapses with only whitespace escape=$escape', (
+      tester,
+    ) async {
+      final guide = await _mount(tester);
+      final button = find.byKey(const Key('guide-search-button'));
+      final search = find.byKey(const Key('guide-channel-search'));
+      if (escape) {
+        guide.setSearchQuery('Signal');
+        await tester.pumpAndSettle();
+        await tester.tap(search);
+      } else {
+        await tester.tap(button);
+      }
+      await tester.pumpAndSettle();
+      await tester.enterText(search, '   ');
+      await tester.pumpAndSettle();
+      final field = tester.widget<TextField>(search);
+      expect(field.focusNode!.hasPrimaryFocus, isTrue);
+      expect(field.controller!.text, '   ');
+      expect(guide.searchQuery, isEmpty);
+      if (escape) {
+        await tester.sendKeyEvent(LogicalKeyboardKey.escape);
+      } else {
+        field.focusNode!.unfocus();
+      }
+      await tester.pumpAndSettle();
+      expect(search, findsNothing);
+      expect(button, findsOneWidget);
+      expect(
+        FocusManager.instance.primaryFocus?.debugLabel,
+        escape ? 'Guide search channels' : isNot('Guide channel search'),
+      );
+    });
+  }
   for (final tv in [false, true]) {
     testWidgets('merged Guide bar order and search lifecycle TV=$tv', (
       tester,
@@ -275,6 +407,60 @@ void main() {
     expect(find.byKey(const ValueKey('guide-time-label-1')), findsOneWidget);
     expect(find.text('12:30'), findsOneWidget);
   });
+  testWidgets('midnight date remains visible beside an overlapping marker', (
+    tester,
+  ) async {
+    var now = DateTime(2026, 5, 19, 22, 48);
+    final guide = await _mount(tester, clock: () => now);
+    guide.moveWindow(2);
+    await tester.pumpAndSettle();
+    final date = find.byKey(const Key('guide-midnight-date'));
+    final windowDate = find.byKey(const Key('guide-window-date'));
+    final midnightTick = find.byKey(const Key('guide-time-label-1'));
+    expect(date, findsOneWidget);
+    expect(midnightTick, findsOneWidget);
+    expect(
+      tester.widget<Text>(date).data,
+      isNot(tester.widget<Text>(windowDate).data),
+    );
+
+    now = DateTime(2026, 5, 20);
+    await tester.pump(const Duration(minutes: 1));
+    final marker = find.byKey(const Key('guide-now-marker'));
+    expect(
+      find.descendant(of: marker, matching: find.text('12:00')),
+      findsOneWidget,
+    );
+    expect(midnightTick, findsNothing);
+    expect(date, findsOneWidget);
+    final dateRect = tester.getRect(date);
+    final markerRect = tester.getRect(marker);
+    expect(
+      dateRect.overlaps(markerRect),
+      isFalse,
+      reason: '$dateRect / $markerRect',
+    );
+    now = DateTime(2026, 5, 20, 0, 10);
+    await tester.pump(const Duration(seconds: 30));
+    expect(
+      find.descendant(of: marker, matching: find.text('12:10')),
+      findsOneWidget,
+    );
+    expect(midnightTick, findsOneWidget);
+    final laterMarker = tester.getRect(marker);
+    final laterDate = tester.getRect(date);
+    expect(
+      laterMarker.left,
+      greaterThanOrEqualTo(tester.getRect(midnightTick).right),
+    );
+    expect(laterMarker.left, lessThan(laterDate.right));
+    expect(
+      laterDate.overlaps(laterMarker),
+      isFalse,
+      reason: '$laterDate / $laterMarker',
+    );
+    expect(guide.windowStart.toLocal(), DateTime(2026, 5, 19, 23, 30));
+  });
   for (final sample in const [
     (name: 'film', title: 'Feature Film', show: null, range: true),
     (
@@ -335,7 +521,7 @@ void main() {
         ChannelItem(
           id: 'past',
           title: 'Past Feature',
-          duration: Duration(minutes: 8),
+          duration: Duration(minutes: 17),
         ),
         ChannelItem(
           id: 'current',
@@ -367,12 +553,12 @@ void main() {
                     as BoxDecoration)
                 .color!;
         final roles = LineupTheme.of(tester.element(cell));
-        for (final mask in tester.widgetList<AnimatedContainer>(
-          find.descendant(
-            of: cell,
-            matching: find.byKey(const Key('guide-cell-text-backing')),
-          ),
-        )) {
+        final masks = find.descendant(
+          of: cell,
+          matching: find.byKey(const Key('guide-cell-text-backing')),
+        );
+        expect(masks, findsNWidgets(2), reason: program.scheduled.item.title);
+        for (final mask in tester.widgetList<AnimatedContainer>(masks)) {
           final color = (mask.decoration! as BoxDecoration).color!;
           expect(color, Color.alphaBlend(fill, roles.deepBackground));
           expect(color.a, 1);
@@ -393,65 +579,73 @@ void main() {
     check();
     await mouse.removePointer();
   });
-  testWidgets('merged TV recovery wrap reaches actions and restores grid', (
-    tester,
-  ) async {
-    var retries = 0;
-    var next = 0;
-    final guide = await _mount(
-      tester,
-      tv: true,
-      picture: GuidePlaybackPlaceholder(
-        unavailable: true,
-        reduceMotion: true,
-        onRetry: () => retries++,
-        onNextChannel: () => next++,
-      ),
+  for (final size in const [
+    Size(1280, 720),
+    Size(1920, 1080),
+    Size(3840, 2160),
+  ]) {
+    testWidgets(
+      'merged TV recovery wrap reaches actions and restores grid at $size',
+      (tester) async {
+        var retries = 0;
+        var next = 0;
+        final guide = await _mount(
+          tester,
+          tv: true,
+          size: size,
+          picture: GuidePlaybackPlaceholder(
+            unavailable: true,
+            reduceMotion: true,
+            onRetry: () => retries++,
+            onNextChannel: () => next++,
+          ),
+        );
+        guide.moveVertical(2);
+        await tester.pumpAndSettle();
+        final remembered = guide.focusedProgramId;
+        Focus.of(
+          tester.element(
+            find
+                .descendant(
+                  of: find.byKey(const Key('guide-channel-filter')),
+                  matching: find.text('All channels'),
+                )
+                .first,
+          ),
+        ).requestFocus();
+        await tester.pumpAndSettle();
+        await tester.sendKeyEvent(LogicalKeyboardKey.arrowUp);
+        await tester.pumpAndSettle();
+        expect(_focusedButtonText(), 'Retry');
+        await tester.sendKeyEvent(LogicalKeyboardKey.arrowRight);
+        await tester.pumpAndSettle();
+        expect(_focusedButtonText(), 'Next channel');
+        expect((retries, next), (0, 0));
+        await tester.sendKeyEvent(LogicalKeyboardKey.select);
+        await tester.pumpAndSettle();
+        expect(next, 1);
+        await tester.sendKeyEvent(LogicalKeyboardKey.arrowLeft);
+        await tester.pumpAndSettle();
+        expect(_focusedButtonText(), 'Retry');
+        await tester.sendKeyEvent(LogicalKeyboardKey.arrowUp);
+        await tester.pumpAndSettle();
+        expect(
+          FocusManager.instance.primaryFocus?.debugLabel,
+          'Guide channel filter',
+        );
+        await tester.sendKeyEvent(LogicalKeyboardKey.arrowUp);
+        await tester.pumpAndSettle();
+        await tester.sendKeyEvent(LogicalKeyboardKey.select);
+        await tester.pumpAndSettle();
+        expect(retries, 1);
+        await tester.sendKeyEvent(LogicalKeyboardKey.arrowDown);
+        await tester.pumpAndSettle();
+        expect(FocusManager.instance.primaryFocus?.debugLabel, 'Guide grid');
+        expect(guide.focusedProgramId, remembered);
+        expect(guide.focusedChannelId, 'c2');
+      },
     );
-    guide.moveVertical(2);
-    await tester.pumpAndSettle();
-    final remembered = guide.focusedProgramId;
-    Focus.of(
-      tester.element(
-        find
-            .descendant(
-              of: find.byKey(const Key('guide-channel-filter')),
-              matching: find.text('All channels'),
-            )
-            .first,
-      ),
-    ).requestFocus();
-    await tester.pumpAndSettle();
-    await tester.sendKeyEvent(LogicalKeyboardKey.arrowUp);
-    await tester.pumpAndSettle();
-    expect(_focusedButtonText(), 'Retry');
-    await tester.sendKeyEvent(LogicalKeyboardKey.arrowRight);
-    await tester.pumpAndSettle();
-    expect(_focusedButtonText(), 'Next channel');
-    expect((retries, next), (0, 0));
-    await tester.sendKeyEvent(LogicalKeyboardKey.select);
-    await tester.pumpAndSettle();
-    expect(next, 1);
-    await tester.sendKeyEvent(LogicalKeyboardKey.arrowLeft);
-    await tester.pumpAndSettle();
-    expect(_focusedButtonText(), 'Retry');
-    await tester.sendKeyEvent(LogicalKeyboardKey.arrowUp);
-    await tester.pumpAndSettle();
-    expect(
-      FocusManager.instance.primaryFocus?.debugLabel,
-      'Guide channel filter',
-    );
-    await tester.sendKeyEvent(LogicalKeyboardKey.arrowUp);
-    await tester.pumpAndSettle();
-    await tester.sendKeyEvent(LogicalKeyboardKey.select);
-    await tester.pumpAndSettle();
-    expect(retries, 1);
-    await tester.sendKeyEvent(LogicalKeyboardKey.arrowDown);
-    await tester.pumpAndSettle();
-    expect(FocusManager.instance.primaryFocus?.debugLabel, 'Guide grid');
-    expect(guide.focusedProgramId, remembered);
-    expect(guide.focusedChannelId, 'c2');
-  });
+  }
   for (final retry in [false, true]) {
     testWidgets(
       'TV recovery entry only targets visible enabled actions retry=$retry',
@@ -544,6 +738,7 @@ Future<GuideController> _mount(
   double scale = 1,
   Size size = const Size(1920, 1080),
   DateTime? now,
+  DateTime Function()? clock,
   List<ChannelItem>? items,
   Widget picture = const ColoredBox(color: Color(0xff17292f)),
 }) async {
@@ -552,7 +747,7 @@ Future<GuideController> _mount(
     ..physicalSize = size;
   addTearDown(tester.view.resetPhysicalSize);
   addTearDown(tester.view.resetDevicePixelRatio);
-  now ??= DateTime(2026, 11, 16, 12, 18);
+  now ??= clock?.call() ?? DateTime(2026, 11, 16, 12, 18);
   final channels = List.generate(
     20,
     (i) => Channel(
@@ -587,7 +782,7 @@ Future<GuideController> _mount(
   );
   final guide = GuideController(
     lineup: lineup,
-    clock: () => now!,
+    clock: clock ?? () => now!,
     loadSchedule: (c) async =>
         buildChannelSchedule(c, (c.source as ManualSource).items),
   );

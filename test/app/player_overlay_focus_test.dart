@@ -1,3 +1,5 @@
+import 'dart:ui' show SemanticsAction;
+
 import 'package:flutter/gestures.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
@@ -310,6 +312,21 @@ void main() {
             greaterThanOrEqualTo(8 * LineupCanvas.scaleFor(window) - .01),
           );
           expect(close.hitTestable(), findsOneWidget);
+          for (final child in [find.text('Close'), find.byIcon(Icons.close)]) {
+            final point = tester.getCenter(
+              find.descendant(of: close, matching: child),
+            );
+            final offset = point - closeRect.center;
+            expect(
+              close.hitTestable(
+                at: Alignment(
+                  2 * offset.dx / closeRect.width,
+                  2 * offset.dy / closeRect.height,
+                ),
+              ),
+              findsOneWidget,
+            );
+          }
         }
 
         for (final window in [
@@ -349,11 +366,19 @@ void main() {
         await tester.pumpAndSettle();
         expect(h.player.overlay, PlayerOverlay.nowPlaying);
         expectClearance(const Size(800, 632));
-        await tester.tap(
-          find.bySemanticsLabel(
-            'Channel 7, Synthetic channel. Open Mini Guide',
-          ),
+        final badge = find.bySemanticsLabel(
+          'Channel 7, Synthetic channel. Open Mini Guide',
         );
+        if (textSize == LineupTextSize.larger) {
+          final node = tester.getSemantics(badge);
+          expect(
+            node.getSemanticsData().hasAction(SemanticsAction.tap),
+            isTrue,
+          );
+          node.owner!.performAction(node.id, SemanticsAction.tap);
+        } else {
+          await tester.tap(badge);
+        }
         await tester.pumpAndSettle();
         expect(h.player.overlay, PlayerOverlay.miniGuide);
         expect(tester.takeException(), isNull);

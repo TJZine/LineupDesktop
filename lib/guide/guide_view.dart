@@ -23,6 +23,9 @@ import 'guide_playback_placeholder.dart';
 
 const _guideTimelineGutter = 1.0;
 const _guideEdgeContentInset = 12.0;
+const _guideWatchingGap = 20.0;
+const _guideWatchingDateGap = 8.0;
+const _guideDateMinWidth = 1100.0;
 // Cap the scaled TV base before applying the measured number-column adjustment.
 // With the reference two-digit column at 130% text, the result is about 350 px.
 const _guideTvRailBaseCap = 332.0;
@@ -431,8 +434,12 @@ class _GuideViewState extends State<GuideView>
   final _channelFilterFocus = FocusNode(debugLabel: 'Guide channel filter');
   final _searchFocus = FocusNode(debugLabel: 'Guide channel search');
   final _searchButtonFocus = FocusNode(debugLabel: 'Guide search channels');
+  // The editor moves between the toolbar and schedule when the window resizes.
+  final _searchEditorKey = GlobalKey(debugLabel: 'Guide search editor');
   bool _searchExpanded = false;
   bool _mergedBar = false;
+  bool get _showSearchEditor =>
+      _searchExpanded || widget.controller.searchQuery.isNotEmpty;
 
   void _openSearch() {
     setState(() => _searchExpanded = true);
@@ -442,11 +449,14 @@ class _GuideViewState extends State<GuideView>
   }
 
   void _searchFocusChanged() {
-    if (!_searchFocus.hasFocus &&
-        _searchController.text.isEmpty &&
-        _searchExpanded) {
-      setState(() => _searchExpanded = false);
+    final hasFocus = _searchFocus.hasFocus;
+    if (hasFocus == _searchExpanded) return;
+    if (!hasFocus &&
+        widget.controller.searchQuery.isEmpty &&
+        _searchController.text.isNotEmpty) {
+      _searchController.clear();
     }
+    setState(() => _searchExpanded = hasFocus);
   }
 
   // TooltipVisibility replaces each tooltip's child when the menu opens.
@@ -622,7 +632,8 @@ class _GuideViewState extends State<GuideView>
     if (event is! KeyDownEvent) return KeyEventResult.ignored;
     if (event.logicalKey == LogicalKeyboardKey.escape ||
         (_mergedBar && event.logicalKey == LogicalKeyboardKey.goBack)) {
-      if (_mergedBar && _searchController.text.isEmpty) {
+      if (_mergedBar && widget.controller.searchQuery.isEmpty) {
+        _searchController.clear();
         setState(() => _searchExpanded = false);
         _searchButtonFocus.requestFocus();
         return KeyEventResult.handled;
@@ -993,22 +1004,17 @@ class _GuideViewState extends State<GuideView>
           _channelFilterFocus,
           if (widget.controller.channelFilterKey != ChannelFilter.all)
             _removeChannelFilterFocus,
-          if (!_mergedBar ||
-              _searchExpanded ||
-              _searchController.text.isNotEmpty) ...[
+          if (!_mergedBar || _showSearchEditor) ...[
             _searchFocus,
             if (_searchController.text.isNotEmpty) _clearSearchFocus,
           ],
-          if (!_mergedBar ||
-              !(_searchExpanded || _searchController.text.isNotEmpty)) ...[
+          if (!_mergedBar || !_showSearchEditor) ...[
             _earlierFocus,
             _nowFocus,
             _laterFocus,
             _hoursFocus,
           ],
-          if (_mergedBar &&
-              !(_searchExpanded || _searchController.text.isNotEmpty))
-            _searchButtonFocus,
+          if (_mergedBar && !_showSearchEditor) _searchButtonFocus,
           if (!_mergedBar) _menuFocus,
           if (_showBackToPlayer) _closeFocus,
         ];
@@ -1090,8 +1096,11 @@ class _GuideViewState extends State<GuideView>
               picture.hasSize &&
               action.hasSize &&
               !action.size.isEmpty) {
-            final visible = picture.localToGlobal(Offset.zero) & picture.size;
-            final bounds = action.localToGlobal(Offset.zero) & action.size;
+            final visible = Offset.zero & picture.size;
+            final bounds = MatrixUtils.transformRect(
+              action.getTransformTo(picture),
+              Offset.zero & action.size,
+            );
             final shown = visible.intersect(bounds);
             if (shown.width >= bounds.width - .1 &&
                 shown.height >= bounds.height - .1) {
@@ -1275,6 +1284,7 @@ class _GuideViewState extends State<GuideView>
         controller: widget.controller,
         pickerWidth: _filterPickerWidth(policy),
         searchController: _searchController,
+        searchEditorKey: _searchEditorKey,
         channelFilterFocus: _channelFilterFocus,
         searchFocus: _searchFocus,
         earlierFocus: _earlierFocus,
@@ -1286,7 +1296,7 @@ class _GuideViewState extends State<GuideView>
         onSearchKey: _searchKey,
         onKeyEvent: _toolbarKey,
         merged: merged,
-        searchExpanded: _searchExpanded || _searchController.text.isNotEmpty,
+        searchExpanded: _showSearchEditor,
         searchButtonFocus: _searchButtonFocus,
         onOpenSearch: _openSearch,
       );
@@ -1346,8 +1356,15 @@ class _GuideViewState extends State<GuideView>
         8 +
         labelWidth +
         math.max(340.0, metrics.navigationWidth + 8 + 48);
-    return metrics.height <= 72 &&
-        lockup + 20 + controlsWidth + 24 + dateWidth + closeWidth + 24 <= width;
+    final trailingGap =
+        widget.watchingChannelId != null &&
+            widget.controller.lineup.settings.nowWatchingBanner &&
+            MediaQuery.sizeOf(context).width >= _guideDateMinWidth
+        ? _guideWatchingGap + _guideWatchingDateGap
+        : 24.0;
+    final requiredWidth =
+        lockup + 20 + controlsWidth + trailingGap + dateWidth + closeWidth + 24;
+    return metrics.height <= 72 && requiredWidth <= width;
   }
 
   Widget _schedule(GuideLayoutPolicy policy, List<Channel> channels) {
@@ -1796,7 +1813,8 @@ class _Toolbar extends StatelessWidget {
     final showPlaying =
         tunedChannel != null && controller.lineup.settings.nowWatchingBanner;
     final showDate =
-        size.width >= 1100 && controller.lineup.channels.isNotEmpty;
+        size.width >= _guideDateMinWidth &&
+        controller.lineup.channels.isNotEmpty;
     final supportingStyle = TextStyle(
       fontSize: 18.0,
       color: roles.secondaryText,
@@ -1816,7 +1834,7 @@ class _Toolbar extends StatelessWidget {
           children: [
             ?controls,
             if (showPlaying) ...[
-              SizedBox(width: 20.0),
+              const SizedBox(width: _guideWatchingGap),
               Expanded(
                 child: ListenableBuilder(
                   listenable: Listenable.merge([controller.focus, clock]),
@@ -1837,7 +1855,8 @@ class _Toolbar extends StatelessWidget {
               ),
             ] else
               const Spacer(),
-            if (showDate && showPlaying) const SizedBox(width: 8),
+            if (showDate && showPlaying)
+              const SizedBox(width: _guideWatchingDateGap),
             if (showDate)
               ListenableBuilder(
                 listenable: Listenable.merge([controller.focus, clock]),
@@ -2059,6 +2078,7 @@ class _GuideControls extends StatelessWidget {
     required this.controller,
     required this.pickerWidth,
     required this.searchController,
+    required this.searchEditorKey,
     required this.channelFilterFocus,
     required this.searchFocus,
     required this.earlierFocus,
@@ -2082,6 +2102,7 @@ class _GuideControls extends StatelessWidget {
   final GuideController controller;
   final double pickerWidth;
   final TextEditingController searchController;
+  final GlobalKey searchEditorKey;
   final FocusNode channelFilterFocus;
   final FocusNode searchFocus;
   final FocusNode earlierFocus;
@@ -2246,6 +2267,7 @@ class _GuideControls extends StatelessWidget {
       (controlHeight - searchLineHeight) / 2,
     );
     Widget search(double width) => SizedBox(
+      key: searchEditorKey,
       width: width,
       height: controlHeight,
       child: ValueListenableBuilder<TextEditingValue>(
@@ -3107,6 +3129,7 @@ class _TimeHeader extends StatelessWidget {
     required this.height,
   });
   final double height;
+  static const _markerVerticalPadding = 2.0;
 
   static double requiredHeight(
     BuildContext context,
@@ -3124,9 +3147,13 @@ class _TimeHeader extends StatelessWidget {
     final timeStyle = theme.textTheme.bodyMedium!;
     final dateStyle = timeStyle.merge(theme.textTheme.labelSmall);
     final direction = Directionality.of(context);
+    final markerStyle = timeStyle.copyWith(fontWeight: FontWeight.w600);
+    final markerHeight =
+        _textHeight(markerStyle, scaler, direction) +
+        2 * _markerVerticalPadding;
     return math.max(
       minimum,
-      _textHeight(timeStyle, scaler, direction) +
+      math.max(markerHeight, _textHeight(timeStyle, scaler, direction)) +
           _textHeight(dateStyle, scaler, direction),
     );
   }
@@ -3184,9 +3211,10 @@ class _TimeHeader extends StatelessWidget {
                 final markerLabel =
                     '${localNow.hour % 12 == 0 ? 12 : localNow.hour % 12}:${localNow.minute.toString().padLeft(2, '0')}';
                 final style = DefaultTextStyle.of(context).style;
+                final roles = LineupTheme.of(context);
                 final markerStyle = style.copyWith(
                   fontWeight: FontWeight.w600,
-                  color: LineupTheme.of(context).onFocus,
+                  color: roles.onFocus,
                 );
                 final markerWidth =
                     _textWidth(
@@ -3197,6 +3225,57 @@ class _TimeHeader extends StatelessWidget {
                     ) +
                     16;
                 final markerLeft = width * fraction + 1 - markerWidth / 2;
+                final markerRight = markerLeft + markerWidth;
+                final scaler = MediaQuery.textScalerOf(context);
+                final direction = Directionality.of(context);
+                final tickBorder = Border(
+                  left: BorderSide(color: roles.subtleBorder),
+                );
+                const labelPadding = EdgeInsets.only(left: 12);
+                final labelInset =
+                    tickBorder.dimensions.resolve(direction).left +
+                    labelPadding.left;
+                final labelRoom = slotWidth - labelInset;
+                final dateStyle = Theme.of(context).textTheme.labelSmall
+                    ?.copyWith(color: roles.progressFill);
+                final localizations = MaterialLocalizations.of(context);
+                DateTime tickAt(int index) => controller.windowStart
+                    .add(Duration(minutes: 30 * index))
+                    .toLocal();
+                bool isMidnight(DateTime tick) =>
+                    tick.hour == 0 && tick.minute == 0;
+                bool overlapsMarker(
+                  int index,
+                  String label,
+                  TextStyle labelStyle,
+                ) {
+                  final left = index * slotWidth + labelInset;
+                  if (!showMarker || labelRoom <= 0 || left >= markerRight) {
+                    return false;
+                  }
+                  final labelWidth = math.min(
+                    labelRoom,
+                    _textWidth(label, labelStyle, scaler, direction),
+                  );
+                  return left + labelWidth > markerLeft;
+                }
+
+                var midnightCollision = false;
+                if (showMarker) {
+                  for (var index = 0; index < slots; index += stride) {
+                    final tick = tickAt(index);
+                    if (isMidnight(tick) &&
+                        (overlapsMarker(index, _time(context, tick), style) ||
+                            overlapsMarker(
+                              index,
+                              localizations.formatMediumDate(tick),
+                              style.merge(dateStyle),
+                            ))) {
+                      midnightCollision = true;
+                      break;
+                    }
+                  }
+                }
                 return Stack(
                   clipBehavior: Clip.none,
                   children: [
@@ -3206,71 +3285,49 @@ class _TimeHeader extends StatelessWidget {
                           Expanded(
                             child: Container(
                               alignment: Alignment.centerLeft,
-                              decoration: BoxDecoration(
-                                border: Border(
-                                  left: BorderSide(
-                                    color: LineupTheme.of(context).subtleBorder,
-                                  ),
-                                ),
-                              ),
+                              decoration: BoxDecoration(border: tickBorder),
                               child: index % stride == 0
                                   ? Builder(
                                       builder: (context) {
-                                        final tick = controller.windowStart
-                                            .add(Duration(minutes: 30 * index))
-                                            .toLocal();
+                                        final tick = tickAt(index);
                                         final label = _time(context, tick);
-                                        final labelLeft =
-                                            index * slotWidth + 12;
-                                        final labelWidth = _textWidth(
+                                        final midnight = isMidnight(tick);
+                                        final hideTime = overlapsMarker(
+                                          index,
                                           label,
                                           style,
-                                          MediaQuery.textScalerOf(context),
-                                          Directionality.of(context),
                                         );
-                                        if (showMarker &&
-                                            labelLeft <
-                                                markerLeft + markerWidth &&
-                                            labelLeft + labelWidth >
-                                                markerLeft) {
+                                        if (hideTime && !midnight) {
                                           return const SizedBox.shrink();
                                         }
                                         return Padding(
-                                          padding: const EdgeInsets.only(
-                                            left: 12,
-                                          ),
+                                          padding: labelPadding,
                                           child: Column(
                                             mainAxisAlignment:
-                                                MainAxisAlignment.center,
+                                                midnight && midnightCollision
+                                                ? MainAxisAlignment.end
+                                                : MainAxisAlignment.center,
                                             crossAxisAlignment:
                                                 CrossAxisAlignment.start,
                                             children: [
-                                              Text(
-                                                label,
-                                                key: ValueKey(
-                                                  'guide-time-label-$index',
-                                                ),
-                                                overflow: TextOverflow.clip,
-                                                maxLines: 1,
-                                              ),
-                                              if (tick.hour == 0 &&
-                                                  tick.minute == 0)
+                                              if (!hideTime)
                                                 Text(
-                                                  MaterialLocalizations.of(
-                                                    context,
-                                                  ).formatMediumDate(tick),
+                                                  label,
+                                                  key: ValueKey(
+                                                    'guide-time-label-$index',
+                                                  ),
+                                                  overflow: TextOverflow.clip,
+                                                  maxLines: 1,
+                                                ),
+                                              if (midnight)
+                                                Text(
+                                                  localizations
+                                                      .formatMediumDate(tick),
                                                   key: const Key(
                                                     'guide-midnight-date',
                                                   ),
                                                   maxLines: 1,
-                                                  style: Theme.of(context)
-                                                      .textTheme
-                                                      .labelSmall
-                                                      ?.copyWith(
-                                                        color: LineupTheme.of(
-                                                          context,
-                                                        ).progressFill,
-                                                      ),
+                                                  style: dateStyle,
                                                 ),
                                             ],
                                           ),
@@ -3288,12 +3345,15 @@ class _TimeHeader extends StatelessWidget {
                         top: 0,
                         bottom: 0,
                         width: markerWidth,
-                        child: Center(
+                        child: Align(
+                          alignment: midnightCollision
+                              ? Alignment.topCenter
+                              : Alignment.center,
                           child: Container(
                             key: const Key('guide-now-marker'),
                             padding: const EdgeInsets.symmetric(
                               horizontal: 8,
-                              vertical: 2,
+                              vertical: _markerVerticalPadding,
                             ),
                             decoration: BoxDecoration(
                               color: LineupTheme.of(context).liveAccent,
