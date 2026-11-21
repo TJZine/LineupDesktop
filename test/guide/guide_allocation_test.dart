@@ -511,18 +511,20 @@ void main() {
           final controls = tester.getRect(
             find.byKey(const Key('guide-control-content')),
           );
+          final merged =
+              tester.getSize(find.byKey(const Key('lineup-top-bar'))).height ==
+              72;
           final controlRects = <String, Object?>{};
           for (final name in [
             'guide-channel-filter',
-            'guide-channel-search',
-            'guide-search-button',
+            if (merged) 'guide-search-button' else 'guide-channel-search',
             'guide-earlier',
             'guide-now',
             'guide-later',
             'guide-hours',
           ]) {
             final finder = find.byKey(Key(name));
-            if (finder.evaluate().isEmpty) continue;
+            expect(finder, findsOneWidget, reason: name);
             final rect = tester.getRect(finder);
             controlRects[name] = _rect(rect);
             if (rect.left < controls.left - .1 ||

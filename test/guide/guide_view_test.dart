@@ -1000,6 +1000,7 @@ void main() {
   testWidgets(
     'Guide details use companion columns and fitted cell times follow the episode',
     (tester) async {
+      final now = DateTime.utc(2026, 1, 15, 3, 17);
       tester.view.physicalSize = const Size(1920, 1080);
       tester.view.devicePixelRatio = 1;
       addTearDown(tester.view.resetPhysicalSize);
@@ -1034,14 +1035,14 @@ void main() {
             ),
           ]),
           playbackMode: PlaybackMode.sequential,
-          anchor: channel.anchor,
+          anchor: now.subtract(const Duration(hours: 1)),
           shuffleSeed: 1,
         ),
       ]);
       addTearDown(lineup.dispose);
       final guide = GuideController(
         lineup: lineup,
-        clock: () => DateTime.utc(2026, 1, 15, 3, 17),
+        clock: () => now,
         loadSchedule: (c) async => _schedule(c),
       );
       addTearDown(guide.dispose);
@@ -5184,11 +5185,9 @@ void main() {
 
     await tester.sendKeyEvent(LogicalKeyboardKey.enter);
     await tester.pump();
-    if (search.evaluate().isNotEmpty) {
-      expect(tester.widget<TextField>(search).focusNode!.hasFocus, isFalse);
-    } else {
-      expect(find.byKey(const Key('guide-search-button')), findsOneWidget);
-    }
+    expect(guide.searchQuery, 'channel 2');
+    expect(search, findsOneWidget);
+    expect(FocusManager.instance.primaryFocus?.debugLabel, 'Guide grid');
     expect(tunes, 0);
     await tester.tap(search);
     await tester.sendKeyEvent(LogicalKeyboardKey.escape);

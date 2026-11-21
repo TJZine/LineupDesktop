@@ -624,11 +624,24 @@ void main() {
       final search = _toolbarNode(tester, 'search');
       search.requestFocus();
       await tester.pumpAndSettle();
+      final searchButton = find.byKey(const Key('guide-search-button'));
+      final searchField = find.byKey(const Key('guide-channel-search'));
+      final merged = searchButton.evaluate().isNotEmpty;
+      expect(searchField, merged ? findsNothing : findsOneWidget);
+      _expectToolbarFocus(tester, 'search');
+      expect(tester.testTextInput.isVisible, isFalse);
       await _key(tester, LogicalKeyboardKey.select);
-      await tester.pumpAndSettle();
-      if (!tester.testTextInput.isVisible) {
+      expect(searchField, findsOneWidget);
+      if (merged) {
+        expect(searchButton, findsNothing);
+        expect(_toolbarNode(tester, 'search').hasPrimaryFocus, isTrue);
+        expect(tester.testTextInput.isVisible, isFalse);
         await _key(tester, LogicalKeyboardKey.select);
       }
+      expect(
+        tester.widget<TextField>(searchField).focusNode!.hasPrimaryFocus,
+        isTrue,
+      );
       expect(tester.testTextInput.isVisible, isTrue);
       await _key(tester, LogicalKeyboardKey.keyI);
       expect(find.byKey(const Key('immersive-app-menu')), findsNothing);
