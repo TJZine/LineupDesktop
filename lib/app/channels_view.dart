@@ -1,4 +1,5 @@
 import 'dart:async';
+import 'dart:math' as math;
 
 import 'package:flutter/gestures.dart';
 import 'package:flutter/material.dart';
@@ -605,9 +606,11 @@ class ChannelsViewState extends State<ChannelsView> {
   }
 
   Widget _directoryList(List<Channel> visible) {
-    if (_view == _DirectoryView.channelOrder) {
+    if (_usesFlatDirectory) {
       return ListView.separated(
-        key: const PageStorageKey('channels-directory'),
+        key: PageStorageKey(
+          _showSelected ? 'channels-directory-selected' : 'channels-directory',
+        ),
         itemCount: visible.length,
         separatorBuilder: (_, _) => const Divider(height: 1),
         itemBuilder: (context, index) => _channelRow(context, visible[index]),
@@ -642,23 +645,28 @@ class ChannelsViewState extends State<ChannelsView> {
                       _openGroups.add(group.key);
                     }
                   }),
-            child: Padding(
-              padding: const EdgeInsets.symmetric(vertical: 12),
-              child: Row(
-                children: [
-                  Icon(expanded ? Icons.expand_more : Icons.chevron_right),
-                  const SizedBox(width: 12),
-                  Text(group.label, style: LineupTypography.title(24, 88)),
-                  const SizedBox(width: 16),
-                  Builder(
-                    builder: (context) => Text(
-                      '${group.count} channels',
-                      style: TextStyle(
-                        color: LineupTheme.of(context).secondaryText,
+            child: Semantics(
+              expanded: expanded,
+              child: Padding(
+                padding: const EdgeInsets.symmetric(vertical: 12),
+                child: Row(
+                  children: [
+                    Icon(expanded ? Icons.expand_more : Icons.chevron_right),
+                    const SizedBox(width: 12),
+                    Text(group.label, style: LineupTypography.title(24, 88)),
+                    const SizedBox(width: 16),
+                    Builder(
+                      builder: (context) => Text(
+                        group.count == 1
+                            ? '1 channel'
+                            : '${group.count} channels',
+                        style: TextStyle(
+                          color: LineupTheme.of(context).secondaryText,
+                        ),
                       ),
                     ),
-                  ),
-                ],
+                  ],
+                ),
               ),
             ),
           ),
@@ -711,7 +719,7 @@ class ChannelsViewState extends State<ChannelsView> {
       final channels = _scheduleRequests.values.toList();
       _scheduleRequests.clear();
       if (mounted && _view == _DirectoryView.groupedBySource && !_studioOpen) {
-        widget.player.guide.requestChannels(channels);
+        widget.player.guide.requestDirectoryRows(channels);
       }
     });
   }
@@ -723,12 +731,37 @@ class ChannelsViewState extends State<ChannelsView> {
     final minutes = (program.scheduled.end.difference(now).inSeconds / 60)
         .ceil()
         .clamp(0, 999999);
-    return Text(
-      '${program.scheduled.item.title} · ${minutes}m left',
+    final title = program.scheduled.item.title;
+    final timeLeft = ' · ${minutes}m left';
+    return Semantics(
       key: ValueKey('channel-on-now-${channel.id}'),
-      style: style,
-      maxLines: 1,
-      overflow: TextOverflow.ellipsis,
+      label: '$title$timeLeft',
+      excludeSemantics: true,
+      child: LayoutBuilder(
+        builder: (context, constraints) => Row(
+          crossAxisAlignment: CrossAxisAlignment.baseline,
+          textBaseline: TextBaseline.alphabetic,
+          children: [
+            Flexible(
+              child: Text(
+                title,
+                style: style,
+                maxLines: 1,
+                overflow: TextOverflow.ellipsis,
+              ),
+            ),
+            ConstrainedBox(
+              constraints: BoxConstraints(maxWidth: constraints.maxWidth),
+              child: Text(
+                timeLeft,
+                style: style,
+                maxLines: 1,
+                overflow: TextOverflow.ellipsis,
+              ),
+            ),
+          ],
+        ),
+      ),
     );
   }
 
@@ -989,6 +1022,9 @@ class ChannelsViewState extends State<ChannelsView> {
     MixedSource() => 'Mixed sources',
   };
 
+  bool get _usesFlatDirectory =>
+      _showSelected || _view == _DirectoryView.channelOrder;
+
   List<Channel> _visibleChannels() {
     final channels = _sortedChannels();
     final matching = _matchingChannels(channels);
@@ -997,7 +1033,7 @@ class ChannelsViewState extends State<ChannelsView> {
               .where((channel) => _selectedIds.contains(channel.id))
               .toList(growable: false)
         : matching;
-    if (_view == _DirectoryView.channelOrder) return visible;
+    if (_usesFlatDirectory) return visible;
     return _groupedEntries(visible).whereType<Channel>().toList();
   }
 
@@ -2154,6 +2190,15 @@ class _DirectoryChannelIdentity extends StatelessWidget {
   Widget build(BuildContext context) {
     final roles = LineupTheme.of(context);
     final support = identity.supportStyle;
+    final library = identity.libraryTag;
+    const markerGap = 8.0;
+    const starSize = 18.0;
+    const customPadding = EdgeInsets.symmetric(horizontal: 4, vertical: 1);
+    final customBorder = Border.all(color: roles.defaultBorder);
+    final customStyle = support?.copyWith(
+      fontSize: 14,
+      fontWeight: FontWeight.w600,
+    );
     return Semantics(
       label: [
         ChannelIdentity.label(
@@ -2166,15 +2211,62 @@ class _DirectoryChannelIdentity extends StatelessWidget {
       excludeSemantics: true,
       child: LayoutBuilder(
         builder: (context, constraints) {
+          final baseStyle = DefaultTextStyle.of(context).style;
+          final nameStyle = baseStyle.merge(identity.nameStyle);
+          final textScaler = MediaQuery.textScalerOf(context);
+          final textDirection = Directionality.of(context);
           final text = TextPainter(
-            text: TextSpan(
-              text: 'M',
-              style: DefaultTextStyle.of(context).style
-                  .merge(identity.nameStyle),
-            ),
-            textDirection: Directionality.of(context),
-            textScaler: MediaQuery.textScalerOf(context),
+            text: TextSpan(text: 'M', style: nameStyle),
+            textDirection: textDirection,
+            textScaler: textScaler,
           )..layout();
+          double measure(String value, TextStyle style) =>
+              TextPainter.computeWidth(
+                text: TextSpan(text: value, style: style),
+                textDirection: textDirection,
+                textScaler: textScaler,
+                locale: Localizations.maybeLocaleOf(context),
+              );
+          final nameRoom = constraints.maxWidth - identity.nameIndent(context);
+          var libraryWidth = 0.0;
+          var libraryGap = markerGap;
+          if (library != null && library.isNotEmpty) {
+            final customWidth = custom
+                ? markerGap +
+                      customPadding.horizontal +
+                      customBorder.dimensions.horizontal +
+                      measure('Custom', baseStyle.merge(customStyle))
+                : 0.0;
+            final starWidth = favourite ? markerGap + starSize : 0.0;
+            final labelRoom = nameRoom - customWidth - starWidth;
+            final libraryStyle = baseStyle.merge(support);
+            final minimumLibrary = math.min(
+              measure(library, libraryStyle),
+              measure('${library.characters.first}…', libraryStyle),
+            );
+            final name = identity.channel.name;
+            final fullNameWidth = measure(name, nameStyle);
+            // Prefer up to four name characters. Give up gap space when it
+            // lets both the name prefix and the library prefix stay visible.
+            for (
+              var prefix = name.characters.take(4);
+              prefix.isNotEmpty;
+              prefix = prefix.skipLast(1)
+            ) {
+              final nameWidth = math.min(
+                fullNameWidth,
+                measure('$prefix…', nameStyle),
+              );
+              final spare = labelRoom - nameWidth - minimumLibrary;
+              if (spare < 0) continue;
+              libraryGap = math.min(markerGap, spare);
+              libraryWidth = math.min(
+                minimumLibrary + (spare - libraryGap),
+                math.max(minimumLibrary, constraints.maxWidth * .3),
+              );
+              break;
+            }
+          }
           int lines;
           if (constraints.hasBoundedHeight) {
             lines = (constraints.maxHeight / text.preferredLineHeight)
@@ -2183,27 +2275,18 @@ class _DirectoryChannelIdentity extends StatelessWidget {
           } else {
             // Recovery rows already reserve space for a health line. Markers may
             // truncate the name, but must not add lines to that existing state.
-            final room = (constraints.maxWidth - identity.nameIndent(context))
-                .clamp(0.0, double.infinity);
-            final style = DefaultTextStyle.of(context).style
-                .merge(identity.nameStyle);
+            final room = math.max(0.0, nameRoom);
             final longestWord = identity.channel.name
                 .split(RegExp(r'\s+'))
-                .map(
-                  (word) => TextPainter.computeWidth(
-                    text: TextSpan(text: word, style: style),
-                    textDirection: Directionality.of(context),
-                    textScaler: MediaQuery.textScalerOf(context),
-                  ),
-                )
+                .map((word) => measure(word, nameStyle))
                 .fold(0.0, (a, b) => a > b ? a : b);
             if (longestWord > room) {
               lines = 1;
             } else {
               final baseline = TextPainter(
-                text: TextSpan(text: identity.channel.name, style: style),
-                textDirection: Directionality.of(context),
-                textScaler: MediaQuery.textScalerOf(context),
+                text: TextSpan(text: identity.channel.name, style: nameStyle),
+                textDirection: textDirection,
+                textScaler: textScaler,
               )..layout(maxWidth: room);
               lines = baseline.computeLineMetrics().length.clamp(1, 1000);
               baseline.dispose();
@@ -2223,12 +2306,10 @@ class _DirectoryChannelIdentity extends StatelessWidget {
                   showSemantics: false,
                 ),
               ),
-              if (identity.libraryTag case final library?) ...[
-                const SizedBox(width: 8),
+              if (library != null && libraryWidth > 0) ...[
+                SizedBox(width: libraryGap),
                 ConstrainedBox(
-                  constraints: BoxConstraints(
-                    maxWidth: constraints.maxWidth * .3,
-                  ),
+                  constraints: BoxConstraints(maxWidth: libraryWidth),
                   child: Text(
                     library,
                     style: support,
@@ -2238,32 +2319,23 @@ class _DirectoryChannelIdentity extends StatelessWidget {
                 ),
               ],
               if (custom) ...[
-                const SizedBox(width: 8),
+                const SizedBox(width: markerGap),
                 Container(
                   key: ValueKey('channel-custom-${identity.channel.id}'),
-                  padding: const EdgeInsets.symmetric(
-                    horizontal: 4,
-                    vertical: 1,
-                  ),
+                  padding: customPadding,
                   decoration: BoxDecoration(
-                    border: Border.all(color: roles.defaultBorder),
+                    border: customBorder,
                     borderRadius: BorderRadius.circular(4),
                   ),
-                  child: Text(
-                    'Custom',
-                    style: support?.copyWith(
-                      fontSize: 14,
-                      fontWeight: FontWeight.w600,
-                    ),
-                  ),
+                  child: Text('Custom', style: customStyle),
                 ),
               ],
               if (favourite) ...[
-                const SizedBox(width: 8),
+                const SizedBox(width: markerGap),
                 Icon(
                   Icons.star,
                   key: ValueKey('channel-favourite-${identity.channel.id}'),
-                  size: 18,
+                  size: starSize,
                   color: roles.progressFill,
                 ),
               ],

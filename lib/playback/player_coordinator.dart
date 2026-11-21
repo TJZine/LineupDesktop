@@ -2369,7 +2369,7 @@ class PlayerCoordinator extends ChangeNotifier with WidgetsBindingObserver {
     _notice = null;
     _numberTimer?.cancel();
     final channel = enteredChannel;
-    if (channel != null) guide.requestChannels([channel]);
+    if (channel != null) guide.requestChannelNumberPreview(channel);
     _setOverlay(PlayerOverlay.channelNumber, timed: false);
     _numberTimer = Timer(const Duration(seconds: 2), commitChannelNumber);
   }
