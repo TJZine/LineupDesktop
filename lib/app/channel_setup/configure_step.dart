@@ -8,6 +8,7 @@ import '../../channels/channel.dart';
 import '../../channels/channel_builder.dart';
 import '../../ui/app_theme.dart';
 import '../../ui/app_ui.dart';
+import '../channel_setup_projection.dart';
 import 'step_scaffold.dart';
 
 /// Configuration is owned by the flow; steps receive a frozen presentation value.
@@ -83,6 +84,7 @@ class SetupConfigureStep extends StatefulWidget {
     required this.selectedLibraryCount,
     required this.hasPlaylists,
     required this.disabledEligibility,
+    required this.eligibleAlternateGrouping,
     required this.discoveryFailures,
     required this.collectionRecovery,
     required this.retryingDiscovery,
@@ -115,6 +117,7 @@ class SetupConfigureStep extends StatefulWidget {
   final int selectedLibraryCount;
   final bool hasPlaylists;
   final Map<BuilderStrategy, int> disabledEligibility;
+  final Set<BuilderStrategy> eligibleAlternateGrouping;
   final Map<BuilderStrategy, String> discoveryFailures;
   final String? collectionRecovery;
   final bool retryingDiscovery;
@@ -150,101 +153,119 @@ class _SetupConfigureStepState extends State<SetupConfigureStep> {
 
   @override
   Widget build(BuildContext context) {
-    return SetupStage(
+    final body = SetupStage(
       footerGap: 0,
-      footer: SetupFooter(
-        configuration: true,
-        leading: [
-          TextButton(
-            onPressed: widget.onBack,
-            child: const Text('Back to libraries'),
+      footer: FocusTraversalOrder(
+        order: const NumericFocusOrder(1),
+        child: SetupFooter(
+          configuration: true,
+          leading: [
+            TextButton(
+              onPressed: widget.onBack,
+              child: const Text('Back to libraries'),
+            ),
+          ],
+          summary: _configurationSummary(widget.allocation),
+          trailing: FilledButton(
+            key: const ValueKey('review-channels'),
+            onPressed:
+                widget.allocation.channels.isNotEmpty ||
+                    widget.allocation.existingSkipped > 0 ||
+                    widget.hasConfirmedMissingSources ||
+                    widget.orderChanged
+                ? widget.onReview
+                : null,
+            child: const Text('Review channels'),
           ),
-        ],
-        summary: _configurationSummary(widget.allocation),
-        trailing: FilledButton(
-          key: const ValueKey('review-channels'),
-          onPressed:
-              widget.allocation.channels.isNotEmpty ||
-                  widget.allocation.existingSkipped > 0 ||
-                  widget.hasConfirmedMissingSources ||
-                  widget.orderChanged
-              ? widget.onReview
-              : null,
-          child: const Text('Review channels'),
         ),
       ),
-      child: LayoutBuilder(
-        builder: (context, constraints) {
-          const labels = ['Channel sources', 'Playback order', 'Lineup rules'];
-          final compact =
-              constraints.maxWidth < 1100 ||
-              MediaQuery.textScalerOf(context).scale(1) >= 1.6;
-          final navigation = [
-            for (var index = 0; index < labels.length; index++)
-              Semantics(
-                selected: widget.section == index,
-                child: LineupNavigationRow(
+      child: FocusTraversalOrder(
+        order: const NumericFocusOrder(0),
+        child: LayoutBuilder(
+          builder: (context, constraints) {
+            const labels = [
+              'Channel sources',
+              'Playback order',
+              'Lineup rules',
+            ];
+            final compact =
+                constraints.maxWidth < 1100 ||
+                MediaQuery.textScalerOf(context).scale(1) >= 1.6;
+            final navigation = [
+              for (var index = 0; index < labels.length; index++)
+                Semantics(
                   selected: widget.section == index,
-                  key: ValueKey('configure-section-$index'),
-                  autofocus: DeviceProfile.of(context).isTv && index == 0,
-                  onPressed: () => widget.onSectionChanged(index),
-                  child: Text(labels[index]),
-                ),
-              ),
-          ];
-          final selectedContent = switch (widget.section) {
-            0 => _configureSectionContent(widget.allocation, 0, _focus),
-            1 => _configureSectionContent(widget.allocation, 1, _focus),
-            _ => _configureSectionContent(widget.allocation, 2, _focus),
-          };
-          final content = KeyedSubtree(
-            key: const ValueKey('channel-configuration'),
-            child: ListView(
-              key: ValueKey(widget.section),
-              children: [
-                if (widget.section != 2)
-                  _heading(
-                    labels[widget.section],
-                    widget.section == 0
-                        ? 'Choose which kinds of generated channels to include.'
-                        : 'For generated channels containing TV episodes',
+                  child: LineupNavigationRow(
+                    selected: widget.section == index,
+                    key: ValueKey('configure-section-$index'),
+                    autofocus: DeviceProfile.of(context).isTv && index == 0,
+                    onPressed: () => widget.onSectionChanged(index),
+                    child: Text(labels[index]),
                   ),
-                selectedContent,
-              ],
-            ),
-          );
-          if (compact) {
-            return Column(
-              crossAxisAlignment: CrossAxisAlignment.stretch,
+                ),
+            ];
+            final selectedContent = switch (widget.section) {
+              0 => _configureSectionContent(widget.allocation, 0, _focus),
+              1 => _configureSectionContent(widget.allocation, 1, _focus),
+              _ => _configureSectionContent(widget.allocation, 2, _focus),
+            };
+            final content = KeyedSubtree(
+              key: const ValueKey('channel-configuration'),
+              child: ListView(
+                key: ValueKey(widget.section),
+                children: [
+                  if (widget.section == 1)
+                    _heading(
+                      labels[widget.section],
+                      widget.section == 0
+                          ? 'Choose which kinds of generated channels to include.'
+                          : 'For generated channels containing TV episodes',
+                    ),
+                  selectedContent,
+                ],
+              ),
+            );
+            if (compact) {
+              return Column(
+                crossAxisAlignment: CrossAxisAlignment.stretch,
+                children: [
+                  Wrap(spacing: 8, runSpacing: 4, children: navigation),
+                  const SizedBox(height: 16),
+                  Expanded(child: content),
+                ],
+              );
+            }
+            return Row(
+              crossAxisAlignment: CrossAxisAlignment.start,
               children: [
-                Wrap(spacing: 8, runSpacing: 4, children: navigation),
-                const SizedBox(height: 16),
+                SizedBox(
+                  width: 236,
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.stretch,
+                    children: [
+                      for (final item in navigation) ...[
+                        item,
+                        const SizedBox(height: 12),
+                      ],
+                    ],
+                  ),
+                ),
+                const SizedBox(width: 40),
                 Expanded(child: content),
               ],
             );
-          }
-          return Row(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              SizedBox(
-                width: 236,
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.stretch,
-                  children: [
-                    for (final item in navigation) ...[
-                      item,
-                      const SizedBox(height: 12),
-                    ],
-                  ],
-                ),
-              ),
-              const SizedBox(width: 40),
-              Expanded(child: content),
-            ],
-          );
-        },
+          },
+        ),
       ),
     );
+    // Available sources can sit above the last rail item. Keep remote vertical
+    // traversal in body order, then enter the footer, independent of geometry.
+    return DeviceProfile.of(context).isTv
+        ? FocusTraversalGroup(
+            policy: SetupVerticalTraversalPolicy(),
+            child: body,
+          )
+        : body;
   }
 
   Widget _heading(String title, String description) {
@@ -376,29 +397,29 @@ class _SetupConfigureStepState extends State<SetupConfigureStep> {
     int section,
     _ConfigureFocus focus,
   ) {
-    final roles = LineupTheme.of(context);
     if (section == 0) {
-      const sourcePairs = [
-        (BuilderStrategy.playlists, BuilderStrategy.collections),
-        (BuilderStrategy.recentlyAdded, BuilderStrategy.decades),
-        (BuilderStrategy.genres, BuilderStrategy.studios),
-        (BuilderStrategy.actors, BuilderStrategy.directors),
+      const order = [
+        BuilderStrategy.playlists,
+        BuilderStrategy.collections,
+        BuilderStrategy.recentlyAdded,
+        BuilderStrategy.decades,
+        BuilderStrategy.genres,
+        BuilderStrategy.studios,
+        BuilderStrategy.actors,
+        BuilderStrategy.directors,
+      ];
+      final ordered = [
+        for (final available in [true, false])
+          for (final strategy in order)
+            if (_sourceAvailable(strategy, allocation) == available) strategy,
+      ];
+      final sourcePairs = [
+        for (var i = 0; i < ordered.length; i += 2)
+          (ordered[i], ordered[i + 1]),
       ];
       return Column(
         crossAxisAlignment: CrossAxisAlignment.stretch,
         children: [
-          if (widget.selectedLibraryCount > 1)
-            Padding(
-              padding: const EdgeInsets.only(bottom: 8),
-              child: Text(
-                'Use one channel across libraries when they share a genre or studio.',
-                style: TextStyle(
-                  color: roles.secondaryText,
-                  fontSize: 16,
-                  height: 1.4,
-                ),
-              ),
-            ),
           LayoutBuilder(
             builder: (_, constraints) {
               final compact =
@@ -486,6 +507,9 @@ class _SetupConfigureStepState extends State<SetupConfigureStep> {
   Widget _configurationSummary(ChannelPlanAllocation result) {
     final roles = LineupTheme.of(context);
     final total = result.channels.length;
+    final sources = _strategies
+        .where((strategy) => _sourceEligible(strategy, result) > 0)
+        .length;
     final details = <String>[
       if (result.allocatedExtras > 0)
         '${result.allocatedOriginals} originals + ${result.allocatedExtras} extra versions',
@@ -518,7 +542,7 @@ class _SetupConfigureStepState extends State<SetupConfigureStep> {
             children: [
               Text(
                 '$total',
-                style: TextStyle(
+                style: LineupTypography.pageTitle.copyWith(
                   color: roles.primaryText,
                   fontSize: 30,
                   fontWeight: FontWeight.w600,
@@ -528,7 +552,7 @@ class _SetupConfigureStepState extends State<SetupConfigureStep> {
               SizedBox(width: 8),
               Flexible(
                 child: Text(
-                  'generated ${total == 1 ? 'channel' : 'channels'}',
+                  '${total == 1 ? 'channel' : 'channels'} from $sources ${sources == 1 ? 'source' : 'sources'}',
                   style: secondaryStyle,
                 ),
               ),
@@ -545,7 +569,8 @@ class _SetupConfigureStepState extends State<SetupConfigureStep> {
     ChannelPlanAllocation allocation,
   ) {
     final canGroup =
-        _supportsGrouping(strategy) && widget.selectedLibraryCount > 1;
+        ChannelSetupProjection.supportsGrouping(strategy) &&
+        widget.selectedLibraryCount > 1;
     return Padding(
       padding: EdgeInsets.symmetric(vertical: 16),
       child: ListTileTheme.merge(
@@ -575,9 +600,11 @@ class _SetupConfigureStepState extends State<SetupConfigureStep> {
     final roles = LineupTheme.of(context);
     final double rowPadding = 16;
     final firstCanGroup =
-        _supportsGrouping(first) && widget.selectedLibraryCount > 1;
+        ChannelSetupProjection.supportsGrouping(first) &&
+        widget.selectedLibraryCount > 1;
     final secondCanGroup =
-        _supportsGrouping(second) && widget.selectedLibraryCount > 1;
+        ChannelSetupProjection.supportsGrouping(second) &&
+        widget.selectedLibraryCount > 1;
 
     if (compact) {
       return DecoratedBox(
@@ -662,36 +689,48 @@ class _SetupConfigureStepState extends State<SetupConfigureStep> {
         )
       : _sourceSelectionContent(context, strategy, allocation);
 
+  int _sourceEligible(
+    BuilderStrategy strategy,
+    ChannelPlanAllocation allocation,
+  ) => _strategies.contains(strategy)
+      ? allocation.eligibleOriginalsByStrategy[strategy] ?? 0
+      : widget.disabledEligibility[strategy] ?? 0;
+
+  bool _sourceAvailable(
+    BuilderStrategy strategy,
+    ChannelPlanAllocation allocation,
+  ) =>
+      (strategy != BuilderStrategy.playlists || widget.hasPlaylists) &&
+      (_sourceEligible(strategy, allocation) > 0 ||
+          widget.eligibleAlternateGrouping.contains(strategy));
+
   Widget _sourceSelectionContent(
     BuildContext context,
     BuilderStrategy strategy,
     ChannelPlanAllocation allocation,
   ) {
     final roles = LineupTheme.of(context);
-    final emptyPlaylists =
-        strategy == BuilderStrategy.playlists && !widget.hasPlaylists;
-    final enabled = _strategies.contains(strategy) && !emptyPlaylists;
+    final eligible = _sourceEligible(strategy, allocation);
+    final unavailable = !_sourceAvailable(strategy, allocation);
+    final enabled = _strategies.contains(strategy) && !unavailable;
     final discoveryFailure = widget.discoveryFailures[strategy];
-    final eligible = enabled
-        ? allocation.eligibleOriginalsByStrategy[strategy] ?? 0
-        : (widget.disabledEligibility[strategy] ?? 0);
     final included = allocation.allocatedOriginalsByStrategy[strategy] ?? 0;
     final channels = enabled
         ? allocation.allocatedChannelsByStrategy[strategy] ?? 0
         : eligible;
     final nameStyle = TextStyle(
-      color: eligible == 0 ? roles.mutedText : roles.primaryText,
+      color: unavailable ? roles.mutedText : roles.primaryText,
       fontSize: 22,
       fontWeight: FontWeight.w600,
       height: 1.4,
     );
     final countStyle = TextStyle(
-      color: eligible == 0 ? roles.mutedText : roles.secondaryText,
+      color: unavailable ? roles.mutedText : roles.secondaryText,
       fontSize: 16,
       height: 1.4,
     );
     final detailStyle = TextStyle(
-      color: eligible == 0 ? roles.mutedText : roles.secondaryText,
+      color: unavailable ? roles.mutedText : roles.secondaryText,
       fontSize: 18,
       height: 1.4,
     );
@@ -706,7 +745,7 @@ class _SetupConfigureStepState extends State<SetupConfigureStep> {
         Flexible(
           fit: FlexFit.tight,
           child: Text(
-            eligible == 0 && discoveryFailure == null
+            unavailable && eligible == 0 && discoveryFailure == null
                 ? 'None in your libraries'
                 : enabled && included < eligible
                 ? '$included of $eligible included'
@@ -738,7 +777,7 @@ class _SetupConfigureStepState extends State<SetupConfigureStep> {
               : EdgeInsets.zero,
           title: title,
           subtitle: subtitle,
-          onChanged: emptyPlaylists ? null : changed,
+          onChanged: unavailable ? null : changed,
         ),
         if (collectionRecovery case final recovery?)
           Padding(
@@ -776,7 +815,9 @@ class _SetupConfigureStepState extends State<SetupConfigureStep> {
   Widget _sourceGroupingControl(BuilderStrategy strategy) {
     final roles = LineupTheme.of(context);
     final menuTheme = DeviceProfile.of(context).isTv ? Theme.of(context) : null;
-    final enabled = _strategies.contains(strategy);
+    final enabled =
+        _strategies.contains(strategy) &&
+        _sourceAvailable(strategy, widget.allocation);
     final countStyle = TextStyle(
       color: roles.secondaryText,
       fontSize: 16,
@@ -1663,7 +1704,9 @@ class _SetupConfigureStepState extends State<SetupConfigureStep> {
       var focused =
           focus.order[strategy]!.earlier.hasFocus ||
           focus.order[strategy]!.later.hasFocus;
-      final enabled = _strategies.contains(strategy);
+      final enabled =
+          _strategies.contains(strategy) &&
+          _sourceEligible(strategy, widget.allocation) > 0;
       return StatefulBuilder(
         key: ValueKey('source-order-state-${strategy.name}'),
         builder: (context, setRowState) => Focus(
@@ -1819,13 +1862,6 @@ class _SetupConfigureStepState extends State<SetupConfigureStep> {
       (earlier ? nodes.earlier : nodes.later).requestFocus();
     });
   }
-
-  bool _supportsGrouping(BuilderStrategy strategy) => const {
-    BuilderStrategy.genres,
-    BuilderStrategy.studios,
-    BuilderStrategy.actors,
-    BuilderStrategy.directors,
-  }.contains(strategy);
 
   String _strategyDescription(BuilderStrategy strategy) => switch (strategy) {
     BuilderStrategy.playlists => 'Create channels from your Plex playlists.',

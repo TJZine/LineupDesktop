@@ -1,3 +1,4 @@
+import 'dart:convert';
 import 'dart:io';
 
 import 'package:flutter/foundation.dart';
@@ -215,17 +216,18 @@ class LicensesRepository {
   ];
 
   Future<List<LicenseItem>> _sources() async {
-    final text = await _assets.loadString('assets/licenses/index.txt');
-    final items = <LicenseItem>[];
-    for (final line in text.split('\n').where((line) => line.isNotEmpty)) {
-      final fields = line.split('\t');
-      if (fields.length != 2 ||
-          fields[1].contains('/') ||
-          fields[1].contains('..')) {
-        throw const FormatException('Invalid source material index');
-      }
-      items.add(_asset(fields[0], 'assets/licenses/${fields[1]}'));
-    }
+    final contents = await _assets.loadString('assets/licenses/sources.json');
+    final documents = (jsonDecode(contents) as Map<String, dynamic>)
+        .cast<String, String>();
+    final items = [
+      for (final entry in documents.entries)
+        LicenseItem.document(
+          'sources/${entry.key}',
+          entry.key,
+          () async => entry.value,
+          subtitle: entry.key,
+        ),
+    ];
     return [LicenseItem.list('sources', 'Sources and rebuilding', items)];
   }
 

@@ -653,6 +653,24 @@ class GuideController extends ChangeNotifier {
     }
   }
 
+  /// Directory batches can be partial. A subsequent Guide viewport replaces
+  /// their queued rows, while committed tunes retain explicit priority.
+  void requestDirectoryRows(Iterable<Channel> channels) {
+    for (final channel in channels) {
+      _request(channel, viewport: true);
+    }
+  }
+
+  /// A number-entry preview may start immediately with one slot left for a tune.
+  void requestChannelNumberPreview(Channel channel) {
+    if (_activeLoads >= maximumConcurrentLoads - 1 ||
+        _pendingExplicit.isNotEmpty ||
+        _pendingViewport.isNotEmpty) {
+      return;
+    }
+    _request(channel);
+  }
+
   Future<void> retry(String channelId) async {
     if (_disposed || !_failedChannelIds.contains(channelId)) return;
     final channel = _channelById[channelId];

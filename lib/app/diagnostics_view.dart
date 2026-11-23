@@ -319,18 +319,41 @@ class _DiagnosticsViewState extends State<DiagnosticsView> {
       PlayerState.idle || PlayerState.stopped || PlayerState.ended => true,
       _ => false,
     };
+    final connection = widget.controller.connection;
+    final picture = telemetry?.gamma == null || telemetry!.gamma!.isEmpty
+        ? 'Unknown'
+        : telemetry.isHdr
+        ? 'HDR'
+        : 'SDR';
     final facts = [
       (
         'Playback',
-        '${_playbackLabel(snapshot.playback.state)} · ${_methodLabel(snapshot.playback.method)}',
+        _playbackLabel(snapshot.playback.state),
+        snapshot.playback.method == DiagnosticPlaybackMethod.unknown
+            ? null
+            : _methodLabel(snapshot.playback.method),
       ),
       (
         'Video',
         (telemetry?.width ?? 0) > 0 && (telemetry?.height ?? 0) > 0
-            ? '${telemetry!.width} × ${telemetry.height} · ${telemetry.videoCodec ?? 'Codec unavailable'}'
+            ? '${telemetry!.width} × ${telemetry.height}'
             : 'Unavailable',
+        [
+          if (telemetry?.videoCodec != null)
+            telemetry!.videoCodec!.toUpperCase(),
+          if (telemetry?.hardwareDecoder != null) telemetry!.hardwareDecoder!,
+        ].join(' · '),
       ),
-      ('Media signal', _mediaSignal(telemetry)),
+      (
+        'Picture',
+        picture,
+        [
+          telemetry?.gamma,
+          telemetry?.primaries,
+          if (telemetry?.videoFormat?.toLowerCase().contains('dolby') == true)
+            telemetry?.videoFormat,
+        ].whereType<String>().map(_signalValue).join(' · '),
+      ),
       (
         'Plex',
         snapshot.plexServerSelected
@@ -338,6 +361,9 @@ class _DiagnosticsViewState extends State<DiagnosticsView> {
                   ? 'Connection verified'
                   : 'Connection unverified')
             : 'No server selected',
+        connection == null
+            ? null
+            : LineupConnectionStatus.description(connection),
       ),
     ];
     return Material(
@@ -373,14 +399,23 @@ class _DiagnosticsViewState extends State<DiagnosticsView> {
                   final width = columns == 1
                       ? constraints.maxWidth
                       : (constraints.maxWidth - gap * (columns - 1)) / columns;
-                  return Wrap(
-                    spacing: gap,
-                    runSpacing: 20,
-                    children: [
-                      for (final fact in facts)
-                        _fact(context, fact.$1, fact.$2, width),
-                    ],
-                  );
+                  final cards = [
+                    for (final fact in facts)
+                      _fact(context, fact.$1, fact.$2, fact.$3, width),
+                  ];
+                  return columns == 4
+                      ? IntrinsicHeight(
+                          child: Row(
+                            crossAxisAlignment: CrossAxisAlignment.stretch,
+                            children: [
+                              for (var i = 0; i < cards.length; i++) ...[
+                                if (i > 0) SizedBox(width: gap),
+                                cards[i],
+                              ],
+                            ],
+                          ),
+                        )
+                      : Wrap(spacing: gap, runSpacing: 20, children: cards);
                 },
               ),
             ),
@@ -468,125 +503,93 @@ class _DiagnosticsViewState extends State<DiagnosticsView> {
         final columnWidth = columns == 1
             ? constraints.maxWidth
             : (constraints.maxWidth - gap * (columns - 1)) / columns;
-        final mediaWidth = columns == 1
-            ? constraints.maxWidth
-            : columns == 2
-            ? constraints.maxWidth
-            : columnWidth * 2 + gap;
-        return Column(
-          crossAxisAlignment: CrossAxisAlignment.stretch,
+        Widget group(String name, List<Widget> facts) => SizedBox(
+          key: ValueKey('diagnostics-technical-$name'),
+          width: columnWidth,
+          child: _technicalGroup(context, name, facts),
+        );
+        final build = snapshot.appBuild;
+        final commit = RegExp(r'[0-9a-fA-F]{7,40}').firstMatch(build)?.group(0);
+        return Wrap(
+          spacing: gap,
+          runSpacing: 24,
           children: [
-            Wrap(
-              spacing: gap,
-              runSpacing: 20,
-              children: [
-                SizedBox(
-                  key: const ValueKey('diagnostics-technical-Application'),
-                  width: columnWidth,
-                  child: _technicalGroup(context, 'Application', [
-                    _technicalFact(
-                      'Lineup',
-                      '${snapshot.appVersion} · build ${snapshot.appBuild}',
-                    ),
-                    _technicalFact('Platform', snapshot.platform),
-                  ]),
-                ),
-                SizedBox(
-                  key: const ValueKey('diagnostics-technical-Video output'),
-                  width: columnWidth,
-                  child: _technicalGroup(context, 'Video output', [
-                    _technicalFact(
-                      isAndroid ? 'Video decoder' : 'Hardware decoder',
-                      telemetry?.hardwareDecoder ?? 'Unavailable',
-                    ),
-                    if (!isAndroid)
-                      _technicalFact(
-                        'Video output',
-                        telemetry?.videoOutput ?? 'Unavailable',
-                      ),
-                  ]),
-                ),
-                SizedBox(
-                  key: const ValueKey('diagnostics-technical-Media signal'),
-                  width: mediaWidth,
-                  child: _technicalGroup(context, 'Media signal', [
-                    _technicalFact(
-                      'Transfer',
-                      telemetry?.gamma ?? 'Unavailable',
-                    ),
-                    if (!isAndroid)
-                      _technicalFact(
-                        'Pixel format',
-                        telemetry?.pixelFormat ?? 'Unavailable',
-                      ),
-                    _technicalFact(
-                      'Primaries',
-                      telemetry?.primaries ?? 'Unavailable',
-                    ),
-                    if (!isAndroid)
-                      _technicalFact(
-                        'Color matrix',
-                        telemetry?.colorMatrix ?? 'Unavailable',
-                      ),
-                    if (!isAndroid)
-                      _technicalFact(
-                        'Reported signal peak',
-                        telemetry?.signalPeak?.toString() ?? 'Unavailable',
-                      ),
-                  ], twoColumns: true),
-                ),
-              ],
-            ),
-            SizedBox(height: 20),
-            if (isMacOS)
-              _technicalFact('HDR output', Diagnostics.macOSHdrOutputFact)
-            else if (isWindows) ...[
+            group('Application', [
+              _technicalFact('Lineup version', snapshot.appVersion),
               _technicalFact(
-                'Windows display',
-                Diagnostics.windowsDisplayFact(snapshot.playback.displayReport),
+                'Commit',
+                commit == null
+                    ? build
+                    : commit.substring(0, math.min(8, commit.length)),
               ),
+              _technicalFact('Platform', snapshot.platform),
               _technicalFact(
-                'HDR matching',
-                Diagnostics.hdrMatchingFact(snapshot.playback.displayReport),
-              ),
-            ],
-            if (hasDesktopOutput) ...[
-              _technicalFact(
-                'Renderer output',
-                Diagnostics.rendererOutputFact(telemetry),
-              ),
-              SizedBox(height: 20),
-              Text.rich(
-                TextSpan(
-                  children: [
-                    TextSpan(
-                      text: 'Per-stream handling · ',
-                      style: TextStyle(color: roles.secondaryText),
-                    ),
-                    TextSpan(
-                      text: 'Unavailable',
-                      style: TextStyle(color: roles.primaryText),
-                    ),
-                  ],
-                ),
-                style: TextStyle(fontSize: 18),
-              ),
-              SizedBox(height: 16),
-              Text(
-                isMacOS
-                    ? Diagnostics.macOSDisplayStateNote
-                    : Diagnostics.windowsDisplayStateNote,
-                style: TextStyle(
-                  color: LineupTheme.of(context).secondaryText,
-                  fontSize: 14,
+                'Plex connection',
+                LineupConnectionStatus.description(
+                  widget.controller.connection,
                 ),
               ),
-              const SizedBox(height: 20),
-            ],
-            _technicalFact(
-              'Plex connection',
-              LineupConnectionStatus.description(widget.controller.connection),
-            ),
+            ]),
+            group('Video output', [
+              _technicalFact(
+                isAndroid ? 'Video decoder' : 'Hardware decoder',
+                telemetry?.hardwareDecoder ?? 'Unavailable',
+              ),
+              if (!isAndroid)
+                _technicalFact(
+                  'Video output',
+                  telemetry?.videoOutput ?? 'Unavailable',
+                ),
+            ]),
+            group('Media signal', [
+              _technicalFact('Transfer', _signalValue(telemetry?.gamma)),
+              if (!isAndroid)
+                _technicalFact(
+                  'Pixel format',
+                  telemetry?.pixelFormat ?? 'Unavailable',
+                ),
+              _technicalFact('Primaries', _signalValue(telemetry?.primaries)),
+              if (!isAndroid)
+                _technicalFact(
+                  'Color matrix',
+                  _signalValue(telemetry?.colorMatrix),
+                ),
+              if (!isAndroid)
+                _technicalFact(
+                  'Reported signal peak',
+                  telemetry?.signalPeak?.toStringAsFixed(2) ?? 'Unavailable',
+                ),
+            ]),
+            if (hasDesktopOutput)
+              group('Display', [
+                if (isMacOS)
+                  _technicalFact('HDR output', Diagnostics.macOSHdrOutputFact),
+                if (isWindows) ...[
+                  _technicalFact(
+                    'Windows display',
+                    Diagnostics.windowsDisplayFact(
+                      snapshot.playback.displayReport,
+                    ),
+                  ),
+                  _technicalFact(
+                    'HDR matching',
+                    Diagnostics.hdrMatchingFact(
+                      snapshot.playback.displayReport,
+                    ),
+                  ),
+                ],
+                _technicalFact(
+                  'Renderer output',
+                  Diagnostics.rendererOutputFact(telemetry),
+                ),
+                _technicalFact('Per-stream handling', 'Unavailable'),
+                Text(
+                  isMacOS
+                      ? Diagnostics.macOSDisplayStateNote
+                      : Diagnostics.windowsDisplayStateNote,
+                  style: TextStyle(color: roles.secondaryText, fontSize: 14),
+                ),
+              ]),
           ],
         );
       },
@@ -596,45 +599,23 @@ class _DiagnosticsViewState extends State<DiagnosticsView> {
   Widget _technicalGroup(
     BuildContext context,
     String title,
-    List<Widget> facts, {
-    bool twoColumns = false,
-  }) {
+    List<Widget> facts,
+  ) {
     final roles = LineupTheme.of(context);
     return Column(
-      crossAxisAlignment: CrossAxisAlignment.start,
+      crossAxisAlignment: CrossAxisAlignment.stretch,
       children: [
         Text(
           title,
           style: TextStyle(
             color: roles.primaryText,
             fontSize: 18,
-            fontWeight: FontWeight.w500,
+            fontWeight: FontWeight.w600,
           ),
         ),
-        SizedBox(height: 10),
-        if (twoColumns)
-          LayoutBuilder(
-            builder: (context, constraints) {
-              final gap = 28.0;
-              final columns =
-                  constraints.maxWidth >= 600 * _effectiveTextScale(context)
-                  ? 2
-                  : 1;
-              final width = columns == 1
-                  ? constraints.maxWidth
-                  : (constraints.maxWidth - gap) / 2;
-              return Wrap(
-                key: const ValueKey('diagnostics-media-signal-values'),
-                spacing: gap,
-                runSpacing: 16,
-                children: [
-                  for (final fact in facts) SizedBox(width: width, child: fact),
-                ],
-              );
-            },
-          )
-        else
-          Column(crossAxisAlignment: CrossAxisAlignment.start, children: facts),
+        const SizedBox(height: 16),
+        for (final fact in facts)
+          Padding(padding: const EdgeInsets.only(bottom: 16), child: fact),
       ],
     );
   }
@@ -941,10 +922,17 @@ class _DiagnosticsViewState extends State<DiagnosticsView> {
     BuildContext context,
     String title,
     String value,
+    String? supporting,
     double width,
-  ) => SizedBox(
+  ) => Container(
     key: ValueKey('diagnostics-summary-$title'),
     width: width,
+    padding: const EdgeInsets.all(20),
+    decoration: BoxDecoration(
+      color: LineupTheme.of(context).elevatedSurface,
+      border: Border.all(color: LineupTheme.of(context).subtleBorder),
+      borderRadius: BorderRadius.circular(LineupTheme.of(context).panelRadius),
+    ),
     child: Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
@@ -955,22 +943,40 @@ class _DiagnosticsViewState extends State<DiagnosticsView> {
             fontSize: 18,
           ),
         ),
-        SizedBox(height: 8),
+        const SizedBox(height: 8),
         Text(
           value,
           style: TextStyle(
             color: LineupTheme.of(context).primaryText,
-            fontSize: 22,
-            fontWeight: FontWeight.w500,
+            fontSize: 24,
+            fontWeight: FontWeight.w600,
             height: 1.2,
           ),
         ),
+        if (supporting != null && supporting.isNotEmpty) ...[
+          const SizedBox(height: 8),
+          Text(
+            supporting,
+            style: TextStyle(
+              color: LineupTheme.of(context).secondaryText,
+              fontSize: 16,
+            ),
+          ),
+        ],
       ],
     ),
   );
 
+  String _signalValue(String? value) => switch (value?.toLowerCase()) {
+    null || '' => 'Unavailable',
+    'pq' => 'PQ',
+    'hlg' => 'HLG',
+    'bt.2020' || 'bt2020' => 'BT.2020',
+    _ => value!,
+  };
+
   String _methodLabel(DiagnosticPlaybackMethod method) => switch (method) {
-    DiagnosticPlaybackMethod.unknown => 'Method unavailable',
+    DiagnosticPlaybackMethod.unknown => '',
     DiagnosticPlaybackMethod.directPlay => 'Direct Play',
     DiagnosticPlaybackMethod.directStream => 'Direct Stream',
     DiagnosticPlaybackMethod.transcode => 'Transcode',
@@ -989,13 +995,4 @@ class _DiagnosticsViewState extends State<DiagnosticsView> {
     PlayerState.error => 'Error',
     PlayerState.unsupported => 'Unsupported',
   };
-
-  String _mediaSignal(PlayerTelemetry? telemetry) {
-    if (telemetry == null) return 'Unavailable';
-    final values = [
-      telemetry.gamma,
-      telemetry.primaries,
-    ].whereType<String>().where((value) => value.isNotEmpty).toList();
-    return values.isEmpty ? 'Unavailable' : values.join(' · ');
-  }
 }

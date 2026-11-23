@@ -45,7 +45,10 @@ flutter:
     - assets/fonts/subtitles/casual/
     - assets/fonts/subtitles/cursive/
     - assets/fonts/subtitles/smallCaps/
-    - assets/licenses/
+    - assets/licenses/engine-notices.txt
+    - path: assets/licenses/sources.json
+      transformers:
+        - package: lineup_desktop:bundle_source_materials
   fonts:
     - family: Arimo
       fonts:

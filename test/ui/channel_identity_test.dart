@@ -5,6 +5,24 @@ import 'package:lineup_desktop/channels/channel.dart';
 import 'package:lineup_desktop/ui/channel_identity.dart';
 
 void main() {
+  testWidgets('number and kind icon use the same gap as icon and name', (
+    tester,
+  ) async {
+    await tester.pumpWidget(
+      host(
+        ChannelIdentity(
+          channel: channel('tv', 3, 'Drama', ChannelKind.tv, 'TV'),
+          nameStyle: const TextStyle(fontSize: 20),
+        ),
+      ),
+    );
+    final number = tester.getRect(find.text('3'));
+    final icon = tester.getRect(find.byIcon(Icons.tv_outlined));
+    final name = tester.getRect(find.text('Drama'));
+    expect(find.text('•'), findsNothing);
+    expect(icon.left - number.right, closeTo(name.left - icon.right, .01));
+  });
+
   testWidgets('one accessible label carries the full channel identity', (
     tester,
   ) async {

@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 """Prepare offline R-03 materials from pinned local inputs; never fetch or sign.
 
-assets regenerates the small in-app source/recipe texts. prepare creates a new
+assets prepares the offline inventory, engine notice and recipe index. prepare creates a new
 companion directory, binding sources to a candidate and verified engine. It uses
 canonical engine verification before archiving Git source snapshots. No app,
 runtime or engine output is modified. verify checks all delivered hashes.
@@ -39,6 +39,7 @@ HELPERS = [
     'third_party/objective_c/VENDOR.md', 'third_party/objective_c/LOCAL.patch',
     'third_party/objective_c/hook/build.dart', 'third_party/objective_c/analysis_options.yaml',
     'pubspec.yaml', 'pubspec.lock', 'analysis_options.yaml', 'tool/format.dart',
+    'bin/bundle_source_materials.dart', 'assets/licenses/sources.json',
     'tool/macos/native_assets.py',
 ]
 HELPERS += [str(p.relative_to(REPOSITORY)) for directory in ['mpv-patches', 'ffmpeg-patches']
@@ -127,7 +128,6 @@ def catalog(runtime_root):
             'Vulkan-Tools': 'KhronosGroup/Vulkan-Tools', 'Volk': 'zeux/volk', 'cereal': 'USCiLab/cereal'}
     for name, revision in external.items():
         lines += [name + ': https://github.com/' + urls[name] + '/tree/' + revision]
-    # Exact nested pin is in the parent Git tree, not an independently selected version.
     lines += ['', 'libplacebo nested sources:',
         'https://code.videolan.org/videolan/libplacebo/-/tree/' + values['LIBPLACEBO_COMMIT'] + '/3rdparty',
         'fast_float and other recursive submodule commits are pinned by this exact parent tree.',
@@ -142,7 +142,6 @@ def catalog(runtime_root):
 
 def asset_files(flutter_sdk, runtime_root):
     files = {'source-inventory.txt': catalog(runtime_root).encode(),
-             'rebuilding.txt': (REPOSITORY / 'docs/licenses-and-rebuilding.md').read_bytes(),
              'engine-notices.txt': ('''Lineup macOS Flutter engine notices
 
 The macOS engine uses Flutter's BSD-3-Clause sources with the repository's
@@ -153,13 +152,10 @@ The exact framework pin, patch hashes and build instructions are readable under
 Sources and rebuilding. The selected engine receipt accompanies the candidate.
 
 ''' + (flutter_sdk / 'LICENSE').read_text()).encode()}
-    entries = [('Credits and library replacement notice', 'rebuilding.txt'),
-               ('Exact source inventory', 'source-inventory.txt')]
-    for relative in HELPERS:
-        filename = relative.replace('/', '__') + '.txt'
-        files[filename] = (REPOSITORY / relative).read_bytes()
-        entries.append((relative, filename))
-    files['index.txt'] = ''.join(title + '\t' + name + '\n' for title, name in entries).encode()
+    sources = {'Credits and library replacement notice': 'docs/licenses-and-rebuilding.md',
+               'Exact source inventory': 'assets/licenses/source-inventory.txt'}
+    sources.update((relative, relative) for relative in HELPERS)
+    files['sources.json'] = (json.dumps(sources, indent=2) + '\n').encode()
     return files
 
 

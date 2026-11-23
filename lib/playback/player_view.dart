@@ -1232,6 +1232,31 @@ class _PlayerInsets {
   final double top;
 }
 
+/// Resting tag metrics are shared with expanded-panel clearance so larger text
+/// cannot put its pointer target underneath the top-right channel controls.
+class _ChannelBugMetrics {
+  const _ChannelBugMetrics(this.labelStyle, this.height);
+
+  factory _ChannelBugMetrics.of(BuildContext context, Channel channel) {
+    final style = Theme.of(context).textTheme.labelLarge?.copyWith(
+      color: LineupTheme.of(context).primaryText,
+      fontSize: 22,
+      fontWeight: FontWeight.w600,
+    );
+    return _ChannelBugMetrics(
+      style,
+      math.max(
+        52,
+        _textSize(context, channel.name, style).height + padding.vertical,
+      ),
+    );
+  }
+
+  static const padding = EdgeInsets.symmetric(horizontal: 12, vertical: 10);
+  final TextStyle? labelStyle;
+  final double height;
+}
+
 class _AnimatedChannelBug extends StatelessWidget {
   const _AnimatedChannelBug({
     required this.visible,
@@ -1314,9 +1339,21 @@ class _Osd extends StatelessWidget {
     final leftInset = insets.left;
     final rightInset = insets.right;
     final dvrControlsEnabled = controller.lineup.settings.dvrControlsEnabled;
-    final bottomInset = DeviceProfile.of(context).isTv
-        ? math.max(12.0, safe.bottom) + (dvrControlsEnabled ? 40 : 0)
-        : 12.0 + (dvrControlsEnabled ? 40 : 0);
+    final bottomInset = math.max(30.0, safe.bottom);
+    const expandedTopPadding = 20.0;
+    final channel = controller.currentChannel;
+    final badgeBottom = channel == null
+        ? null
+        : insets.top + _ChannelBugMetrics.of(context, channel).height;
+    final safeBottom = DeviceProfile.of(context).isTv
+        ? 0.0
+        : MediaQuery.paddingOf(context).bottom;
+    final expandedPanelHeight = badgeBottom == null
+        ? size.height - safeBottom
+        : math.max(
+            0.0,
+            size.height - safeBottom - badgeBottom - 8 + expandedTopPadding,
+          );
     final program = controller.currentProgram;
     final audioAvailable = controller.tracks.any(
       (track) => track.type == PlayerTrackType.audio,
@@ -1325,7 +1362,6 @@ class _Osd extends StatelessWidget {
       (track) => track.type == PlayerTrackType.subtitle,
     );
     final unsupported = controller.status.state == PlayerState.unsupported;
-    final expanded = !LineupLayout.isCompactWidth(size.width);
     final horizontal = size.width >= 1200 && size.height >= 640;
 
     final desktop = DeviceProfile.of(context).formFactor == FormFactor.desktop;
@@ -1408,18 +1444,17 @@ class _Osd extends StatelessWidget {
         : displays.displayFor(selectedAudio);
     final audioLabel = audioDisplay == null || audioDisplay.compactText == null
         ? 'Audio'
-        : 'Audio · ${audioDisplay.compactText}';
+        : 'Audio ${audioDisplay.compactText}';
     final audioDescription =
         audioDisplay?.tooltipText ??
         (audioAvailable ? 'Audio tracks' : 'Audio tracks unavailable');
     final subtitlesDisplay = selectedSubtitles == null
         ? null
         : displays.displayFor(selectedSubtitles);
-    final subtitlesLabel = subtitlesDisplay == null
-        ? '${expanded ? 'Subtitles' : 'Subs'} · Off'
-        : subtitlesDisplay.compactText == null
-        ? (expanded ? 'Subtitles' : 'Subs')
-        : '${expanded ? 'Subtitles' : 'Subs'} · ${subtitlesDisplay.compactText}';
+    final subtitlesValue = selectedSubtitles == null
+        ? 'Off'
+        : subtitlesDisplay?.compactText;
+    final subtitlesLabel = ['Subtitles', ?subtitlesValue].join(' ');
     final subtitlesDescription = subtitlesDisplay == null
         ? (subtitlesAvailable
               ? 'Subtitle tracks: Off'
@@ -1431,7 +1466,7 @@ class _Osd extends StatelessWidget {
         : (sleepRemaining.inSeconds / Duration.secondsPerMinute).ceil();
     final sleepLabel = remainingMinutes == null
         ? 'Sleep'
-        : 'Sleep · ${remainingMinutes}m';
+        : 'Sleep ${remainingMinutes}m';
     final optionActions = <Widget>[
       _PickerAnchor(
         handle: pickerAnchors[_PlayerControl.subtitles]!,
@@ -1439,7 +1474,8 @@ class _Osd extends StatelessWidget {
           context,
           key: const Key('player-osd-subtitles'),
           focusNode: controls[_PlayerControl.subtitles],
-          label: subtitlesLabel,
+          label: 'Subtitles',
+          value: subtitlesValue,
           tooltip: subtitlesDescription,
           semanticLabel: subtitlesDescription,
           icon: Icons.subtitles_outlined,
@@ -1457,7 +1493,8 @@ class _Osd extends StatelessWidget {
           context,
           key: const Key('player-osd-audio'),
           focusNode: controls[_PlayerControl.audio],
-          label: audioLabel,
+          label: 'Audio',
+          value: audioDisplay?.compactText,
           tooltip: audioDescription,
           semanticLabel: audioDescription,
           icon: Icons.audiotrack,
@@ -1474,7 +1511,8 @@ class _Osd extends StatelessWidget {
         child: _osdAction(
           context,
           key: const Key('player-osd-sleep'),
-          label: sleepLabel,
+          label: 'Sleep',
+          value: remainingMinutes == null ? null : '${remainingMinutes}m',
           tooltip: sleepRemaining == null ? 'Stop playback after…' : sleepLabel,
           icon: Icons.bedtime_outlined,
           focusNode: sleepFocus,
@@ -1485,18 +1523,18 @@ class _Osd extends StatelessWidget {
     final windowActions = <Widget>[
       if (openMenu != null)
         Builder(
-          builder: (invokerContext) => IconButton(
-            style: actionStyle,
+          builder: (invokerContext) => _osdAction(
+            context,
             key: const Key('player-app-menu'),
             focusNode: menuFocus,
+            label: 'More',
             tooltip: 'Lineup menu',
+            semanticLabel: 'Lineup menu',
+            icon: Icons.menu,
             onPressed: () {
               controller.closeSleepPicker();
               openMenu!(invokerContext, menuFocus);
             },
-            padding: null,
-            iconSize: 20,
-            icon: const Icon(Icons.menu, semanticLabel: 'Lineup menu'),
           ),
         ),
       if (!DeviceProfile.of(context).isTv)
@@ -1551,10 +1589,7 @@ class _Osd extends StatelessWidget {
             fit: BoxFit.contain,
             fallback: _OsdTitle(title: primaryTitle),
             clearLogo: true,
-            logoMaximumSize: Size(
-              (size.width >= 1920 ? 520 : 360),
-              (size.height >= 900 ? 104 : 72),
-            ),
+            logoMaximumSize: Size((size.width >= 1920 ? 520 : 360), 168),
             logoMinimumVisibleSize: Size(96, (size.height >= 900 ? 28 : 24)),
           )
         else
@@ -1568,7 +1603,7 @@ class _Osd extends StatelessWidget {
             overflow: TextOverflow.ellipsis,
             style: Theme.of(context).textTheme.bodyMedium?.copyWith(
               color: roles.secondaryText,
-              fontSize: 18,
+              fontSize: 26,
               fontWeight: FontWeight.w400,
             ),
           ),
@@ -1607,9 +1642,7 @@ class _Osd extends StatelessWidget {
       fontWeight: FontWeight.w400,
     );
     final playbackStatus = Text(
-      controller.presentedState == PlayerState.playing
-          ? 'Playing'
-          : _statusLabel(controller.presentedState) ?? 'Ready',
+      _statusLabel(controller.presentedState) ?? '',
       style: osdSecondaryStyle,
     );
     final progress = _OsdProgress(
@@ -1620,7 +1653,7 @@ class _Osd extends StatelessWidget {
     Widget actionGroup(List<Widget> children) =>
         Row(mainAxisSize: MainAxisSize.min, children: children);
     final availableWidth = size.width - leftInset - rightInset;
-    final labelStyle = actionStyle.textStyle?.resolve({});
+    final labelStyle = _osdOptionStyle(context).textStyle?.resolve({});
     final minimumSize =
         actionStyle.minimumSize?.resolve({}) ?? const Size(44, 44);
     final padding = (actionStyle.padding?.resolve({}) ?? EdgeInsets.zero)
@@ -1635,10 +1668,7 @@ class _Osd extends StatelessWidget {
         .max(minimumWidth, 20 + padding.horizontal)
         .ceilToDouble();
     double labelledActionWidth(String label) => math
-        .max(
-          minimumWidth,
-          _textWidth(context, label, labelStyle) + 20 + 8 + padding.horizontal,
-        )
+        .max(minimumWidth, _textWidth(context, label, labelStyle) + 26 + 8 + 40)
         .ceilToDouble();
     final baselineStandardWidth =
         [
@@ -1646,8 +1676,9 @@ class _Osd extends StatelessWidget {
           audioLabel,
           sleepLabel,
         ].map(labelledActionWidth).fold(0.0, (total, width) => total + width) +
-        windowActions.length * iconActionWidth +
-        16;
+        (openMenu == null ? 0 : labelledActionWidth('More')) +
+        (desktop ? iconActionWidth : 0) +
+        6 * (optionActions.length + windowActions.length);
     final transportWidth = dvrControlsEnabled ? 168 : 0;
     final baselineControlsWidth = baselineStandardWidth + transportWidth;
     final wrapActions = baselineControlsWidth > availableWidth * .65;
@@ -1678,12 +1709,13 @@ class _Osd extends StatelessWidget {
                   width: math.min(standardWidth, width),
                   child: Wrap(
                     key: const Key('player-osd-standard-actions'),
+                    spacing: 6,
+                    runSpacing: 6,
                     alignment: WrapAlignment.end,
                     crossAxisAlignment: WrapCrossAlignment.center,
                     children: [
                       ?guideAction,
                       ...optionActions,
-                      const SizedBox(width: 16),
                       ...windowActions,
                     ],
                   ),
@@ -1693,16 +1725,6 @@ class _Osd extends StatelessWidget {
           );
         },
       ),
-    );
-    final slider = _OsdProgress(
-      controller: controller,
-      detailsExpanded: detailsExpanded,
-      part: _OsdProgressPart.slider,
-    );
-    final progressLine = _OsdProgress(
-      controller: controller,
-      detailsExpanded: detailsExpanded,
-      part: _OsdProgressPart.line,
     );
     final pickerOpen = trackPopover != null;
     Widget bottomPanel({required Widget child}) => IgnorePointer(
@@ -1726,107 +1748,119 @@ class _Osd extends StatelessWidget {
         right: !DeviceProfile.of(context).isTv,
         bottom: !DeviceProfile.of(context).isTv,
         child: _BottomPanelExpansion(
-          child: SubtitlePanelReporter(
-            avoidance: subtitleAvoidance,
-            presentationKey: subtitleLayerKey,
-            feather: _OsdPanelMaterial.feather,
-            child: CustomPaint(
-              painter: _OsdPanelMaterial(
-                color: _overlayColor(context, controller, more: .62),
-                collapsedFade:
-                    !detailsExpanded &&
-                    controller.lineup.settings.overlayTransparency ==
-                        OverlayTransparency.moreTransparent,
-              ),
-              child: Container(
-                key: const Key('player-osd-surface'),
-                width: double.infinity,
-                padding: EdgeInsets.fromLTRB(
-                  leftInset,
-                  detailsExpanded
-                      ? 20
-                      : horizontal
-                      ? (size.height >= 900 ? 44 : 20)
-                      : (size.height >= 720 ? 56 : 40),
-                  rightInset,
-                  bottomInset,
+          child: ConstrainedBox(
+            constraints: BoxConstraints(
+              maxHeight: detailsExpanded
+                  ? expandedPanelHeight
+                  : double.infinity,
+            ),
+            child: SubtitlePanelReporter(
+              avoidance: subtitleAvoidance,
+              presentationKey: subtitleLayerKey,
+              feather: detailsExpanded ? 180 : _OsdPanelMaterial.feather,
+              child: CustomPaint(
+                painter: _OsdPanelMaterial(
+                  expanded: detailsExpanded,
+                  color: _overlayColor(context, controller, more: .62),
+                  collapsedFade:
+                      !detailsExpanded &&
+                      controller.lineup.settings.overlayTransparency ==
+                          OverlayTransparency.moreTransparent,
                 ),
-                child: _consumeOverlayPadding(
-                  context,
-                  Semantics(
-                    container: true,
-                    label: 'Playback controls',
-                    child: Column(
-                      mainAxisSize: MainAxisSize.min,
-                      crossAxisAlignment: CrossAxisAlignment.stretch,
-                      children: [
-                        if (detailsExpanded) ...[
-                          _NowPlaying(
-                            closeFocus: controls[_PlayerControl.close]!,
-                            moreInfoFocus: controls[_PlayerControl.moreInfo]!,
-                            controller: controller,
-                            maxHeight: math.max(
-                              80,
-                              size.height -
-                                  (wrapActions ? 280 : 190) -
-                                  (dvrControlsEnabled ? 40 : 0) +
-                                  // The additive compact More info action must
-                                  // not crop the shelf's four cast/role pairs.
-                                  (DeviceProfile.of(context).isTv ? 52 : 0),
+                child: Container(
+                  key: const Key('player-osd-surface'),
+                  width: double.infinity,
+                  padding: EdgeInsets.fromLTRB(
+                    leftInset,
+                    detailsExpanded
+                        ? expandedTopPadding
+                        : horizontal
+                        ? (size.height >= 900 ? 44 : 20)
+                        : (size.height >= 720 ? 56 : 40),
+                    rightInset,
+                    bottomInset,
+                  ),
+                  child: _consumeOverlayPadding(
+                    context,
+                    Semantics(
+                      container: true,
+                      label: 'Playback controls',
+                      child: Column(
+                        mainAxisSize: MainAxisSize.min,
+                        crossAxisAlignment: CrossAxisAlignment.stretch,
+                        children: [
+                          if (detailsExpanded) ...[
+                            Flexible(
+                              fit: FlexFit.loose,
+                              child: _NowPlaying(
+                                closeFocus: controls[_PlayerControl.close]!,
+                                moreInfoFocus:
+                                    controls[_PlayerControl.moreInfo]!,
+                                controller: controller,
+                                maxHeight: math.max(
+                                  80,
+                                  size.height -
+                                      (wrapActions ? 280 : 190) -
+                                      (dvrControlsEnabled ? 40 : 0) +
+                                      // The additive compact More info action must
+                                      // not crop the shelf's four cast/role pairs.
+                                      (DeviceProfile.of(context).isTv ? 52 : 0),
+                                ),
+                              ),
                             ),
-                          ),
-                          const SizedBox(height: 20),
-                          if (horizontal && !wrapActions)
+                            const SizedBox(height: 20),
+                            if (horizontal && !wrapActions)
+                              Row(
+                                crossAxisAlignment: CrossAxisAlignment.end,
+                                children: [
+                                  Expanded(child: playbackStatus),
+                                  const SizedBox(width: 24),
+                                  groupedActions,
+                                ],
+                              )
+                            else ...[
+                              playbackStatus,
+                              const SizedBox(height: 6),
+                              Align(
+                                alignment: Alignment.centerRight,
+                                child: groupedActions,
+                              ),
+                            ],
+                          ] else if (horizontal && !wrapActions)
                             Row(
+                              key: const Key('player-osd-horizontal-layout'),
                               crossAxisAlignment: CrossAxisAlignment.end,
                               children: [
-                                Expanded(child: playbackStatus),
-                                const SizedBox(width: 24),
+                                Expanded(child: identity),
+                                SizedBox(width: 24),
                                 groupedActions,
                               ],
                             )
                           else ...[
-                            playbackStatus,
-                            const SizedBox(height: 6),
+                            KeyedSubtree(
+                              key: horizontal
+                                  ? const Key('player-osd-horizontal-layout')
+                                  : null,
+                              child: identity,
+                            ),
+                            SizedBox(height: 6),
                             Align(
                               alignment: Alignment.centerRight,
-                              child: groupedActions,
+                              child: wrapActions
+                                  ? groupedActions
+                                  : Row(
+                                      key: const Key(
+                                        'player-osd-stacked-controls',
+                                      ),
+                                      mainAxisSize: MainAxisSize.min,
+                                      children: [groupedActions],
+                                    ),
                             ),
                           ],
-                        ] else if (horizontal && !wrapActions)
-                          Row(
-                            key: const Key('player-osd-horizontal-layout'),
-                            crossAxisAlignment: CrossAxisAlignment.end,
-                            children: [
-                              Expanded(child: identity),
-                              SizedBox(width: 24),
-                              groupedActions,
-                            ],
-                          )
-                        else ...[
-                          KeyedSubtree(
-                            key: horizontal
-                                ? const Key('player-osd-horizontal-layout')
-                                : null,
-                            child: identity,
-                          ),
-                          SizedBox(height: 6),
-                          Align(
-                            alignment: Alignment.centerRight,
-                            child: wrapActions
-                                ? groupedActions
-                                : Row(
-                                    key: const Key(
-                                      'player-osd-stacked-controls',
-                                    ),
-                                    mainAxisSize: MainAxisSize.min,
-                                    children: [groupedActions],
-                                  ),
-                          ),
+                          SizedBox(height: 10),
+                          progress,
                         ],
-                        SizedBox(height: 10),
-                        progress,
-                      ],
+                      ),
                     ),
                   ),
                 ),
@@ -1870,20 +1904,6 @@ class _Osd extends StatelessWidget {
                 )
               : null,
         ),
-        if (trackPopover == null) progressLine,
-        if (trackPopover == null &&
-            dvrControlsEnabled &&
-            DeviceProfile.of(context).isTv)
-          Positioned(
-            key: const Key('player-safe-dvr-target'),
-            left: safe.left,
-            right: safe.right,
-            // Slider's invisible 48cu semantics target extends 4cu beyond
-            // this 40cu portal. Keep that target above the bottom safe edge.
-            bottom: safe.bottom + (kMinInteractiveDimension - 40) / 2,
-            height: 40,
-            child: slider,
-          ),
       ],
     );
   }
@@ -1914,7 +1934,7 @@ class _OsdTitle extends StatelessWidget {
   }
 }
 
-enum _OsdProgressPart { timing, line, slider }
+enum _OsdProgressPart { timing, line }
 
 class _OsdProgress extends StatelessWidget {
   const _OsdProgress({
@@ -1967,33 +1987,45 @@ class _OsdProgress extends StatelessWidget {
           );
     final osdSecondaryStyle = Theme.of(context).textTheme.bodySmall?.copyWith(
       color: roles.secondaryText,
-      fontSize: 18,
+      fontSize: 20,
       fontWeight: FontWeight.w400,
     );
     if (part == _OsdProgressPart.timing) {
       return Row(
         key: const Key('player-osd-progress-block'),
         children: [
-          Expanded(
-            child: Text(
-              [
-                '${_duration(displayedPosition)} / ${_duration(timingDuration)}',
-                ?remaining,
-              ].join(' · '),
-              key: const Key('player-osd-timing'),
-              style: osdSecondaryStyle?.copyWith(
-                fontFeatures: const [FontFeature.tabularFigures()],
-              ),
+          Text(
+            '${_duration(displayedPosition)} / ${_duration(timingDuration)}',
+            key: const Key('player-osd-timing'),
+            style: osdSecondaryStyle?.copyWith(
+              fontFeatures: const [FontFeature.tabularFigures()],
             ),
           ),
+          const SizedBox(width: 20),
+          Expanded(
+            flex: 3,
+            child: _OsdProgress(
+              controller: controller,
+              detailsExpanded: detailsExpanded,
+              part: _OsdProgressPart.line,
+            ),
+          ),
+          if (remaining != null) ...[
+            const SizedBox(width: 20),
+            Text(
+              remaining,
+              key: const Key('player-osd-remaining'),
+              style: osdSecondaryStyle,
+            ),
+          ],
           if (next != null) ...[
-            SizedBox(width: 16),
+            const SizedBox(width: 24),
             Expanded(
+              flex: 2,
               child: Align(
                 alignment: Alignment.centerRight,
                 child: Text(
-                  'Up next · ${_time(context, next.scheduled.start)} · '
-                  '${next.scheduled.item.title}',
+                  'Up next · ${_time(context, next.scheduled.start)} · ${next.scheduled.item.title}',
                   key: const Key('player-osd-next'),
                   maxLines: 1,
                   overflow: TextOverflow.ellipsis,
@@ -2009,8 +2041,8 @@ class _OsdProgress extends StatelessWidget {
     final sliderInteractive =
         controller.duration > Duration.zero &&
         controller.status.state != PlayerState.unsupported;
-    // The slider portal keeps the same fade/semantics ancestry as its lane.
-    // On TV only its interactive target moves inside the content-safe bounds.
+    // Keep the transparent seek target on the inset visible lane. Its Overlay
+    // gives the full semantics/touch target room beyond the four-pixel track.
     final slider = Overlay.wrap(
       key: ValueKey(sliderInteractive),
       clipBehavior: Clip.none,
@@ -2023,7 +2055,7 @@ class _OsdProgress extends StatelessWidget {
           overlayShape: SliderComponentShape.noOverlay,
         ),
         child: Slider(
-          label: DeviceProfile.of(context).isTv ? 'Playback progress' : null,
+          label: 'Playback progress',
           semanticFormatterCallback: DeviceProfile.of(context).isTv
               ? (value) =>
                     '${_duration(Duration(milliseconds: value.round()))} of ${_duration(timingDuration)}'
@@ -2037,24 +2069,21 @@ class _OsdProgress extends StatelessWidget {
         ),
       ),
     );
-    if (part == _OsdProgressPart.slider) return slider;
-    return Positioned(
+    return SizedBox(
       key: const Key('player-osd-progress-line'),
-      left: 0,
-      right: 0,
-      bottom: 0,
+      height: 48,
       child: SizedBox(
-        height: 40,
         child: Semantics(
-          hidden: DeviceProfile.of(context).isTv && dvrControlsEnabled,
-          label: 'Playback progress',
-          value:
-              '${_duration(displayedPosition)} of ${_duration(timingDuration)}',
+          container: true,
+          label: dvrControlsEnabled ? null : 'Playback progress',
+          value: dvrControlsEnabled
+              ? null
+              : '${_duration(displayedPosition)} of ${_duration(timingDuration)}',
           child: Stack(
             fit: StackFit.expand,
             children: [
               Align(
-                alignment: Alignment.bottomCenter,
+                alignment: Alignment.center,
                 child: SizedBox(
                   height: 4,
                   child: LinearProgressIndicator(
@@ -2064,7 +2093,13 @@ class _OsdProgress extends StatelessWidget {
                   ),
                 ),
               ),
-              if (dvrControlsEnabled && !DeviceProfile.of(context).isTv) slider,
+              if (dvrControlsEnabled)
+                KeyedSubtree(
+                  key: DeviceProfile.of(context).isTv
+                      ? const Key('player-safe-dvr-target')
+                      : null,
+                  child: slider,
+                ),
             ],
           ),
         ),
@@ -2133,21 +2168,15 @@ class _ChannelBugState extends State<_ChannelBug> {
         width: border ? roles.focusBorderWidth : 1,
       ),
     );
-    final labelStyle = Theme.of(context).textTheme.labelLarge?.copyWith(
-      color: roles.primaryText,
-      fontSize: size.width >= 1920 && size.height >= 900 ? 16 : 14,
-      fontWeight: FontWeight.w500,
-    );
-    const verticalPadding = 7.0;
-    final badgeHeight =
-        _textSize(context, channel.name, labelStyle).height +
-        2 * verticalPadding;
+    final metrics = _ChannelBugMetrics.of(context, channel);
+    final labelStyle = metrics.labelStyle;
+    final badgeHeight = metrics.height;
     final identity = Container(
-      constraints: BoxConstraints(maxWidth: size.width * .65),
-      padding: const EdgeInsets.symmetric(
-        horizontal: 12,
-        vertical: verticalPadding,
+      constraints: BoxConstraints(
+        minHeight: badgeHeight,
+        maxWidth: size.width * .65,
       ),
+      padding: _ChannelBugMetrics.padding,
       child: ChannelIdentity(
         channel: channel,
         libraryTag: libraryTag,
@@ -2309,7 +2338,7 @@ class _NowPlaying extends StatelessWidget {
       ?item.summary,
       if (castFacts.isNotEmpty) 'Cast: $castFacts',
     ].join('. ');
-    final posterWidth = dense ? 160.0 : 240.0;
+    const posterWidth = 248.0;
 
     return GestureDetector(
       behavior: HitTestBehavior.opaque,
@@ -2366,7 +2395,7 @@ class _NowPlaying extends StatelessWidget {
                           width: posterWidth,
                           height: math.min(posterWidth * 1.5, maxHeight - 64),
                           child: ClipRRect(
-                            borderRadius: BorderRadius.circular(8),
+                            borderRadius: BorderRadius.circular(6),
                             child: posterPath == null
                                 ? _ArtworkFallback(roles: roles)
                                 : _PlayerArtwork(
@@ -2397,6 +2426,7 @@ class _NowPlaying extends StatelessWidget {
                                 .bodyLarge
                                 ?.copyWith(
                                   color: roles.primaryText,
+                                  fontSize: 21,
                                   height: 1.45,
                                 );
                             final summary = item.summary;
@@ -2419,7 +2449,7 @@ class _NowPlaying extends StatelessWidget {
                                     maxLines: 3,
                                   )..layout(
                                     maxWidth: math.min(
-                                      900,
+                                      1040,
                                       constraints.maxWidth,
                                     ),
                                   );
@@ -2492,7 +2522,7 @@ class _NowPlaying extends StatelessWidget {
                                   ExcludeSemantics(
                                     child: ConstrainedBox(
                                       constraints: const BoxConstraints(
-                                        maxWidth: 900,
+                                        maxWidth: 1040,
                                       ),
                                       child: Text(
                                         summary,
@@ -2506,6 +2536,7 @@ class _NowPlaying extends StatelessWidget {
                                             .bodyLarge
                                             ?.copyWith(
                                               color: roles.primaryText,
+                                              fontSize: 21,
                                               height: 1.45,
                                             ),
                                       ),
@@ -2633,14 +2664,14 @@ class _NowPlayingIdentityState extends State<_NowPlayingIdentity> {
         overflow: TextOverflow.ellipsis,
         style: _nowPlayingTitleStyle(context, dense: widget.compact),
       );
-      const logoMaxHeight = 72.0;
+      const logoMaxHeight = 110.0;
       const logoMaxWidth = logoMaxHeight * 6;
       return LayoutBuilder(
         builder: (context, available) {
           Widget clearLogo(Uint8List bytes, Widget fallback) => ClearLogoImage(
             bytes,
             imageKey: const Key('player-now-playing-logo'),
-            maximumVisibleHeight: 56,
+            maximumVisibleHeight: 110,
             excludeFromSemantics: true,
             maximumSize: const Size(logoMaxWidth, logoMaxHeight),
             minimumVisibleSize: Size(96, widget.compact ? 20 : 28),
@@ -2741,6 +2772,7 @@ TextStyle? _nowPlayingSeriesStyle(
 
 TextStyle _nowPlayingTitleStyle(BuildContext context, {required bool dense}) =>
     LineupTypography.programTitle.copyWith(
+      fontSize: 40,
       color: LineupTheme.of(context).primaryText,
       shadows: _overlayTextShadow,
     );
@@ -2874,14 +2906,14 @@ class _NowPlayingCast extends StatelessWidget {
     final roles = LineupTheme.of(context);
     const limit = 4;
     final visible = cast.take(limit).toList(growable: false);
-    final diameter = (dense ? 40.0 : 46.0);
+    const diameter = 56.0;
     const gap = 24.0;
     final nameStyle = _nowPlayingSecondaryStyle(
       context,
       dense: dense,
-    )?.copyWith(fontSize: 16, height: 1.3, color: roles.primaryText);
+    )?.copyWith(fontSize: 20, height: 1.3, color: roles.primaryText);
     final roleStyle = Theme.of(context).textTheme.bodySmall
-        ?.copyWith(color: roles.secondaryText, fontSize: 14);
+        ?.copyWith(color: roles.secondaryText, fontSize: 18);
     final naturalWidths = [
       for (final member in visible)
         math.max(
@@ -3046,7 +3078,7 @@ class _NowPlayingCastColumn extends StatelessWidget {
     final nameStyle = _nowPlayingSecondaryStyle(
       context,
       dense: dense,
-    )?.copyWith(fontSize: 16, height: 1.3, color: roles.primaryText);
+    )?.copyWith(fontSize: 20, height: 1.3, color: roles.primaryText);
     var displayName = member.name;
     final words = member.name.trim().split(RegExp(r'\s+'));
     if (words.length > 2) {
@@ -3128,7 +3160,7 @@ class _NowPlayingCastColumn extends StatelessWidget {
                   overflow: TextOverflow.ellipsis,
                   textAlign: TextAlign.start,
                   style: Theme.of(context).textTheme.bodySmall
-                      ?.copyWith(color: roles.secondaryText, fontSize: 14),
+                      ?.copyWith(color: roles.secondaryText, fontSize: 18),
                 ),
               ),
             ),
@@ -3155,7 +3187,7 @@ class _CastFallback extends StatelessWidget {
   }
 }
 
-class _MiniGuide extends StatelessWidget {
+class _MiniGuide extends StatefulWidget {
   const _MiniGuide({
     required this.controller,
     required this.active,
@@ -3166,7 +3198,22 @@ class _MiniGuide extends StatelessWidget {
   final VoidCallback openGuide;
 
   @override
+  State<_MiniGuide> createState() => _MiniGuideState();
+}
+
+class _MiniGuideState extends State<_MiniGuide> {
+  final _scroll = ScrollController();
+  final _footerKey = GlobalKey(debugLabel: 'Mini Guide footer');
+
+  @override
+  void dispose() {
+    _scroll.dispose();
+    super.dispose();
+  }
+
+  @override
   Widget build(BuildContext context) {
+    final controller = widget.controller;
     final channels = controller.miniGuideChannels;
     final roles = LineupTheme.of(context);
     final size = MediaQuery.sizeOf(context);
@@ -3176,9 +3223,7 @@ class _MiniGuide extends StatelessWidget {
     final textScale = MediaQuery.textScalerOf(context).scale(1);
     final layoutTextScale = textScale < 1 ? 1.0 : textScale;
     final large = horizontal && size.width >= 1920 && size.height >= 1080;
-    final rowHeight = horizontal
-        ? (large ? 66.0 : 56.0) * layoutTextScale
-        : null;
+    final rowHeight = horizontal ? 84.0 * layoutTextScale : null;
     final channelColumnWidth = (large ? 365.0 : 250.0);
     final columnGap = (large ? 36.0 : 24.0);
     final contentInset = (horizontal
@@ -3192,7 +3237,22 @@ class _MiniGuide extends StatelessWidget {
         : EdgeInsets.fromLTRB(contentInset, 12, contentInset, 16);
     final rowInset = (large ? 18.0 : 12.0);
     const fadeTail = 55.0;
+    const footerGap = 8.0;
     final theme = Theme.of(context);
+    // Keep one aligned number column for the five built rows. The reference
+    // floor grows with platform text, and actual glyphs may require more room.
+    final numberStyle = theme.textTheme.bodyMedium?.copyWith(
+      fontSize: 18,
+      fontWeight: FontWeight.w500,
+    );
+    final numberColumnWidth = channels.fold<double>(
+      46 * math.max(1, textScale),
+      (width, channel) => math.max(
+        width,
+        _textWidth(context, '${channel.number}', numberStyle).ceilToDouble() +
+            1,
+      ),
+    );
     final actionLabelStyle = LineupTypography.tvLabelStyle(context);
     return DefaultTextStyle(
       style: theme.textTheme.bodyMedium!,
@@ -3211,6 +3271,9 @@ class _MiniGuide extends StatelessWidget {
                     controller.lineup.settings.overlayTransparency ==
                     OverlayTransparency.moreTransparent,
                 tailHeight: fadeTail,
+                scroll: _scroll,
+                footerKey: _footerKey,
+                footerInsets: footerGap + contentPadding.bottom,
               ),
               child: Container(
                 key: const Key('mini-guide-shelf'),
@@ -3225,6 +3288,7 @@ class _MiniGuide extends StatelessWidget {
                     label: 'Mini Guide',
                     child: SingleChildScrollView(
                       key: const Key('mini-guide-scroll'),
+                      controller: _scroll,
                       child: Listener(
                         behavior: HitTestBehavior.opaque,
                         onPointerSignal: (event) {
@@ -3283,7 +3347,7 @@ class _MiniGuide extends StatelessWidget {
                                     TextButton(
                                       onPressed: () {
                                         controller.showFullGuide();
-                                        openGuide();
+                                        widget.openGuide();
                                       },
                                       child: Row(
                                         mainAxisSize: MainAxisSize.min,
@@ -3376,30 +3440,21 @@ class _MiniGuide extends StatelessWidget {
                                 channel: channel,
                                 rowHeight: rowHeight,
                                 channelColumnWidth: channelColumnWidth,
+                                numberColumnWidth: numberColumnWidth,
                                 columnGap: columnGap,
-                                active: active,
+                                active: widget.active,
                                 large: large,
                                 rowInset: rowInset,
                                 isLast: index == channels.length - 1,
                               ),
-                            SizedBox(height: 8),
+                            const SizedBox(height: footerGap),
                             Wrap(
+                              key: _footerKey,
                               alignment: WrapAlignment.spaceBetween,
                               crossAxisAlignment: WrapCrossAlignment.center,
                               spacing: 12,
                               runSpacing: 4,
                               children: [
-                                Text(
-                                  isTv
-                                      ? 'Up/Down Browse · Select Tune · Back Close'
-                                      : 'Up / Down · Browse · Enter Tune · Esc Close',
-                                  style: TextStyle(
-                                    color: roles.secondaryText,
-                                    fontSize: isTv
-                                        ? LineupTypography.tvTextFloor
-                                        : 18,
-                                  ),
-                                ),
                                 Row(
                                   mainAxisSize: MainAxisSize.min,
                                   children: [
@@ -3458,6 +3513,7 @@ class _MiniGuideRow extends StatelessWidget {
     required this.channel,
     required this.rowHeight,
     required this.channelColumnWidth,
+    required this.numberColumnWidth,
     required this.columnGap,
     required this.active,
     required this.large,
@@ -3469,6 +3525,7 @@ class _MiniGuideRow extends StatelessWidget {
   final Channel channel;
   final double? rowHeight;
   final double channelColumnWidth;
+  final double numberColumnWidth;
   final double columnGap;
   final bool active;
   final bool large;
@@ -3479,287 +3536,322 @@ class _MiniGuideRow extends StatelessWidget {
   Widget build(BuildContext context) {
     final focused = channel.id == controller.miniGuideChannelId;
     final tuned = channel.id == controller.watchingChannelId;
-    return LineupRowSurface(
-      selected: tuned || (focused && !LineupFocusScope.visible(context)),
-      focused: focused,
-      child: Builder(
-        builder: (context) {
-          final roles = LineupTheme.of(context);
-          final foreground = roles.primaryText;
-          final filledFocus =
-              DeviceProfile.of(context).isTv &&
-              roles.focusTreatment == LineupFocusTreatment.fill &&
-              LineupFocusScope.visible(context, focused);
-          final unsupported =
-              controller.status.state == PlayerState.unsupported;
-          final current = controller.guide.currentProgram(channel.id);
-          final next = controller.guide.nextProgram(channel.id);
-          final now = controller.guide.now;
-          final spanMilliseconds = current == null
-              ? 0
-              : current.scheduled.end
-                    .difference(current.scheduled.start)
-                    .inMilliseconds;
-          final progress = current == null || spanMilliseconds == 0
-              ? 0.0
-              : now.difference(current.scheduled.start).inMilliseconds /
-                    spanMilliseconds;
-          final titleStyle = Theme.of(context).textTheme.bodyMedium?.copyWith(
-            color: foreground,
-            shadows: filledFocus ? const [] : null,
-            fontSize: 18,
-            fontWeight: FontWeight.w500,
-          );
-          final metadataStyle = Theme.of(context).textTheme.bodySmall?.copyWith(
-            color: roles.secondaryText,
-            fontSize: 18,
-            shadows: filledFocus ? const [] : null,
-          );
-          final nextTitleStyle = titleStyle?.copyWith(
-            color: roles.secondaryText,
-            fontWeight: FontWeight.w400,
-          );
-          Widget ticker(String text, Key key, {TextStyle? style}) =>
-              FocusedTicker(
-                key: key,
-                text: text,
-                focused: focused,
-                active: active,
-                reduceMotion: MediaQuery.disableAnimationsOf(context),
-                style: style,
+    return Padding(
+      padding: const EdgeInsets.symmetric(horizontal: 6),
+      child: ClipRRect(
+        borderRadius: BorderRadius.circular(6),
+        child: LineupRowSurface(
+          selected: tuned || (focused && !LineupFocusScope.visible(context)),
+          focused: focused,
+          child: Builder(
+            builder: (context) {
+              final roles = LineupTheme.of(context);
+              final foreground = roles.primaryText;
+              final filledFocus =
+                  DeviceProfile.of(context).isTv &&
+                  roles.focusTreatment == LineupFocusTreatment.fill &&
+                  LineupFocusScope.visible(context, focused);
+              final unsupported =
+                  controller.status.state == PlayerState.unsupported;
+              final current = controller.guide.currentProgram(channel.id);
+              final next = controller.guide.nextProgram(channel.id);
+              final now = controller.guide.now;
+              final spanMilliseconds = current == null
+                  ? 0
+                  : current.scheduled.end
+                        .difference(current.scheduled.start)
+                        .inMilliseconds;
+              final progress = current == null || spanMilliseconds == 0
+                  ? 0.0
+                  : now.difference(current.scheduled.start).inMilliseconds /
+                        spanMilliseconds;
+              final titleStyle = Theme.of(context).textTheme.bodyMedium
+                  ?.copyWith(
+                    color: foreground,
+                    shadows: filledFocus ? const [] : null,
+                    fontSize: 18,
+                    fontWeight: FontWeight.w500,
+                  );
+              final metadataStyle = Theme.of(context).textTheme.bodySmall
+                  ?.copyWith(
+                    color: roles.secondaryText,
+                    fontSize: 18,
+                    shadows: filledFocus ? const [] : null,
+                  );
+              final nextTitleStyle = titleStyle?.copyWith(
+                color: roles.secondaryText,
+                fontWeight: FontWeight.w400,
               );
-          final libraryTag = ChannelIdentity.libraryTagFor(
-            channel,
-            controller.lineup.channels,
-          );
-          final identityLabel = ChannelIdentity.label(
-            channel,
-            libraryTag: libraryTag,
-          );
-          final numberStyle = titleStyle;
-          final numberText = '${channel.number}';
-          final numberWidth = math.max(
-            large ? 46.0 : 32.0,
-            TextPainter.computeWidth(
-                  text: TextSpan(text: numberText, style: numberStyle),
-                  textDirection: Directionality.of(context),
-                  textScaler: MediaQuery.textScalerOf(context),
-                  locale: Localizations.maybeLocaleOf(context),
-                ) +
-                8,
-          );
-          final channelIdentity = ChannelIdentity(
-            channel: channel,
-            libraryTag: libraryTag,
-            nameStyle: titleStyle,
-            numberWidth: numberWidth,
-            supportStyle: metadataStyle,
-            showSemantics: false,
-            allowTagBelow: rowHeight != null,
-            tickerBuilder: (style) {
-              final key = Key('mini-guide-channel-${channel.id}');
-              if (focused &&
-                  active &&
-                  !MediaQuery.disableAnimationsOf(context)) {
-                return ticker(channel.name, key, style: style);
-              }
-              return Text(
-                channel.name,
-                key: key,
-                maxLines: 1,
-                softWrap: false,
-                overflow: TextOverflow.fade,
-                style: style,
+              Widget ticker(String text, Key key, {TextStyle? style}) =>
+                  FocusedTicker(
+                    key: key,
+                    text: text,
+                    focused: focused,
+                    active: active,
+                    reduceMotion: MediaQuery.disableAnimationsOf(context),
+                    style: style,
+                  );
+              final libraryTag = ChannelIdentity.libraryTagFor(
+                channel,
+                controller.lineup.channels,
               );
-            },
-            secondary: tuned
-                ? Row(
-                    mainAxisSize: MainAxisSize.min,
-                    children: [
-                      Icon(
-                        Icons.play_arrow_rounded,
-                        size: large ? 14 : 12,
-                        color: roles.secondaryText,
-                      ),
-                      const SizedBox(width: 4),
-                      Flexible(
-                        child: Text(
-                          'Watching',
-                          maxLines: 1,
-                          overflow: TextOverflow.ellipsis,
-                          style: metadataStyle,
-                        ),
-                      ),
-                    ],
-                  )
-                : null,
-          );
-          final row = controller.guide.row(channel.id);
-          final unavailable = row.state == GuideLoadState.error;
-          final currentText = unavailable
-              ? 'Schedule unavailable'
-              : current == null
-              ? 'Loading schedule…'
-              : _programTitle(current.scheduled.item);
-          final currentSupport = current == null
-              ? null
-              : _miniGuideProgramSupport(context, current);
-          final nextText = next == null
-              ? null
-              : _programTitle(next.scheduled.item);
-          final nextSupport = next == null
-              ? null
-              : _miniGuideProgramSupport(context, next, upcoming: true);
-          final currentTitle = ticker(
-            currentText,
-            Key('mini-guide-current-${channel.id}'),
-            style: titleStyle,
-          );
-          final currentCell = Column(
-            mainAxisSize: MainAxisSize.min,
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              currentTitle,
-              if (currentSupport != null)
-                Text(
-                  currentSupport,
-                  maxLines: 1,
-                  overflow: TextOverflow.ellipsis,
-                  style: metadataStyle,
-                ),
-              if (current != null) ...[
-                SizedBox(height: 3),
-                LinearProgressIndicator(
-                  value: progress.clamp(0, 1),
-                  minHeight: 2,
-                  color: roles.progressFill,
-                  backgroundColor: roles.progressTrack.withValues(alpha: 0.72),
-                  semanticsLabel: 'Program progress',
-                ),
-              ],
-            ],
-          );
-          final nextTitle = next == null
-              ? null
-              : Column(
-                  mainAxisSize: MainAxisSize.min,
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    ticker(
-                      nextText!,
-                      Key('mini-guide-next-${channel.id}'),
-                      style: nextTitleStyle,
-                    ),
+              final identityLabel = ChannelIdentity.label(
+                channel,
+                libraryTag: libraryTag,
+              );
+              final channelIdentity = ChannelIdentity(
+                channel: channel,
+                libraryTag: libraryTag,
+                nameStyle: titleStyle,
+                numberWidth: numberColumnWidth,
+                numberAlignment: TextAlign.end,
+                supportStyle: metadataStyle,
+                showSemantics: false,
+                allowTagBelow: false,
+                tickerBuilder: (style) {
+                  final key = Key('mini-guide-channel-${channel.id}');
+                  if (focused &&
+                      active &&
+                      !MediaQuery.disableAnimationsOf(context)) {
+                    return ticker(channel.name, key, style: style);
+                  }
+                  return Text(
+                    channel.name,
+                    key: key,
+                    maxLines: 1,
+                    softWrap: false,
+                    overflow: TextOverflow.fade,
+                    style: style,
+                  );
+                },
+              );
+              final inlineIdentity = tuned
+                  ? LayoutBuilder(
+                      builder: (context, constraints) {
+                        const gap = 8.0;
+                        final nameAndStatusRoom = math.max(
+                          0.0,
+                          constraints.maxWidth -
+                              channelIdentity.nameIndent(context) -
+                              gap,
+                        );
+                        final nameRoom = math.min(
+                          2.5 * MediaQuery.textScalerOf(context).scale(18),
+                          nameAndStatusRoom / 2,
+                        );
+                        return Row(
+                          children: [
+                            Flexible(child: channelIdentity),
+                            const SizedBox(width: gap),
+                            ConstrainedBox(
+                              constraints: BoxConstraints(
+                                maxWidth: nameAndStatusRoom - nameRoom,
+                              ),
+                              child: Text(
+                                'Watching',
+                                maxLines: 1,
+                                overflow: TextOverflow.ellipsis,
+                                style: metadataStyle,
+                              ),
+                            ),
+                          ],
+                        );
+                      },
+                    )
+                  : channelIdentity;
+              final row = controller.guide.row(channel.id);
+              final unavailable = row.state == GuideLoadState.error;
+              final currentText = unavailable
+                  ? 'Schedule unavailable'
+                  : current == null
+                  ? 'Loading schedule…'
+                  : _programTitle(current.scheduled.item);
+              final currentSupport = current == null
+                  ? null
+                  : _miniGuideProgramSupport(context, current);
+              final nextText = next == null
+                  ? null
+                  : _programTitle(next.scheduled.item);
+              final nextSupport = next == null
+                  ? null
+                  : _miniGuideProgramSupport(context, next, upcoming: true);
+              final currentTitle = ticker(
+                currentText,
+                Key('mini-guide-current-${channel.id}'),
+                style: titleStyle,
+              );
+              final currentCell = Column(
+                mainAxisSize: MainAxisSize.min,
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  currentTitle,
+                  if (currentSupport != null)
                     Text(
-                      nextSupport!,
+                      currentSupport,
                       maxLines: 1,
                       overflow: TextOverflow.ellipsis,
                       style: metadataStyle,
                     ),
+                  if (current != null) ...[
+                    SizedBox(height: 3),
+                    LinearProgressIndicator(
+                      value: progress.clamp(0, 1),
+                      minHeight: 2,
+                      color: roles.progressFill,
+                      backgroundColor: roles.progressTrack.withValues(
+                        alpha: 0.72,
+                      ),
+                      semanticsLabel: 'Program progress',
+                    ),
                   ],
-                );
-          final semantics = [
-            identityLabel,
-            'Now $currentText',
-            if (current?.scheduled.item.showTitle?.trim().isNotEmpty == true)
-              ?currentSupport,
-            if (nextText != null) 'Next $nextText',
-            if (next?.scheduled.item.showTitle?.trim().isNotEmpty == true)
-              ?nextSupport,
-            if (tuned) 'Now watching',
-          ].join('. ');
-          return Semantics(
-            key: Key('mini-guide-row-${channel.id}'),
-            selected: focused,
-            label: '$semantics.',
-            child: DecoratedBox(
-              decoration: BoxDecoration(
-                border: Border(
-                  bottom: BorderSide(
-                    color: isLast
-                        ? Colors.transparent
-                        : roles.primaryText.withValues(alpha: 0.10),
-                    width: 1.0,
+                ],
+              );
+              final nextTitle = next == null
+                  ? null
+                  : Column(
+                      mainAxisSize: MainAxisSize.min,
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        ticker(
+                          nextText!,
+                          Key('mini-guide-next-${channel.id}'),
+                          style: nextTitleStyle,
+                        ),
+                        Text(
+                          nextSupport!,
+                          maxLines: 1,
+                          overflow: TextOverflow.ellipsis,
+                          style: metadataStyle,
+                        ),
+                      ],
+                    );
+              final semantics = [
+                identityLabel,
+                'Now $currentText',
+                if (current?.scheduled.item.showTitle?.trim().isNotEmpty ==
+                    true)
+                  ?currentSupport,
+                if (nextText != null) 'Next $nextText',
+                if (next?.scheduled.item.showTitle?.trim().isNotEmpty == true)
+                  ?nextSupport,
+                if (tuned) 'Now watching',
+              ].join('. ');
+              return Semantics(
+                key: Key('mini-guide-row-${channel.id}'),
+                selected: focused,
+                label: '$semantics.',
+                child: DecoratedBox(
+                  decoration: BoxDecoration(
+                    border: Border(
+                      bottom: BorderSide(
+                        color: isLast
+                            ? Colors.transparent
+                            : roles.primaryText.withValues(alpha: 0.10),
+                        width: 1.0,
+                      ),
+                    ),
                   ),
-                ),
-              ),
-              child: Material(
-                color: Colors.transparent,
-                child: InkWell(
-                  onTap: () => controller.focusMiniGuideChannel(channel.id),
-                  onDoubleTap: unsupported || unavailable
-                      ? null
-                      : () {
-                          controller.focusMiniGuideChannel(channel.id);
-                          unawaited(controller.tuneMiniGuideSelection());
-                        },
-                  child: rowHeight == null
-                      ? Padding(
-                          padding: EdgeInsets.symmetric(
-                            horizontal: rowInset,
-                            vertical: 7,
-                          ),
-                          child: Column(
-                            crossAxisAlignment: CrossAxisAlignment.stretch,
-                            children: [
-                              channelIdentity,
-                              Padding(
-                                padding: EdgeInsetsDirectional.only(
-                                  start: channelIdentity.nameIndent(context),
+                  child: Material(
+                    color: Colors.transparent,
+                    child: InkWell(
+                      onTap: () => controller.focusMiniGuideChannel(channel.id),
+                      onDoubleTap: unsupported || unavailable
+                          ? null
+                          : () {
+                              controller.focusMiniGuideChannel(channel.id);
+                              unawaited(controller.tuneMiniGuideSelection());
+                            },
+                      child: rowHeight == null
+                          ? Padding(
+                              padding: EdgeInsets.symmetric(
+                                horizontal: rowInset,
+                                vertical: 7,
+                              ),
+                              child: Column(
+                                crossAxisAlignment: CrossAxisAlignment.stretch,
+                                children: [
+                                  inlineIdentity,
+                                  Padding(
+                                    padding: EdgeInsetsDirectional.only(
+                                      start: channelIdentity.nameIndent(
+                                        context,
+                                      ),
+                                    ),
+                                    child: Column(
+                                      crossAxisAlignment:
+                                          CrossAxisAlignment.start,
+                                      children: [currentCell, ?nextTitle],
+                                    ),
+                                  ),
+                                ],
+                              ),
+                            )
+                          : SizedBox(
+                              height: rowHeight,
+                              child: Padding(
+                                padding: EdgeInsets.symmetric(
+                                  horizontal: rowInset,
                                 ),
-                                child: Column(
-                                  crossAxisAlignment: CrossAxisAlignment.start,
-                                  children: [currentCell, ?nextTitle],
+                                child: Row(
+                                  children: [
+                                    SizedBox(
+                                      width: channelColumnWidth,
+                                      child: inlineIdentity,
+                                    ),
+                                    SizedBox(width: columnGap),
+                                    Expanded(flex: 115, child: currentCell),
+                                    SizedBox(width: columnGap),
+                                    Expanded(
+                                      flex: 100,
+                                      child:
+                                          nextTitle ?? const SizedBox.shrink(),
+                                    ),
+                                  ],
                                 ),
                               ),
-                            ],
-                          ),
-                        )
-                      : SizedBox(
-                          height: rowHeight,
-                          child: Padding(
-                            padding: EdgeInsets.symmetric(horizontal: rowInset),
-                            child: Row(
-                              children: [
-                                SizedBox(
-                                  width: channelColumnWidth,
-                                  child: channelIdentity,
-                                ),
-                                SizedBox(width: columnGap),
-                                Expanded(flex: 115, child: currentCell),
-                                SizedBox(width: columnGap),
-                                Expanded(
-                                  flex: 100,
-                                  child: nextTitle ?? const SizedBox.shrink(),
-                                ),
-                              ],
                             ),
-                          ),
-                        ),
+                    ),
+                  ),
                 ),
-              ),
-            ),
-          );
-        },
+              );
+            },
+          ),
+        ),
       ),
     );
   }
 }
 
 class _MiniGuideFadePainter extends CustomPainter {
-  const _MiniGuideFadePainter({
+  _MiniGuideFadePainter({
     required this.scrim,
     required this.tailHeight,
     required this.lighter,
-  });
+    required this.scroll,
+    required this.footerKey,
+    required this.footerInsets,
+  }) : super(repaint: scroll);
 
+  final ScrollController scroll;
+  final GlobalKey footerKey;
+  final double footerInsets;
   final Color scrim;
   final double tailHeight;
   final bool lighter;
 
   @override
   void paint(Canvas canvas, Size size) {
-    final content = Offset.zero & size;
+    final footer = footerKey.currentContext!.findRenderObject()! as RenderBox;
+    final position = scroll.position;
+    // The footer scrolls with the rows. Include the content beyond the
+    // viewport so a clipped shelf keeps its visible rows under the scrim.
+    final rowsBottom =
+        size.height +
+        position.maxScrollExtent -
+        position.pixels -
+        footerInsets -
+        footer.size.height;
+    final fadeStart = math.max(0.0, rowsBottom + 24);
     final paint = Paint()..color = scrim;
     if (lighter) {
       paint.shader = LinearGradient(
@@ -3772,10 +3864,14 @@ class _MiniGuideFadePainter extends CustomPainter {
           scrim.withValues(alpha: .52),
         ],
         stops: const [0, .4, .85, 1],
-      ).createShader(content);
+      ).createShader(Rect.fromLTWH(0, 0, size.width, fadeStart));
     }
-    canvas.drawRect(content, paint);
-    final tail = Rect.fromLTWH(0, size.height, size.width, tailHeight);
+    canvas.drawRect(
+      Rect.fromLTWH(0, 0, size.width, math.min(fadeStart, size.height)),
+      paint,
+    );
+    if (fadeStart >= size.height) return;
+    final tail = Rect.fromLTWH(0, fadeStart, size.width, tailHeight);
     canvas.drawRect(
       tail,
       Paint()
@@ -3791,10 +3887,9 @@ class _MiniGuideFadePainter extends CustomPainter {
   }
 
   @override
-  bool shouldRepaint(covariant _MiniGuideFadePainter oldDelegate) =>
-      scrim != oldDelegate.scrim ||
-      lighter != oldDelegate.lighter ||
-      tailHeight != oldDelegate.tailHeight;
+  // Row heights and footer layout can change while the shelf stays clipped
+  // to the same size.
+  bool shouldRepaint(covariant _MiniGuideFadePainter oldDelegate) => true;
 }
 
 // Lay out the OSD first so the picker can use the actual button bounds on
@@ -3980,10 +4075,6 @@ const _pickerPadding = 12.0;
 const _trackRowPadding = 12.0;
 const _trackTrailingWidth = 30.0;
 
-String _trackPickerHint(BuildContext context) => DeviceProfile.of(context).isTv
-    ? 'Up/Down Browse · Select Choose · Back Close'
-    : 'Up/Down Browse · Enter Select · Esc Close';
-
 double _popoverWidth(BuildContext context, double contentWidth) {
   final maxWidth = DeviceProfile.of(context).isTv
       ? 720.0
@@ -3998,13 +4089,21 @@ double _trackPopoverWidth(
   PlayerTrackType type,
 ) {
   final theme = Theme.of(context).textTheme;
-  final titleStyle = theme.bodyLarge?.copyWith(fontWeight: FontWeight.w500);
+  final titleStyle = theme.bodyLarge?.copyWith(
+    fontSize: 23,
+    fontWeight: FontWeight.w600,
+  );
   // Keep the same horizontal padding and leading reserve as the track tiles,
   // including room for the trailing selection glyph and its title gap.
   const rowExtras =
       2 * (_pickerPadding + _trackRowPadding) + _trackTrailingWidth + 22;
   var width =
-      _textWidth(context, _trackPickerHint(context), theme.bodySmall) +
+      _textWidth(
+        context,
+        type == PlayerTrackType.audio ? 'Audio' : 'Subtitles',
+        theme.titleLarge?.copyWith(fontSize: 26),
+      ) +
+      _sleepCloseWidth(context) +
       2 * _pickerPadding;
   for (final track in controller.tracks) {
     if (track.type != type) continue;
@@ -4015,8 +4114,8 @@ double _trackPopoverWidth(
             _textWidth(context, display.primaryText, titleStyle),
             _textWidth(
               context,
-              display.secondaryFacts.join(' · '),
-              theme.bodyMedium,
+              displays.pickerSecondaryFactsFor(track).join(' · '),
+              theme.bodyMedium?.copyWith(fontSize: 19),
             ),
           ) +
           rowExtras,
@@ -4038,8 +4137,9 @@ const _sleepTileTitleGap = 16.0;
 const _sleepSelectionSize = 20.0;
 
 TextStyle? _sleepTileTextStyle(BuildContext context) =>
-    ListTileTheme.of(context).titleTextStyle ??
-    Theme.of(context).textTheme.bodyLarge;
+    (ListTileTheme.of(context).titleTextStyle ??
+            Theme.of(context).textTheme.bodyLarge)
+        ?.copyWith(fontSize: 23, fontWeight: FontWeight.w600);
 
 TextButton _sleepCloseButton(VoidCallback onPressed) =>
     TextButton(onPressed: onPressed, child: const _OverlayCloseLabel());
@@ -4090,7 +4190,11 @@ double _sleepPopoverWidth(BuildContext context, String state) {
   final theme = Theme.of(context);
   var width = math.max(
     _textWidth(context, state, theme.textTheme.bodySmall),
-    _textWidth(context, _sleepPickerTitle, theme.textTheme.titleLarge) +
+    _textWidth(
+          context,
+          _sleepPickerTitle,
+          theme.textTheme.titleLarge?.copyWith(fontSize: 26),
+        ) +
         _sleepCloseWidth(context),
   );
   final tileStyle = _sleepTileTextStyle(context);
@@ -4200,7 +4304,9 @@ class _SleepTimerPicker extends StatelessWidget {
                       Expanded(
                         child: Text(
                           _sleepPickerTitle,
-                          style: theme.textTheme.titleLarge,
+                          style: theme.textTheme.titleLarge?.copyWith(
+                            fontSize: 26,
+                          ),
                         ),
                       ),
                       _sleepCloseButton(() {
@@ -4214,6 +4320,7 @@ class _SleepTimerPicker extends StatelessWidget {
                       'Sleep · ${(remaining.inSeconds / 60).ceil()}m',
                       style: theme.textTheme.bodySmall?.copyWith(
                         color: supportingText,
+                        fontSize: 19,
                       ),
                     ),
                   for (final choice in _sleepChoices)
@@ -4323,11 +4430,6 @@ class _TracksState extends State<_Tracks> {
     final fillFocus = roles.focusTreatment == LineupFocusTreatment.fill;
     final selectedTrack = tracks.where((track) => track.selected).firstOrNull;
     final textTheme = Theme.of(context).textTheme;
-    final supportingText = Color.lerp(
-      roles.secondaryText,
-      roles.primaryText,
-      .65,
-    )!;
     Widget present(Widget child) {
       if (widget.inPopover) {
         return FocusScope(
@@ -4357,8 +4459,8 @@ class _TracksState extends State<_Tracks> {
                 child: Text(
                   widget.type == PlayerTrackType.audio ? 'Audio' : 'Subtitles',
                   style: widget.inPopover
-                      ? textTheme.titleLarge
-                      : textTheme.headlineSmall,
+                      ? textTheme.titleLarge?.copyWith(fontSize: 26)
+                      : textTheme.headlineSmall?.copyWith(fontSize: 36),
                 ),
               ),
               TextButton(
@@ -4438,8 +4540,9 @@ class _TracksState extends State<_Tracks> {
                                 final title = off
                                     ? 'Off'
                                     : display!.primaryText;
-                                final metadata =
-                                    display?.secondaryFacts ?? const <String>[];
+                                final metadata = track == null
+                                    ? const <String>[]
+                                    : displays.pickerSecondaryFactsFor(track);
                                 final metadataText = metadata.join(' · ');
 
                                 final tooltip = display?.tooltipText ?? title;
@@ -4488,7 +4591,8 @@ class _TracksState extends State<_Tracks> {
                                   title,
                                   (roles) => textTheme.bodyLarge?.copyWith(
                                     color: roles.primaryText,
-                                    fontWeight: FontWeight.w500,
+                                    fontSize: 23,
+                                    fontWeight: FontWeight.w600,
                                   ),
                                 );
                                 final subtitleWidget = metadata.isEmpty
@@ -4497,11 +4601,8 @@ class _TracksState extends State<_Tracks> {
                                         metadataText,
                                         (roles) =>
                                             textTheme.bodyMedium?.copyWith(
-                                              color: Color.lerp(
-                                                roles.secondaryText,
-                                                roles.primaryText,
-                                                .65,
-                                              ),
+                                              color: roles.secondaryText,
+                                              fontSize: 19,
                                             ),
                                       );
                                 final Widget trailingWidget = fillFocus
@@ -4606,19 +4707,6 @@ class _TracksState extends State<_Tracks> {
                 ),
               ),
             ),
-          Padding(
-            key: const Key('playback-options-footer'),
-            padding: EdgeInsets.only(top: widget.inPopover ? 8 : 20),
-            child: Text(
-              _trackPickerHint(context),
-              style: textTheme.bodySmall?.copyWith(
-                color: supportingText,
-                fontSize: !widget.inPopover && DeviceProfile.of(context).isTv
-                    ? LineupTypography.tvTextFloor
-                    : null,
-              ),
-            ),
-          ),
         ],
       ),
     );
@@ -5047,6 +5135,26 @@ class _StatusBug extends StatelessWidget {
     final libraryTag = channel == null
         ? null
         : ChannelIdentity.libraryTagFor(channel, controller.lineup.channels);
+    final entryProgram = channel == null
+        ? null
+        : controller.guide.currentProgram(channel.id);
+    final entryRemaining = entryProgram == null
+        ? null
+        : _wholeMinutesLeft(
+            controller.guide.now.difference(entryProgram.scheduled.start),
+            entryProgram.scheduled.end.difference(entryProgram.scheduled.start),
+          );
+    final entryDescription = entryProgram == null
+        ? null
+        : [entryProgram.scheduled.item.title, ?entryRemaining].join(' · ');
+    final liveLabel = !numberEntry
+        ? text
+        : channel == null
+        ? '$text. Not in this lineup'
+        : [
+            ChannelIdentity.label(channel, libraryTag: libraryTag),
+            ?entryDescription,
+          ].join('. ');
     final style = Theme.of(context).textTheme.bodyLarge
         ?.copyWith(color: roles.primaryText, shadows: _overlayTextShadow);
     return Align(
@@ -5068,16 +5176,16 @@ class _StatusBug extends StatelessWidget {
             Semantics(
               container: true,
               liveRegion: true,
-              label: channel == null
-                  ? text
-                  : ChannelIdentity.label(channel, libraryTag: libraryTag),
+              label: liveLabel,
               excludeSemantics: true,
               child: Container(
                 key: numberEntry
                     ? const Key('channel-number-buffer')
                     : const Key('player-status-bug'),
                 constraints: BoxConstraints(
-                  maxWidth: MediaQuery.sizeOf(context).width * .65,
+                  maxWidth: numberEntry
+                      ? 460
+                      : MediaQuery.sizeOf(context).width * .65,
                 ),
                 padding: const EdgeInsets.symmetric(
                   horizontal: 16,
@@ -5091,13 +5199,40 @@ class _StatusBug extends StatelessWidget {
                     ? Column(
                         mainAxisSize: MainAxisSize.min,
                         children: [
-                          Text(text, style: style?.copyWith(fontSize: 48)),
+                          Text(
+                            text,
+                            key: const Key('channel-number-digits'),
+                            style: LineupTypography.programTitle.copyWith(
+                              color: roles.primaryText,
+                              fontSize: 84,
+                            ),
+                          ),
                           if (channel != null)
                             ChannelIdentity(
                               channel: channel,
                               libraryTag: libraryTag,
-                              nameStyle: style?.copyWith(fontSize: 20),
+                              numberText: '',
+                              nameStyle: style?.copyWith(
+                                fontSize: 22,
+                                fontWeight: FontWeight.w600,
+                              ),
                               showSemantics: false,
+                            )
+                          else
+                            Text(
+                              'Not in this lineup',
+                              style: style?.copyWith(fontSize: 22),
+                            ),
+                          if (entryDescription != null)
+                            Text(
+                              entryDescription,
+                              key: const Key('channel-number-program'),
+                              maxLines: 1,
+                              overflow: TextOverflow.ellipsis,
+                              style: style?.copyWith(
+                                fontSize: 19,
+                                color: roles.secondaryText,
+                              ),
                             ),
                         ],
                       )
@@ -5311,6 +5446,7 @@ Widget _osdAction(
   BuildContext context, {
   required Key key,
   required String label,
+  String? value,
   required String? tooltip,
   String? semanticLabel,
   required IconData icon,
@@ -5325,15 +5461,42 @@ Widget _osdAction(
     excludeSemantics: semanticLabel != null,
     child: TextButton(
       key: key,
-      style: _playerActionStyle(context),
+      style: _osdOptionStyle(context),
       focusNode: focusNode,
       onPressed: onPressed,
       child: Row(
         mainAxisSize: MainAxisSize.min,
         children: [
-          Icon(icon, size: 20),
-          SizedBox(width: 8),
-          Flexible(child: Text(label, softWrap: true)),
+          Icon(icon, size: 26),
+          const SizedBox(width: 8),
+          Flexible(
+            child: Builder(
+              builder: (context) {
+                final roles = LineupTheme.of(context);
+                final style = DefaultTextStyle.of(context).style;
+                return Text.rich(
+                  TextSpan(
+                    children: [
+                      TextSpan(
+                        text: label,
+                        style: const TextStyle(fontWeight: FontWeight.w600),
+                      ),
+                      if (value != null)
+                        TextSpan(
+                          text: ' $value',
+                          style: TextStyle(
+                            fontWeight: FontWeight.w400,
+                            color: style.color == roles.onFocus
+                                ? roles.onFocus
+                                : roles.secondaryText,
+                          ),
+                        ),
+                    ],
+                  ),
+                );
+              },
+            ),
+          ),
         ],
       ),
     ),
@@ -5485,22 +5648,54 @@ ButtonStyle _playerActionStyle(BuildContext context) {
   );
 }
 
+ButtonStyle _osdOptionStyle(BuildContext context) {
+  final roles = LineupTheme.of(context);
+  return _playerActionStyle(context).copyWith(
+    textStyle: WidgetStatePropertyAll(
+      LineupTypography.button
+          .copyWith(fontSize: 22, fontWeight: FontWeight.w600)
+          .copyWith(shadows: _overlayTextShadow),
+    ),
+    foregroundColor: WidgetStateProperty.resolveWith(
+      (states) => states.contains(WidgetState.disabled)
+          ? roles.secondaryText.withValues(alpha: .45)
+          : roles.focusTreatment == LineupFocusTreatment.fill &&
+                states.contains(WidgetState.focused)
+          ? roles.onFocus
+          : roles.primaryText,
+    ),
+    minimumSize: const WidgetStatePropertyAll(Size(44, 60)),
+    shape: const WidgetStatePropertyAll(
+      RoundedRectangleBorder(
+        borderRadius: BorderRadius.all(Radius.circular(6)),
+      ),
+    ),
+    padding: const WidgetStatePropertyAll(EdgeInsets.symmetric(horizontal: 20)),
+  );
+}
+
 class _OsdPanelMaterial extends CustomPainter {
-  const _OsdPanelMaterial({required this.color, required this.collapsedFade});
+  const _OsdPanelMaterial({
+    required this.color,
+    required this.collapsedFade,
+    this.expanded = false,
+  });
   static const feather = 55.0;
 
   final Color color;
   final bool collapsedFade;
+  final bool expanded;
 
   @override
   void paint(Canvas canvas, Size size) {
+    final fadeHeight = expanded ? 180.0 : feather;
     final bounds = Rect.fromLTWH(
       0,
-      -feather,
+      -fadeHeight,
       size.width,
-      size.height + feather,
+      size.height + fadeHeight,
     );
-    final join = feather / bounds.height;
+    final join = fadeHeight / bounds.height;
     final colors = collapsedFade
         ? [
             color.withValues(alpha: 0),
@@ -5527,33 +5722,37 @@ class _OsdPanelMaterial extends CustomPainter {
 
   @override
   bool shouldRepaint(_OsdPanelMaterial oldDelegate) =>
-      color != oldDelegate.color || collapsedFade != oldDelegate.collapsedFade;
+      color != oldDelegate.color ||
+      collapsedFade != oldDelegate.collapsedFade ||
+      expanded != oldDelegate.expanded;
 }
 
 class _TrackListFade extends StatelessWidget {
   const _TrackListFade({required this.child});
   final Widget child;
   @override
-  Widget build(BuildContext context) => ShaderMask(
-    blendMode: BlendMode.dstIn,
-    shaderCallback: (bounds) => LinearGradient(
-      begin: Alignment.topCenter,
-      end: Alignment.bottomCenter,
-      colors: const [
-        Colors.transparent,
-        Colors.white,
-        Colors.white,
-        Colors.transparent,
-      ],
-      stops: [
-        0,
-        math.min(8 / bounds.height, .1),
-        math.max(1 - 8 / bounds.height, .9),
-        1,
-      ],
-    ).createShader(bounds),
-    child: ClipRect(child: child),
-  );
+  Widget build(BuildContext context) => DeviceProfile.of(context).isTv
+      ? ClipRect(child: child)
+      : ShaderMask(
+          blendMode: BlendMode.dstIn,
+          shaderCallback: (bounds) => LinearGradient(
+            begin: Alignment.topCenter,
+            end: Alignment.bottomCenter,
+            colors: const [
+              Colors.transparent,
+              Colors.white,
+              Colors.white,
+              Colors.transparent,
+            ],
+            stops: [
+              0,
+              math.min(8 / bounds.height, .1),
+              math.max(1 - 8 / bounds.height, .9),
+              1,
+            ],
+          ).createShader(bounds),
+          child: ClipRect(child: child),
+        );
 }
 
 class _OverlayTextTheme extends StatelessWidget {

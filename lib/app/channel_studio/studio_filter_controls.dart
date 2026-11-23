@@ -1,6 +1,6 @@
 part of '../channel_studio_view.dart';
 
-enum _StudioPendingChoice { filter, selection }
+enum _StudioPendingChoice { selection }
 
 Widget _studioFilterFieldInk(BuildContext context, LineupFieldButton field) {
   final roles = LineupTheme.of(context);
@@ -12,7 +12,7 @@ Widget _studioFilterFieldInk(BuildContext context, LineupFieldButton field) {
 }
 
 /// Shared only by the library filter editor and the manual browser.
-/// Pending choices never mutate the draft until the picker applies them.
+/// The open picker retains navigation state while values update the draft.
 final class _FilterPickerController extends ChangeNotifier {
   _FilterPickerController({required this.onOpening});
   final VoidCallback onOpening;
@@ -131,7 +131,6 @@ mixin _StudioFilterControls<T extends StatefulWidget> on State<T> {
     includeWatched: _includeWatched,
     onCancel: _cancelPendingFilter,
     onApply: (values) {
-      _picker.close();
       _filtersChanged(() {
         final filter = _libraryFilter(key);
         if (values.isEmpty) {
@@ -140,15 +139,19 @@ mixin _StudioFilterControls<T extends StatefulWidget> on State<T> {
           _currentFilters[filter] = List.unmodifiable(values);
         }
       });
-      _restoreFilterFocus(key);
     },
   );
 
   void _restoreFilterFocus(String key) {
     WidgetsBinding.instance.addPostFrameCallback((_) {
-      if (mounted) {
-        (_filterControlFocus[key] ?? _filterControlFocus['choose'])
-            ?.requestFocus();
+      if (!mounted) return;
+      final opener = _filterControlFocus[key];
+      final target =
+          opener != null && opener.parent != null && opener.canRequestFocus
+          ? opener
+          : _filterControlFocus['choose'];
+      if (target != null && target.parent != null && target.canRequestFocus) {
+        target.requestFocus();
       }
     });
   }

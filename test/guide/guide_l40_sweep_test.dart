@@ -226,8 +226,19 @@ void _expectLegacyTv(Size size, double scale, double header, String reason) {
   expect(tv.pictureWidth, closeTo(picture, .000001), reason: reason);
   expect(
     tv.rowHeight,
-    closeTo(math.max(rowFloor, (available - band) / 5), .000001),
+    closeTo(
+      math.max(
+        rowFloor,
+        (available - band) /
+            ((available - band) / rowFloor).floor().clamp(5, 6),
+      ),
+      .000001,
+    ),
     reason: reason,
   );
-  expect(tv.rowCount, 5, reason: reason);
+  expect(
+    tv.rowCount,
+    ((available - band) / rowFloor).floor().clamp(5, 6),
+    reason: reason,
+  );
 }

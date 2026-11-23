@@ -40,11 +40,15 @@ FocusNode _toolbarNode(WidgetTester tester, String name) => switch (name) {
         .widget<InkWell>(find.byKey(const Key('guide-channel-filter')))
         .focusNode!,
   'search' =>
-    tester
-        .widget<LineupTextFieldActivation>(
-          find.byType(LineupTextFieldActivation),
-        )
-        .focusNode!,
+    find.byKey(const Key('guide-search-button')).evaluate().isNotEmpty
+        ? tester
+              .widget<IconButton>(find.byKey(const Key('guide-search-button')))
+              .focusNode!
+        : tester
+              .widget<LineupTextFieldActivation>(
+                find.byType(LineupTextFieldActivation),
+              )
+              .focusNode!,
   'earlier' =>
     tester
         .widget<IconButton>(find.byKey(const Key('guide-earlier')))
@@ -66,7 +70,10 @@ FocusNode _toolbarNode(WidgetTester tester, String name) => switch (name) {
 
 Finder _toolbarFinder(String name) => switch (name) {
   'channelFilter' => find.byKey(const Key('guide-channel-filter')),
-  'search' => find.byKey(const Key('guide-channel-search')),
+  'search' =>
+    find.byKey(const Key('guide-channel-search')).evaluate().isNotEmpty
+        ? find.byKey(const Key('guide-channel-search'))
+        : find.byKey(const Key('guide-search-button')),
   'earlier' => find.byKey(const Key('guide-earlier')),
   'now' => find.byKey(const Key('guide-now')),
   'later' => find.byKey(const Key('guide-later')),
@@ -91,15 +98,7 @@ String _expectedToolbarControl(WidgetTester tester, {double? target}) {
   final visibleCell = cell.intersect(timeline);
   final targetX =
       target ?? (visibleCell.isEmpty ? cell : visibleCell).center.dx;
-  const controls = [
-    'channelFilter',
-    'search',
-    'earlier',
-    'now',
-    'later',
-    'hours',
-    'menu',
-  ];
+  final controls = _toolbarControlOrder(tester);
   final candidates = controls.where(
     (name) => _toolbarNode(tester, name).canRequestFocus,
   );
@@ -111,6 +110,32 @@ String _expectedToolbarControl(WidgetTester tester, {double? target}) {
             .abs();
     return candidateDistance < nearestDistance ? candidate : nearest;
   });
+}
+
+List<String> _toolbarControlOrder(WidgetTester tester) {
+  if (find.byKey(const Key('guide-search-button')).evaluate().isNotEmpty) {
+    return [
+      'menu',
+      'channelFilter',
+      'earlier',
+      'now',
+      'later',
+      'hours',
+      'search',
+    ];
+  }
+  if (find.byKey(const Key('guide-hours')).evaluate().isEmpty) {
+    return ['menu', 'channelFilter', 'search'];
+  }
+  return [
+    'channelFilter',
+    'search',
+    'earlier',
+    'now',
+    'later',
+    'hours',
+    'menu',
+  ];
 }
 
 void _expectToolbarFocus(WidgetTester tester, String name) {
@@ -564,15 +589,7 @@ void main() {
         expect(guide.focusNode!.hasPrimaryFocus, isTrue);
       }
 
-      final controls = [
-        'channelFilter',
-        'search',
-        'earlier',
-        'now',
-        'later',
-        'hours',
-        'menu',
-      ];
+      final controls = _toolbarControlOrder(tester);
       guide.controller.focusProgram(firstProgram);
       await tester.pumpAndSettle();
       guide.focusNode!.requestFocus();
@@ -607,8 +624,25 @@ void main() {
       final search = _toolbarNode(tester, 'search');
       search.requestFocus();
       await tester.pumpAndSettle();
+      final searchButton = find.byKey(const Key('guide-search-button'));
+      final searchField = find.byKey(const Key('guide-channel-search'));
+      final merged = searchButton.evaluate().isNotEmpty;
+      expect(searchField, merged ? findsNothing : findsOneWidget);
+      _expectToolbarFocus(tester, 'search');
+      expect(tester.testTextInput.isVisible, isFalse);
       await _key(tester, LogicalKeyboardKey.select);
-      await tester.pumpAndSettle();
+      expect(searchField, findsOneWidget);
+      if (merged) {
+        expect(searchButton, findsNothing);
+        expect(_toolbarNode(tester, 'search').hasPrimaryFocus, isTrue);
+        expect(tester.testTextInput.isVisible, isFalse);
+        await _key(tester, LogicalKeyboardKey.select);
+      }
+      expect(
+        tester.widget<TextField>(searchField).focusNode!.hasPrimaryFocus,
+        isTrue,
+      );
+      expect(tester.testTextInput.isVisible, isTrue);
       await _key(tester, LogicalKeyboardKey.keyI);
       expect(find.byKey(const Key('immersive-app-menu')), findsNothing);
       await _key(tester, LogicalKeyboardKey.info);

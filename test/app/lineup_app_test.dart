@@ -8,6 +8,7 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:lineup_desktop/ui/lineup_canvas.dart';
 import 'package:lineup_desktop/app/lineup_app.dart';
 import 'package:lineup_desktop/app/lineup_controller.dart';
+import 'package:lineup_desktop/app/channel_studio_view.dart';
 import 'package:lineup_desktop/app/lineup_shell.dart';
 import 'package:lineup_desktop/app/onboarding_view.dart';
 import 'package:lineup_desktop/channels/channel.dart';
@@ -24,6 +25,61 @@ import 'package:lineup_desktop/settings/lineup_settings.dart';
 import '../support/ui_fixture.dart';
 
 void main() {
+  for (final tv in [false, true]) {
+    testWidgets(
+      'root multiplies platform text size once on ${tv ? 'TV' : 'desktop'}',
+      (tester) async {
+        tester.view
+          ..physicalSize = const Size(1920, 1080)
+          ..devicePixelRatio = tv ? 2 : 1;
+        addTearDown(tester.view.reset);
+        tester.platformDispatcher.textScaleFactorTestValue = 1.2;
+        addTearDown(tester.platformDispatcher.clearTextScaleFactorTestValue);
+        final controller = FixtureController(
+          scenario: const LineupScenario(stage: SetupStage.ready),
+        );
+        await tester.pumpWidget(
+          UiFixture(controller: controller, profile: profileFor(tv)).build(),
+        );
+        await tester.pumpAndSettle();
+        double scale() =>
+            MediaQuery.textScalerOf(tester.element(find.byType(GuideView)))
+                .scale(20) /
+            20;
+        expect(scale(), closeTo(1.2, .001));
+        for (final (size, factor) in const [
+          (LineupTextSize.standard, 1.0),
+          (LineupTextSize.large, 1.15),
+          (LineupTextSize.larger, 1.3),
+        ]) {
+          await controller.updateSettings(
+            (current) => current.copyWith(textSize: size),
+          );
+          await tester.pumpAndSettle();
+          expect(scale(), closeTo(1.2 * factor, .001));
+        }
+        TextScaler scaler() =>
+            MediaQuery.textScalerOf(tester.element(find.byType(GuideView)));
+        final before = scaler();
+        await controller.updateSettings(
+          (current) => current.copyWith(reduceMotion: !current.reduceMotion),
+        );
+        await tester.pumpAndSettle();
+        final after = scaler();
+        expect(identical(after, before), isFalse);
+        expect(after, before);
+        expect(after.hashCode, before.hashCode);
+        await controller.updateSettings(
+          (current) => current.copyWith(textSize: LineupTextSize.larger),
+        );
+        tester.platformDispatcher.textScaleFactorTestValue = 1.8;
+        await tester.pumpAndSettle();
+        expect(scale(), closeTo(2.0, .001));
+        await tester.pumpWidget(const SizedBox.shrink());
+      },
+    );
+  }
+
   testWidgets(
     'TV shell keeps Player and Settings video full-frame with safe menus',
     (tester) async {
@@ -390,7 +446,32 @@ void main() {
     await tester.pumpAndSettle();
 
     expect(controller.stage, SetupStage.ready);
-    expect(find.text('Create custom channel'), findsOneWidget);
+    final studio = find.byType(ChannelStudioView);
+    expect(studio, findsOneWidget);
+    final view = tester.widget<ChannelStudioView>(studio);
+    expect(view.mode, ChannelStudioMode.createCustom);
+    expect(view.channel?.id, isNull);
+    expect(
+      find.descendant(
+        of: find.ancestor(
+          of: find.byKey(const Key('studio-status-tag')),
+          matching: find.byWidgetPredicate(
+            (widget) => widget is Semantics && widget.properties.header == true,
+          ),
+        ),
+        matching: find.byWidgetPredicate(
+          (widget) => widget is Text && widget.data == 'Movies',
+        ),
+      ),
+      findsOneWidget,
+    );
+    expect(
+      find.descendant(
+        of: find.byKey(const Key('studio-status-tag')),
+        matching: find.text('Draft'),
+      ),
+      findsOneWidget,
+    );
     expect(
       find.textContaining('No channel numbers are available'),
       findsOneWidget,
@@ -442,7 +523,7 @@ void main() {
 
     await openDestination(tester, 'Settings');
 
-    expect(find.byType(DropdownButton<LineupThemeName>), findsOneWidget);
+    expect(find.byKey(const ValueKey('settings-field-Theme')), findsOneWidget);
 
     await tester.pumpWidget(const SizedBox.shrink());
     await tester.pumpAndSettle();
@@ -647,7 +728,7 @@ void main() {
 
     await tester.sendKeyEvent(LogicalKeyboardKey.f3);
     await tester.pumpAndSettle();
-    expect(find.byType(DropdownButton<LineupThemeName>), findsOneWidget);
+    expect(find.byKey(const ValueKey('settings-field-Theme')), findsOneWidget);
     expectSettingsRailFocus(tester, 'Appearance');
 
     await tester.sendKeyEvent(LogicalKeyboardKey.escape);
@@ -666,7 +747,7 @@ void main() {
     await tester.sendKeyEvent(LogicalKeyboardKey.f3);
     await tester.pumpAndSettle();
 
-    expect(find.byType(DropdownButton<LineupThemeName>), findsOneWidget);
+    expect(find.byKey(const ValueKey('settings-field-Theme')), findsOneWidget);
     expectSettingsRailFocus(tester, 'Appearance');
 
     await tester.sendKeyEvent(LogicalKeyboardKey.backspace);
@@ -1128,7 +1209,7 @@ void main() {
     await tester.sendKeyEvent(LogicalKeyboardKey.digit3);
     await tester.sendKeyUpEvent(LogicalKeyboardKey.controlLeft);
     await tester.pumpAndSettle();
-    expect(find.byType(DropdownButton<LineupThemeName>), findsOneWidget);
+    expect(find.byKey(const ValueKey('settings-field-Theme')), findsOneWidget);
     await tester.sendKeyDownEvent(LogicalKeyboardKey.controlLeft);
     await tester.sendKeyEvent(LogicalKeyboardKey.keyG);
     await tester.sendKeyUpEvent(LogicalKeyboardKey.controlLeft);
@@ -1137,7 +1218,7 @@ void main() {
     await tester.pumpAndSettle();
 
     expect(FocusManager.instance.primaryFocus?.debugLabel, 'Player');
-    expect(find.byType(DropdownButton<LineupThemeName>), findsNothing);
+    expect(find.byKey(const ValueKey('settings-field-Theme')), findsNothing);
 
     final playback = tester
         .widget<PlayerView>(find.byType(PlayerView))

@@ -12,6 +12,7 @@ import '../ui/app_ui.dart';
 import 'lineup_controller.dart';
 import 'navigation_shortcuts.dart';
 import 'plex_link_launcher.dart';
+import 'setup_result_atmosphere.dart';
 
 sealed class _ServerAttempt {
   const _ServerAttempt();
@@ -429,7 +430,6 @@ class UpstreamOnboardingViewState extends State<UpstreamOnboardingView>
   @override
   Widget build(BuildContext context) {
     _scheduleServerEntryFocus();
-    final roles = LineupTheme.of(context);
     final refinedStage = switch (widget.controller.stage) {
       SetupStage.linking || SetupStage.profiles || SetupStage.servers => true,
       _ => false,
@@ -459,19 +459,7 @@ class UpstreamOnboardingViewState extends State<UpstreamOnboardingView>
             },
           },
           child: Scaffold(
-            body: DecoratedBox(
-              decoration: refinedStage
-                  ? BoxDecoration(color: roles.deepBackground)
-                  : BoxDecoration(
-                      gradient: RadialGradient(
-                        center: const Alignment(-0.6, -0.65),
-                        radius: 1.25,
-                        colors: [
-                          roles.progressFill.withValues(alpha: 0.08),
-                          roles.deepBackground,
-                        ],
-                      ),
-                    ),
+            body: _background(
               child: SafeArea(
                 child: Column(
                   children: [
@@ -533,6 +521,13 @@ class UpstreamOnboardingViewState extends State<UpstreamOnboardingView>
       ),
     );
   }
+
+  Widget _background({required Widget child}) => ColoredBox(
+    color: LineupTheme.of(context).deepBackground,
+    child: widget.controller.stage == SetupStage.welcome
+        ? SetupResultAtmosphere(applying: false, failed: false, child: child)
+        : child,
+  );
 
   Widget _screen({required Key key}) {
     final controller = widget.controller;
@@ -650,124 +645,64 @@ class UpstreamOnboardingViewState extends State<UpstreamOnboardingView>
     final usable = _usableLink && controller.error == null;
     final expired =
         controller.pinExpired && !controller.secureCancellationRequired;
-    final remaining = controller.pinRemaining;
-    final seconds = remaining.inSeconds.clamp(0, 3599);
+    final seconds = controller.pinRemaining.inSeconds.clamp(0, 3599);
     final time =
         '${seconds ~/ 60}:${(seconds % 60).toString().padLeft(2, '0')}';
     final roles = LineupTheme.of(context);
-    final textScaler = MediaQuery.textScalerOf(context);
-    final narrow = contentWidth <= 720 || textScaler.scale(1) >= 1.6;
-    final theme = Theme.of(context);
-    final bodyStyle = theme.textTheme.bodyMedium?.copyWith(
-      fontSize: 18,
-      height: 1.45,
-    );
-    double textHeight(String text, TextStyle? style, double width) {
+    final scaler = MediaQuery.textScalerOf(context);
+    final stacked = contentWidth / scaler.scale(1) < 840;
+    final panelWidth = stacked ? contentWidth : (contentWidth - 24) / 2;
+    final innerWidth = math.max(1.0, panelWidth - 64);
+    final bodyStyle = Theme.of(context).textTheme.bodyMedium!
+        .copyWith(fontSize: 18, height: 1.45, color: roles.secondaryText);
+    double textHeight(String text, TextStyle style) {
       final painter = TextPainter(
         text: TextSpan(text: text, style: style),
         textDirection: Directionality.of(context),
-        textScaler: textScaler,
-      )..layout(maxWidth: math.max(1, width));
+        textScaler: scaler,
+      )..layout(maxWidth: innerWidth);
       final height = painter.height;
       painter.dispose();
       return height;
     }
 
-    const qrColumnWidth = 232.0;
-    final deviceWidth = narrow
-        ? contentWidth
-        : contentWidth - qrColumnWidth - 40;
-    final instructionsHeight = math.max(
-      textHeight(
-        'Open plex.tv/link and enter this code.',
-        bodyStyle,
-        deviceWidth,
-      ),
-      textHeight(
-        'Request a fresh code to finish signing in.',
-        bodyStyle,
-        deviceWidth,
-      ),
-    );
-    final bodyLineHeight = textScaler.scale(18) * 1.45;
-    final codeHeight = math.max(
-      58.0,
-      math.max(
-        textScaler.scale(narrow ? 32 : 40) * 1.4,
-        bodyLineHeight *
-            (narrow
-                ? 4
-                : textScaler.scale(1) > 1
-                ? 3
-                : 2),
-      ),
-    );
-    final captionHeight = math.max(
-      28.0,
-      math.max(
-        textHeight(
-          'Or scan with your phone',
-          theme.textTheme.bodyMedium,
-          qrColumnWidth,
-        ),
-        textHeight(
-          'Request a new code',
-          theme.textTheme.bodyMedium,
-          qrColumnWidth,
-        ),
-      ),
-    );
-    final cancelWidth = textScaler.scale(18) * 4 + 56;
-    final footerHeight = math.max(
+    final buttonStyle = Theme.of(context).textTheme.labelLarge!;
+    double actionWidth(String label) =>
+        TextPainter.computeWidth(
+          text: TextSpan(text: label, style: buttonStyle),
+          textDirection: Directionality.of(context),
+          textScaler: scaler,
+        ) +
+        48;
+    final buttonHeight = math.max(
       56.0,
-      textHeight(
-        'Waiting for sign-in · Expires in 3:59',
-        bodyStyle,
-        contentWidth - cancelWidth - 18,
-      ),
+      scaler.scale(buttonStyle.fontSize ?? 18) * 1.4 + 24,
     );
-    final safeError = controller.error;
+    final actionHeight =
+        !isTv &&
+            actionWidth('Open browser') + 28 + 12 + actionWidth('Copy code') >
+                innerWidth
+        ? buttonHeight * 2 + 8
+        : buttonHeight;
+    final codeHeight = math.max(
+      scaler.scale(96) * 1.2,
+      textHeight('That code expired before sign-in finished.', bodyStyle),
+    );
+    final panelHeight = math.max(
+      420.0,
+      64 +
+          scaler.scale(20) * 1.4 +
+          16 +
+          textHeight('Request a fresh code to finish signing in.', bodyStyle) +
+          12 +
+          codeHeight +
+          32 +
+          actionHeight,
+    );
+    final qrSize = math.min(232.0, innerWidth);
     final message = expired
         ? 'That code expired before sign-in finished.'
-        : safeError;
-    final codeRow = message == null && pin != null
-        ? Wrap(
-            spacing: 16,
-            runSpacing: 12,
-            crossAxisAlignment: WrapCrossAlignment.center,
-            children: [
-              Semantics(
-                label: 'Plex link code ${pin.code.split('').join(' ')}',
-                excludeSemantics: true,
-                child: SelectableText(
-                  pin.code,
-                  style: LineupTypography.time.copyWith(
-                    fontSize: narrow ? 32 : 40,
-                    letterSpacing: 6,
-                    fontWeight: FontWeight.w500,
-                    color: roles.primaryText,
-                  ),
-                ),
-              ),
-              if (!isTv)
-                LineupCompactControls(
-                  child: OutlinedButton(
-                    onPressed: usable ? _copyCode : null,
-                    child: const Text('Copy code'),
-                  ),
-                ),
-            ],
-          )
-        : message == null
-        ? const SizedBox.shrink()
-        : Semantics(
-            key: const ValueKey('linking-message-slot'),
-            liveRegion: true,
-            child: Text(
-              message,
-              style: bodyStyle?.copyWith(color: roles.secondaryText),
-            ),
-          );
+        : controller.error;
     final action = usable
         ? Semantics(
             label: isTv
@@ -798,31 +733,34 @@ class UpstreamOnboardingViewState extends State<UpstreamOnboardingView>
                   : 'Get a new code',
             ),
           );
-    final qrSize = narrow ? 172.0 : 200.0;
-    final qr = SizedBox(
-      width: qrColumnWidth,
+    Widget panel({
+      required String label,
+      required Widget child,
+      required Key key,
+    }) => Container(
+      key: key,
+      height: panelHeight,
+      padding: const EdgeInsets.all(32),
+      decoration: BoxDecoration(
+        color: roles.primarySurface,
+        border: Border.all(color: roles.subtleBorder),
+        borderRadius: BorderRadius.circular(8),
+      ),
       child: Column(
-        mainAxisSize: MainAxisSize.min,
-        crossAxisAlignment: CrossAxisAlignment.center,
+        crossAxisAlignment: CrossAxisAlignment.stretch,
         children: [
-          Visibility(
-            visible: usable,
-            maintainState: true,
-            maintainAnimation: true,
-            maintainSize: true,
-            child: Row(
-              mainAxisSize: MainAxisSize.min,
-              children: [
-                SizedBox(width: 64, child: Divider(color: roles.subtleBorder)),
-                Padding(
-                  padding: const EdgeInsets.symmetric(horizontal: 10),
-                  child: Text('or', style: TextStyle(color: roles.mutedText)),
-                ),
-                SizedBox(width: 64, child: Divider(color: roles.subtleBorder)),
-              ],
-            ),
-          ),
-          const SizedBox(height: 12),
+          Text(label, style: bodyStyle.copyWith(fontWeight: FontWeight.w600)),
+          const SizedBox(height: 16),
+          Expanded(child: child),
+        ],
+      ),
+    );
+    final phone = panel(
+      key: const ValueKey('linking-phone-panel'),
+      label: 'With your phone',
+      child: Column(
+        mainAxisAlignment: MainAxisAlignment.center,
+        children: [
           Semantics(
             key: const ValueKey('linking-qr-slot'),
             label: usable ? 'QR code for plex.tv/link' : 'QR code unavailable',
@@ -852,39 +790,34 @@ class UpstreamOnboardingViewState extends State<UpstreamOnboardingView>
                     ),
             ),
           ),
-          const SizedBox(height: 8),
+          const SizedBox(height: 12),
           SizedBox(
-            height: captionHeight,
-            child: Center(
-              child: Text(
-                usable ? 'Or scan with your phone' : 'Request a new code',
-                textAlign: TextAlign.center,
-                style: TextStyle(color: roles.secondaryText),
-              ),
+            height: math.max(
+              textHeight('Scan with your camera', bodyStyle),
+              textHeight('Request a new code', bodyStyle),
+            ),
+            child: Text(
+              usable ? 'Scan with your camera' : 'Request a new code',
+              textAlign: TextAlign.center,
+              style: bodyStyle,
             ),
           ),
         ],
       ),
     );
-    final deviceColumn = Column(
-      crossAxisAlignment: CrossAxisAlignment.start,
-      mainAxisSize: MainAxisSize.min,
-      children: [
-        Text(
-          'Sign in to Plex',
-          style: theme.textTheme.headlineMedium?.copyWith(
-            fontSize: 44,
-            height: 1.2,
-            fontWeight: FontWeight.w600,
-          ),
-        ),
-        const SizedBox(height: 12),
-        SizedBox(
-          height: instructionsHeight,
-          child: Align(
-            alignment: Alignment.topLeft,
+    final device = panel(
+      key: const ValueKey('linking-device-panel'),
+      label: 'On another device',
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.stretch,
+        children: [
+          SizedBox(
+            height: textHeight(
+              'Request a fresh code to finish signing in.',
+              bodyStyle,
+            ),
             child: RichText(
-              textScaler: textScaler,
+              textScaler: scaler,
               text: TextSpan(
                 style: bodyStyle,
                 children: [
@@ -896,87 +829,129 @@ class UpstreamOnboardingViewState extends State<UpstreamOnboardingView>
                   if (usable)
                     TextSpan(
                       text: 'plex.tv/link',
-                      style: bodyStyle?.copyWith(
+                      style: bodyStyle.copyWith(
                         color: roles.progressFill,
                         fontWeight: FontWeight.w600,
                       ),
                     ),
-                  if (usable) const TextSpan(text: ' and enter this code.'),
+                  if (usable) const TextSpan(text: ' and enter'),
                 ],
               ),
             ),
           ),
-        ),
-        const SizedBox(height: 20),
-        SizedBox(
-          key: const ValueKey('linking-code-slot'),
-          height: codeHeight,
-          child: Align(alignment: Alignment.centerLeft, child: codeRow),
-        ),
-        const SizedBox(height: 8),
-        SizedBox(
-          key: const ValueKey('linking-action-slot'),
-          height: 56,
-          child: Align(alignment: Alignment.centerLeft, child: action),
-        ),
-      ],
-    );
-    return SizedBox(
-      width: double.infinity,
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.stretch,
-        mainAxisSize: MainAxisSize.min,
-        children: [
-          narrow
-              ? Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [deviceColumn, const SizedBox(height: 24), qr],
-                )
-              : Row(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    Expanded(child: deviceColumn),
-                    const SizedBox(width: 40),
-                    qr,
-                  ],
-                ),
-          const SizedBox(height: 20),
-          const Divider(),
           const SizedBox(height: 12),
           SizedBox(
-            key: const ValueKey('linking-footer'),
-            height: footerHeight,
-            child: Row(
-              crossAxisAlignment: CrossAxisAlignment.center,
-              children: [
-                _LinkStatusDot(
-                  animated: usable && !controller.settings.reduceMotion,
-                  phase: _pulse,
-                ),
-                const SizedBox(width: 10),
-                Expanded(
-                  child: Text(
-                    usable
-                        ? 'Waiting for sign-in · Expires in $time'
-                        : 'Sign-in unavailable',
-                    style: bodyStyle?.copyWith(color: roles.secondaryText),
-                  ),
-                ),
-                if (!controller.secureCancellationRequired)
-                  TextButton(
-                    onPressed: controller.busy
-                        ? null
-                        : controller.cancelLinking,
-                    child: Text(
-                      'Cancel',
-                      style: LineupTypography.tvLabelStyle(context),
+            key: const ValueKey('linking-code-slot'),
+            height: codeHeight,
+            child: Align(
+              alignment: Alignment.centerLeft,
+              child: message != null
+                  ? Semantics(
+                      key: const ValueKey('linking-message-slot'),
+                      liveRegion: true,
+                      child: Text(message, style: bodyStyle),
+                    )
+                  : pin == null
+                  ? const SizedBox.shrink()
+                  : Semantics(
+                      label: 'Plex link code ${pin.code.split('').join(' ')}',
+                      excludeSemantics: true,
+                      child: FittedBox(
+                        fit: BoxFit.scaleDown,
+                        alignment: Alignment.centerLeft,
+                        child: SelectableText(
+                          pin.code,
+                          style: LineupTypography.pageTitle.copyWith(
+                            fontSize: 96,
+                            letterSpacing: 12,
+                            color: roles.primaryText,
+                          ),
+                        ),
+                      ),
                     ),
-                  ),
-              ],
+            ),
+          ),
+          const Spacer(),
+          SizedBox(
+            key: const ValueKey('linking-action-slot'),
+            height: actionHeight,
+            child: Align(
+              alignment: Alignment.centerLeft,
+              child: Wrap(
+                spacing: 12,
+                runSpacing: 8,
+                children: [
+                  action,
+                  if (!isTv && usable)
+                    OutlinedButton(
+                      onPressed: _copyCode,
+                      child: const Text('Copy code'),
+                    ),
+                ],
+              ),
             ),
           ),
         ],
       ),
+    );
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.stretch,
+      mainAxisSize: MainAxisSize.min,
+      children: [
+        Text(
+          'Sign in to Plex',
+          style: LineupTypography.pageTitle.copyWith(color: roles.primaryText),
+        ),
+        const SizedBox(height: 12),
+        Text(
+          'Use whichever is easier. Lineup continues by itself once you have signed in.',
+          style: bodyStyle,
+        ),
+        const SizedBox(height: 32),
+        if (stacked) ...[
+          phone,
+          const SizedBox(height: 24),
+          device,
+        ] else
+          Row(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Expanded(child: phone),
+              const SizedBox(width: 24),
+              Expanded(child: device),
+            ],
+          ),
+        const SizedBox(height: 24),
+        SizedBox(
+          key: const ValueKey('linking-footer'),
+          height: math.max(56, scaler.scale(18) * 2.9),
+          child: Row(
+            children: [
+              _LinkStatusDot(
+                animated: usable && !controller.settings.reduceMotion,
+                phase: _pulse,
+              ),
+              const SizedBox(width: 10),
+              Expanded(
+                child: Text(
+                  usable
+                      ? 'Waiting for sign-in · the code expires in $time'
+                      : 'Sign-in unavailable',
+                  style: bodyStyle,
+                ),
+              ),
+              if (!controller.secureCancellationRequired)
+                TextButton(
+                  onPressed: controller.busy ? null : controller.cancelLinking,
+                  child: Text(
+                    'Cancel',
+                    style: LineupTypography.tvLabelStyle(context),
+                  ),
+                ),
+            ],
+          ),
+        ),
+      ],
     );
   }
 
@@ -1224,41 +1199,49 @@ class UpstreamOnboardingViewState extends State<UpstreamOnboardingView>
             ),
           ),
         SizedBox(height: 12),
-        Wrap(
-          spacing: 12,
-          runSpacing: 12,
-          alignment: WrapAlignment.center,
+        Row(
           children: [
-            OutlinedButton.icon(
-              autofocus: !_actionsBusy && widget.controller.servers.isEmpty,
-              // Keep remote focus on Refresh while its request is pending.
-              // _refreshServers ignores repeated activation while busy.
-              onPressed: !_actionsBusy || (_isTv && _serverRefresh != null)
-                  ? _refreshServers
-                  : null,
-              icon: const Icon(Icons.refresh),
-              label: const Text('Refresh servers'),
-            ),
-            if (widget.controller.profiles.length > 1)
-              OutlinedButton.icon(
-                onPressed: _actionsBusy ? null : _showProfiles,
-                icon: const Icon(Icons.switch_account),
-                label: const Text('Switch profile'),
+            Expanded(
+              child: Wrap(
+                spacing: 12,
+                runSpacing: 12,
+                alignment: WrapAlignment.start,
+                children: [
+                  OutlinedButton.icon(
+                    autofocus:
+                        !_actionsBusy && widget.controller.servers.isEmpty,
+                    // Keep remote focus on Refresh while its request is pending.
+                    // _refreshServers ignores repeated activation while busy.
+                    onPressed:
+                        !_actionsBusy || (_isTv && _serverRefresh != null)
+                        ? _refreshServers
+                        : null,
+                    icon: const Icon(Icons.refresh),
+                    label: const Text('Refresh servers'),
+                  ),
+                  if (widget.controller.profiles.length > 1)
+                    OutlinedButton.icon(
+                      onPressed: _actionsBusy ? null : _showProfiles,
+                      icon: const Icon(Icons.switch_account),
+                      label: const Text('Switch profile'),
+                    ),
+                  if (widget.controller.serverSelectionCanCancel)
+                    TextButton(
+                      focusNode: _serverCancelFocus,
+                      onPressed: widget.authorizationStopPending
+                          ? null
+                          : _cancelServerSelection,
+                      child: Text(
+                        widget.accountOrigin ? '‹ Settings · Account' : 'Back',
+                      ),
+                    ),
+                ],
               ),
+            ),
             if (widget.onRequestLogout != null)
               TextButton(
                 onPressed: _actionsBusy ? null : widget.onRequestLogout,
                 child: const Text('Sign out'),
-              ),
-            if (widget.controller.serverSelectionCanCancel)
-              TextButton(
-                focusNode: _serverCancelFocus,
-                onPressed: widget.authorizationStopPending
-                    ? null
-                    : _cancelServerSelection,
-                child: Text(
-                  widget.accountOrigin ? '‹ Settings · Account' : 'Back',
-                ),
               ),
           ],
         ),
@@ -1896,16 +1879,6 @@ class _ServerCard extends StatelessWidget {
         Text(server.owned ? 'Yours' : 'Shared with you', style: supportStyle),
         if (previouslyUsed && !current)
           Text('Previously used', style: supportStyle),
-        if (unreachable || measuredConnection?.latency != null) ...[
-          const SizedBox(height: 8),
-          if (unreachable)
-            Semantics(
-              liveRegion: true,
-              child: Text('Unreachable', style: supportStyle),
-            )
-          else
-            LineupConnectionStatus(connection: measuredConnection),
-        ],
       ],
     );
     final buttonLabel = pending
@@ -1922,7 +1895,7 @@ class _ServerCard extends StatelessWidget {
       'Retry' when unreachable => 'Retry ${server.name}',
       _ => buttonLabel,
     };
-    final trailing = MergeSemantics(
+    final action = MergeSemantics(
       child: Semantics(
         label: actionLabel,
         // Only continuing with the connected server is emphasized; list
@@ -1952,12 +1925,35 @@ class _ServerCard extends StatelessWidget {
               ),
       ),
     );
+    final status = unreachable
+        ? Semantics(
+            liveRegion: true,
+            child: Text(
+              'Unreachable',
+              style: supportStyle.copyWith(
+                color: Theme.of(context).colorScheme.error,
+              ),
+            ),
+          )
+        : measuredConnection?.latency != null
+        ? LineupConnectionStatus(connection: measuredConnection)
+        : null;
 
     return LayoutBuilder(
       builder: (context, constraints) {
         final stacked =
             constraints.maxWidth < 520 ||
             MediaQuery.textScalerOf(context).scale(1) >= 1.6;
+        final trailing = Row(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            if (status != null) ...[
+              if (stacked) Flexible(child: status) else status,
+              const SizedBox(width: 16),
+            ],
+            action,
+          ],
+        );
         final content = stacked
             ? Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
@@ -2055,6 +2051,18 @@ class _ProfilePinStepState extends State<_ProfilePinStep> {
   int _attempt = 0;
   final _keyboardFocus = FocusNode(debugLabel: 'Profile PIN keyboard owner');
   final _firstDigitFocus = FocusNode(debugLabel: 'Profile PIN digit 1');
+
+  @override
+  void initState() {
+    super.initState();
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (mounted && DeviceProfile.of(context).isTv) {
+        // The onboarding focus scope can already own focus when the keypad
+        // replaces Profiles, so the digit's autofocus alone is insufficient.
+        _firstDigitFocus.requestFocus();
+      }
+    });
+  }
 
   bool handleBack() {
     if (_submitting) return true;
@@ -2293,7 +2301,7 @@ class _ProfilePinStepState extends State<_ProfilePinStep> {
                             _PinKey(
                               digit: digit,
                               focusNode: digit == 1 ? _firstDigitFocus : null,
-                              autofocus: digit == 1 && !_submitting,
+                              autofocus: !isTv && digit == 1 && !_submitting,
                               onPressed: _submitting
                                   ? null
                                   : () => _digit(digit),

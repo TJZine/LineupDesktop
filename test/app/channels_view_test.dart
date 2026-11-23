@@ -1,5 +1,5 @@
 import 'dart:async';
-import 'dart:ui' show Tristate;
+import 'dart:ui' show CheckedState, Tristate;
 
 import 'package:flutter/foundation.dart'
     show TargetPlatform, debugDefaultTargetPlatformOverride;
@@ -11,10 +11,13 @@ import 'package:flutter/services.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:lineup_desktop/app/channels_view.dart';
 import 'package:lineup_desktop/app/lineup_controller.dart';
+import 'package:lineup_desktop/app/channel_studio_view.dart';
 import 'package:lineup_desktop/app/lineup_app.dart';
 import 'package:lineup_desktop/channels/channel.dart';
 import 'package:lineup_desktop/channels/channel_filter.dart';
 import 'package:lineup_desktop/channels/scheduler.dart';
+import 'package:lineup_desktop/guide/guide_controller.dart';
+import 'package:lineup_desktop/playback/player_coordinator.dart';
 import 'package:lineup_desktop/playback/player_view.dart';
 import 'package:lineup_desktop/plex/plex_models.dart';
 import 'package:lineup_desktop/ui/lineup_controls.dart';
@@ -26,6 +29,1042 @@ import 'package:lineup_desktop/settings/lineup_settings.dart';
 import '../support/ui_fixture.dart';
 
 void main() {
+  for (final target in [
+    for (final theme in LineupThemeName.values) (isTv: true, theme: theme),
+    (isTv: false, theme: LineupThemeName.emberSteel),
+  ]) {
+    testWidgets(
+      'group count follows existing focus ink ${target.theme.name} TV=${target.isTv}',
+      (tester) async {
+        tester.view
+          ..physicalSize = const Size(1920, 1080)
+          ..devicePixelRatio = 1;
+        addTearDown(tester.view.reset);
+        await tester.pumpWidget(
+          UiFixture(
+            profile: profileFor(target.isTv),
+            scenario: LineupScenario(
+              stage: SetupStage.ready,
+              settings: LineupSettings(theme: target.theme),
+              channels: [
+                _channel('first', 1, 'First'),
+                _channel('second', 2, 'Second'),
+              ],
+            ),
+          ).build(),
+        );
+        await tester.pumpAndSettle();
+        await openDestination(tester, 'Channels');
+        expect(find.text('Your lineup, in channel order.'), findsOneWidget);
+        await _chooseDirectoryView(tester, 'Grouped by source');
+        expect(
+          find.text('Your lineup, grouped by where each channel comes from.'),
+          findsOneWidget,
+        );
+        expect(find.text('Your lineup, in channel order.'), findsNothing);
+        final header = find.byKey(const ValueKey('channel-group-custom'));
+        final count = find.descendant(
+          of: header,
+          matching: find.text('2 channels'),
+        );
+        final roles = LineupTheme.of(tester.element(find.byType(ChannelsView)));
+        Color? countInk() => tester.widget<Text>(count).style?.color;
+        expect(countInk(), roles.secondaryText);
+        await tester.sendKeyEvent(LogicalKeyboardKey.shiftLeft);
+        final focus = tester.widget<TextButton>(header).focusNode!;
+        focus.requestFocus();
+        await tester.pumpAndSettle();
+        expect(focus.hasPrimaryFocus, isTrue);
+        final focusedInk = target.isTv
+            ? roles.focusSecondaryText
+            : roles.secondaryText;
+        expect(countInk(), focusedInk);
+        await tester.sendKeyEvent(LogicalKeyboardKey.arrowDown);
+        await tester.pumpAndSettle();
+        expect(FocusManager.instance.primaryFocus?.debugLabel, 'Open First');
+        expect(countInk(), roles.secondaryText);
+        await tester.sendKeyEvent(LogicalKeyboardKey.arrowUp);
+        await tester.pumpAndSettle();
+        expect(focus.hasPrimaryFocus, isTrue);
+        expect(countInk(), focusedInk);
+        await tester.pumpWidget(const SizedBox());
+      },
+    );
+  }
+
+  for (final isTv in [false, true]) {
+    testWidgets(
+      'directory semantics retain marker facts and row controls TV=$isTv',
+      (tester) async {
+        tester.view
+          ..physicalSize = const Size(1920, 1080)
+          ..devicePixelRatio = 1;
+        addTearDown(tester.view.reset);
+        const name = 'Shared station';
+        await tester.pumpWidget(
+          UiFixture(
+            profile: profileFor(isTv),
+            scenario: LineupScenario(
+              stage: SetupStage.ready,
+              channels: [
+                _channel(
+                  'marked',
+                  1,
+                  name,
+                  sourceLibraries: const {'one': 'Library One'},
+                ).copyWith(favorite: true),
+                _channel(
+                  'other',
+                  2,
+                  name,
+                  sourceLibraries: const {'two': 'Library Two'},
+                ),
+              ],
+            ),
+          ).build(),
+        );
+        await tester.pumpAndSettle();
+        await openDestination(tester, 'Channels');
+        final row = find.byKey(const ValueKey('channel-row-marked'));
+        final other = find.byKey(const ValueKey('channel-row-other'));
+        void expectFacts(
+          Finder row,
+          String fullIdentity, {
+          required bool custom,
+          required bool favourite,
+        }) {
+          final node = tester.getSemantics(
+            find.descendant(of: row, matching: find.text(name)),
+          );
+          final label = node.label;
+          expect(label, contains(fullIdentity));
+          expect(
+            RegExp('Channel [12], Shared station').allMatches(label),
+            hasLength(1),
+          );
+          expect(
+            RegExp(r'\bCustom\b').allMatches(label),
+            hasLength(custom ? 1 : 0),
+          );
+          expect(
+            RegExp(r'\bFavourite\b').allMatches(label),
+            hasLength(favourite ? 1 : 0),
+          );
+          expect(
+            node.getSemanticsData().hasAction(SemanticsAction.tap),
+            isTrue,
+          );
+        }
+
+        void expectActions() {
+          final actions = tester
+              .getSemantics(
+                find.descendant(
+                  of: row,
+                  matching: find.byTooltip('Actions for $name'),
+                ),
+              )
+              .getSemanticsData();
+          expect(actions.label, 'Actions for $name');
+          expect(actions.flagsCollection.isButton, isTrue);
+          expect(actions.hasAction(SemanticsAction.tap), isTrue);
+        }
+
+        const identity = 'Channel 1, Shared station, Library One library';
+        expectFacts(row, identity, custom: true, favourite: true);
+        expectFacts(
+          other,
+          'Channel 2, Shared station, Library Two library',
+          custom: true,
+          favourite: false,
+        );
+        expectActions();
+        await _chooseDirectoryView(tester, 'Grouped by source');
+        expectFacts(row, identity, custom: false, favourite: true);
+        expectFacts(
+          other,
+          'Channel 2, Shared station, Library Two library',
+          custom: false,
+          favourite: false,
+        );
+        expectActions();
+        await tester.tap(find.text('Select'));
+        await tester.pumpAndSettle();
+        final checkbox = find.descendant(
+          of: row,
+          matching: find.byType(Checkbox),
+        );
+        var selection = tester.getSemantics(checkbox).getSemanticsData();
+        expect(selection.label, 'Select $name');
+        expect(selection.flagsCollection.isChecked, CheckedState.isFalse);
+        expect(selection.hasAction(SemanticsAction.tap), isTrue);
+        expectFacts(row, identity, custom: false, favourite: true);
+        expect(
+          find.descendant(
+            of: row,
+            matching: find.byTooltip('Actions for $name'),
+          ),
+          findsNothing,
+        );
+        await tester.tap(checkbox);
+        await tester.pumpAndSettle();
+        selection = tester.getSemantics(checkbox).getSemanticsData();
+        expect(selection.flagsCollection.isChecked, CheckedState.isTrue);
+        expectFacts(row, identity, custom: false, favourite: true);
+        await _chooseDirectoryView(tester, 'Channel order');
+        expectFacts(row, identity, custom: true, favourite: true);
+        expect(
+          tester
+              .getSemantics(checkbox)
+              .getSemanticsData()
+              .flagsCollection
+              .isChecked,
+          CheckedState.isTrue,
+        );
+        await tester.pumpWidget(const SizedBox());
+      },
+      semanticsEnabled: true,
+    );
+  }
+
+  for (final isTv in [false, true]) {
+    testWidgets(
+      'directory markers follow name and keep platform row height TV=$isTv',
+      (tester) async {
+        tester.view
+          ..physicalSize = const Size(1920, 1080)
+          ..devicePixelRatio = 1;
+        addTearDown(tester.view.reset);
+        final name = 'Shared station';
+        await tester.pumpWidget(
+          UiFixture(
+            profile: profileFor(isTv),
+            scenario: LineupScenario(
+              stage: SetupStage.ready,
+              channels: [
+                _channel(
+                  'marked',
+                  1,
+                  name,
+                  sourceLibraries: const {'one': 'Library One'},
+                ).copyWith(favorite: true),
+                _channel(
+                  'other',
+                  2,
+                  name,
+                  sourceLibraries: const {'two': 'Library Two'},
+                ),
+                _channel(
+                  'long',
+                  3,
+                  'A very long channel name ' * 10,
+                ).copyWith(favorite: true),
+              ],
+            ),
+          ).build(),
+        );
+        await tester.pumpAndSettle();
+        await openDestination(tester, 'Channels');
+        final row = find.byKey(const ValueKey('channel-row-marked'));
+        final library = find.descendant(
+          of: row,
+          matching: find.text('Library One'),
+        );
+        final tag = find.byKey(const ValueKey('channel-custom-marked'));
+        final star = find.byKey(const ValueKey('channel-favourite-marked'));
+        expect(
+          tester.getTopLeft(library).dx,
+          greaterThan(
+            tester
+                .getTopRight(
+                  find.descendant(of: row, matching: find.text(name)),
+                )
+                .dx,
+          ),
+        );
+        expect(
+          tester.getTopLeft(tag).dx,
+          greaterThan(tester.getTopRight(library).dx),
+        );
+        expect(
+          tester.getTopLeft(star).dx,
+          greaterThan(tester.getTopRight(tag).dx),
+        );
+        expect(
+          (tester.widget<Container>(tag).decoration as BoxDecoration).border,
+          isNotNull,
+        );
+        expect(tester.widget<Icon>(star).icon, Icons.star);
+        expect(
+          tester.widget<Icon>(star).color,
+          LineupTheme.of(tester.element(star)).progressFill,
+        );
+        expect(tester.getSize(row).height, isTv ? 72 : 80);
+        expect(
+          tester.getSize(find.byKey(const ValueKey('channel-row-long'))).height,
+          tester.getSize(row).height,
+        );
+        tester.platformDispatcher.textScaleFactorTestValue = 1.3;
+        addTearDown(tester.platformDispatcher.clearTextScaleFactorTestValue);
+        await tester.pumpAndSettle();
+        expect(tester.getSize(row).height, isTv ? 72 : 80);
+        expect(
+          tester.getSize(find.byKey(const ValueKey('channel-row-long'))).height,
+          tester.getSize(row).height,
+        );
+        expect(tester.takeException(), isNull);
+      },
+    );
+  }
+
+  testWidgets(
+    'grouped selection leaves room for a colliding channel name at 2×',
+    (tester) async {
+      // Use the shipped row typography without changing other tests' font metrics.
+      const rowFont = 'Inter directory fixture';
+      await tester.runAsync(() async {
+        await (FontLoader(rowFont)..addFont(
+              rootBundle.load('assets/fonts/inter/Inter[opsz,wght].ttf'),
+            ))
+            .load();
+      });
+      final theme = LineupTheme.forName(LineupThemeName.emberSteel);
+      tester.view
+        ..physicalSize = const Size(854, 1500)
+        ..devicePixelRatio = 1;
+      addTearDown(tester.view.reset);
+      addTearDown(tester.platformDispatcher.clearTextScaleFactorTestValue);
+      const name = 'Reel channel';
+      const library = 'Synthetic film library with a long label';
+      final controller = _GroupedScheduleController(
+        scenario: LineupScenario(
+          stage: SetupStage.ready,
+          channels: [
+            _channel(
+              'marked',
+              12,
+              name,
+              kind: ChannelKind.film,
+              sourceLibraries: const {'one': library},
+            ).copyWith(favorite: true),
+            _channel(
+              'other',
+              13,
+              name,
+              kind: ChannelKind.film,
+              sourceLibraries: const {'two': 'Other film library'},
+            ),
+          ],
+        ),
+      );
+      final guide = GuideController(lineup: controller);
+      final native = FixturePlayer();
+      final player = PlayerCoordinator(
+        player: native,
+        lineup: controller,
+        guide: guide,
+      );
+      final menuFocus = FocusNode();
+      addTearDown(controller.dispose);
+      addTearDown(guide.dispose);
+      addTearDown(native.dispose);
+      addTearDown(player.dispose);
+      addTearDown(menuFocus.dispose);
+      await tester.pumpWidget(
+        MaterialApp(
+          theme: theme.copyWith(
+            textTheme: theme.textTheme.copyWith(
+              titleMedium: theme.textTheme.titleMedium!.copyWith(
+                fontFamily: rowFont,
+              ),
+              bodyMedium: theme.textTheme.bodyMedium!.copyWith(
+                fontFamily: rowFont,
+              ),
+            ),
+          ),
+          home: Scaffold(
+            body: ChannelsView(
+              controller: controller,
+              player: player,
+              onOpenPlayer: () {},
+              onOpenMenu: (_, _) {},
+              menuFocusNode: menuFocus,
+            ),
+          ),
+        ),
+      );
+      await tester.pumpAndSettle();
+      await _chooseDirectoryView(tester, 'Grouped by source');
+      await tester.tap(find.text('Select'));
+      await tester.pumpAndSettle();
+      tester.platformDispatcher.textScaleFactorTestValue = 2;
+      await tester.pumpAndSettle();
+
+      final row = find.byKey(const ValueKey('channel-row-marked'));
+      Finder inRow(Finder matching) =>
+          find.descendant(of: row, matching: matching);
+      final number = inRow(find.text('12'));
+      final glyph = inRow(find.byIcon(Icons.movie_outlined));
+      final title = inRow(find.text(name));
+      final tag = inRow(find.text(library));
+      final star = inRow(find.byIcon(Icons.star));
+      void expectRenderedPrefix(Finder label, String prefix) {
+        final paragraph = tester.renderObject<RenderParagraph>(label);
+        final boxes = paragraph.getBoxesForSelection(
+          TextSelection(baseOffset: 0, extentOffset: prefix.length),
+        );
+        double measure(String text) => TextPainter.computeWidth(
+          text: TextSpan(text: text, style: paragraph.text.style),
+          textDirection: paragraph.textDirection,
+          textScaler: paragraph.textScaler,
+        );
+        expect(boxes, hasLength(1));
+        // The last visible character's selection box can include the ellipsis.
+        expect(
+          boxes.single.toRect().width,
+          anyOf(
+            closeTo(measure(prefix), .75),
+            closeTo(measure('$prefix…'), .75),
+          ),
+        );
+      }
+
+      expectRenderedPrefix(title, 'Ree');
+      expectRenderedPrefix(tag, 'S');
+      expect(
+        tester.getTopRight(number).dx,
+        lessThan(tester.getTopLeft(glyph).dx),
+      );
+      expect(
+        tester.getTopRight(glyph).dx,
+        lessThan(tester.getTopLeft(title).dx),
+      );
+      final nameTagGap =
+          tester.getTopLeft(tag).dx - tester.getTopRight(title).dx;
+      expect(nameTagGap, inExclusiveRange(0, 8));
+      expect(tester.getTopRight(tag).dx, lessThan(tester.getTopLeft(star).dx));
+      expect(
+        tester.renderObject<RenderParagraph>(tag).didExceedMaxLines,
+        isTrue,
+      );
+      final bounds = tester.getRect(row);
+      for (final part in [number, glyph, title, tag, star]) {
+        final rect = tester.getRect(part);
+        expect(bounds.contains(rect.topLeft), isTrue);
+        expect(rect.right, lessThanOrEqualTo(bounds.right));
+        expect(rect.bottom, lessThanOrEqualTo(bounds.bottom));
+      }
+      expect(tester.getSize(row).height, 68);
+      expect(
+        tester.getSemantics(title).label,
+        contains('Channel 12, $name, Film, $library library, Favourite'),
+      );
+      // Selection review keeps the grouped row columns at narrower widths.
+      await tester.tap(row);
+      await tester.pumpAndSettle();
+      await tester.tap(find.text('1 selected'));
+      await tester.pumpAndSettle();
+      tester.view.physicalSize = const Size(800, 1500);
+      await tester.pumpAndSettle();
+      expectRenderedPrefix(title, 'R');
+      expectRenderedPrefix(tag, 'S');
+
+      tester.view.physicalSize = const Size(745, 1500);
+      await tester.pumpAndSettle();
+      expectRenderedPrefix(title, 'R');
+      expect(tag, findsNothing);
+      expect(
+        tester.getSemantics(title).label,
+        contains('Channel 12, $name, Film, $library library, Favourite'),
+      );
+      expect(tester.takeException(), isNull);
+      await tester.pumpWidget(const SizedBox());
+    },
+    semanticsEnabled: true,
+  );
+
+  for (final isTv in [false, true]) {
+    for (final scale in [1.0, 1.3]) {
+      testWidgets(
+        'recovery row retains its pre-refinement height TV=$isTv text=$scale',
+        (tester) async {
+          tester.view
+            ..physicalSize = isTv
+                ? const Size(1920, 1080)
+                : const Size(1280, 720)
+            ..devicePixelRatio = 1;
+          tester.platformDispatcher.textScaleFactorTestValue = scale;
+          addTearDown(tester.view.reset);
+          addTearDown(tester.platformDispatcher.clearTextScaleFactorTestValue);
+          await tester.pumpWidget(
+            UiFixture(
+              profile: profileFor(isTv),
+              controller: _FailedScheduleController(
+                scenario: LineupScenario(
+                  stage: SetupStage.ready,
+                  channels: [
+                    _channel(
+                      'recovery',
+                      1,
+                      'Recovery station',
+                    ).copyWith(favorite: true),
+                  ],
+                ),
+              ),
+            ).build(),
+          );
+          await tester.pumpAndSettle();
+          await openDestination(tester, 'Channels');
+          final row = find.byKey(const ValueKey('channel-row-recovery'));
+          final recovery = find.text(
+            'Schedule issue — open this channel to recover',
+          );
+          expect(recovery, findsOneWidget);
+          // Measured from the production baseline with identical profile/font scale.
+          final baseline = isTv
+              ? (scale == 1 ? 101.0 : 125.0)
+              : (scale == 1 ? 105.0 : 129.0);
+          expect(tester.getSize(row).height, baseline);
+          expect(
+            tester.getBottomRight(recovery).dy,
+            lessThanOrEqualTo(tester.getBottomRight(row).dy),
+          );
+          expect(tester.takeException(), isNull);
+        },
+      );
+    }
+  }
+
+  for (final isTv in [false, true]) {
+    for (final scale in [1.0, 1.3]) {
+      testWidgets(
+        'view selector contains full closed and open labels TV=$isTv text=$scale',
+        (tester) async {
+          tester.view
+            ..physicalSize = isTv
+                ? const Size(1920, 1080)
+                : const Size(1280, 720)
+            ..devicePixelRatio = 1;
+          tester.platformDispatcher.textScaleFactorTestValue = scale;
+          addTearDown(tester.view.reset);
+          addTearDown(tester.platformDispatcher.clearTextScaleFactorTestValue);
+          await tester.pumpWidget(
+            UiFixture(
+              profile: profileFor(isTv),
+              scenario: LineupScenario(
+                stage: SetupStage.ready,
+                channels: [_channel('custom', 1, 'Custom station')],
+              ),
+            ).build(),
+          );
+          await tester.pumpAndSettle();
+          await openDestination(tester, 'Channels');
+          await _chooseDirectoryView(tester, 'Grouped by source');
+          void expectFullLabel(Finder label, String text) {
+            final paragraph = tester.renderObject<RenderParagraph>(label);
+            expect(paragraph.didExceedMaxLines, isFalse);
+            expect(
+              paragraph.getBoxesForSelection(
+                TextSelection(baseOffset: 0, extentOffset: text.length),
+              ),
+              hasLength(1),
+            );
+            expect(
+              paragraph.getMaxIntrinsicWidth(double.infinity),
+              lessThanOrEqualTo(paragraph.size.width + .01),
+            );
+          }
+
+          final selector = find.byKey(const Key('channels-view'));
+          expectFullLabel(
+            find.descendant(
+              of: selector,
+              matching: find.text('Grouped by source'),
+            ),
+            'Grouped by source',
+          );
+          void expectCentered(String label) {
+            final box = find.ancestor(
+              of: selector,
+              matching: find.byType(LineupDropdownBox),
+            );
+            final value = find.descendant(
+              of: selector,
+              matching: find.text(label),
+            );
+            final arrow = find.descendant(
+              of: selector,
+              matching: find.byIcon(Icons.arrow_drop_down),
+            );
+            final center = tester.getCenter(box).dy;
+            expect(tester.getCenter(value).dy, closeTo(center, 1));
+            expect(tester.getCenter(arrow).dy, closeTo(center, 1));
+          }
+
+          expectCentered('Grouped by source');
+          await tester.tap(selector);
+          await tester.pumpAndSettle();
+          for (final label in ['Channel order', 'Grouped by source']) {
+            expectFullLabel(find.text(label).last, label);
+          }
+          await tester.sendKeyEvent(LogicalKeyboardKey.escape);
+          await tester.pumpAndSettle();
+          await _chooseDirectoryView(tester, 'Channel order');
+          expectCentered('Channel order');
+          expect(tester.takeException(), isNull);
+        },
+      );
+    }
+  }
+
+  testWidgets(
+    'grouped directory preserves choice across routes and reorder resets it',
+    (tester) async {
+      tester.view
+        ..physicalSize = const Size(1920, 1080)
+        ..devicePixelRatio = 1;
+      addTearDown(tester.view.reset);
+      await tester.pumpWidget(
+        UiFixture(
+          scenario: LineupScenario(
+            stage: SetupStage.ready,
+            channels: [
+              _channel('custom', 1, 'Custom station'),
+              _sourceChannel('genre', 2, 'Drama', LibraryFilter.genre),
+            ],
+          ),
+        ).build(),
+      );
+      await tester.pumpAndSettle();
+      await openDestination(tester, 'Channels');
+      await _chooseDirectoryView(tester, 'Grouped by source');
+      expect(
+        find.byKey(const ValueKey('channel-group-custom')),
+        findsOneWidget,
+      );
+      expect(
+        find.byKey(const ValueKey('channel-group-genres')),
+        findsOneWidget,
+      );
+      expect(find.byKey(const ValueKey('channel-row-custom')), findsOneWidget);
+      expect(find.byKey(const ValueKey('channel-row-genre')), findsNothing);
+      expect(find.text('On now'), findsOneWidget);
+      await openDestination(tester, 'Guide');
+      await openDestination(tester, 'Channels');
+      expect(
+        find.byKey(const ValueKey('channel-group-custom')),
+        findsOneWidget,
+      );
+      await tester.tap(find.text('Reorder channels'));
+      await tester.pumpAndSettle();
+      await tester.tap(find.text('Cancel'));
+      await tester.pumpAndSettle();
+      expect(find.byKey(const ValueKey('channel-group-custom')), findsNothing);
+      expect(find.text('Channel order'), findsOneWidget);
+    },
+  );
+
+  testWidgets(
+    'groups follow source order with Custom first and search/filter inside groups',
+    (tester) async {
+      tester.view
+        ..physicalSize = const Size(1920, 1080)
+        ..devicePixelRatio = 1;
+      addTearDown(tester.view.reset);
+      await tester.pumpWidget(
+        UiFixture(
+          scenario: LineupScenario(
+            stage: SetupStage.ready,
+            channels: [
+              _sourceChannel(
+                'studio',
+                1,
+                'Studio station',
+                LibraryFilter.studio,
+              ),
+              _sourceChannel('genre', 2, 'Drama', LibraryFilter.genre),
+              _channel('custom', 3, 'Custom station'),
+            ],
+          ),
+        ).build(),
+      );
+      await tester.pumpAndSettle();
+      await openDestination(tester, 'Channels');
+      await _chooseDirectoryView(tester, 'Grouped by source');
+      final custom = find.byKey(const ValueKey('channel-group-custom'));
+      final studios = find.byKey(const ValueKey('channel-group-studios'));
+      final genres = find.byKey(const ValueKey('channel-group-genres'));
+      expect(
+        tester.getTopLeft(custom).dy,
+        lessThan(tester.getTopLeft(studios).dy),
+      );
+      expect(
+        tester.getTopLeft(studios).dy,
+        lessThan(tester.getTopLeft(genres).dy),
+      );
+      expect(find.text('1 channel'), findsNWidgets(3));
+      await tester.tap(genres);
+      await tester.pumpAndSettle();
+      expect(find.byKey(const ValueKey('channel-row-genre')), findsOneWidget);
+      expect(
+        find.descendant(
+          of: find.byKey(const ValueKey('channel-row-custom')),
+          matching: find.text('Custom'),
+        ),
+        findsNothing,
+      );
+      await tester.enterText(find.byKey(const Key('channels-search')), 'Drama');
+      await tester.pumpAndSettle();
+      expect(custom, findsNothing);
+      expect(studios, findsNothing);
+      expect(genres, findsOneWidget);
+      await tester.enterText(find.byKey(const Key('channels-search')), '');
+      await tester.tap(find.byKey(const Key('channels-filter')));
+      await tester.pumpAndSettle();
+      await tester.tap(find.text('Studios').last);
+      await tester.pumpAndSettle();
+      expect(studios, findsOneWidget);
+      expect(genres, findsNothing);
+    },
+  );
+
+  testWidgets('search preserves full-lineup source group order', (
+    tester,
+  ) async {
+    tester.view
+      ..physicalSize = const Size(1920, 1080)
+      ..devicePixelRatio = 1;
+    addTearDown(tester.view.reset);
+    await tester.pumpWidget(
+      UiFixture(
+        scenario: LineupScenario(
+          stage: SetupStage.ready,
+          channels: [
+            _sourceChannel(
+              'hidden',
+              1,
+              'Hidden collection',
+              LibraryFilter.collection,
+            ),
+            _sourceChannel('genre', 2, 'Keep genre', LibraryFilter.genre),
+            _sourceChannel(
+              'collection',
+              3,
+              'Keep collection',
+              LibraryFilter.collection,
+            ),
+          ],
+        ),
+      ).build(),
+    );
+    await tester.pumpAndSettle();
+    await openDestination(tester, 'Channels');
+    await _chooseDirectoryView(tester, 'Grouped by source');
+    final collections = find.byKey(const ValueKey('channel-group-collections'));
+    final genres = find.byKey(const ValueKey('channel-group-genres'));
+    expect(
+      tester.getTopLeft(collections).dy,
+      lessThan(tester.getTopLeft(genres).dy),
+    );
+    await tester.enterText(find.byKey(const Key('channels-search')), 'Keep');
+    await tester.pumpAndSettle();
+    expect(find.text('1 channel'), findsNWidgets(2));
+    expect(
+      tester.getTopLeft(collections).dy,
+      lessThan(tester.getTopLeft(genres).dy),
+    );
+  });
+
+  testWidgets(
+    'grouped On now requests built rows only and updates after schedule completion and clock',
+    (tester) async {
+      tester.view
+        ..physicalSize = const Size(1920, 1080)
+        ..devicePixelRatio = 1;
+      addTearDown(tester.view.reset);
+      final now = DateTime.utc(2026, 1, 1, 0, 5);
+      final longTitle = 'A long synthetic program title ' * 8;
+      var clock = now;
+      final controller = _GroupedScheduleController(
+        scenario: LineupScenario(
+          stage: SetupStage.ready,
+          channels: [
+            for (var i = 0; i < 200; i++)
+              _channel(
+                'lazy-$i',
+                i + 1,
+                'Station $i',
+                source: i == 0
+                    ? ManualSource([
+                        ChannelItem(
+                          id: 'lazy-0-program',
+                          title: longTitle,
+                          duration: const Duration(minutes: 30),
+                        ),
+                      ])
+                    : null,
+              ),
+          ],
+        ),
+      );
+      final guide = GuideController(
+        lineup: controller,
+        clock: () => clock,
+        loadSchedule: controller.loadDirectorySchedule,
+      );
+      final native = FixturePlayer();
+      final player = PlayerCoordinator(
+        player: native,
+        lineup: controller,
+        guide: guide,
+        clock: () => clock,
+      );
+      final menuFocus = FocusNode();
+      addTearDown(controller.dispose);
+      addTearDown(guide.dispose);
+      addTearDown(player.dispose);
+      addTearDown(native.dispose);
+      addTearDown(menuFocus.dispose);
+      await tester.pumpWidget(
+        MaterialApp(
+          theme: LineupTheme.forName(LineupThemeName.emberSteel),
+          home: Scaffold(
+            body: ChannelsView(
+              controller: controller,
+              player: player,
+              onOpenPlayer: () {},
+              onOpenMenu: (_, _) {},
+              menuFocusNode: menuFocus,
+              clock: () => clock,
+            ),
+          ),
+        ),
+      );
+      await tester.pumpAndSettle();
+      await _chooseDirectoryView(tester, 'Grouped by source');
+      final built = find.byWidgetPredicate(
+        (w) => w is Material && w.key.toString().contains('channel-row-lazy-'),
+      );
+      expect(built.evaluate().length, lessThan(30));
+      expect(controller.requests.toSet().length, lessThan(30));
+      expect(find.text('—'), findsWidgets);
+      controller.release.complete();
+      await tester.pumpAndSettle();
+      void expectOnNow(String id, String title, int minutes) {
+        final cell = find.byKey(ValueKey('channel-on-now-$id'));
+        final countdown = ' · ${minutes}m left';
+        final timeLeft = find.descendant(
+          of: cell,
+          matching: find.text(countdown),
+        );
+        final program = find.descendant(of: cell, matching: find.text(title));
+        expect(program, findsOneWidget);
+        expect(
+          tester.renderObject<RenderParagraph>(program).didExceedMaxLines,
+          title == longTitle,
+        );
+        expect(
+          tester.renderObject<RenderParagraph>(timeLeft).didExceedMaxLines,
+          isFalse,
+        );
+        expect(
+          tester.getTopRight(timeLeft).dx,
+          lessThanOrEqualTo(tester.getTopRight(cell).dx),
+        );
+        expect(
+          tester.getSemantics(timeLeft).label,
+          contains('$title$countdown'),
+        );
+      }
+
+      expectOnNow('lazy-0', longTitle, 25);
+      clock = now.add(const Duration(minutes: 2));
+      await tester.pump(const Duration(seconds: 30));
+      await tester.pump();
+      expectOnNow('lazy-0', longTitle, 23);
+      final requestedBeforeDrag = controller.requests.toSet();
+      await tester.drag(
+        find.byKey(const PageStorageKey('channels-directory-grouped')),
+        const Offset(0, -800),
+      );
+      await tester.pumpAndSettle();
+      expect(controller.requests.toSet().length, greaterThan(8));
+      expect(controller.requests.toSet().length, lessThan(60));
+      final newlyVisible = controller.requests
+          .toSet()
+          .difference(requestedBeforeDrag)
+          .where(
+            (id) => find
+                .byKey(ValueKey('channel-row-$id'))
+                .hitTestable()
+                .evaluate()
+                .isNotEmpty,
+          );
+      expect(newlyVisible, isNotEmpty);
+      final id = newlyVisible.first;
+      expectOnNow(id, 'Station ${id.substring('lazy-'.length)} program', 23);
+      await tester.pumpWidget(const SizedBox());
+    },
+    semanticsEnabled: true,
+  );
+
+  testWidgets('grouped failed schedules keep a quiet placeholder', (
+    tester,
+  ) async {
+    tester.view
+      ..physicalSize = const Size(1920, 1080)
+      ..devicePixelRatio = 1;
+    addTearDown(tester.view.reset);
+    await tester.pumpWidget(
+      UiFixture(
+        controller: _FailedScheduleController(
+          scenario: LineupScenario(
+            stage: SetupStage.ready,
+            channels: [_channel('failed', 1, 'Unavailable schedule')],
+          ),
+        ),
+      ).build(),
+    );
+    await tester.pumpAndSettle();
+    await openDestination(tester, 'Channels');
+    await _chooseDirectoryView(tester, 'Grouped by source');
+    final row = find.byKey(const ValueKey('channel-row-failed'));
+    expect(find.descendant(of: row, matching: find.text('—')), findsOneWidget);
+    expect(
+      find.descendant(
+        of: row,
+        matching: find.byType(CircularProgressIndicator),
+      ),
+      findsNothing,
+    );
+  });
+
+  testWidgets('grouped selection review includes rows from collapsed groups', (
+    tester,
+  ) async {
+    tester.view
+      ..physicalSize = const Size(1920, 1080)
+      ..devicePixelRatio = 1;
+    addTearDown(tester.view.reset);
+    final controller = _RecordingDirectoryController(
+      scenario: LineupScenario(
+        stage: SetupStage.ready,
+        channels: [
+          _channel('first', 1, 'First station'),
+          _channel('second', 2, 'Second station'),
+          _sourceChannel('genre', 3, 'Genre station', LibraryFilter.genre),
+        ],
+      ),
+    );
+    await tester.pumpWidget(UiFixture(controller: controller).build());
+    await tester.pumpAndSettle();
+    await openDestination(tester, 'Channels');
+    await _chooseDirectoryView(tester, 'Grouped by source');
+    final search = find.byKey(const Key('channels-search'));
+    await tester.enterText(search, 'station');
+    await tester.pumpAndSettle();
+    final genreHeader = find.byKey(const ValueKey('channel-group-genres'));
+    final genreRow = find.byKey(const ValueKey('channel-row-genre'));
+    expect(genreHeader, findsOneWidget);
+    expect(genreRow, findsNothing);
+    await tester.tap(find.text('Select'));
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('Select all matching'));
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('3 selected'));
+    await tester.pumpAndSettle();
+    expect(genreHeader, findsNothing);
+    expect(genreRow, findsOneWidget);
+    expect(find.text('On now'), findsOneWidget);
+    await tester.tap(genreRow);
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('Delete selected'));
+    await tester.pumpAndSettle();
+    expect(
+      find.byKey(const ValueKey('delete-dialog-row-first')),
+      findsOneWidget,
+    );
+    expect(
+      find.byKey(const ValueKey('delete-dialog-row-second')),
+      findsOneWidget,
+    );
+    expect(find.byKey(const ValueKey('delete-dialog-row-genre')), findsNothing);
+    await tester.tap(
+      find.descendant(of: find.byType(Dialog), matching: find.text('Cancel')),
+    );
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('Back to results'));
+    await tester.pumpAndSettle();
+    expect(genreHeader, findsOneWidget);
+    expect(genreRow, findsNothing);
+    expect(
+      tester
+          .widget<EditableText>(
+            find.descendant(of: search, matching: find.byType(EditableText)),
+          )
+          .controller
+          .text,
+      'station',
+    );
+    await tester.tap(find.text('Delete selected'));
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('Delete 2 channels'));
+    await tester.pumpAndSettle();
+    expect(controller.deleted.map((channel) => channel.id), [
+      'first',
+      'second',
+    ]);
+  });
+
+  testWidgets('TV grouped header Select toggles and Down reaches its rows', (
+    tester,
+  ) async {
+    await tester.pumpWidget(
+      UiFixture(
+        profile: profileFor(true),
+        scenario: LineupScenario(
+          stage: SetupStage.ready,
+          channels: [_channel('custom', 1, 'Custom station')],
+        ),
+      ).build(),
+    );
+    await tester.pumpAndSettle();
+    await openDestination(tester, 'Channels');
+    await _chooseDirectoryView(tester, 'Grouped by source');
+    final header = find.byKey(const ValueKey('channel-group-custom'));
+    void expectDisclosure(Tristate expanded) {
+      final nodes = tester.semantics.simulatedAccessibilityTraversal().where(
+        (node) =>
+            node.label.contains('Custom') && node.label.contains('1 channel'),
+      );
+      expect(nodes, hasLength(1));
+      final data = nodes.single.getSemanticsData();
+      expect(data.hasAction(SemanticsAction.tap), isTrue);
+      expect(data.flagsCollection.isButton, isTrue);
+      expect(data.flagsCollection.isExpanded, expanded);
+    }
+
+    tester.widget<TextButton>(header).focusNode!.requestFocus();
+    await tester.pump();
+    expectDisclosure(Tristate.isTrue);
+    await tester.sendKeyEvent(LogicalKeyboardKey.select);
+    await tester.pumpAndSettle();
+    expect(find.byKey(const ValueKey('channel-row-custom')), findsNothing);
+    expectDisclosure(Tristate.isFalse);
+    await tester.sendKeyEvent(LogicalKeyboardKey.select);
+    await tester.pumpAndSettle();
+    expectDisclosure(Tristate.isTrue);
+    await tester.sendKeyEvent(LogicalKeyboardKey.arrowDown);
+    await tester.pumpAndSettle();
+    expect(
+      FocusManager.instance.primaryFocus?.debugLabel,
+      'Open Custom station',
+    );
+    await tester.sendKeyEvent(LogicalKeyboardKey.arrowUp);
+    await tester.pumpAndSettle();
+    expect(tester.widget<TextButton>(header).focusNode!.hasFocus, isTrue);
+  }, semanticsEnabled: true);
+
   for (final isTv in [true, false]) {
     testWidgets(
       'bulk-selected channel rows show checked state on the checkbox only (TV: $isTv)',
@@ -143,7 +1182,7 @@ void main() {
       await tester.binding.handlePopRoute();
       await tester.pumpAndSettle();
       expect(backgrounded, 0);
-      expect(find.byKey(const Key('guide-channel-search')), findsOneWidget);
+      expect(find.byKey(const Key('guide-search-button')), findsOneWidget);
       await tester.binding.handlePopRoute();
       await tester.pumpAndSettle();
       expect(backgrounded, 1);
@@ -1221,7 +2260,27 @@ void main() {
           await tester.sendKeyEvent(LogicalKeyboardKey.enter);
         }
         await tester.pumpAndSettle();
-        expect(find.text('Edit custom channel'), findsOneWidget);
+        final studio = find.byType(ChannelStudioView);
+        expect(studio, findsOneWidget);
+        final view = tester.widget<ChannelStudioView>(studio);
+        expect(view.mode, ChannelStudioMode.editCustom);
+        expect(view.channel?.id, 'custom');
+        expect(
+          find.descendant(
+            of: studio,
+            matching: find.byWidgetPredicate(
+              (widget) => widget is Text && widget.data == 'Custom station',
+            ),
+          ),
+          findsOneWidget,
+        );
+        expect(
+          find.descendant(
+            of: find.byKey(const Key('studio-status-tag')),
+            matching: find.text('Saved'),
+          ),
+          findsOneWidget,
+        );
       },
     );
   }
@@ -1364,10 +2423,64 @@ void main() {
       }
 
       await choose('Custom station', 'Edit');
-      expect(find.text('Edit custom channel'), findsOneWidget);
+      final studio = find.byType(ChannelStudioView);
+      expect(studio, findsOneWidget);
+      final view = tester.widget<ChannelStudioView>(studio);
+      expect(view.mode, ChannelStudioMode.editCustom);
+      expect(view.channel?.id, 'custom');
+      expect(
+        find.descendant(
+          of: find.ancestor(
+            of: find.byKey(const Key('studio-status-tag')),
+            matching: find.byWidgetPredicate(
+              (widget) =>
+                  widget is Semantics && widget.properties.header == true,
+            ),
+          ),
+          matching: find.byWidgetPredicate(
+            (widget) => widget is Text && widget.data == 'Custom station',
+          ),
+        ),
+        findsOneWidget,
+      );
+      expect(
+        find.descendant(
+          of: find.byKey(const Key('studio-status-tag')),
+          matching: find.text('Saved'),
+        ),
+        findsOneWidget,
+      );
       await tester.tap(find.text('‹ Channels'));
       await tester.pumpAndSettle();
       await choose('Generated station', 'Duplicate as custom');
+      final duplicate = tester.widget<ChannelStudioView>(
+        find.byType(ChannelStudioView),
+      );
+      expect(duplicate.mode, ChannelStudioMode.duplicateCustom);
+      expect(duplicate.channel?.id, 'gen');
+      expect(
+        find.descendant(
+          of: find.ancestor(
+            of: find.byKey(const Key('studio-status-tag')),
+            matching: find.byWidgetPredicate(
+              (widget) =>
+                  widget is Semantics && widget.properties.header == true,
+            ),
+          ),
+          matching: find.byWidgetPredicate(
+            (widget) =>
+                widget is Text && widget.data == 'Generated station copy',
+          ),
+        ),
+        findsOneWidget,
+      );
+      expect(
+        find.descendant(
+          of: find.byKey(const Key('studio-status-tag')),
+          matching: find.text('Draft'),
+        ),
+        findsOneWidget,
+      );
       expect(
         tester
             .widget<TextFormField>(find.byKey(const Key('studio-name')))
@@ -1381,7 +2494,7 @@ void main() {
   );
 
   testWidgets(
-    'both directories drop the Custom tag before crowding a wide name',
+    'directory retains outlined Custom for long names while reorder keeps prior tag policy',
     (tester) async {
       tester.view
         ..physicalSize = const Size(1280, 1080)
@@ -1415,14 +2528,21 @@ void main() {
           of: shortRow,
           matching: find.text('Custom'),
         );
-        expect(tester.getTopLeft(shortTag).dy, tester.getTopLeft(shortName).dy);
+        if (prefix == 'reorder') {
+          expect(
+            tester.getTopLeft(shortTag).dy,
+            tester.getTopLeft(shortName).dy,
+          );
+        } else {
+          expect(tester.getCenter(shortTag).dy, tester.getCenter(shortName).dy);
+        }
         expect(
           tester.getTopLeft(shortTag).dx,
           greaterThanOrEqualTo(tester.getTopRight(shortName).dx),
         );
         expect(
           find.descendant(of: longRow, matching: find.text('Custom')),
-          findsNothing,
+          prefix == 'reorder' ? findsNothing : findsOneWidget,
         );
         expect(
           tester
@@ -1510,7 +2630,13 @@ void main() {
     await tester.pumpAndSettle();
     expect(find.text('Duplicate as custom'), findsOneWidget);
     expect(find.text('Delete…'), findsOneWidget);
-    expect(find.byType(LineupDropdownMenuRow), findsNWidgets(4));
+    expect(
+      find.descendant(
+        of: find.byWidgetPredicate((widget) => widget is PopupMenuEntry),
+        matching: find.byType(LineupDropdownMenuRow),
+      ),
+      findsNWidgets(4),
+    );
 
     await tester.tap(find.text('Delete…'));
     await tester.pumpAndSettle();
@@ -1945,6 +3071,7 @@ Channel _channel(
   int number,
   String name, {
   bool generated = false,
+  ChannelKind kind = ChannelKind.unknown,
   ContentSource? source,
   Map<String, String> sourceLibraries = const {},
 }) => Channel(
@@ -1964,6 +3091,7 @@ Channel _channel(
   anchor: DateTime.utc(2026),
   shuffleSeed: number,
   builderKey: generated ? 'generated:$id' : null,
+  kind: kind,
   sourceLibraries: sourceLibraries,
 );
 
@@ -2052,4 +3180,53 @@ class _RecordingDirectoryController extends FixtureController {
       throw failure;
     }
   }
+}
+
+Future<void> _chooseDirectoryView(WidgetTester tester, String label) async {
+  await tester.tap(find.byKey(const Key('channels-view')));
+  await tester.pumpAndSettle();
+  await tester.tap(find.text(label).last);
+  await tester.pumpAndSettle();
+}
+
+Channel _sourceChannel(
+  String id,
+  int number,
+  String name,
+  LibraryFilter filter,
+) => _channel(
+  id,
+  number,
+  name,
+  generated: true,
+  source: LibrarySource(
+    libraryId: 'movies',
+    libraryType: PlexLibraryType.movie,
+    filters: {
+      filter: [name],
+    },
+  ),
+);
+
+class _GroupedScheduleController extends FixtureController {
+  _GroupedScheduleController({super.scenario});
+  final requests = <String>[];
+  final release = Completer<void>();
+
+  Future<ScheduleIndex> loadDirectorySchedule(Channel channel) async {
+    requests.add(channel.id);
+    await release.future;
+    return loadScheduleFor(channel);
+  }
+
+  @override
+  Future<ScheduleIndex> loadScheduleFor(Channel channel) async =>
+      buildChannelSchedule(channel, (channel.source as ManualSource).items);
+}
+
+class _FailedScheduleController extends FixtureController {
+  _FailedScheduleController({super.scenario});
+  @override
+  Future<ScheduleIndex> loadScheduleFor(Channel channel) async =>
+      throw StateError('Synthetic schedule failure');
 }

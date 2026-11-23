@@ -4,6 +4,106 @@ import 'package:lineup_desktop/playback/player_track_label.dart';
 
 void main() {
   test(
+    'subtitle tracks named Off have visible and spoken distinguishing facts',
+    () {
+      for (final (codec, support) in [
+        ('subrip', 'SRT (text)'),
+        (null, 'Track 7'),
+      ]) {
+        final track = _track(
+          id: 7,
+          type: PlayerTrackType.subtitle,
+          title: 'Off',
+          codec: codec,
+        );
+        final projection = PlayerTrackDisplayProjection([track]);
+        final display = projection.displayFor(track);
+        expect(display.primaryText, 'Off');
+        expect(projection.pickerSecondaryFactsFor(track), [support]);
+        expect(display.semanticsText, 'Select Subtitle track: Off, $support.');
+      }
+    },
+  );
+
+  test('picker subtitle support only distinguishes equal first lines', () {
+    final unique = _track(
+      id: 1,
+      type: PlayerTrackType.subtitle,
+      language: 'ja',
+      codec: 'ass',
+    );
+    final text = _track(
+      id: 2,
+      type: PlayerTrackType.subtitle,
+      language: 'en',
+      codec: 'subrip',
+    );
+    final image = _track(
+      id: 3,
+      type: PlayerTrackType.subtitle,
+      language: 'en',
+      codec: 'hdmv_pgs_subtitle',
+    );
+    final forced = _track(
+      id: 4,
+      type: PlayerTrackType.subtitle,
+      language: 'en',
+      codec: 'subrip',
+      forced: true,
+    );
+    final audio = _track(
+      id: 5,
+      language: 'en',
+      codec: 'aac',
+      channelLayout: 'stereo',
+    );
+    final projection = PlayerTrackDisplayProjection([
+      unique,
+      text,
+      image,
+      forced,
+      audio,
+    ]);
+    expect(projection.pickerSecondaryFactsFor(unique), isEmpty);
+    expect(projection.pickerSecondaryFactsFor(text), ['SRT (text)']);
+    expect(projection.pickerSecondaryFactsFor(image), ['PGS (image)']);
+    expect(projection.pickerSecondaryFactsFor(forced), isEmpty);
+    expect(projection.pickerSecondaryFactsFor(audio), ['Stereo', 'AAC']);
+    expect(
+      projection.displayFor(unique).tooltipText,
+      contains('ASS (styled text)'),
+    );
+    expect(
+      projection.displayFor(forced).semanticsText,
+      contains('marked as forced'),
+    );
+  });
+
+  test(
+    'English regional labels distinguish Spain and Latin America consistently',
+    () {
+      final spain = _track(id: 1, language: 'es-ES');
+      final latin = _track(id: 2, language: 'es-419');
+      final japanese = _track(id: 3, language: 'ja');
+      final projection = PlayerTrackDisplayProjection([spain, latin, japanese]);
+      expect(projection.displayFor(spain).primaryText, 'Spanish (Spain)');
+      expect(
+        projection.displayFor(latin).primaryText,
+        'Spanish (Latin America)',
+      );
+      expect(projection.displayFor(japanese).compactText, 'Japanese');
+      expect(
+        projection.displayFor(latin).tooltipText,
+        contains('Spanish (Latin America)'),
+      );
+      expect(
+        projection.displayFor(japanese).semanticsText,
+        contains('Japanese'),
+      );
+    },
+  );
+
+  test(
     'snapshot projection preserves every display field across mixed peers',
     () {
       final tracks = [
@@ -114,14 +214,15 @@ void main() {
     const cases = <({String input, String? primary})>[
       (input: 'en', primary: 'English'),
       (input: 'ENG', primary: 'English'),
-      (input: 'fra', primary: 'Français'),
-      (input: 'fre', primary: 'Français'),
-      (input: 'dEu', primary: 'Deutsch'),
-      (input: 'ger', primary: 'Deutsch'),
-      (input: 'es-419', primary: 'Español'),
-      (input: 'pt-BR', primary: 'Português'),
-      (input: 'zh-Hans', primary: '简体中文'),
-      (input: 'zh_Hant', primary: '繁體中文'),
+      (input: 'fra', primary: 'French'),
+      (input: 'ja', primary: 'Japanese'),
+      (input: 'fre', primary: 'French'),
+      (input: 'dEu', primary: 'German'),
+      (input: 'ger', primary: 'German'),
+      (input: 'es-419', primary: 'Spanish'),
+      (input: 'pt-BR', primary: 'Portuguese'),
+      (input: 'zh-Hans', primary: 'Chinese (Simplified)'),
+      (input: 'zh_Hant', primary: 'Chinese (Traditional)'),
       (input: 'en-unknown', primary: 'en-unknown'),
       (input: 'und', primary: 'Audio track 1'),
       (input: 'mul', primary: 'Multiple languages'),
@@ -199,7 +300,7 @@ void main() {
     );
     expect(
       formatPlayerTrackDisplay(_track(language: 'pt-br')).primaryText,
-      'Português',
+      'Portuguese',
     );
     expect(
       formatPlayerTrackDisplay(_track(language: 'en-XX')).primaryText,

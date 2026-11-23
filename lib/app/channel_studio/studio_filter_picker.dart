@@ -33,6 +33,11 @@ class _StudioFilterPicker extends StatefulWidget {
 class _StudioFilterPickerState extends State<_StudioFilterPicker> {
   final _filterPickerSearch = TextEditingController();
   final _filterPickerFocus = FocusNode(debugLabel: 'Search filter values');
+  final _valueControlsFocus = FocusNode(skipTraversal: true);
+  final _selectedCountFocus = FocusNode(debugLabel: 'Filter selected count');
+  final _firstValueFocus = FocusNode(debugLabel: 'First filter value');
+  final _valuesScroll = ScrollController();
+  FocusNode? _returnToControls;
   List<String> get _activeFilterValues => widget.picker.values;
   Set<String> get _activeAvailableFilterValues => widget.picker.available;
   Map<String, String> get _activeFilterLabels => widget.picker.labels;
@@ -53,12 +58,72 @@ class _StudioFilterPickerState extends State<_StudioFilterPicker> {
   void dispose() {
     _filterPickerSearch.dispose();
     _filterPickerFocus.dispose();
+    _valueControlsFocus.dispose();
+    _selectedCountFocus.dispose();
+    _firstValueFocus.dispose();
+    _valuesScroll.dispose();
     super.dispose();
+  }
+
+  KeyEventResult _navigateValues(KeyEvent event) {
+    if (event is! KeyDownEvent && event is! KeyRepeatEvent) {
+      return KeyEventResult.ignored;
+    }
+    if (event.logicalKey == LogicalKeyboardKey.arrowUp &&
+        _firstValueFocus.hasPrimaryFocus) {
+      // Search can enter values directly. Return to the actions so Clear
+      // selection and the selected-only toggle remain reachable by remote.
+      final previous = _returnToControls;
+      final target =
+          previous != null &&
+              previous.ancestors.contains(_valueControlsFocus) &&
+              previous.canRequestFocus
+          ? previous
+          : _selectedCountFocus;
+      FocusTraversalPolicy.defaultTraversalRequestFocusCallback(
+        target,
+        alignmentPolicy: ScrollPositionAlignmentPolicy.keepVisibleAtStart,
+      );
+      return KeyEventResult.handled;
+    }
+    if (event.logicalKey != LogicalKeyboardKey.arrowDown ||
+        !(_filterPickerFocus.hasPrimaryFocus || _valueControlsFocus.hasFocus)) {
+      return KeyEventResult.ignored;
+    }
+
+    final origin = FocusManager.instance.primaryFocus;
+    _returnToControls = _valueControlsFocus.hasFocus ? origin : null;
+    void focusFirstValue() {
+      if (!mounted ||
+          origin?.hasPrimaryFocus != true ||
+          _firstValueFocus.parent == null) {
+        return;
+      }
+      FocusTraversalPolicy.defaultTraversalRequestFocusCallback(
+        _firstValueFocus,
+        alignmentPolicy: ScrollPositionAlignmentPolicy.keepVisibleAtEnd,
+      );
+    }
+
+    // The first matching result can be offscreen or unmounted after scrolling.
+    if (_valuesScroll.hasClients) {
+      final position = _valuesScroll.position;
+      if (position.pixels != position.minScrollExtent) {
+        _valuesScroll.jumpTo(position.minScrollExtent);
+      }
+    }
+    if (_firstValueFocus.parent != null) {
+      focusFirstValue();
+    } else {
+      WidgetsBinding.instance.addPostFrameCallback((_) => focusFirstValue());
+    }
+    return KeyEventResult.handled;
   }
 
   @override
   Widget build(BuildContext context) {
     final key = widget.picker.activeKey!;
+    final isTv = DeviceProfile.of(context).isTv;
     final filters = widget.filters;
     final libraryId = widget.libraryId;
     if (key == 'choose') {
@@ -70,6 +135,7 @@ class _StudioFilterPickerState extends State<_StudioFilterPicker> {
         },
         child: Focus(
           autofocus: true,
+          skipTraversal: isTv,
           child: Column(
             key: const Key('studio-filter-criteria'),
             crossAxisAlignment: CrossAxisAlignment.stretch,
@@ -77,6 +143,14 @@ class _StudioFilterPickerState extends State<_StudioFilterPicker> {
               Text(
                 'Choose a filter',
                 style: _studioSectionHeadingStyle(context),
+              ),
+              Align(
+                alignment: Alignment.centerLeft,
+                child: TextButton(
+                  key: const Key('studio-filter-back'),
+                  onPressed: widget.onCancel,
+                  child: const Text('Back'),
+                ),
               ),
               for (final criterion in _facetKeys)
                 TextButton(
@@ -90,23 +164,6 @@ class _StudioFilterPickerState extends State<_StudioFilterPicker> {
                   ),
                   child: Text(_facetLabel(criterion)),
                 ),
-              Wrap(
-                spacing: 8,
-                crossAxisAlignment: WrapCrossAlignment.center,
-                children: [
-                  Semantics(
-                    liveRegion: true,
-                    child: Text(
-                      'Finish this filter with Done, or cancel it, before saving or tuning.',
-                      style: _studioSupportStyle(context),
-                    ),
-                  ),
-                  TextButton(
-                    onPressed: () => widget.onCancel(),
-                    child: const Text('Cancel'),
-                  ),
-                ],
-              ),
             ],
           ),
         ),
@@ -139,6 +196,7 @@ class _StudioFilterPickerState extends State<_StudioFilterPicker> {
         .where((value) => !_activeAvailableFilterValues.contains(value))
         .toSet();
     Widget valueTile(String value) => CheckboxListTile(
+      focusNode: isTv && value == visible.first ? _firstValueFocus : null,
       controlAffinity: ListTileControlAffinity.leading,
       value: _pendingFilterValues.contains(value),
       title: Text(
@@ -151,6 +209,7 @@ class _StudioFilterPickerState extends State<_StudioFilterPicker> {
         checked == true
             ? _pendingFilterValues.add(value)
             : _pendingFilterValues.remove(value);
+        widget.onApply(_pendingFilterValues.toList());
       }),
     );
     final media = MediaQuery.of(context);
@@ -166,6 +225,10 @@ class _StudioFilterPickerState extends State<_StudioFilterPicker> {
         },
         child: Focus(
           autofocus: true,
+          skipTraversal: isTv,
+          onKeyEvent: isTv && visible.isNotEmpty
+              ? (_, event) => _navigateValues(event)
+              : null,
           child: Column(
             key: Key('studio-filter-picker-$key'),
             crossAxisAlignment: CrossAxisAlignment.stretch,
@@ -176,6 +239,14 @@ class _StudioFilterPickerState extends State<_StudioFilterPicker> {
               ),
               SizedBox(height: 4),
               Text(widget.libraryTitle, style: _studioSupportStyle(context)),
+              Align(
+                alignment: Alignment.centerLeft,
+                child: TextButton(
+                  key: const Key('studio-filter-back'),
+                  onPressed: widget.onCancel,
+                  child: const Text('Back'),
+                ),
+              ),
               SizedBox(height: 8),
               LineupTextFieldActivation(
                 focusNode: _filterPickerFocus,
@@ -191,42 +262,52 @@ class _StudioFilterPickerState extends State<_StudioFilterPicker> {
                   onChanged: (_) => setState(() {}),
                 ),
               ),
-              Wrap(
-                spacing: 8,
-                runSpacing: 8,
-                crossAxisAlignment: WrapCrossAlignment.center,
-                children: [
-                  TextButton(
-                    onPressed: () => setState(
-                      () =>
-                          _showPendingFilterValues = !_showPendingFilterValues,
-                    ),
-                    child: Text('${_pendingFilterValues.length} selected'),
-                  ),
-                  TextButton(
-                    onPressed: _pendingFilterValues.isEmpty
-                        ? null
-                        : () => setState(_pendingFilterValues.clear),
-                    child: const Text('Clear selection'),
-                  ),
-                  if (unavailable.isNotEmpty)
+              Focus(
+                canRequestFocus: false,
+                focusNode: _valueControlsFocus,
+                child: Wrap(
+                  spacing: 8,
+                  runSpacing: 8,
+                  crossAxisAlignment: WrapCrossAlignment.center,
+                  children: [
                     TextButton(
+                      focusNode: isTv ? _selectedCountFocus : null,
                       onPressed: () => setState(
-                        () => _pendingFilterValues.removeAll(unavailable),
+                        () => _showPendingFilterValues =
+                            !_showPendingFilterValues,
                       ),
-                      child: Text('Remove ${unavailable.length} unavailable'),
+                      child: Text('${_pendingFilterValues.length} selected'),
                     ),
-                  Text(
-                    '$count matching programs',
-                    style: _studioSupportStyle(context)
-                        .merge(LineupTypography.tvLabelStyle(context)),
-                  ),
-                ],
+                    TextButton(
+                      onPressed: _pendingFilterValues.isEmpty
+                          ? null
+                          : () => setState(() {
+                              _pendingFilterValues.clear();
+                              widget.onApply(const []);
+                            }),
+                      child: const Text('Clear selection'),
+                    ),
+                    if (unavailable.isNotEmpty)
+                      TextButton(
+                        onPressed: () => setState(() {
+                          _pendingFilterValues.removeAll(unavailable);
+                          widget.onApply(_pendingFilterValues.toList());
+                        }),
+                        child: Text('Remove ${unavailable.length} unavailable'),
+                      ),
+                    Text(
+                      '$count matching programs',
+                      style: _studioSupportStyle(context)
+                          .merge(LineupTypography.tvLabelStyle(context)),
+                    ),
+                  ],
+                ),
               ),
               if (independentlyScrollable)
                 SizedBox(
                   height: (media.size.height * .29).clamp(180, 460),
                   child: ListView.builder(
+                    controller: isTv ? _valuesScroll : null,
                     itemCount: visible.length,
                     itemBuilder: (context, index) => valueTile(visible[index]),
                   ),
@@ -234,31 +315,6 @@ class _StudioFilterPickerState extends State<_StudioFilterPicker> {
               else
                 for (final value in visible) valueTile(value),
               SizedBox(height: 12),
-              Wrap(
-                alignment: WrapAlignment.end,
-                spacing: 8,
-                runSpacing: 8,
-                crossAxisAlignment: WrapCrossAlignment.center,
-                children: [
-                  Semantics(
-                    liveRegion: true,
-                    child: Text(
-                      'Finish this filter with Done, or cancel it, before saving or tuning.',
-                      style: _studioSupportStyle(context),
-                    ),
-                  ),
-                  TextButton(
-                    onPressed: () => widget.onCancel(),
-                    child: const Text('Cancel'),
-                  ),
-                  FilledButton(
-                    onPressed: () {
-                      widget.onApply(_pendingFilterValues.toList());
-                    },
-                    child: const Text('Done'),
-                  ),
-                ],
-              ),
             ],
           ),
         ),

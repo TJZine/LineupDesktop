@@ -2,6 +2,22 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:lineup_desktop/settings/lineup_settings.dart';
 
 void main() {
+  test('text size round trips and defaults leniently for older settings', () {
+    for (final size in LineupTextSize.values) {
+      final settings = const LineupSettings().copyWith(textSize: size);
+      expect(LineupSettings.fromJson(settings.toJson()).textSize, size);
+      expect(settings.toJson()['textSize'], size.name);
+    }
+    final old = const LineupSettings().toJson()..remove('textSize');
+    expect(LineupSettings.fromJson(old).textSize, LineupTextSize.standard);
+    for (final unknown in ['future', null, 42]) {
+      expect(
+        LineupSettings.fromJson({...old, 'textSize': unknown}).textSize,
+        LineupTextSize.standard,
+      );
+    }
+  });
+
   test(
     'overlay transparency defaults compatibly and round trips each level',
     () {
