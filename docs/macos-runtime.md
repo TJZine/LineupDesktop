@@ -483,12 +483,13 @@ document in the same commit.
 ### Offline source-companion preparation
 
 [Source-material tooling](../tool/macos/source_materials.py) uses local verified
-archives and Git snapshots; it never fetches, builds or signs. Its small committed
-`assets/licenses/` snapshot contains exact source pins (including resolved nested
-runtime dependencies), recipe/helper texts and the macOS engine patches. Regenerate
-it after changing an included input, including any file in `HELPERS` in
-`tool/macos/source_materials.py`. The `assets` command needs the pinned Flutter SDK's
-`LICENSE` file. The **Verify Dart** job checks that the mirrors are current:
+archives and Git snapshots. Flutter bundles the recipe texts from their repository
+files and records each input for incremental builds. Regenerate the offline
+inventory, engine notice and recipe index when the runtime pins, Flutter pin or
+license, or the set of recipe paths in `HELPERS` changes. Use the pinned Flutter
+SDK for its license.
+The **Verify Dart** job checks these generated inputs and reads the bundled
+documents through the Licenses screen's repository.
 
 ```sh
 python3 tool/macos/source_materials.py assets --flutter-sdk "$FLUTTER_ROOT"

@@ -22,7 +22,7 @@ void main() {
   var backgrounds = 0;
   setUpAll(() async {
     await loadPinnedTestFonts();
-    await rootBundle.loadString('assets/licenses/index.txt');
+    await rootBundle.loadString('assets/licenses/sources.json');
     LicenseRegistry.addLicense(
       () => Stream.value(
         LicenseEntryWithLineBreaks([
