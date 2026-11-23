@@ -158,6 +158,44 @@ void main() {
     });
   }
 
+  testWidgets('TV Guide repeats navigation and tunes once per OK press', (
+    tester,
+  ) async {
+    final now = DateTime.utc(2026, 1, 15, 12, 15);
+    final lineup = _Lineup(3, anchor: now.subtract(const Duration(hours: 1)));
+    addTearDown(lineup.dispose);
+    final guide = GuideController(
+      lineup: lineup,
+      clock: () => now,
+      loadSchedule: (channel) async => _schedule(channel),
+    );
+    addTearDown(guide.dispose);
+    final tuned = <String>[];
+    await tester.pumpWidget(
+      MaterialApp(
+        builder: _guideTvCanvasBuilder,
+        home: GuideView(
+          controller: guide,
+          onClose: (_, _) {},
+          onTune: (id) async => tuned.add(id),
+        ),
+      ),
+    );
+    await tester.pumpAndSettle();
+    await tester.sendKeyDownEvent(LogicalKeyboardKey.arrowDown);
+    await tester.sendKeyRepeatEvent(LogicalKeyboardKey.arrowDown);
+    await tester.sendKeyUpEvent(LogicalKeyboardKey.arrowDown);
+    await tester.pumpAndSettle();
+    expect(guide.focusedChannelId, 'channel-2');
+
+    await tester.sendKeyDownEvent(LogicalKeyboardKey.enter);
+    await tester.sendKeyRepeatEvent(LogicalKeyboardKey.enter);
+    await tester.sendKeyUpEvent(LogicalKeyboardKey.enter);
+    expect(tuned, ['channel-2']);
+    await tester.sendKeyEvent(LogicalKeyboardKey.enter);
+    expect(tuned, ['channel-2', 'channel-2']);
+  });
+
   testWidgets('Guide toolbar icons expose explicit accessible names', (
     tester,
   ) async {
