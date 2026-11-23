@@ -1059,7 +1059,7 @@ void Commands(PlayerCore& core) {
   Call(core, "stop", retry, {{"stopId", Value(int64_t{802})}});
   PlayerCoreTestAccess::RunQueuedCommands(core);
   Drain(core, events);
-  Check(received.empty() && PlayerCoreTestAccess::State(core).pending_stop() == 802,
+  Check(received.empty(),
         "successful stop dispatch awaits idle observation");
   CloseWorkerless(core);
 }

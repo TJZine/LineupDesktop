@@ -92,6 +92,13 @@ lineup_player_core_settings(native_playback_state_test)
 target_include_directories(native_playback_state_test PRIVATE "${LINEUP_NATIVE_DIR}")
 add_test(NAME native_playback_state COMMAND native_playback_state_test)
 
+add_executable(playback_lifecycle_model ${LINEUP_PLAYER_CORE_TEST_OPTIONS}
+  "playback_lifecycle_model.cpp"
+)
+lineup_player_core_settings(playback_lifecycle_model)
+target_include_directories(playback_lifecycle_model PRIVATE "${LINEUP_NATIVE_DIR}")
+add_test(NAME playback_lifecycle_model COMMAND playback_lifecycle_model)
+
 add_executable(player_core_contract_test ${LINEUP_PLAYER_CORE_TEST_OPTIONS}
   "player_core_contract_test.cpp"
 )
