@@ -72,6 +72,7 @@ jobs:
           ANDROID_SERIAL: emulator-5554
         run: |
           set -euo pipefail
+          export PATH="$ANDROID_HOME/cmdline-tools/latest/bin:$ANDROID_HOME/platform-tools:$PATH"
           sudo setfacl -m "u:$(id -un):rw" /dev/kvm
           image='system-images;android-30;google_apis;x86_64'
           sdkmanager "$image" emulator
