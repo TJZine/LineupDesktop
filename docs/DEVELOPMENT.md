@@ -71,12 +71,18 @@ block unrelated portable work; report the specific unverified scenario.
 `test/` contains Dart policy, boundary, widget, and public-seam integration
 tests using `flutter_test`. The product-spine test uses fake Plex/native
 boundaries; `test_driver/ui_harness.dart` is a synthetic development composition
-root. Neither is an automated real-app E2E harness with checked artifacts;
-that harness is currently absent, and CI does not launch the app. Select
-additional evidence by the changed obligation and credible failure, using the
-shared verification procedure and existing owners in the project profile.
-Building a new harness requires an actual task need; these synthetic checks
-do not establish physical media, platform input, or package behavior.
+root. Android CI launches the debug APK on a disposable emulator, seeds
+app-private files, and observes the startup screen through Android UI Automator.
+To repeat the check, boot an emulator with ARM64 support and no Lineup Dev
+installation, set `ANDROID_HOME` and `ANDROID_SERIAL`, then run:
+
+```sh
+flutter build apk --debug --target-platform android-arm,android-arm64
+python3 tool/android/startup-e2e.py -v
+```
+
+The scenarios cover newer saved data and recovery of invalid UTF-8. Native
+playback, physical input, and other platforms have their own acceptance paths.
 
 `flutter analyze` includes `test/`, `tool/visual/`, and `test_driver/` under the
 same analyzer configuration as `lib/`. There is no coverage-percentage floor;
@@ -834,9 +840,8 @@ output and exercises receipt/artifact/license/package rejection checks. Ordinary
 CI also runs the portable Python tooling fixtures and PowerShell process/policy
 fixtures. The canonical fixture migration requires fresh execution even where the
 earlier recipe passed Debug. The recorded earlier Release failure remains blocked;
-inspect which jobs ran before describing a green CI result. CI does not launch
-the application; runtime markers and native presentation still require physical
-Windows acceptance.
+inspect which jobs ran before describing a green CI result. Windows runtime
+markers and native presentation still require physical Windows acceptance.
 
 ## Android TV development
 

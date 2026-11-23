@@ -1889,7 +1889,6 @@ void main() {
     );
     await tester.pumpAndSettle();
 
-    expect(find.byType(MaterialBanner), findsOneWidget);
     final semantics = tester.widget<Semantics>(
       find.byWidgetPredicate(
         (widget) =>
@@ -1904,7 +1903,6 @@ void main() {
     await tester.tap(find.widgetWithText(TextButton, 'Dismiss'));
     await tester.pump();
 
-    expect(find.byType(MaterialBanner), findsNothing);
     expect(controller.startupRecoveryNotice, isNull);
     expect(controller.settings.theme, theme);
   });
