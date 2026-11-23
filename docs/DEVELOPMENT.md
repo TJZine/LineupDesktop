@@ -73,11 +73,13 @@ tests using `flutter_test`. The product-spine test uses fake Plex/native
 boundaries; `test_driver/ui_harness.dart` is a synthetic development composition
 root. Android CI launches the debug APK on a disposable emulator, seeds
 app-private files, and observes the startup screen through Android UI Automator.
-To repeat the check, boot an emulator with ARM64 support and no Lineup Dev
-installation, set `ANDROID_HOME` and `ANDROID_SERIAL`, then run:
+To repeat the check, boot a disposable emulator without Lineup Dev installed
+and set `ANDROID_HOME` and `ANDROID_SERIAL`. Match the Flutter build target
+to the emulator CPU (`android-x64` on the Linux CI runner, `android-arm64`
+on Apple silicon). The Linux command is
 
 ```sh
-flutter build apk --debug --target-platform android-arm,android-arm64
+flutter build apk --debug --target-platform android-x64
 python3 tool/android/startup-e2e.py -v
 ```
 

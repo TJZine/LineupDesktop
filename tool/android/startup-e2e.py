@@ -1,6 +1,6 @@
 """Run against a booted disposable emulator with no installed Lineup Dev app.
 
-Build with flutter build apk --debug --target-platform android-arm,android-arm64.
+Build a debug APK for the emulator ABI (android-arm64 or android-x64).
 Set ANDROID_SERIAL to the emulator and run python3 tool/android/startup-e2e.py.
 """
 
@@ -12,6 +12,7 @@ import subprocess
 import time
 import unittest
 import xml.etree.ElementTree as ET
+from zipfile import ZipFile
 
 PACKAGE = "com.tjzine.lineup.dev"
 STORE = "files/Lineup Desktop"
@@ -33,6 +34,12 @@ class StartupTest(unittest.TestCase):
         if not match:
             raise RuntimeError("The selected emulator must be online")
         cls.target = [adb, "-t", match[1]]
+        abi = cls.shell("getprop", "ro.product.cpu.abi").decode().strip()
+        with ZipFile(APK) as apk:
+            if f"lib/{abi}/libflutter.so" not in apk.namelist():
+                raise RuntimeError(
+                    f"Build the debug APK with a native {abi} Flutter engine"
+                )
         if cls.shell("pm", "list", "packages", PACKAGE).strip():
             raise RuntimeError("Use an emulator without Lineup Dev installed")
         cls.adb("install", str(APK))
@@ -94,7 +101,21 @@ class StartupTest(unittest.TestCase):
             for node, text in labels:
                 if label in text:
                     return node
-        self.fail(f"Expected {label!r} (excluded {absent!r}), observed {observed!r}")
+        running = self.shell("sh", "-c", 'pidof "$1" || true', "sh", PACKAGE).strip()
+        windows = self.shell("dumpsys", "window").decode(errors="replace")
+        focus = re.search(r"mCurrentFocus=(.*)", windows)
+        window = focus[1] if focus else ""
+        component = re.search(r"\bu\d+ ([\w.]+)/([\w.$]+)", window)
+        if component:
+            foreground = component[1] + "/" + component[2]
+        elif "Application Not Responding" in window:
+            foreground = "system ANR dialog"
+        else:
+            foreground = "unknown"
+        self.fail(
+            f"Expected {label!r} (excluded {absent!r}), observed {observed!r}. "
+            f"Lineup process {'alive' if running else 'absent'}, foreground {foreground}."
+        )
 
     def test_future_format_refuses_startup_and_preserves_files(self):
         future = b'{"formatVersion":2147483647,"futureField":"preserve this"}\n'
