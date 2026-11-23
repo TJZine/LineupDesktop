@@ -5,6 +5,8 @@ enum PlexLibraryType { movie, show }
 
 enum PlaybackMode { sequential, shuffle, block }
 
+enum ChannelProgrammingMatch { differentSource, sourceOnly, schedule }
+
 enum LibraryFilter { genre, collection, studio, actor, director, decade }
 
 enum LibraryOrder { supplied, title, addedDescending }
@@ -593,6 +595,24 @@ class Channel {
       sourceLibrariesIncomplete ? null : sourceLibraries.values.singleOrNull;
   final bool favorite;
 
+  ChannelProgrammingMatch compareProgramming({
+    required ContentSource source,
+    required PlaybackMode mode,
+    required int? blockSize,
+    required bool includeSpecials,
+  }) {
+    if (!scheduleProgrammingSourceEquals(this.source, source)) {
+      return ChannelProgrammingMatch.differentSource;
+    }
+    if (playbackMode != mode ||
+        (mode == PlaybackMode.block &&
+            ((this.blockSize ?? 3) != (blockSize ?? 3) ||
+                this.includeSpecials != includeSpecials))) {
+      return ChannelProgrammingMatch.sourceOnly;
+    }
+    return ChannelProgrammingMatch.schedule;
+  }
+
   Channel copyWith({
     int? number,
     String? name,
@@ -823,8 +843,6 @@ String canonicalScheduleIdentity(Channel channel) => jsonEncode({
 bool canonicalSourceEquals(ContentSource left, ContentSource right) =>
     canonicalSourceIdentity(left) == canonicalSourceIdentity(right);
 
-/// Compares programming for schedule retention. Manual snapshots are
-/// refreshed from inventory, while the ordered occurrence IDs define the recipe.
 bool scheduleProgrammingSourceEquals(ContentSource left, ContentSource right) {
   if (left is ManualSource && right is ManualSource) {
     final items = left.items;

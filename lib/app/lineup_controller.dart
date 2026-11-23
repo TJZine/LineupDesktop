@@ -2194,16 +2194,13 @@ class LineupController extends ChangeNotifier {
     Channel? current, {
     required bool verifiedNewTiming,
   }) {
-    final sameSource =
-        current != null &&
-        scheduleProgrammingSourceEquals(current.source, incoming.source);
-    final sameProgramming =
-        sameSource &&
-        current.playbackMode == incoming.playbackMode &&
-        (incoming.playbackMode != PlaybackMode.block ||
-            (current.blockSize ?? 3) == (incoming.blockSize ?? 3)) &&
-        (incoming.playbackMode != PlaybackMode.block ||
-            current.includeSpecials == incoming.includeSpecials);
+    final match = current?.compareProgramming(
+      source: incoming.source,
+      mode: incoming.playbackMode,
+      blockSize: incoming.blockSize,
+      includeSpecials: incoming.includeSpecials,
+    );
+    final retained = match == ChannelProgrammingMatch.schedule ? current : null;
     final inventory = playableInventory;
     final libraryIds = channelSourceLibraryIds(incoming.source);
     final playlistItems = <String, Iterable<ChannelItem>>{};
@@ -2247,31 +2244,31 @@ class LineupController extends ChangeNotifier {
         ? playlistSourceLibraries(
             currentIds: libraryIds,
             currentTitles: currentTitles,
-            savedTitles: sameSource ? current.sourceLibraries : const {},
+            savedTitles: match == ChannelProgrammingMatch.differentSource
+                ? const {}
+                : current?.sourceLibraries ?? const {},
           )
-        : {if (sameProgramming) ...current.sourceLibraries, ...currentTitles};
+        : {...?retained?.sourceLibraries, ...currentTitles};
     final saved = Channel(
       id: incoming.id,
       number: incoming.number,
       name: incoming.name,
       source: incoming.source,
       playbackMode: incoming.playbackMode,
-      anchor: sameProgramming ? current.anchor : incoming.anchor,
-      shuffleSeed: sameProgramming ? current.shuffleSeed : incoming.shuffleSeed,
+      anchor: retained?.anchor ?? incoming.anchor,
+      shuffleSeed: retained?.shuffleSeed ?? incoming.shuffleSeed,
       blockSize: incoming.blockSize,
       builderKey: incoming.builderKey,
       includeSpecials: incoming.includeSpecials,
-      scheduleVersion: sameProgramming
-          ? current.scheduleVersion
-          : incoming.scheduleVersion,
-      scheduleTransition: sameProgramming ? current.scheduleTransition : null,
+      scheduleVersion: retained?.scheduleVersion ?? incoming.scheduleVersion,
+      scheduleTransition: retained?.scheduleTransition,
       favorite: current?.favorite ?? false,
       kind: switch (channelKindFor(
         incoming.source,
         playlists: playlistItems,
         resolvedItems: resolvedItems,
       )) {
-        ChannelKind.unknown when sameProgramming => current.kind,
+        ChannelKind.unknown when retained != null => retained.kind,
         final kind => kind,
       },
       sourceLibraries: sourceLibraries,

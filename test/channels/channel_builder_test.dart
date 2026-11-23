@@ -944,7 +944,7 @@ void main() {
       anchor: DateTime.utc(2027),
     ).channels.single;
 
-    expect(merged, same(reordered));
+    expect(merged.toJson(), reordered.toJson());
   });
 
   test('all build modes reserve sparse custom numbers through 1000', () {
@@ -1350,7 +1350,7 @@ void main() {
     expect(result.truncated, isFalse);
   });
 
-  test('merge reuses exact channels without resetting their schedule', () {
+  test('merge keeps the saved block recipe and timing', () {
     const proposal = ChannelProposal(
       name: 'Series',
       source: LibrarySource(libraryId: 'tv', libraryType: PlexLibraryType.show),
@@ -1378,8 +1378,7 @@ void main() {
       anchor: DateTime.utc(2027),
     ).channels.single;
 
-    expect(merged, same(existing));
-    expect(merged.anchor, DateTime.utc(2026));
+    expect(merged.toJson(), existing.toJson());
   });
 
   test('changed merge match receives every requested material field', () {
@@ -1421,7 +1420,6 @@ void main() {
       anchor: DateTime.utc(2027),
     ).channels.single;
 
-    expect(changed, isNot(same(stale)));
     expect(changed.id, stale.id);
     expect(changed.number, 42);
     expect(changed.name, 'Old name');
@@ -1659,7 +1657,7 @@ void main() {
       strategy: BuilderStrategy.recentlyAdded,
       series: true,
     );
-    final existing = materializeChannelPlan(
+    final generated = materializeChannelPlan(
       proposals: const [proposal],
       existing: const [],
       mode: ChannelBuildMode.replace,
@@ -1668,6 +1666,15 @@ void main() {
       anchor: DateTime.utc(2026),
     ).channels.single;
 
+    final content = [
+      channelItemFor(_builderEpisode('special', 0, 'Collection')),
+      channelItemFor(_builderEpisode('regular', 1, 'Collection')),
+    ];
+    final existing = migrateLegacySchedule(
+      Channel.fromJson({...generated.toJson(), 'scheduleVersion': 1}),
+      content,
+      generated.anchor,
+    );
     final updated = materializeChannelPlan(
       proposals: const [proposal],
       existing: [existing],
@@ -1679,43 +1686,48 @@ void main() {
 
     expect(updated.id, existing.id);
     expect(updated.includeSpecials, isFalse);
-    expect(updated, isNot(same(existing)));
+    final start = existing.anchor;
+    final schedule = buildChannelSchedule(updated, content);
+    final programs = scheduleWindow(
+      start,
+      existing.scheduleTransition!.boundary,
+      start,
+      schedule,
+    );
+    expect(programs.map((program) => program.item.id).toSet(), {'regular'});
   });
 
-  test(
-    'merge reuses equivalent non-block channels when specials is requested',
-    () {
-      const proposal = ChannelProposal(
-        name: 'Movies',
-        source: LibrarySource(
-          libraryId: 'movies',
-          libraryType: PlexLibraryType.movie,
-        ),
-        mode: PlaybackMode.shuffle,
-        itemCount: 20,
-        playableItemCount: 20,
-        blockItemCountWithoutSpecials: 20,
-        strategy: BuilderStrategy.recentlyAdded,
-      );
-      final existing = materializeChannelPlan(
-        proposals: const [proposal],
-        existing: const [],
-        mode: ChannelBuildMode.replace,
-        anchor: DateTime.utc(2026),
-      ).channels.single;
+  test('requesting specials leaves non-block recipes unchanged', () {
+    const proposal = ChannelProposal(
+      name: 'Movies',
+      source: LibrarySource(
+        libraryId: 'movies',
+        libraryType: PlexLibraryType.movie,
+      ),
+      mode: PlaybackMode.shuffle,
+      itemCount: 20,
+      playableItemCount: 20,
+      blockItemCountWithoutSpecials: 20,
+      strategy: BuilderStrategy.recentlyAdded,
+    );
+    final existing = materializeChannelPlan(
+      proposals: const [proposal],
+      existing: const [],
+      mode: ChannelBuildMode.replace,
+      anchor: DateTime.utc(2026),
+    ).channels.single;
 
-      final merged = materializeChannelPlan(
-        proposals: const [proposal],
-        existing: [existing],
-        mode: ChannelBuildMode.merge,
-        includeSpecials: true,
-        anchor: DateTime.utc(2027),
-      ).channels.single;
+    final merged = materializeChannelPlan(
+      proposals: const [proposal],
+      existing: [existing],
+      mode: ChannelBuildMode.merge,
+      includeSpecials: true,
+      anchor: DateTime.utc(2027),
+    ).channels.single;
 
-      expect(merged, same(existing));
-      expect(merged.includeSpecials, isFalse);
-    },
-  );
+    expect(merged.toJson(), existing.toJson());
+    expect(merged.includeSpecials, isFalse);
+  });
 
   test(
     'proposal discovery can return the complete balanced candidate pool',

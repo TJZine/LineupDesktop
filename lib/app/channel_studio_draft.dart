@@ -225,15 +225,20 @@ class ChannelStudioDraft {
     dirty = !canonicalChannelValueEquals(signature, _baseline);
   }
 
-  /// Projection is side-effect free. Preview uses staged timing and safe text
-  /// placeholders; saving requires validated text and committed timing.
   Channel project({
     required String name,
     required String number,
     required ContentSource programming,
     required bool preview,
   }) {
-    final retainsSchedule = _retainsSchedule(programming);
+    final base = expectedBase;
+    final match = base?.compareProgramming(
+      source: programming,
+      mode: playbackMode,
+      blockSize: effectiveBlockSize,
+      includeSpecials: effectiveIncludeSpecials,
+    );
+    final retained = match == ChannelProgrammingMatch.schedule ? base : null;
     return Channel(
       id: id,
       number: preview ? (int.tryParse(number) ?? 1) : int.parse(number),
@@ -245,12 +250,8 @@ class ChannelStudioDraft {
       blockSize: _projectedBlockSize,
       builderKey: builderKey,
       includeSpecials: effectiveIncludeSpecials,
-      scheduleVersion: retainsSchedule
-          ? expectedBase!.scheduleVersion
-          : currentScheduleVersion,
-      scheduleTransition: retainsSchedule
-          ? expectedBase!.scheduleTransition
-          : null,
+      scheduleVersion: retained?.scheduleVersion ?? currentScheduleVersion,
+      scheduleTransition: retained?.scheduleTransition,
     );
   }
 
@@ -274,16 +275,6 @@ class ChannelStudioDraft {
     scheduleVersion: template.scheduleVersion,
     scheduleTransition: template.scheduleTransition,
   );
-
-  bool _retainsSchedule(ContentSource programming) {
-    final base = expectedBase;
-    return base != null &&
-        scheduleProgrammingSourceEquals(base.source, programming) &&
-        base.playbackMode == playbackMode &&
-        (playbackMode != PlaybackMode.block ||
-            (base.blockSize ?? 3) == effectiveBlockSize) &&
-        base.includeSpecials == effectiveIncludeSpecials;
-  }
 
   void stageScheduleIdentity(
     Channel recipe,
