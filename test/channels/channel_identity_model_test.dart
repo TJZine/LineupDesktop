@@ -7,6 +7,8 @@ import 'package:lineup_desktop/channels/scheduler.dart';
 import 'package:lineup_desktop/plex/plex_models.dart';
 import 'package:lineup_desktop/ui/channel_identity.dart';
 
+import '../support/committed_state_matchers.dart';
+
 const tv = PlexLibrary(id: 'tv', title: 'TV Shows', type: PlexLibraryType.show);
 const film = PlexLibrary(
   id: 'film',
@@ -118,35 +120,32 @@ void main() {
           .toList();
       final combined = proposals(combine: {BuilderStrategy.genres}).first;
       final custom = channel('custom', 8, 'Drama');
+      final saved = plan([combined]).channels.single;
+      final libraryPair = [(tv.title, 'Drama'), (film.title, 'Drama')];
       for (final input in [
         [combined, ...separate],
         [...separate, combined],
       ]) {
         final fresh = plan(input, existing: [custom]).channels;
         expect(
-          fresh.where((row) => row.libraryTitle != null).map((row) => row.name),
-          everyElement('Drama'),
+          fresh.map((row) => (row.libraryTitle, row.name)),
+          unorderedEquals([...libraryPair, (null, 'Drama 2')]),
+        );
+
+        final update = plan(
+          input,
+          existing: [custom, saved],
+          mode: ChannelBuildMode.merge,
+        ).channels;
+        expect(
+          update.map((row) => (row.libraryTitle, row.name)),
+          unorderedEquals([...libraryPair, (null, 'Drama')]),
         );
         expect(
-          fresh.singleWhere((row) => row.libraryTitle == null).name,
-          'Drama 2',
+          update.singleWhere((row) => row.id == saved.id),
+          channelValue(saved),
         );
       }
-
-      final saved = plan([combined]).channels.single;
-      final update = plan(
-        [combined, ...separate],
-        existing: [custom, saved],
-        mode: ChannelBuildMode.merge,
-      ).channels;
-      expect(
-        update.where((row) => row.libraryTitle != null).map((row) => row.name),
-        everyElement('Drama'),
-      );
-      expect(
-        update.singleWhere((row) => row.libraryTitle == null),
-        same(saved),
-      );
     },
   );
 
@@ -361,7 +360,7 @@ void main() {
     expect(recovered.excludedExtras, 0);
     expect(recovered.numberLimitExcluded, 0);
     expect(recovered.channels.map((row) => row.number), [3, 1, 2]);
-    expect(recovered.channels.skip(1), orderedEquals(initial.channels));
+    expect(recovered.channels.skip(1), channelValues(initial.channels));
   });
 
   test('Replace carries favourites by builder key with fresh anchors', () {
