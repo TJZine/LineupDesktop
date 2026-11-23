@@ -3078,7 +3078,6 @@ void main() {
             find.descendant(of: headerMarker, matching: find.byType(Text)),
           )
           .data;
-      // The marker shows local h:mm; derive it so any runner time zone works.
       expect(markerLabel, _testTime(now.toLocal()).split(' ').first);
       expect(marker(earlier), findsNothing);
       expect(marker(next), findsOneWidget);

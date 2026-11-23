@@ -16,6 +16,7 @@ import '../guide/guide_controller.dart';
 import '../guide/focused_ticker.dart';
 import '../settings/lineup_settings.dart';
 import '../ui/app_theme.dart';
+import '../ui/schedule_wall_time.dart';
 import '../ui/app_ui.dart';
 import '../ui/channel_identity.dart';
 import '../ui/lineup_canvas.dart';
@@ -2025,7 +2026,7 @@ class _OsdProgress extends StatelessWidget {
               child: Align(
                 alignment: Alignment.centerRight,
                 child: Text(
-                  'Up next · ${_time(context, next.scheduled.start)} · ${next.scheduled.item.title}',
+                  'Up next · ${ScheduleWallTime(next.scheduled.start).timeLabel(context)} · ${next.scheduled.item.title}',
                   key: const Key('player-osd-next'),
                   maxLines: 1,
                   overflow: TextOverflow.ellipsis,
@@ -3330,7 +3331,8 @@ class _MiniGuideState extends State<_MiniGuide> {
                                     ),
                                     SizedBox(width: 20),
                                     Text(
-                                      _time(context, controller.guide.now),
+                                      ScheduleWallTime(controller.guide.now)
+                                          .timeLabel(context),
                                       style: TextStyle(
                                         color: roles.secondaryText,
                                         fontSize: isTv
@@ -5540,8 +5542,8 @@ String _miniGuideProgramSupport(
   bool upcoming = false,
 }) {
   final scheduled = program.scheduled;
-  final start = _time(context, scheduled.start);
-  final end = _time(context, scheduled.end);
+  final start = ScheduleWallTime(scheduled.start).timeLabel(context);
+  final end = ScheduleWallTime(scheduled.end).timeLabel(context);
   final episode = scheduled.item.showTitle?.trim().isNotEmpty == true;
   if (!episode) return upcoming ? start : '$start–$end';
 
@@ -5571,12 +5573,6 @@ String? _osdEpisodeFacts(ChannelItem item) {
       ? numbered
       : '$numbered — $episodeTitle';
 }
-
-String _time(BuildContext context, DateTime value) =>
-    MaterialLocalizations.of(context).formatTimeOfDay(
-      TimeOfDay.fromDateTime(value.toLocal()),
-      alwaysUse24HourFormat: false,
-    );
 
 String? _statusLabel(PlayerState state) => switch (state) {
   PlayerState.idle => null,
