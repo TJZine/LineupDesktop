@@ -42,10 +42,8 @@ class Win32Window {
   // window properties. Returns nullptr if the window has been destroyed.
   HWND GetHandle();
 
-  // If true, closing this window will quit the application.
   void SetQuitOnClose(bool quit_on_close);
 
-  // Return a RECT representing the bounds of the current client area.
   RECT GetClientArea();
 
  protected:
@@ -56,7 +54,6 @@ class Win32Window {
 
   virtual bool OnCreate();
 
-  // Called when Destroy is called.
   virtual void OnDestroy();
 
  private:

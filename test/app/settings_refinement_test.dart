@@ -169,6 +169,12 @@ void main() {
         tester.getRect(find.text('Customise')).left,
         lessThan(row.center.dx),
       );
+      if (config.tv) {
+        expect(
+          tester.getRect(find.text('Customise')).left,
+          closeTo(tester.getRect(find.text('Position')).left, .1),
+        );
+      }
       await tester.tapAt(Offset(row.left + 16, row.center.dy));
       await tester.pumpAndSettle();
       expect(

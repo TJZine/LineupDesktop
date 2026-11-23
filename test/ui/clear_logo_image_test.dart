@@ -369,7 +369,6 @@ void main() {
     // Contained in the 8-pixel bucket of 420x84 physical pixels (416x80).
     // Previously canvas size x DPR: 840x168, four times the painted pixels.
     expect((image.width, image.height), (400, 80));
-    // Geometry is unchanged: the logo still fills the canvas slot.
     expect(
       tester.getSize(find.byKey(const Key('accepted-logo'))),
       const Size(420, 84),

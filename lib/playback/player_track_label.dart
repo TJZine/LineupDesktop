@@ -200,7 +200,6 @@ Object _displayInputs(PlayerTrack track) => (
   track.commentary,
 );
 
-/// Pure, shared presentation policy for an individual track choice.
 PlayerTrackDisplay formatPlayerTrackDisplay(
   PlayerTrack track, {
   Iterable<PlayerTrack> peers = const <PlayerTrack>[],

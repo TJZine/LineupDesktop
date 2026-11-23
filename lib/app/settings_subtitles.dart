@@ -170,7 +170,7 @@ extension _SubtitleSettingsPage on _SettingsViewState {
               onPressed: _openSubtitleCustomise,
               style: TextButton.styleFrom(
                 minimumSize: const Size(0, 72),
-                padding: EdgeInsets.fromLTRB(tv ? inset - 3 : 8, 12, inset, 12),
+                padding: EdgeInsets.fromLTRB(tv ? inset : 8, 12, inset, 12),
               ),
               child: const Row(
                 children: [
@@ -563,7 +563,6 @@ class _SubtitleSettingRowState extends State<_SubtitleSettingRow> {
             LineupToggleSurface(
               child: LayoutBuilder(
                 builder: (context, constraints) {
-                  // The TV surface supplies contrasting ink to descendants.
                   final roles = LineupTheme.of(context);
                   final inset = DeviceProfile.of(context).isTv
                       ? _SettingsViewState._rowInset
@@ -574,7 +573,7 @@ class _SubtitleSettingRowState extends State<_SubtitleSettingRow> {
                   return Container(
                     constraints: const BoxConstraints(minHeight: 72),
                     padding: EdgeInsets.fromLTRB(
-                      inset > 0 ? inset - 3 : 0,
+                      inset > 0 ? _SettingsViewState._toggleContentInset : 0,
                       12,
                       inset,
                       12,

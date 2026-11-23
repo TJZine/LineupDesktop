@@ -1132,7 +1132,6 @@ void main() {
         expect(find.byType(UpstreamChannelSetupView), findsNothing);
         expect(find.byType(UpstreamOnboardingView), findsOneWidget);
         if (profiles) {
-          // Public controller boundary: the optional Profiles excursion.
           f.controller.showProfiles();
           await tester.pumpAndSettle();
           await back(tester);
