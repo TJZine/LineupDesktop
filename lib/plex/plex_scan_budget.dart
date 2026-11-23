@@ -42,9 +42,14 @@ class PlexScanLimitException extends PlexException {
 /// It is never stored in inventory or shared with unrelated async operations.
 class PlexScanBudget {
   PlexScanBudget(this.limits, {Future<void>? cancelled}) {
-    _timer = Timer(limits.elapsed, () => _exhaust('elapsed'));
+    _timer = Timer(limits.elapsed, expireElapsed);
     unawaited(cancelled?.then((_) => cancel()));
   }
+
+  static const _cancelled = PlexException(
+    'cancelled',
+    'Library scan cancelled.',
+  );
 
   static final Object _zoneKey = Object();
   static PlexScanBudget? get current =>
@@ -78,12 +83,16 @@ class PlexScanBudget {
   void check() {
     if (_failure case final failure?) throw failure;
     if (_watch.elapsed >= limits.elapsed && !_closed) {
-      _exhaust('elapsed');
-      throw _failure!;
+      throw expireElapsed();
     }
     if (!isActive) {
-      throw const PlexException('cancelled', 'Library scan cancelled.');
+      throw _cancelled;
     }
+  }
+
+  PlexException expireElapsed() {
+    if (isActive) _exhaust('elapsed');
+    return _failure ?? _cancelled;
   }
 
   void _exhaust(String limit) {
