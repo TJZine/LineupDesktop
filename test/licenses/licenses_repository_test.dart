@@ -281,10 +281,18 @@ void main() {
         );
         final contents = await document.read!();
         expect(contents, isNotEmpty);
+        final expectedBytes = await File(entry.value).readAsBytes();
+        expect(contents, utf8.decode(expectedBytes), reason: entry.value);
+      }
+      for (final source in expected.values.toSet()) {
+        final bundled = await rootBundle.load(source);
         expect(
-          utf8.encode(contents),
-          await File(entry.value).readAsBytes(),
-          reason: entry.value,
+          bundled.buffer.asUint8List(
+            bundled.offsetInBytes,
+            bundled.lengthInBytes,
+          ),
+          await File(source).readAsBytes(),
+          reason: source,
         );
       }
       final notices = await sources

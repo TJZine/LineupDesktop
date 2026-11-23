@@ -28,8 +28,6 @@
   "pubspec.lock": "pubspec.lock",
   "analysis_options.yaml": "analysis_options.yaml",
   "tool/format.dart": "tool/format.dart",
-  "bin/bundle_source_materials.dart": "bin/bundle_source_materials.dart",
-  "assets/licenses/sources.json": "assets/licenses/sources.json",
   "tool/macos/native_assets.py": "tool/macos/native_assets.py",
   "tool/macos/mpv-patches/0001-vulkan-mac-embed-into-host-CAMetalLayer-via-wid.patch": "tool/macos/mpv-patches/0001-vulkan-mac-embed-into-host-CAMetalLayer-via-wid.patch",
   "tool/macos/ffmpeg-patches/0001-aarch64-do-not-build-GPL-licensed-AC-3-DSP-code.patch": "tool/macos/ffmpeg-patches/0001-aarch64-do-not-build-GPL-licensed-AC-3-DSP-code.patch",

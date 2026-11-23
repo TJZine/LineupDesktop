@@ -484,9 +484,10 @@ document in the same commit.
 
 [Source-material tooling](../tool/macos/source_materials.py) uses local verified
 archives and Git snapshots. Flutter bundles the recipe texts from their repository
-files and records each input for incremental builds. Regenerate the offline
-inventory, engine notice and recipe index when the runtime pins, Flutter pin or
-license, or the set of recipe paths in `HELPERS` changes. Use the pinned Flutter
+files, using the same asset paths in tests and packaged apps. The `assets`
+command regenerates the offline inventory, engine notice, recipe index and
+source declarations in `pubspec.yaml`. Run it when the runtime pins, Flutter
+pin or license, or the set of recipe paths in `HELPERS` changes. Use the pinned Flutter
 SDK for its license.
 The **Verify Dart** job checks these generated inputs and reads the bundled
 documents through the Licenses screen's repository.

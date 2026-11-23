@@ -217,14 +217,19 @@ class LicensesRepository {
 
   Future<List<LicenseItem>> _sources() async {
     final contents = await _assets.loadString('assets/licenses/sources.json');
-    final documents = (jsonDecode(contents) as Map<String, dynamic>)
+    final index = (jsonDecode(contents) as Map<String, dynamic>)
         .cast<String, String>();
+    final manifest = await AssetManifest.loadFromAssetBundle(_assets);
+    final bundled = manifest.listAssets().toSet();
+    if (!index.values.every(bundled.contains)) {
+      throw const FormatException('Missing source material in asset bundle');
+    }
     final items = [
-      for (final entry in documents.entries)
+      for (final entry in index.entries)
         LicenseItem.document(
           'sources/${entry.key}',
           entry.key,
-          () async => entry.value,
+          () => _assets.loadString(entry.value),
           subtitle: entry.key,
         ),
     ];
