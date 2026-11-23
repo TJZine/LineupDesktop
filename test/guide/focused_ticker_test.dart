@@ -2,24 +2,28 @@ import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:lineup_desktop/guide/focused_ticker.dart';
 
+import '../support/text_painter_lifetime.dart';
+
 void main() {
   testWidgets('fits without overflow and keeps ellipsis presentation static', (
     tester,
   ) async {
-    await tester.pumpWidget(
-      const _Harness(
-        child: FocusedTicker(text: 'Short program', focused: true),
-      ),
-    );
+    await expectTextPaintersReleased(tester, () async {
+      await tester.pumpWidget(
+        const _Harness(
+          child: FocusedTicker(text: 'Short program', focused: true),
+        ),
+      );
 
-    final textFinder = find.text('Short program');
-    final text = tester.widget<Text>(textFinder);
-    final initialPosition = tester.getTopLeft(textFinder);
-    expect(text.overflow, TextOverflow.ellipsis);
-    expect(tester.takeException(), isNull);
-    await tester.pump(const Duration(seconds: 3));
-    expect(tester.getTopLeft(textFinder), initialPosition);
-    expect(tester.takeException(), isNull);
+      final textFinder = find.text('Short program');
+      final text = tester.widget<Text>(textFinder);
+      final initialPosition = tester.getTopLeft(textFinder);
+      expect(text.overflow, TextOverflow.ellipsis);
+      expect(tester.takeException(), isNull);
+      await tester.pump(const Duration(seconds: 3));
+      expect(tester.getTopLeft(textFinder), initialPosition);
+      expect(tester.takeException(), isNull);
+    });
   });
 
   testWidgets('focused overflow moves after the initial pause', (tester) async {
@@ -155,12 +159,10 @@ void main() {
 
     await tester.pumpWidget(ticker());
     final measured = debugFocusedTickerMeasureCount;
-    // Focus and width changes rebuild and relayout without measuring again.
     await tester.pumpWidget(ticker(focused: true));
     await tester.pumpWidget(ticker(focused: true, width: 120));
     await tester.pump(const Duration(milliseconds: 1200));
     expect(debugFocusedTickerMeasureCount, measured);
-    // The focused overflow still scrolls with the remembered measurement.
     final x = tester.getTopLeft(find.text(text)).dx;
     await tester.pump(const Duration(milliseconds: 400));
     expect(tester.getTopLeft(find.text(text)).dx, lessThan(x));

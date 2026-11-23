@@ -19,6 +19,7 @@ import '../ui/app_theme.dart';
 import '../ui/app_ui.dart';
 import '../ui/channel_identity.dart';
 import '../ui/lineup_canvas.dart';
+import '../ui/text_measure.dart';
 import 'native_player.dart';
 import 'native_video_surface.dart';
 import 'subtitle_layer.dart';
@@ -2433,28 +2434,15 @@ class _NowPlaying extends StatelessWidget {
                             var summaryClamped = false;
                             if (DeviceProfile.of(context).isTv &&
                                 summary != null) {
-                              final painter =
-                                  TextPainter(
-                                    text: TextSpan(
-                                      text: summary,
-                                      style: summaryStyle,
-                                    ),
-                                    textDirection: Directionality.of(context),
-                                    textScaler: MediaQuery.textScalerOf(
-                                      context,
-                                    ),
-                                    locale: Localizations.maybeLocaleOf(
-                                      context,
-                                    ),
-                                    maxLines: 3,
-                                  )..layout(
-                                    maxWidth: math.min(
-                                      1040,
-                                      constraints.maxWidth,
-                                    ),
-                                  );
-                              summaryClamped = painter.didExceedMaxLines;
-                              painter.dispose();
+                              summaryClamped = TextMeasure.exceedsMaxLines(
+                                text: summary,
+                                style: summaryStyle,
+                                textDirection: Directionality.of(context),
+                                textScaler: MediaQuery.textScalerOf(context),
+                                locale: Localizations.maybeLocaleOf(context),
+                                maxLines: 3,
+                                maxWidth: math.min(1040, constraints.maxWidth),
+                              );
                             }
                             return Column(
                               mainAxisSize: MainAxisSize.min,
@@ -2878,16 +2866,14 @@ double _textWidth(BuildContext context, String text, TextStyle? style) =>
     _textSize(context, text, style).width;
 
 Size _textSize(BuildContext context, String text, TextStyle? style) {
-  final painter = TextPainter(
-    text: TextSpan(text: text, style: style),
+  return TextMeasure.size(
+    text: text,
+    style: style,
     textDirection: Directionality.of(context),
     textScaler: MediaQuery.textScalerOf(context),
     locale: Localizations.maybeLocaleOf(context),
     maxLines: 1,
-  )..layout();
-  final size = painter.size;
-  painter.dispose();
-  return size;
+  );
 }
 
 class _NowPlayingCast extends StatelessWidget {
@@ -3082,14 +3068,16 @@ class _NowPlayingCastColumn extends StatelessWidget {
     var displayName = member.name;
     final words = member.name.trim().split(RegExp(r'\s+'));
     if (words.length > 2) {
-      final measure = TextPainter(
-        text: TextSpan(text: member.name, style: nameStyle),
+      final clipped = TextMeasure.exceedsMaxLines(
+        text: member.name,
+        style: nameStyle,
         textDirection: Directionality.of(context),
         textScaler: MediaQuery.textScalerOf(context),
         locale: Localizations.maybeLocaleOf(context),
         maxLines: 2,
-      )..layout(maxWidth: width);
-      if (measure.didExceedMaxLines) {
+        maxWidth: width,
+      );
+      if (clipped) {
         displayName = [
           words.first,
           ...words
@@ -3099,7 +3087,6 @@ class _NowPlayingCastColumn extends StatelessWidget {
           words.last,
         ].join(' ');
       }
-      measure.dispose();
     }
     return Column(
       mainAxisSize: MainAxisSize.min,

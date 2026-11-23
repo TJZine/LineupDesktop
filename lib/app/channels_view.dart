@@ -13,6 +13,7 @@ import '../playback/player_coordinator.dart';
 import '../ui/app_theme.dart';
 import '../ui/app_ui.dart';
 import '../ui/channel_identity.dart';
+import '../ui/text_measure.dart';
 import 'channel_health_monitor.dart';
 import 'channel_studio_view.dart';
 import 'lineup_controller.dart';
@@ -1401,17 +1402,17 @@ class ChannelsViewState extends State<ChannelsView> {
         24 +
         LineupDropdownMenuRow.contentPadding.horizontal +
         32;
-    final viewLine = TextPainter(
-      text: TextSpan(text: 'M', style: viewStyle),
+    final lineHeight = TextMeasure.size(
+      text: 'M',
+      style: viewStyle,
       textDirection: Directionality.of(context),
       textScaler: MediaQuery.textScalerOf(context),
-    )..layout();
+    ).height;
     final viewItemHeight =
-        (viewLine.height + LineupDropdownMenuRow.contentPadding.vertical).clamp(
+        (lineHeight + LineupDropdownMenuRow.contentPadding.vertical).clamp(
           kMinInteractiveDimension,
           double.infinity,
         );
-    viewLine.dispose();
     final view = SizedBox(
       width: viewWidth,
       child: LineupDropdownBox(
@@ -2215,11 +2216,6 @@ class _DirectoryChannelIdentity extends StatelessWidget {
           final nameStyle = baseStyle.merge(identity.nameStyle);
           final textScaler = MediaQuery.textScalerOf(context);
           final textDirection = Directionality.of(context);
-          final text = TextPainter(
-            text: TextSpan(text: 'M', style: nameStyle),
-            textDirection: textDirection,
-            textScaler: textScaler,
-          )..layout();
           double measure(String value, TextStyle style) =>
               TextPainter.computeWidth(
                 text: TextSpan(text: value, style: style),
@@ -2269,9 +2265,16 @@ class _DirectoryChannelIdentity extends StatelessWidget {
           }
           int lines;
           if (constraints.hasBoundedHeight) {
-            lines = (constraints.maxHeight / text.preferredLineHeight)
-                .floor()
-                .clamp(1, 2);
+            final nameLineHeight = TextMeasure.preferredLineHeight(
+              text: 'M',
+              style: nameStyle,
+              textDirection: textDirection,
+              textScaler: textScaler,
+            );
+            lines = (constraints.maxHeight / nameLineHeight).floor().clamp(
+              1,
+              2,
+            );
           } else {
             // Recovery rows already reserve space for a health line. Markers may
             // truncate the name, but must not add lines to that existing state.
@@ -2283,16 +2286,15 @@ class _DirectoryChannelIdentity extends StatelessWidget {
             if (longestWord > room) {
               lines = 1;
             } else {
-              final baseline = TextPainter(
-                text: TextSpan(text: identity.channel.name, style: nameStyle),
+              lines = TextMeasure.lineCount(
+                text: identity.channel.name,
+                style: nameStyle,
                 textDirection: textDirection,
                 textScaler: textScaler,
-              )..layout(maxWidth: room);
-              lines = baseline.computeLineMetrics().length.clamp(1, 1000);
-              baseline.dispose();
+                maxWidth: room,
+              ).clamp(1, 1000);
             }
           }
-          text.dispose();
           return Row(
             children: [
               Flexible(
