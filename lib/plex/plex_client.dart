@@ -1619,28 +1619,32 @@ class PlexClient {
     if (bodyFields != null) request.bodyFields = bodyFields;
     final requestLimit = timeout ?? requestTimeout;
     final remainingBudget = budget?.remaining;
-    final limit = remainingBudget != null && remainingBudget < requestLimit
-        ? remainingBudget
-        : requestLimit;
+    final scanOwnsDeadline =
+        remainingBudget != null && remainingBudget <= requestLimit;
+    final headerLimit = scanOwnsDeadline ? remainingBudget : requestLimit;
     final elapsed = Stopwatch()..start();
     try {
       final pendingResponse = _http.send(request);
       late final http.StreamedResponse streamed;
       try {
-        streamed = await pendingResponse.timeout(limit);
+        streamed = await pendingResponse.timeout(
+          headerLimit,
+          onTimeout: () {
+            abortRequest();
+            unawaited(
+              pendingResponse
+                  .then((lateResponse) => _cancel(lateResponse.stream))
+                  .onError((_, _) {}),
+            );
+            if (scanOwnsDeadline) throw budget!.expireElapsed();
+            throw _networkTimeout;
+          },
+        );
       } on FormatException {
         throw const PlexException(
           'auth-invalid',
           'Plex authentication is no longer valid.',
         );
-      } on TimeoutException {
-        abortRequest();
-        unawaited(
-          pendingResponse
-              .then((lateResponse) => _cancel(lateResponse.stream))
-              .onError((_, _) {}),
-        );
-        rethrow;
       }
       if (streamed.statusCode < 200 || streamed.statusCode >= 300) {
         final draining = _cancel(streamed.stream);
@@ -1668,8 +1672,10 @@ class PlexClient {
         }
         throw PlexException(oversizedCode, oversizedMessage);
       }
-      final remaining = limit - elapsed.elapsed;
-      if (remaining <= Duration.zero) {
+      final remaining = scanOwnsDeadline
+          ? null
+          : requestLimit - elapsed.elapsed;
+      if (remaining != null && remaining <= Duration.zero) {
         final draining = _cancel(streamed.stream);
         if (budget != null) {
           await draining;
@@ -1698,10 +1704,7 @@ class PlexClient {
       );
     } on TimeoutException {
       abortRequest();
-      throw const PlexException(
-        'network-timeout',
-        'Plex did not respond in time. Try again.',
-      );
+      throw _networkTimeout;
     } on FormatException {
       throw const PlexException('parse-error', 'Plex response was invalid.');
     } on http.RequestAbortedException {
@@ -1729,7 +1732,7 @@ class PlexClient {
   Future<Uint8List> _readBounded(
     Stream<List<int>> stream, {
     required int maximumBytes,
-    required Duration timeout,
+    required Duration? timeout,
     required String oversizedCode,
     required String oversizedMessage,
     Future<void>? cancelled,
@@ -1751,25 +1754,27 @@ class PlexClient {
       }());
     }
 
-    final timer = Timer(
-      timeout,
-      () => finishError(
-        TimeoutException('Plex response deadline elapsed.'),
-        StackTrace.current,
-      ),
-    );
+    final timer = timeout == null
+        ? null
+        : Timer(
+            timeout,
+            () => finishError(
+              TimeoutException('Plex response deadline elapsed.'),
+              StackTrace.current,
+            ),
+          );
     subscription = stream.listen(
       (chunk) {
         if (finishing || completer.isCompleted) return;
         try {
           PlexScanBudget.current?.receive(chunk.length);
         } catch (error, stack) {
-          timer.cancel();
+          timer?.cancel();
           finishError(error, stack);
           return;
         }
         if (bytes.length + chunk.length > maximumBytes) {
-          timer.cancel();
+          timer?.cancel();
           finishError(
             PlexException(oversizedCode, oversizedMessage),
             StackTrace.current,
@@ -1779,11 +1784,11 @@ class PlexClient {
         bytes.add(chunk);
       },
       onError: (Object error, StackTrace stackTrace) {
-        timer.cancel();
+        timer?.cancel();
         finishError(error, stackTrace);
       },
       onDone: () {
-        timer.cancel();
+        timer?.cancel();
         if (!completer.isCompleted && !finishing) {
           completer.complete(bytes.takeBytes());
         }
@@ -1792,7 +1797,7 @@ class PlexClient {
     );
     unawaited(
       cancelled?.then((_) {
-        timer.cancel();
+        timer?.cancel();
         if (completer.isCompleted || finishing) return;
         Object error = _scanCancelledException;
         try {
@@ -1808,6 +1813,11 @@ class PlexClient {
 
   void close() => _http.close();
 }
+
+const _networkTimeout = PlexException(
+  'network-timeout',
+  'Plex did not respond in time. Try again.',
+);
 
 const _scanCancelledException = PlexException(
   'cancelled',

@@ -26,6 +26,7 @@ import 'package:lineup_desktop/ui/app_theme.dart';
 import 'package:lineup_desktop/ui/focus_ink.dart';
 import 'package:lineup_desktop/settings/lineup_settings.dart';
 
+import '../support/text_painter_lifetime.dart';
 import '../support/ui_fixture.dart';
 
 void main() {
@@ -1967,27 +1968,29 @@ void main() {
       await tester.pumpAndSettle();
       await openDestination(tester, 'Channels');
 
-      await tester.tap(find.text('Reorder channels'));
-      await tester.pump();
+      await expectTextPaintersReleased(tester, () async {
+        await tester.tap(find.text('Reorder channels'));
+        await tester.pump();
 
-      expect(find.text('No.'), findsOneWidget);
-      expect(find.text('Number'), findsNothing);
-      expect(find.text('Move to…'), findsNWidgets(2));
-      final firstUp = find.ancestor(
-        of: find.byTooltip('Move First up'),
-        matching: find.byType(IconButton),
-      );
-      final firstDown = find.ancestor(
-        of: find.byTooltip('Move First down'),
-        matching: find.byType(IconButton),
-      );
-      final secondDown = find.ancestor(
-        of: find.byTooltip('Move Second down'),
-        matching: find.byType(IconButton),
-      );
-      expect(tester.widget<IconButton>(firstUp).onPressed, isNull);
-      expect(tester.widget<IconButton>(firstDown).onPressed, isNotNull);
-      expect(tester.widget<IconButton>(secondDown).onPressed, isNull);
+        expect(find.text('No.'), findsOneWidget);
+        expect(find.text('Number'), findsNothing);
+        expect(find.text('Move to…'), findsNWidgets(2));
+        final firstUp = find.ancestor(
+          of: find.byTooltip('Move First up'),
+          matching: find.byType(IconButton),
+        );
+        final firstDown = find.ancestor(
+          of: find.byTooltip('Move First down'),
+          matching: find.byType(IconButton),
+        );
+        final secondDown = find.ancestor(
+          of: find.byTooltip('Move Second down'),
+          matching: find.byType(IconButton),
+        );
+        expect(tester.widget<IconButton>(firstUp).onPressed, isNull);
+        expect(tester.widget<IconButton>(firstDown).onPressed, isNotNull);
+        expect(tester.widget<IconButton>(secondDown).onPressed, isNull);
+      });
     },
   );
 
