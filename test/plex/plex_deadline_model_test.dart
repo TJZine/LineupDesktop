@@ -10,7 +10,7 @@ import 'package:lineup_desktop/plex/plex_scan_budget.dart';
 enum _Deadlines {
   scanFirst(1, 2),
   requestFirst(2, 1),
-  equal(1, 1);
+  equalLimitsScanStartedFirst(1, 1);
 
   const _Deadlines(this.scanMinutes, this.requestMinutes);
   final int scanMinutes;
