@@ -76,3 +76,38 @@ dependencies {
     testImplementation("com.squareup.okhttp3:mockwebserver:4.12.1")
     testImplementation("com.squareup.okhttp3:okhttp-tls:4.12.1")
 }
+
+repositories {
+    exclusiveContent {
+        forRepository {
+            maven {
+                name = "RobolectricTestArtifacts"
+                url = uri("https://maven-central.storage-download.googleapis.com/maven2/")
+            }
+        }
+        filter {
+            includeModule("org.robolectric", "android-all-instrumented")
+            includeModule("org.robolectric", "nativeruntime-dist-compat")
+        }
+    }
+}
+
+val robolectricSdkDirectory = layout.buildDirectory.dir("robolectric-sdks")
+val prepareRobolectricSdks by tasks.registering(Sync::class) {
+    into(robolectricSdkDirectory)
+    for (version in listOf(
+        "9-robolectric-4913185-2-i7",
+        "11-robolectric-6757853-i7",
+        "12-robolectric-7732740-i7",
+        "14-robolectric-10818077-i7",
+    )) {
+        val sdk = dependencies.create("org.robolectric:android-all-instrumented:$version")
+        from(configurations.detachedConfiguration(sdk).apply { isTransitive = false })
+    }
+}
+
+tasks.withType<Test>().configureEach {
+    inputs.files(prepareRobolectricSdks)
+    systemProperty("robolectric.dependency.dir", robolectricSdkDirectory.get().asFile.absolutePath)
+    systemProperty("robolectric.logging.enabled", logger.isInfoEnabled)
+}
