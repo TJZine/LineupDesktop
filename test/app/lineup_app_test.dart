@@ -1970,21 +1970,20 @@ void main() {
     );
     await tester.pumpAndSettle();
 
-    final semantics = tester.widget<Semantics>(
-      find.byWidgetPredicate(
-        (widget) =>
-            widget is Semantics &&
-            widget.properties.label == controller.startupRecoveryNotice,
-      ),
-    );
-    expect(semantics.properties.liveRegion, isTrue);
-    expect(controller.startupRecoveryNotice, isNot(contains('/')));
+    final notice = controller.startupRecoveryNotice!;
+    final announcement = find.semantics.byLabel(notice);
+    expect(notice, isNot(contains('/')));
+    expect(find.text(notice), findsOneWidget);
+    final semantics = announcement.evaluate().single.getSemanticsData();
+    expect(semantics.flagsCollection.isLiveRegion, isTrue);
     final theme = controller.settings.theme;
 
     await tester.tap(find.widgetWithText(TextButton, 'Dismiss'));
     await tester.pump();
 
     expect(controller.startupRecoveryNotice, isNull);
+    expect(find.text(notice), findsNothing);
+    expect(announcement, findsNothing);
     expect(controller.settings.theme, theme);
   });
 
