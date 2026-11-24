@@ -136,7 +136,7 @@ struct FakeMpv {
   std::string rejected_observation;
   std::optional<LoadOutcome> controlled_load;
   std::optional<int64_t> playlist_id;
-  bool reject_stop = false;
+  std::atomic<bool> reject_stop{false};
   bool fail_create = false;
   bool fail_stream_registration = false;
   int64_t selected_track = -1;
@@ -1059,7 +1059,7 @@ void Commands(PlayerCore& core) {
   Call(core, "stop", retry, {{"stopId", Value(int64_t{802})}});
   PlayerCoreTestAccess::RunQueuedCommands(core);
   Drain(core, events);
-  Check(received.empty() && PlayerCoreTestAccess::State(core).pending_stop() == 802,
+  Check(received.empty(),
         "successful stop dispatch awaits idle observation");
   CloseWorkerless(core);
 }
@@ -2091,15 +2091,33 @@ void Lifecycle() {
         "worker wipes the header before deallocation and before waiting again");
   received.clear();
 
+  const auto is_stop_result = [](const ValueMap& event) {
+    return Has(event, "type", Value("stopResult"));
+  };
+  const auto has_stop_result = [&] {
+    return std::any_of(received.begin(), received.end(), is_stop_result);
+  };
   fake->idle = false;
+  fake->reject_stop = true;
   Reply stop;
-  Call(core, "stop", stop, {{"stopId", Value(int64_t{901})}});
-  Check(stop.successes == 1, "worker stop acceptance");
-  std::this_thread::sleep_for(std::chrono::milliseconds(20));
+  Call(core, "stop", stop, {{"stopId", Value(int64_t{801})}});
+  Check(stop.successes == 1, "stop acceptance separate from execution");
+  PumpUntil(core, events, has_stop_result, "worker reports rejected stop");
+  const auto rejected = std::find_if(received.begin(), received.end(), is_stop_result);
+  Check(std::count_if(received.begin(), received.end(), is_stop_result) == 1 &&
+        Has(*rejected, "stopId", Value(int64_t{801})) && Has(*rejected, "success", Value(false)),
+        "stop rejection belongs to stop id");
+  received.clear();
+  fake->reject_stop = false;
+  Reply retry;
+  Call(core, "stop", retry, {{"stopId", Value(int64_t{802})}});
+  Check(retry.successes == 1, "worker accepts retry");
+  PumpUntil(core, events, [&] {
+    std::lock_guard lock(fake->mutex);
+    return std::count(fake->commands.begin(), fake->commands.end(), "stop") == 2;
+  }, "worker executes retry");
   core.ProcessWakeup(events.Sink());
-  Check(std::none_of(received.begin(), received.end(), [](const ValueMap& event) {
-    return Has(event, "stopId", Value(int64_t{901}));
-  }), "stop result waits for idle observation");
+  Check(!has_stop_result(), "successful stop dispatch awaits idle observation");
   {
     std::lock_guard lock(fake->mutex);
     // The authenticated replacement accepted entry 77 but has not started in
@@ -2115,21 +2133,18 @@ void Lifecycle() {
     fake->injected.push_back(end_event);
     fake->idle_at_next_wait = true;
   }
-  PumpUntil(core, events, [&] {
-    return std::any_of(received.begin(), received.end(), [](const ValueMap& event) {
-      return Has(event, "stopId", Value(int64_t{901})) && Has(event, "success", Value(true));
-    });
-  }, "worker observes idle before stop result");
+  PumpUntil(core, events, has_stop_result, "worker observes idle before stop result");
+  const auto stop_result = std::find_if(received.begin(), received.end(), is_stop_result);
+  Check(std::count_if(received.begin(), received.end(), is_stop_result) == 1 &&
+        Has(*stop_result, "stopId", Value(int64_t{802})) &&
+        Has(*stop_result, "success", Value(true)),
+        "empty idle must complete the successful retry with stopId 802");
   const auto predecessor_end = std::find_if(received.begin(), received.end(), [](const auto& event) {
     return Has(event, "loadId", Value(int64_t{6})) && Has(event, "state", Value("ended"));
   });
-  const auto stop_result = std::find_if(received.begin(), received.end(), [](const auto& event) {
-    return Has(event, "stopId", Value(int64_t{901}));
-  });
   Check(std::any_of(received.begin(), received.end(), [](const auto& event) {
           return Has(event, "loadId", Value(int64_t{6})) && Has(event, "state", Value("loading"));
-        }) && predecessor_end != received.end() && stop_result != received.end() &&
-        predecessor_end < stop_result,
+        }) && predecessor_end != received.end() && predecessor_end < stop_result,
         "queued predecessor lifecycle retains identity before empty-idle stop reclamation");
 
   const int before = fake->destroyed.load();
