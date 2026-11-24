@@ -14,6 +14,7 @@ import '../channels/channel_filter.dart';
 import '../ui/media_badges.dart';
 import '../settings/lineup_settings.dart';
 import '../ui/app_theme.dart';
+import '../ui/schedule_wall_time.dart';
 import '../ui/app_ui.dart';
 import '../ui/channel_identity.dart';
 import '../ui/lineup_canvas.dart';
@@ -1322,10 +1323,7 @@ class _GuideViewState extends State<GuideView>
         (widget.onOpenMenu == null
             ? 0
             : 36 + (DeviceProfile.of(context).isTv ? 40 : 0));
-    final now = widget.controller.now.toLocal();
-    final localizations = MaterialLocalizations.of(context);
-    final date =
-        '${localizations.formatMediumDate(now)}  ·  ${localizations.formatTimeOfDay(TimeOfDay.fromDateTime(now))}';
+    final date = ScheduleWallTime(widget.controller.now).headerLabel(context);
     final dateWidth = text(
       date,
       theme.textTheme.bodyMedium!.copyWith(fontSize: 18),
@@ -1802,7 +1800,6 @@ class _Toolbar extends StatelessWidget {
   Widget build(BuildContext context) {
     final size = MediaQuery.sizeOf(context);
     final roles = LineupTheme.of(context);
-    final localizations = MaterialLocalizations.of(context);
     final tunedChannel = controller.lineup.channels
         .where((channel) => channel.id == watchingChannelId)
         .firstOrNull;
@@ -1857,9 +1854,8 @@ class _Toolbar extends StatelessWidget {
               ListenableBuilder(
                 listenable: Listenable.merge([controller.focus, clock]),
                 builder: (context, _) {
-                  final now = controller.now.toLocal();
                   return Text(
-                    '${localizations.formatMediumDate(now)}  ·  ${localizations.formatTimeOfDay(TimeOfDay.fromDateTime(now))}',
+                    ScheduleWallTime(controller.now).headerLabel(context),
                     key: const Key('guide-current-date-time'),
                     maxLines: 1,
                     style: supportingStyle.copyWith(color: roles.mutedText),
@@ -3135,9 +3131,10 @@ class _TimeHeader extends StatelessWidget {
     final minimum = 38 * scaler.scale(1);
     final hasMidnight = List.generate(
       controller.guideHours * 2,
-      (index) =>
-          controller.windowStart.add(Duration(minutes: 30 * index)).toLocal(),
-    ).any((tick) => tick.hour == 0 && tick.minute == 0);
+      (index) => ScheduleWallTime(
+        controller.windowStart.add(Duration(minutes: 30 * index)),
+      ),
+    ).any((tick) => tick.isMidnight);
     if (!hasMidnight) return minimum;
     final theme = Theme.of(context);
     final timeStyle = theme.textTheme.bodyMedium!;
@@ -3174,8 +3171,7 @@ class _TimeHeader extends StatelessWidget {
               child: Align(
                 alignment: Alignment.centerLeft,
                 child: Text(
-                  MaterialLocalizations.of(context)
-                      .formatMediumDate(controller.windowStart.toLocal()),
+                  ScheduleWallTime(controller.windowStart).dateLabel(context),
                   key: const Key('guide-window-date'),
                   maxLines: 1,
                   overflow: TextOverflow.ellipsis,
@@ -3203,9 +3199,7 @@ class _TimeHeader extends StatelessWidget {
                         .difference(controller.windowStart)
                         .inMicroseconds;
                 final showMarker = fraction >= 0 && fraction < 1;
-                final localNow = now.toLocal();
-                final markerLabel =
-                    '${localNow.hour % 12 == 0 ? 12 : localNow.hour % 12}:${localNow.minute.toString().padLeft(2, '0')}';
+                final markerLabel = ScheduleWallTime(now).markerLabel;
                 final style = DefaultTextStyle.of(context).style;
                 final roles = LineupTheme.of(context);
                 final markerStyle = style.copyWith(
@@ -3234,12 +3228,9 @@ class _TimeHeader extends StatelessWidget {
                 final labelRoom = slotWidth - labelInset;
                 final dateStyle = Theme.of(context).textTheme.labelSmall
                     ?.copyWith(color: roles.progressFill);
-                final localizations = MaterialLocalizations.of(context);
-                DateTime tickAt(int index) => controller.windowStart
-                    .add(Duration(minutes: 30 * index))
-                    .toLocal();
-                bool isMidnight(DateTime tick) =>
-                    tick.hour == 0 && tick.minute == 0;
+                ScheduleWallTime tickAt(int index) => ScheduleWallTime(
+                  controller.windowStart.add(Duration(minutes: 30 * index)),
+                );
                 bool overlapsMarker(
                   int index,
                   String label,
@@ -3260,11 +3251,15 @@ class _TimeHeader extends StatelessWidget {
                 if (showMarker) {
                   for (var index = 0; index < slots; index += stride) {
                     final tick = tickAt(index);
-                    if (isMidnight(tick) &&
-                        (overlapsMarker(index, _time(context, tick), style) ||
+                    if (tick.isMidnight &&
+                        (overlapsMarker(
+                              index,
+                              tick.timeLabel(context),
+                              style,
+                            ) ||
                             overlapsMarker(
                               index,
-                              localizations.formatMediumDate(tick),
+                              tick.dateLabel(context),
                               style.merge(dateStyle),
                             ))) {
                       midnightCollision = true;
@@ -3286,8 +3281,8 @@ class _TimeHeader extends StatelessWidget {
                                   ? Builder(
                                       builder: (context) {
                                         final tick = tickAt(index);
-                                        final label = _time(context, tick);
-                                        final midnight = isMidnight(tick);
+                                        final label = tick.timeLabel(context);
+                                        final midnight = tick.isMidnight;
                                         final hideTime = overlapsMarker(
                                           index,
                                           label,
@@ -3317,8 +3312,7 @@ class _TimeHeader extends StatelessWidget {
                                                 ),
                                               if (midnight)
                                                 Text(
-                                                  localizations
-                                                      .formatMediumDate(tick),
+                                                  tick.dateLabel(context),
                                                   key: const Key(
                                                     'guide-midnight-date',
                                                   ),
@@ -4002,6 +3996,10 @@ class _ProgramCellState extends State<_ProgramCell> {
         : roles.primarySurface.withValues(alpha: 0.55);
     final border = Border.all(color: Colors.transparent, width: 1);
 
+    final program = widget.program.scheduled;
+    final startLabel = ScheduleWallTime(program.start).timeLabel(context);
+    final endLabel = ScheduleWallTime(program.end).timeLabel(context);
+
     return Positioned(
       left: widget.left,
       width: widget.width,
@@ -4015,7 +4013,7 @@ class _ProgramCellState extends State<_ProgramCell> {
           focused: widget.focused,
           onTap: widget.onDoubleTap ?? widget.onTap,
           label:
-              '${widget.program.scheduled.item.title}, ${_time(context, widget.program.scheduled.start)} to ${_time(context, widget.program.scheduled.end)}${widget.current
+              '${program.item.title}, $startLabel to $endLabel${widget.current
                   ? ', currently airing'
                   : widget.past
                   ? ', ended'
@@ -4139,7 +4137,7 @@ class _ProgramCellContent extends StatelessWidget {
           return const SizedBox.shrink();
         }
         final time =
-            '${_time(context, program.scheduled.start)}–${_time(context, program.scheduled.end)}';
+            '${ScheduleWallTime(program.scheduled.start).timeLabel(context)}–${ScheduleWallTime(program.scheduled.end).timeLabel(context)}';
         final titleWidth = _textWidth(
           primaryTitle,
           titleStyle,
@@ -4745,7 +4743,7 @@ class _ProgramDetails extends StatelessWidget {
     );
     final channelStyle = _GuideStyles.channel.copyWith(color: roles.mutedText);
     final airing =
-        '${_time(context, program.scheduled.start)}–${_time(context, program.scheduled.end)}';
+        '${ScheduleWallTime(program.scheduled.start).timeLabel(context)}–${ScheduleWallTime(program.scheduled.end).timeLabel(context)}';
     final timeLine = [
       airing,
       if (current) '$remaining left' else if (!past) _duration(item.duration),
@@ -5122,12 +5120,6 @@ Color _artworkHashColor(Uint8List bytes) {
     0.42,
   ).toColor();
 }
-
-String _time(BuildContext context, DateTime value) =>
-    MaterialLocalizations.of(context).formatTimeOfDay(
-      TimeOfDay.fromDateTime(value.toLocal()),
-      alwaysUse24HourFormat: false,
-    );
 
 String _libraryName(GuideController controller, String id) =>
     controller.lineup.libraries

@@ -8,6 +8,7 @@ import '../channels/channel.dart';
 import '../channels/scheduler.dart';
 import '../guide/guide_controller.dart';
 import '../ui/app_theme.dart';
+import '../ui/schedule_wall_time.dart';
 import '../ui/app_ui.dart';
 import 'lineup_controller.dart';
 import 'air_check_verification.dart';
@@ -389,7 +390,7 @@ class _ChannelAirCheckState extends State<ChannelAirCheck> {
                                 ),
                               if (preview != null && preview.window.truncated)
                                 Text(
-                                  'Preview truncated at ${_time(context, preview.window.lastProjectedEnd!)}; this is the last projected program end.',
+                                  'Preview truncated at ${ScheduleWallTime(preview.window.lastProjectedEnd!).timeLabel(context)}; this is the last projected program end.',
                                   style: TextStyle(
                                     color: LineupTheme.of(context)
                                         .secondaryText,
@@ -475,7 +476,7 @@ class _ChannelAirCheckState extends State<ChannelAirCheck> {
           crossAxisAlignment: WrapCrossAlignment.center,
           children: [
             Text(
-              'Schedule through ${_time(context, preview.window.lastProjectedEnd ?? preview.windowEnd)}',
+              'Schedule through ${ScheduleWallTime(preview.window.lastProjectedEnd ?? preview.windowEnd).timeLabel(context)}',
               style: TextStyle(color: LineupTheme.of(context).secondaryText),
             ),
             if (_futureHours < 24)
@@ -536,7 +537,7 @@ class _ChannelAirCheckState extends State<ChannelAirCheck> {
           ],
         ),
         Text(
-          '${_weekday(now.toLocal().weekday)} · ${_time(context, now)}',
+          '${_weekday(now.toLocal().weekday)} · ${ScheduleWallTime(now).timeLabel(context)}',
           style: TextStyle(
             color: roles.secondaryText,
             fontWeight: FontWeight.w400,
@@ -573,6 +574,10 @@ class _ChannelAirCheckState extends State<ChannelAirCheck> {
       itemBuilder: (context, index) {
         final program = programs[index];
         final current = program.isCurrentAt(now);
+        final startLabel = ScheduleWallTime(program.scheduled.start)
+            .timeLabel(context);
+        final endLabel = ScheduleWallTime(program.scheduled.end)
+            .timeLabel(context);
         final selected = program.id == _selectedId;
         void activate({bool fromRemote = false}) {
           setState(() {
@@ -589,7 +594,7 @@ class _ChannelAirCheckState extends State<ChannelAirCheck> {
           button: true,
           excludeSemantics: true,
           label:
-              'Channel ${preview.channel.number} ${preview.channel.name}, ${program.scheduled.item.title}, ${_time(context, program.scheduled.start)} to ${_time(context, program.scheduled.end)}, ${current ? 'current' : 'upcoming'}',
+              'Channel ${preview.channel.number} ${preview.channel.name}, ${program.scheduled.item.title}, $startLabel to $endLabel, ${current ? 'current' : 'upcoming'}',
           onTap: activate,
           child: LineupNavigationRow(
             selected: selected || current,
@@ -613,9 +618,7 @@ class _ChannelAirCheckState extends State<ChannelAirCheck> {
                       SizedBox(
                         width: (widget.compact ? 76 : 94),
                         child: Text(
-                          current
-                              ? 'ON NOW'
-                              : _time(context, program.scheduled.start),
+                          current ? 'ON NOW' : startLabel,
                           style: TextStyle(
                             color: current
                                 ? (focused
@@ -656,7 +659,7 @@ class _ChannelAirCheckState extends State<ChannelAirCheck> {
                                     program.scheduled.item.episodeNumber !=
                                         null)
                                   'S${program.scheduled.item.seasonNumber ?? '—'} E${program.scheduled.item.episodeNumber ?? '—'}',
-                                '${_time(context, program.scheduled.start)}–${_time(context, program.scheduled.end)}',
+                                '$startLabel–$endLabel',
                               ].join(' · '),
                               style: _airCheckButtonTextStyle(
                                 color: roles.mutedText,
@@ -744,7 +747,7 @@ class _ChannelAirCheckState extends State<ChannelAirCheck> {
       crossAxisAlignment: CrossAxisAlignment.stretch,
       children: [
         Text(
-          '${_temporal(selected, now).toUpperCase()} · ${_dateContext(selected.scheduled.start)} · ${_time(context, selected.scheduled.start)}–${_time(context, selected.scheduled.end)}',
+          '${_temporal(selected, now).toUpperCase()} · ${_dateContext(selected.scheduled.start)} · ${ScheduleWallTime(selected.scheduled.start).timeLabel(context)}–${ScheduleWallTime(selected.scheduled.end).timeLabel(context)}',
           style: TextStyle(
             color: LineupTheme.of(context).secondaryText,
             fontSize: (widget.compact ? 11 : 16),
@@ -952,12 +955,6 @@ String _temporal(GuideProgram program, DateTime now) => program.isCurrentAt(now)
     : !program.scheduled.end.isAfter(now)
     ? 'past'
     : 'future';
-
-String _time(BuildContext context, DateTime value) =>
-    MaterialLocalizations.of(context).formatTimeOfDay(
-      TimeOfDay.fromDateTime(value.toLocal()),
-      alwaysUse24HourFormat: false,
-    );
 
 String _weekday(int weekday) =>
     const ['MON', 'TUE', 'WED', 'THU', 'FRI', 'SAT', 'SUN'][weekday - 1];
