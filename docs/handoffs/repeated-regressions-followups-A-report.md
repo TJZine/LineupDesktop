@@ -1,6 +1,6 @@
 # A. Verified Android JVM test dependencies
 
-The branch is `followup/android-gradle-cache`, based on `76419674e`. Source commit `676f5d1c022fa4635c2cdd219c0a8a5757521091` contains the implementation. The PR description records the hosted evidence for the published head. [PR #99](https://github.com/TJZine/LineupDesktop/pull/99)
+The branch is `followup/android-gradle-cache`, based on `76419674e`. Source commit `676f5d1c022fa4635c2cdd219c0a8a5757521091` introduced the cache and verified staging. Commit `e93a4a69ba9f3606089a409c84b8c15434c72bff` routes the two test dependencies to the verified mirror. The PR description records the hosted evidence for the published head. [PR #99](https://github.com/TJZine/LineupDesktop/pull/99)
 
 ## Failure and repair
 
@@ -12,24 +12,28 @@ Robolectric also fetched SDKs inside test workers. A `--info` run of `DeviceCapt
 
 Each tested SDK version now resolves separately through Gradle. The test worker receives a flat directory containing the verified JARs through `robolectric.dependency.dir`. Robolectric selects its local resolver when that property is set. The CI JVM test runs with `--info` to expose Gradle downloads and the resolver selection. [SDK version mapping](https://github.com/robolectric/robolectric/blob/robolectric-4.18.1/robolectric/src/main/java/org/robolectric/plugins/DefaultSdkProvider.java) · [Resolver selection](https://github.com/robolectric/robolectric/blob/robolectric-4.18.1/robolectric/src/main/java/org/robolectric/plugins/LegacyDependencyResolver.java)
 
+The first hosted cold run on this PR reached Gradle's verified staging task and still received HTTP 429 on three requests for the API 28 SDK JAR. A cache miss therefore still depended on the same rate-limited endpoint as the earlier native runtime failure. The app now uses Gradle's exclusive repository filter to fetch these two test modules from Google's Maven Central mirror. Other app dependencies continue to use the existing repositories. Plugin resolution, release dependencies and checksum policy retain their existing configuration. [Hosted cold failure](https://github.com/TJZine/LineupDesktop/actions/runs/45483112876/job/138761487855) · [Gradle exclusive repository filters](https://docs.gradle.org/9.3.1/userguide/filtering_repository_content.html#sec:repository-content-filtering)
+
 ## Checksum provenance
 
 The new `org.robolectric:android-all-instrumented` pins cover Android API levels 28, 30, 31 and 34. For each JAR and POM, the SHA-256 computed from pre-existing local bytes agreed with the published `.sha256` at Maven Central and at Google’s Maven Central mirror. The mirror distributes the same upstream publication. The eight expected hashes are in `android/gradle/verification-metadata.xml`. [Central artifacts](https://repo.maven.apache.org/maven2/org/robolectric/android-all-instrumented/) · [Central mirror](https://maven-central.storage-download.googleapis.com/maven2/org/robolectric/android-all-instrumented/14-robolectric-10818077-i7/android-all-instrumented-14-robolectric-10818077-i7.jar.sha256)
 
+For the two native runtime versions present in the existing metadata, 1.0.18 and 1.0.20, downloading and hashing the JAR and POM from the mirror reproduced all four committed SHA-256 values. This includes the 1.0.20 JAR from the original HTTP 429 failure. [Mirrored native runtime POM](https://maven-central.storage-download.googleapis.com/maven2/org/robolectric/nativeruntime-dist-compat/1.0.20/nativeruntime-dist-compat-1.0.20.pom)
+
 ## Local verification
 
-All JVM runs used Flutter 3.47.7, JDK 17 and the pinned Gradle 9.3.1 wrapper. An isolated local init script directed test-worker Maven storage to a disposable empty directory. The cold and warm Gradle daemons also received `-Dmaven.repo.local` pointing there.
+All JVM runs used Flutter 3.47.7, JDK 17 and the pinned Gradle 9.3.1 wrapper. An isolated local init script directed test-worker Maven storage to a disposable empty directory. The cold and warm Gradle daemons also received `-Dmaven.repo.local` pointing there. The JVM controls below use the repository filter from `e93a4a69b`.
 
 | Case | Command from `android/` | Observation |
 | --- | --- | --- |
-| Cold Gradle and Maven stores | `./gradlew :app:testDebugUnitTest --rerun --no-daemon --info` | Gradle downloaded the four SDK JARs and four POMs from Central, plus the native runtime JAR. Robolectric selected its local resolver. All 190 tests passed. |
-| Restored Gradle state in a fresh checkout | Same command | Copied only `caches/` and `wrapper/` from the cold Gradle home. The checkout had no staged SDKs or build output. All 190 tests passed. The log contained zero Robolectric HTTP GET, download or transfer records, and the test worker's Maven store contained no JARs. |
+| Cold Gradle and Maven stores | `./gradlew :app:testDebugUnitTest --rerun --no-daemon --info` | The mirror served four SDK JARs, four SDK POMs and the native runtime JAR and POM. Gradle contacted direct Central for other dependencies. The log contained zero direct Central requests for either filtered module and zero mirror requests for unrelated modules. Robolectric selected its local resolver. All 190 tests passed. |
+| Restored Gradle state in a fresh checkout | Same command | Copied only `caches/` and `wrapper/` from the cold Gradle home. The checkout had no staged SDKs or build output. All 190 tests passed. The online log contained zero Robolectric URLs at either the mirror or direct Central and zero Robolectric download or transfer records. The test worker's Maven store contained no JARs. |
 | Warm SDK integrity control | `./gradlew :app:testDebugUnitTest --rerun --offline --no-daemon --info` | Changed only the API 34 SDK JAR’s expected SHA-256 in an isolated checkout. `:app:prepareRobolectricSdks` failed with “One artifact failed verification” naming `android-all-instrumented-14-robolectric-10818077-i7.jar`. Restored the original metadata. |
 | Warm native runtime integrity control | Same offline command | Changed only the expected SHA-256 for `nativeruntime-dist-compat-1.0.20.jar`. Resolution of `:app:debugUnitTestRuntimeClasspath` failed with “One artifact failed verification” naming that JAR. Restored the original metadata. |
 | Restored expected hashes | Same offline command | All 190 tests passed. The metadata matched the source commit byte-for-byte, the SDK resolver stayed local, and the log contained zero Robolectric HTTP GET, download or transfer records. |
 
-The Android tooling suite passed 20 tests and the CI tooling suite passed four. The separate Kotlin CodeQL workflow also consumes the verified SDK configuration when it runs JVM tests. Package A adds the cache action to the two requested CI workflow jobs.
+The production license check (`python3 tool/android/generate-licenses.py --check` with the release script's Gradle project, Flutter and output arguments) reproduced the checked-in assets for all 70 release modules and 71 documents, totaling 768,091 license bytes. The `releaseRuntimeClasspath` dependency report contained neither of the two test modules. The Android tooling suite passed 20 tests and the CI tooling suite passed four. The separate Kotlin CodeQL workflow also consumes the verified SDK configuration when it runs JVM tests. Package A adds the cache action to the two requested CI workflow jobs.
 
 ## Hosted verification
 
-A GitHub-hosted cold run, a cache write on a push to main, and a following PR restoring that cache require their respective Actions runs. The PR description carries the job links and observations as they complete. [Hosted evidence in PR #99](https://github.com/TJZine/LineupDesktop/pull/99)
+The hosted cold run at `b98b96dd5` failed on the API 28 download described above. A passing cold run using the mirror, a cache write on a push to main, and a following PR restoring that cache require their respective Actions runs. The PR description carries the job links and observations as they complete. [Hosted evidence in PR #99](https://github.com/TJZine/LineupDesktop/pull/99)
