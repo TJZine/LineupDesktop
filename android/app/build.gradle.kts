@@ -19,20 +19,20 @@ android {
         minSdk = 28
         targetSdk = flutter.targetSdkVersion
         manifestPlaceholders["appLabel"] = "Lineup"
-        // Native-asset hooks can otherwise add x86_64 even when Flutter targets
-        // only ARM. Distribution is a two-ABI universal TV APK.
-        ndk {
-            abiFilters += listOf("armeabi-v7a", "arm64-v8a")
-        }
-        // Uses the version code from pubspec.yaml. When using split APKs, 1000 * ABI_VERSION
-        // is added automatically by Flutter. (https://developer.android.com/studio/build/configure-apk-splits#configure-APK-versions)
-        // You can force using the value of versionCode by specifying the `-P force-version-code-ignoring-abi=true`
-        // flag during build.
         versionCode = flutter.versionCode
         versionName = flutter.versionName
     }
 
     buildTypes {
+        configureEach {
+            val emulatorDebug = name == "debug" &&
+                providers.gradleProperty("target-platform").orNull == "android-x64"
+            ndk.abiFilters += if (emulatorDebug) {
+                listOf("x86_64")
+            } else {
+                listOf("armeabi-v7a", "arm64-v8a")
+            }
+        }
         getByName("debug") {
             applicationIdSuffix = ".dev"
             manifestPlaceholders["appLabel"] = "Lineup Dev"

@@ -175,11 +175,12 @@ obligation to retained evidence.
 | Authenticated references | `windows/runner/authenticated_reference_test.cpp`, `tool/windows/authenticated-reference-test.py` | Production initialization/load path against the prepared DLL with synthetic HTTPS; no physical Plex or presentation claim |
 | Windows runtime/package | [Physical acceptance](../docs/windows-native-validation.md) | Record exact candidate, build/runtime identities, platform, display, scenario and result |
 
-At the inspected revision, `test_driver/ui_harness.dart` is synthetic and
-`test/app/product_spine_test.dart` uses fake Plex/native boundaries. CI does
-not launch a real application E2E campaign. Native CTest targets remain
-excluded from the default application build. Windows CI explicitly builds and
-runs the encoder, playback-state, core-contract, codec-conversion,
+`test_driver/ui_harness.dart` is synthetic and
+`test/app/product_spine_test.dart` uses fake Plex/native boundaries.
+Android CI launches the normal debug APK on a disposable emulator for the
+saved-state startup scenarios in `tool/android/startup-e2e.py`. Native CTest
+targets remain excluded from the default application build. Windows CI explicitly
+builds and runs the encoder, playback-state, core-contract, codec-conversion,
 display-controller, and guardian suites after the stock-engine application
 build. Windows CI also selects the player-contract and authenticated-reference
 CTests; the runner-lifecycle CTest remains a separate explicit check outside CI.

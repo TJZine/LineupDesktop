@@ -85,6 +85,41 @@ jobs:
           if-no-files-found: error
           retention-days: 14
 
+  android-startup:
+    name: Verify Android app startup
+    runs-on: ubuntu-24.04
+    timeout-minutes: 35
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
+        with:
+          persist-credentials: false
+      - uses: gradle/actions/wrapper-validation@0b6dd653ba04f4f93bf581ec31e66cbd7dcb644d
+      - uses: ./.github/actions/setup-flutter
+      - name: Build debug APK with the emulator's native Flutter engine
+        run: flutter build apk --debug --target-platform android-x64
+      - name: Exercise startup recovery in the launched Android app
+        timeout-minutes: 12
+        env:
+          ANDROID_SERIAL: emulator-5554
+        run: |
+          set -euo pipefail
+          export PATH="$ANDROID_HOME/cmdline-tools/latest/bin:$ANDROID_HOME/platform-tools:$PATH"
+          sudo setfacl -m "u:$(id -un):rw" /dev/kvm
+          image='system-images;android-30;default;x86_64'
+          sdkmanager "$image" emulator
+          export ANDROID_AVD_HOME="$RUNNER_TEMP/startup-avd"
+          mkdir "$ANDROID_AVD_HOME"
+          echo no | avdmanager create avd -n startup -k "$image" --device pixel_4
+          "$ANDROID_HOME/emulator/emulator" @startup -port 5554 -no-window \
+            -no-snapshot -no-boot-anim -no-audio -gpu swiftshader_indirect > "$RUNNER_TEMP/emulator.log" 2>&1 &
+          emulator_pid=$!
+          trap 'kill "$emulator_pid" 2>/dev/null || true' EXIT
+          timeout 240 bash -c 'adb wait-for-device && until [[ "$(adb shell getprop sys.boot_completed | tr -d "\r")" == 1 ]]; do sleep 2; done'
+          test "$(adb shell getprop ro.product.cpu.abi | tr -d '\r')" = x86_64
+          adb shell input keyevent KEYCODE_WAKEUP
+          adb shell wm dismiss-keyguard
+          python3 tool/android/startup-e2e.py -v
+
   build-macos:
     name: Verify macOS portable/native build
     runs-on: macos-latest
@@ -893,6 +928,7 @@ jobs:
     needs:
       - verify
       - android
+      - android-startup
       - build-macos
       - macos-player-core
       - windows-release-policy
