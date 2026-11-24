@@ -443,7 +443,8 @@ void Commands(WindowsNativePlayer& player, native_test::Messenger& messenger) {
   Check(invalid.errors == 1, "invalid request id cannot construct queued track payload");
   Reply late;
   messenger.Call("selectTrack", late, track);
-  NativePlayerTestAccess::State(player).RetireLoad(11);
+  auto& playback = NativePlayerTestAccess::State(player);
+  playback.RetireLoad(playback.EndFile(101));
   NativePlayerTestAccess::DrainCommandsSynchronously(player);
   NativePlayerTestAccess::Drain(player);
   Check(messenger.events.size() == 1 && Has(messenger.events[0], "success", Value(false)) &&

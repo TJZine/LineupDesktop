@@ -325,7 +325,7 @@ state without a code to `native_playback_error`.
 
 ### Loads
 
-The Dart transport creates a monotonically increasing `loadId` for each load,
+Each Dart transport instance creates a monotonically increasing `loadId` for each load,
 retires the previous load before replacement, and accepts only events whose
 `loadId` equals the active ID. A load completes when its matching `playing`
 state arrives. A matching error, timeout, explicit stop, or replacement settles
@@ -333,13 +333,20 @@ the pending load and retires its active ID. The caller's product generation is
 kept in Dart and projected onto `PlayerEvent`; it is not sent as a native
 argument.
 
-Native playlist mappings remain bounded. On START_FILE, a lower-ID replace
-entry that never started is reclaimed; already-started entries remain mapped
-for queued predecessor events. Redirect siblings are exempt from that barrier
-because allocation order need not match playback order. Stop completion
-reclaims all never-started mappings and pending fallback identities only after
-the mpv event queue has drained and idle with an empty playlist is confirmed.
-Command acceptance alone never reclaims a predecessor's event identity.
+A Dart hot restart can reuse a wire ID while the same native player survives.
+The desktop worker records the acceptance order of successful replace commands.
+A keyed or fallback START_FILE reclaims all unstarted entries owned by earlier
+commands, including their pending fallback identities and redirect children.
+Siblings of the starting load and entries owned by newer commands stay eligible.
+Started predecessors remain identifiable for their own queued END_FILE.
+
+An END_FILE carrying an unknown playlist ID cannot terminate the current load.
+When a started predecessor's wire ID matches the most recent replacement, its
+late terminal event retires only that predecessor and is suppressed on the Dart
+channel, including after the replacement has ended.
+Stop completion reclaims all remaining unstarted entries after the mpv event queue
+drains and the worker confirms idle with an empty playlist. Both tracking tables
+have a 1,024-entry limit.
 
 ### Seeks
 

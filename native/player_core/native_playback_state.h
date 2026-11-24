@@ -16,6 +16,12 @@ namespace lineup::player {
 class NativePlaybackState {
  public:
   static constexpr size_t kMaxPlaylistEntries = 1024;
+  struct Load {
+    int64_t wire_id;
+    uint64_t sequence;
+    bool operator==(const Load& other) const { return sequence == other.sequence; }
+    bool operator!=(const Load& other) const { return !(*this == other); }
+  };
   struct StartResult {
     bool within_capacity;
     std::optional<int64_t> rejected_load;
@@ -23,90 +29,92 @@ class NativePlaybackState {
   // Deferred log detail for a later failed END_FILE, not a live failure state.
   // Backend probing can log an error and then recover with another backend.
   struct Failure {
-    int64_t load_id;
+    Load owner;
     std::string code;
     std::optional<int64_t> http_status;
   };
 
-  std::optional<int64_t> active_load() const { return active_load_; }
-  std::optional<int64_t> event_load() const { return event_load_; }
+  std::optional<Load> active_owner() const {
+    return active_ ? std::optional<Load>(latest_) : std::nullopt;
+  }
+  std::optional<int64_t> active_load() const {
+    return active_ ? std::optional<int64_t>(latest_.wire_id) : std::nullopt;
+  }
+  std::optional<int64_t> PublicId(std::optional<Load> owner) const {
+    if (!owner || (*owner != latest_ && owner->wire_id == latest_.wire_id)) {
+      return std::nullopt;
+    }
+    return owner->wire_id;
+  }
+  std::optional<int64_t> event_load() const { return PublicId(event_); }
   std::optional<int64_t> pending_stop() const { return pending_stop_; }
   const std::optional<Failure>& failure() const { return failure_; }
   bool TrackTargetsActiveLoad(int64_t load_id) const {
-    return active_load_ == load_id;
+    return active_load() == load_id;
   }
 
-  // A missing playlist id uses the pending START_FILE FIFO. Capacity failure
-  // leaves command acceptance intact, but cannot manufacture an event identity.
   bool AcceptLoad(int64_t load_id, std::optional<int64_t> playlist_id) {
-    active_load_ = load_id;
+    latest_ = Load{load_id, latest_.sequence + 1};
+    active_ = true;
     if (playlist_id) {
       if (playlist_loads_.find(*playlist_id) == playlist_loads_.end() &&
           playlist_loads_.size() >= kMaxPlaylistEntries) {
         return false;
       }
-      playlist_loads_[*playlist_id].load_id = load_id;
+      playlist_loads_.insert_or_assign(*playlist_id, PlaylistLoad{latest_, false});
     } else {
-      if (pending_loads_.size() >= kMaxPlaylistEntries) {
-        return false;
-      }
-      pending_loads_.push_back(load_id);
+      if (pending_loads_.size() >= kMaxPlaylistEntries) return false;
+      pending_loads_.push_back(latest_);
     }
     return true;
   }
 
   StartResult StartFile(std::optional<int64_t> playlist_id) {
     if (!playlist_id) {
-      ClearFailureFor(event_load_);
+      ClearFailureFor(event_);
       return {true, std::nullopt};
     }
-    for (auto entry = playlist_loads_.begin(); entry != playlist_loads_.end();) {
-      if (entry->first < *playlist_id &&
-          entry->second.phase == EntryPhase::awaiting_replace_start) {
-        entry = playlist_loads_.erase(entry);
-      } else {
-        ++entry;
-      }
-    }
-    const auto load = playlist_loads_.find(*playlist_id);
-    StartResult result{true, std::nullopt};
-    if (load != playlist_loads_.end()) {
-      event_load_ = load->second.load_id;
-      load->second.phase = EntryPhase::started;
+    const auto entry = playlist_loads_.find(*playlist_id);
+    if (entry != playlist_loads_.end()) {
+      event_ = entry->second.owner;
+      entry->second.started = true;
     } else if (!pending_loads_.empty()) {
-      event_load_ = pending_loads_.front();
+      event_ = pending_loads_.front();
       pending_loads_.pop_front();
-      if (playlist_loads_.size() >= kMaxPlaylistEntries) {
-        result = {false, event_load_};
-        event_load_.reset();
-      } else {
-        playlist_loads_[*playlist_id] = {*event_load_, EntryPhase::started};
-      }
     } else {
-      event_load_.reset();
+      event_.reset();
+      return {true, std::nullopt};
     }
-    ClearFailureFor(event_load_);
-    return result;
-  }
 
-  std::optional<int64_t> EndFile(std::optional<int64_t> playlist_id) {
-    auto load_id = event_load_;
-    if (playlist_id) {
-      const auto load = playlist_loads_.find(*playlist_id);
-      if (load != playlist_loads_.end()) {
-        load_id = load->second.load_id;
-        playlist_loads_.erase(load);
+    ReclaimBefore(event_->sequence);
+    if (entry == playlist_loads_.end()) {
+      if (playlist_loads_.size() >= kMaxPlaylistEntries) {
+        const auto rejected = PublicId(event_);
+        event_.reset();
+        return {false, rejected};
       }
+      playlist_loads_.emplace(*playlist_id, PlaylistLoad{*event_, true});
     }
-    return load_id;
+    ClearFailureFor(event_);
+    return {true, std::nullopt};
   }
 
-  bool Redirect(std::optional<int64_t> load_id, int64_t first, int64_t count) {
-    if (!load_id || first < 0 || count < 0 ||
+  std::optional<Load> EndFile(std::optional<int64_t> playlist_id) {
+    if (!playlist_id) return event_;
+    const auto entry = playlist_loads_.find(*playlist_id);
+    if (entry == playlist_loads_.end()) return std::nullopt;
+    const auto owner = entry->second.owner;
+    playlist_loads_.erase(entry);
+    return owner;
+  }
+
+  bool Redirect(std::optional<Load> owner, int64_t first, int64_t count) {
+    if (!owner || first < 0 || count < 0 ||
         count > static_cast<int64_t>(kMaxPlaylistEntries) ||
         (count != 0 && first > std::numeric_limits<int64_t>::max() - (count - 1))) {
       return false;
     }
+    if (owner->sequence < latest_start_) return true;
     size_t new_entries = 0;
     for (int64_t offset = 0; offset < count; ++offset) {
       if (playlist_loads_.find(first + offset) == playlist_loads_.end()) {
@@ -117,42 +125,25 @@ class NativePlaybackState {
       return false;
     }
     for (int64_t offset = 0; offset < count; ++offset) {
-      auto& entry = playlist_loads_[first + offset];
-      entry.load_id = *load_id;
-      if (entry.phase != EntryPhase::started) {
-        entry.phase = EntryPhase::awaiting_redirect_start;
-      }
+      playlist_loads_.try_emplace(first + offset, PlaylistLoad{*owner, false});
     }
     return true;
   }
 
-  void RetireLoad(std::optional<int64_t> load_id) {
-    if (load_id) {
-      for (auto entry = playlist_loads_.begin(); entry != playlist_loads_.end();) {
-        if (entry->second.load_id == *load_id) {
-          entry = playlist_loads_.erase(entry);
-        } else {
-          ++entry;
-        }
-      }
-      pending_loads_.erase(std::remove(pending_loads_.begin(), pending_loads_.end(),
-                                      *load_id), pending_loads_.end());
-    }
-    ClearFailureFor(load_id);
-    if (active_load_ == load_id) {
-      active_load_.reset();
-    }
-    if (event_load_ == load_id) {
-      event_load_.reset();
-    }
+  void RetireLoad(std::optional<Load> owner) {
+    if (!owner) return;
+    EraseEntries([&](const PlaylistLoad& entry) { return entry.owner == *owner; });
+    pending_loads_.erase(std::remove(pending_loads_.begin(), pending_loads_.end(),
+                                    *owner), pending_loads_.end());
+    ClearFailureFor(owner);
+    if (latest_ == *owner) active_ = false;
+    if (event_ == owner) event_.reset();
   }
 
   void RecordFailure(std::string code, std::optional<int64_t> http_status) {
-    if (!event_load_ || event_load_ != active_load_) {
-      return;
-    }
-    if (!failure_ || failure_->load_id != *event_load_ || http_status) {
-      failure_ = Failure{*event_load_, std::move(code), http_status};
+    if (!event_ || event_ != active_owner()) return;
+    if (!failure_ || failure_->owner != *event_ || http_status) {
+      failure_ = Failure{*event_, std::move(code), http_status};
     }
   }
 
@@ -163,13 +154,7 @@ class NativePlaybackState {
     }
     // The caller must drain queued lifecycle events before confirming empty
     // idle. Even START_FILE/END_FILE pairs may still be queued after stop.
-    for (auto entry = playlist_loads_.begin(); entry != playlist_loads_.end();) {
-      if (entry->second.phase != EntryPhase::started) {
-        entry = playlist_loads_.erase(entry);
-      } else {
-        ++entry;
-      }
-    }
+    EraseEntries([](const PlaylistLoad& entry) { return !entry.started; });
     pending_loads_.clear();
     const auto completed = pending_stop_;
     pending_stop_.reset();
@@ -179,19 +164,40 @@ class NativePlaybackState {
   void Reset() { *this = NativePlaybackState{}; }
 
  private:
-  void ClearFailureFor(std::optional<int64_t> load_id) {
-    if (load_id && failure_ && failure_->load_id == *load_id) {
-      failure_.reset();
+  void ReclaimBefore(uint64_t sequence) {
+    if (sequence <= latest_start_) return;
+    latest_start_ = sequence;
+    while (!pending_loads_.empty() && pending_loads_.front().sequence < sequence) {
+      pending_loads_.pop_front();
+    }
+    EraseEntries([&](const PlaylistLoad& entry) {
+      return !entry.started && entry.owner.sequence < sequence;
+    });
+  }
+
+  template <typename Predicate>
+  void EraseEntries(Predicate remove) {
+    for (auto entry = playlist_loads_.begin(); entry != playlist_loads_.end();) {
+      if (remove(entry->second)) {
+        entry = playlist_loads_.erase(entry);
+      } else {
+        ++entry;
+      }
     }
   }
-  std::optional<int64_t> active_load_;
-  std::optional<int64_t> event_load_;
+
+  void ClearFailureFor(std::optional<Load> owner) {
+    if (owner && failure_ && failure_->owner == *owner) failure_.reset();
+  }
+  Load latest_{0, 0};
+  uint64_t latest_start_ = 0;
+  bool active_ = false;
+  std::optional<Load> event_;
   std::optional<int64_t> pending_stop_;
-  std::deque<int64_t> pending_loads_;
-  enum class EntryPhase { awaiting_replace_start, awaiting_redirect_start, started };
+  std::deque<Load> pending_loads_;
   struct PlaylistLoad {
-    int64_t load_id = 0;
-    EntryPhase phase = EntryPhase::awaiting_replace_start;
+    Load owner;
+    bool started;
   };
   std::unordered_map<int64_t, PlaylistLoad> playlist_loads_;
   std::optional<Failure> failure_;
