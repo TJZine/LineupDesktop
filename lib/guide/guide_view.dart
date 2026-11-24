@@ -945,20 +945,16 @@ class _GuideViewState extends State<GuideView>
     if (event is! KeyDownEvent && event is! KeyRepeatEvent) {
       return KeyEventResult.ignored;
     }
+    final isTv = DeviceProfile.of(context).isTv;
     final key =
-        tvRemoteKeyAlias(
-          event.logicalKey,
-          enabled: DeviceProfile.of(context).isTv,
-        ) ??
-        event.logicalKey;
+        tvRemoteKeyAlias(event.logicalKey, enabled: isTv) ?? event.logicalKey;
     final keyboard = HardwareKeyboard.instance;
     final commandModified =
         keyboard.isControlPressed ||
         keyboard.isMetaPressed ||
         keyboard.isAltPressed;
     if (key == LogicalKeyboardKey.arrowUp) {
-      if (DeviceProfile.of(context).isTv &&
-          widget.controller.focusedChannelIndex == 0) {
+      if (isTv && widget.controller.focusedChannelIndex == 0) {
         _focusNearestToolbarControl();
       } else {
         widget.controller.moveVertical(-1);
@@ -987,6 +983,7 @@ class _GuideViewState extends State<GuideView>
         key == LogicalKeyboardKey.numpadEnter ||
         key == LogicalKeyboardKey.space ||
         key == LogicalKeyboardKey.select) {
+      if (isTv && event is KeyRepeatEvent) return KeyEventResult.handled;
       final selected = widget.controller.selectFocusedProgram();
       if (selected?.isCurrentAt(widget.controller.now) == true) {
         unawaited(widget.onTune(selected!.channelId));
