@@ -571,10 +571,17 @@ ChannelPlanAllocation materializeChannelPlan({
         matched?.number ??
         (stableGrouped ? groupedNumber(proposal.strategy) : next);
     if (number > 1000) return null;
-    final sameSource =
+    final match = matched?.compareProgramming(
+      source: proposal.source,
+      mode: entry.mode,
+      blockSize: entry.blockSize,
+      includeSpecials: normalizedIncludeSpecials,
+    );
+    final retained = match == ChannelProgrammingMatch.schedule ? matched : null;
+    final sourceLibraries =
         matched != null &&
-        canonicalSourceEquals(matched.source, proposal.source);
-    final sourceLibraries = sameSource && proposal.source is PlaylistSource
+            match != ChannelProgrammingMatch.differentSource &&
+            proposal.source is PlaylistSource
         ? playlistSourceLibraries(
             currentIds: proposal.playlistLibraryIds,
             currentTitles: proposal.sourceLibraries,
@@ -584,15 +591,6 @@ ChannelPlanAllocation materializeChannelPlan({
     final sourceLibrariesIncomplete =
         proposal.sourceLibrariesIncomplete ||
         !proposal.playlistLibraryIds.every(sourceLibraries.containsKey);
-    if (sameSource &&
-        matched.playbackMode == entry.mode &&
-        matched.blockSize == entry.blockSize &&
-        matched.includeSpecials == normalizedIncludeSpecials &&
-        matched.kind == kind &&
-        matched.sourceLibrariesIncomplete == sourceLibrariesIncomplete &&
-        canonicalChannelValueEquals(matched.sourceLibraries, sourceLibraries)) {
-      return matched;
-    }
     final id = matched?.id ?? createChannelId();
     final channel = Channel(
       id: id,
@@ -607,6 +605,8 @@ ChannelPlanAllocation materializeChannelPlan({
       kind: kind,
       sourceLibraries: sourceLibraries,
       sourceLibrariesIncomplete: sourceLibrariesIncomplete,
+      scheduleVersion: retained?.scheduleVersion ?? currentScheduleVersion,
+      scheduleTransition: retained?.scheduleTransition,
       shuffleSeed: matched?.shuffleSeed ?? stableChannelSeed(id),
       blockSize: entry.blockSize,
       builderKey: builderKey,

@@ -424,7 +424,10 @@ void main() {
         ),
         anchor: DateTime.utc(2027),
       );
-      expect(merged.channels, first.channels);
+      expect(
+        merged.channels.map((channel) => channel.toJson()),
+        first.channels.map((channel) => channel.toJson()),
+      );
     },
   );
 }

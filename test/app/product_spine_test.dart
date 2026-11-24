@@ -16,6 +16,109 @@ import '../support/test_doubles.dart';
 
 void main() {
   test(
+    'merging a renamed library preserves its on-air program after restart',
+    () async {
+      final directory = await Directory.systemTemp.createTemp('lineup-merge-');
+      addTearDown(() => directory.delete(recursive: true));
+      final now = _ProductPlex.now;
+      final end = now.add(const Duration(minutes: 15));
+      const scope = LineupScope(profileKey: 'child', serverId: 'server');
+      final channel = Channel(
+        id: 'recent',
+        name: 'My recent films',
+        number: 42,
+        builderKey:
+            '9e185ed5150761e567798859905b958873a6e0622cbd1f17ec3eca34e3313c3b',
+        source: const LibrarySource(
+          libraryId: 'movies',
+          libraryType: PlexLibraryType.movie,
+          order: LibraryOrder.addedDescending,
+        ),
+        sourceLibraries: const {'movies': 'Old library name'},
+        kind: ChannelKind.film,
+        playbackMode: PlaybackMode.sequential,
+        anchor: now.subtract(const Duration(hours: 3)),
+        shuffleSeed: 42,
+        scheduleTransition: ScheduleTransition(
+          boundary: end,
+          legacyCycleItems: const [
+            ChannelItem(
+              id: 'movie-7',
+              title: 'Original broadcast',
+              duration: Duration(hours: 1),
+            ),
+          ],
+        ),
+      );
+      await FileAppStore(directory).save(
+        const PersistedState(profileId: 'child').withLineup(
+          scope,
+          ScopedLineup(
+            libraryIds: {'movies'},
+            channels: [channel],
+            currentChannelId: channel.id,
+          ),
+        ),
+      );
+      final credentials = MemoryCredentialStore(
+        accountToken: 'account-token',
+        profileTokens: {'child': 'child-token'},
+      );
+      LineupController createController() => LineupController(
+        store: FileAppStore(directory),
+        credentials: credentials,
+        plex: _ProductPlex([]),
+        scheduleClock: () => now,
+      );
+      final lineup = createController();
+      try {
+        await lineup.initialize();
+        expect(lineup.stage, SetupStage.ready);
+        final base = lineup.channels;
+        final plan = materializeChannelPlan(
+          proposals: buildChannelProposals(
+            libraries: lineup.libraries,
+            items: lineup.availableMedia,
+            strategies: {BuilderStrategy.recentlyAdded},
+          ),
+          existing: base,
+          mode: ChannelBuildMode.merge,
+          anchor: now,
+        );
+        expect(
+          await lineup.applyReviewedChannelPlan(
+            plan.channels,
+            mode: ChannelBuildMode.merge,
+            expectedBase: base,
+          ),
+          ChannelPlanApplyResult.applied,
+        );
+      } finally {
+        lineup.dispose();
+      }
+
+      final restarted = createController();
+      addTearDown(restarted.dispose);
+      await restarted.initialize();
+      expect(restarted.stage, SetupStage.ready);
+      final restored = restarted.channels.single;
+      expect(restored.id, channel.id);
+      expect(restored.libraryTitle, 'Movies');
+      final guide = GuideController(lineup: restarted, clock: () => now)
+        ..requestViewport(0, 1);
+      addTearDown(guide.dispose);
+      await _until(() => guide.currentProgram(channel.id) != null);
+      final onAir = guide.currentProgram(channel.id)!.scheduled;
+      expect(onAir.item.id, 'movie-7');
+      expect(onAir.item.title, 'Original broadcast');
+      expect(onAir.end, end);
+      final next = guide.currentProgram(channel.id, end)!.scheduled;
+      expect(next.start, end);
+      expect(next.item.title, startsWith('Movie '));
+    },
+  );
+
+  test(
     'deterministic public seams exercise the portable product spine',
     () async {
       final directory = await Directory.systemTemp.createTemp(
