@@ -481,8 +481,8 @@ class ChannelStudioViewState extends State<ChannelStudioView> {
             onSaveAndTune: _confirmSaveAndTune,
             onSave: _save,
           ),
-          child: Builder(
-            builder: (context) => SingleChildScrollView(
+          child: LayoutBuilder(
+            builder: (context, viewportConstraints) => SingleChildScrollView(
               key: const Key('studio-scroll'),
               child: AbsorbPointer(
                 absorbing: _busy,
@@ -541,6 +541,7 @@ class ChannelStudioViewState extends State<ChannelStudioView> {
                       LayoutBuilder(
                         builder: (context, constraints) {
                           final programming = _StudioProgramming(
+                            controller: widget.controller,
                             key: _programmingKey,
                             draft: _session,
                             inventory: _playableInventory,
@@ -593,9 +594,11 @@ class ChannelStudioViewState extends State<ChannelStudioView> {
                             onUseNext: _useNextAvailable,
                           );
                           final preview = ChannelAirCheck(
+                            hasUnsavedChanges:
+                                _session.expectedBase == null || _session.dirty,
+                            viewportHeight: viewportConstraints.maxHeight,
                             controller: widget.controller,
                             channel: _previewDraft,
-                            originalChannel: _session.expectedBase,
                             clock: _clock,
                             compact:
                                 constraints.maxWidth /
@@ -889,9 +892,7 @@ class ChannelStudioViewState extends State<ChannelStudioView> {
 
   bool get _hasPendingProgrammingChoice => _pendingProgrammingChoice != null;
   String get _pendingProgrammingHint =>
-      _pendingProgrammingChoice == _StudioPendingChoice.filter
-      ? 'Finish this filter with Done, or cancel it, before saving or tuning.'
-      : 'Add the selected programs, or cancel selection, before saving or tuning.';
+      'Add the selected programs, or cancel selection, before saving or tuning.';
 
   bool get _canSave {
     final persisted = _session.expectedBase != null;
@@ -913,9 +914,7 @@ class ChannelStudioViewState extends State<ChannelStudioView> {
     if (_busy) return;
     if (_hasPendingProgrammingChoice) {
       setState(
-        () => _error = _pendingProgrammingChoice == _StudioPendingChoice.filter
-            ? 'Finish or cancel the open filter before saving.'
-            : 'Add or cancel the selected programs before saving.',
+        () => _error = 'Add or cancel the selected programs before saving.',
       );
       return;
     }

@@ -3658,6 +3658,113 @@ void main() {
     },
   );
 
+  for (final cancelEntry in [false, true]) {
+    testWidgets(
+      'number preview leaves capacity for a tune (cancel entry: $cancelEntry)',
+      (tester) async {
+        final lineup = _TestLineup(count: 12);
+        final blockers = lineup.channels.skip(2).take(3).toList();
+        final release = Completer<void>();
+        final started = <int>[];
+        final guide = GuideController(
+          lineup: lineup,
+          loadSchedule: (channel) async {
+            started.add(channel.number);
+            if (channel.number != 12) await release.future;
+            return _schedule(channel);
+          },
+        );
+        final player = _Player();
+        final coordinator = PlayerCoordinator(
+          player: player,
+          lineup: lineup,
+          guide: guide,
+        );
+        addTearDown(lineup.dispose);
+        addTearDown(guide.dispose);
+        addTearDown(player.dispose);
+        addTearDown(coordinator.dispose);
+        guide.requestChannels(blockers);
+        expect(started, [3, 4, 5]);
+
+        if (cancelEntry) {
+          coordinator.appendChannelDigit('7');
+          expect(coordinator.enteredChannel?.number, 7);
+          coordinator.closeOverlay();
+          expect(coordinator.enteredChannelNumber, isEmpty);
+        } else {
+          coordinator.appendChannelDigit('1');
+          expect(coordinator.enteredChannel?.number, 1);
+          coordinator.appendChannelDigit('2');
+          expect(coordinator.enteredChannel?.number, 12);
+        }
+        expect(started, [3, 4, 5]);
+        final tune = cancelEntry
+            ? coordinator.tune('channel-11')
+            : coordinator.commitChannelNumber();
+        await tester.pump();
+        expect(started, [3, 4, 5, 12]);
+        expect(lineup.currentChannelId, 'channel-11');
+        expect(player.loads, hasLength(1));
+        await tune;
+
+        release.complete();
+        await tester.pump();
+        expect(started, [3, 4, 5, 12]);
+        coordinator.closeOverlay();
+      },
+    );
+  }
+
+  testWidgets(
+    'cold number preview loads with spare capacity and cached facts survive pressure',
+    (tester) async {
+      final lineup = _TestLineup(count: 12);
+      final first = lineup.channels.first;
+      final release = Completer<void>();
+      final started = <int>[];
+      final guide = GuideController(
+        lineup: lineup,
+        loadSchedule: (channel) async {
+          started.add(channel.number);
+          if (channel.id != first.id) await release.future;
+          return _schedule(channel);
+        },
+      );
+      final player = _Player();
+      final coordinator = PlayerCoordinator(
+        player: player,
+        lineup: lineup,
+        guide: guide,
+      );
+      addTearDown(lineup.dispose);
+      addTearDown(guide.dispose);
+      addTearDown(player.dispose);
+      addTearDown(coordinator.dispose);
+      guide.requestChannels(lineup.channels.skip(2).take(2));
+      expect(guide.currentProgram(first.id), isNull);
+
+      coordinator.appendChannelDigit('1');
+      expect(started, [3, 4, 1]);
+      await tester.pump();
+      expect(coordinator.enteredChannel?.id, first.id);
+      final program = guide.currentProgram(first.id);
+      expect(program?.scheduled.item.title, 'Program 0');
+      coordinator.closeOverlay();
+
+      guide.requestChannels([lineup.channels[4]]);
+      coordinator.appendChannelDigit('1');
+      expect(
+        guide.currentProgram(coordinator.enteredChannel!.id)?.id,
+        program!.id,
+      );
+      expect(started, [3, 4, 1, 5]);
+      coordinator.closeOverlay();
+      release.complete();
+      await tester.pump();
+    },
+  );
+
   testWidgets('number notices expire and newer input and tunes replace them', (
     tester,
   ) async {

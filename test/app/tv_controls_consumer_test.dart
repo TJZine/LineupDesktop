@@ -35,10 +35,15 @@ void main() {
       await openDestination(tester, 'Settings');
       await tester.sendKeyEvent(LogicalKeyboardKey.arrowRight);
       await tester.pumpAndSettle();
-      await tester.sendKeyEvent(LogicalKeyboardKey.arrowDown);
-      await tester.pumpAndSettle();
-      await tester.sendKeyEvent(LogicalKeyboardKey.arrowDown);
-      await tester.pumpAndSettle();
+      final artwork = find.text('Use title artwork');
+      for (
+        var steps = 0;
+        steps < 8 && !Focus.of(tester.element(artwork)).hasFocus;
+        steps++
+      ) {
+        await tester.sendKeyEvent(LogicalKeyboardKey.arrowDown);
+        await tester.pumpAndSettle();
+      }
       final title = find.text('Use title artwork');
       final surface = find.ancestor(
         of: title,

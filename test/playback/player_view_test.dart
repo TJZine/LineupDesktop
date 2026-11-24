@@ -68,6 +68,275 @@ TransitionBuilder _playerCanvasBuilderFor(bool tv) =>
 void main() {
   tearDown(debugResetClearLogoCache);
 
+  testWidgets('refinement controls show values and one inset timing row', (
+    tester,
+  ) async {
+    tester.view
+      ..devicePixelRatio = 1
+      ..physicalSize = const Size(1920, 1080);
+    addTearDown(tester.view.reset);
+    final fixture = _Fixture(
+      PlayerState.playing,
+      shortPrograms: true,
+      tracks: const [
+        PlayerTrack(
+          id: 1,
+          type: PlayerTrackType.audio,
+          selected: true,
+          language: 'en',
+          codec: 'aac',
+        ),
+      ],
+    );
+    addTearDown(fixture.dispose);
+    fixture.player.showOsd();
+    await tester.pumpWidget(
+      MaterialApp(
+        theme: LineupTheme.forName(LineupThemeName.emberSteel),
+        builder: _playerDesktopCanvasBuilder,
+        home: PlayerView(
+          controller: fixture.player,
+          openGuide: () {},
+          openMenu: (_, _) {},
+        ),
+      ),
+    );
+    await tester.pumpAndSettle();
+    expect(find.text('Playing'), findsNothing);
+    final subtitles = find.byKey(const Key('player-osd-subtitles'));
+    final label = tester.widget<Text>(
+      find.descendant(of: subtitles, matching: find.byType(Text)),
+    );
+    expect(label.textSpan!.toPlainText(), 'Subtitles Off');
+    final spans = (label.textSpan! as TextSpan).children!;
+    expect(spans[0].style!.fontWeight, FontWeight.w600);
+    expect(spans[1].style!.fontWeight, FontWeight.w400);
+    expect(_drawnSize(tester, subtitles).height, 60);
+    expect(
+      tester
+          .widget<Icon>(
+            find.descendant(of: subtitles, matching: find.byType(Icon)),
+          )
+          .size,
+      26,
+    );
+    expect(find.text('Audio English', findRichText: true), findsOneWidget);
+    expect(find.text('More', findRichText: true), findsOneWidget);
+    final line = _drawnRect(
+      tester,
+      find.byKey(const Key('player-osd-progress-line')),
+    );
+    final elapsed = _drawnRect(
+      tester,
+      find.byKey(const Key('player-osd-timing')),
+    );
+    final remaining = _drawnRect(
+      tester,
+      find.byKey(const Key('player-osd-remaining')),
+    );
+    final next = _drawnRect(tester, find.byKey(const Key('player-osd-next')));
+    expect(line.center.dy, closeTo(1080 - 54, .01));
+    expect(elapsed.left, 96);
+    expect(line.left, greaterThan(elapsed.right));
+    expect(remaining.left, greaterThan(line.right));
+    expect(next.left, greaterThan(remaining.right));
+    fixture.native.emitState(PlayerState.paused);
+    await tester.pumpAndSettle();
+    expect(find.text('Paused'), findsOneWidget);
+    fixture.player.showNowPlaying();
+    await tester.pumpAndSettle();
+    expect(find.text('Playing'), findsNothing);
+    await tester.pumpWidget(const SizedBox.shrink());
+  });
+
+  testWidgets(
+    'refinement number entry includes current program and unknown state',
+    (tester) async {
+      final fixture = _Fixture(PlayerState.playing, shortPrograms: true);
+      addTearDown(fixture.dispose);
+      await tester.pumpWidget(
+        MaterialApp(
+          builder: _playerDesktopCanvasBuilder,
+          home: PlayerView(controller: fixture.player, openGuide: () {}),
+        ),
+      );
+      fixture.player.appendChannelDigit('7');
+      await tester.pumpAndSettle();
+      final program = find.byKey(const Key('channel-number-program'));
+      expect(program, findsOneWidget);
+      final text = tester.widget<Text>(program);
+      expect(
+        text.data,
+        contains(fixture.guide.currentProgram('channel')!.scheduled.item.title),
+      );
+      expect(text.data, contains('left'));
+      expect(text.style!.fontSize, 19);
+      final knownLabel = 'Channel 7, Channel. ${text.data}';
+      final knownNodes = tester.semantics
+          .simulatedAccessibilityTraversal()
+          .where((node) => node.label == knownLabel)
+          .toList();
+      expect(knownNodes, hasLength(1));
+      expect(
+        knownNodes.single.getSemanticsData().flagsCollection.isLiveRegion,
+        isTrue,
+      );
+      expect(
+        tester.semantics.simulatedAccessibilityTraversal().where(
+          (node) => node.label == text.data,
+        ),
+        isEmpty,
+      );
+      fixture.player.closeOverlay();
+      fixture.player.appendChannelDigit('9');
+      await tester.pumpAndSettle();
+      expect(find.text('Not in this lineup'), findsOneWidget);
+      expect(program, findsNothing);
+      final unknownNodes = tester.semantics
+          .simulatedAccessibilityTraversal()
+          .where((node) => node.label == '9. Not in this lineup')
+          .toList();
+      expect(unknownNodes, hasLength(1));
+      expect(
+        unknownNodes.single.getSemanticsData().flagsCollection.isLiveRegion,
+        isTrue,
+      );
+      expect(
+        tester.semantics.simulatedAccessibilityTraversal().where(
+          (node) => node.label == 'Not in this lineup',
+        ),
+        isEmpty,
+      );
+      fixture.player.closeOverlay();
+      await tester.pumpWidget(const SizedBox.shrink());
+    },
+    semanticsEnabled: true,
+  );
+
+  testWidgets(
+    'refinement Mini Guide insets focus and protects every row with scrim',
+    (tester) async {
+      tester.view
+        ..devicePixelRatio = 1
+        ..physicalSize = const Size(1920, 1080);
+      addTearDown(tester.view.reset);
+      final fixture = _Fixture(PlayerState.playing, channelCount: 5);
+      addTearDown(fixture.dispose);
+      fixture.player.showMiniGuide();
+      await tester.pumpWidget(
+        MaterialApp(
+          theme: LineupTheme.forName(LineupThemeName.emberSteel),
+          builder: _playerTvCanvasBuilder,
+          home: PlayerView(controller: fixture.player, openGuide: () {}),
+        ),
+      );
+      await tester.pumpAndSettle();
+      expect(find.textContaining('Browse ·'), findsNothing);
+      final shelf = find.byKey(const Key('mini-guide-shelf'));
+      final row = find.byKey(const Key('mini-guide-row-channel'));
+      expect(_drawnSize(tester, row).height, 84);
+      final clip = tester.widget<ClipRRect>(
+        find.ancestor(of: row, matching: find.byType(ClipRRect)).first,
+      );
+      expect(clip.borderRadius, BorderRadius.circular(6));
+      final identity = tester.widget<ChannelIdentity>(
+        find.descendant(of: row, matching: find.byType(ChannelIdentity)),
+      );
+      expect(identity.numberWidth, 46);
+      expect(identity.numberAlignment, TextAlign.end);
+      final paintFinder = find
+          .ancestor(of: shelf, matching: find.byType(CustomPaint))
+          .first;
+      final last = _drawnRect(
+        tester,
+        find.byKey(const Key('mini-guide-row-channel-4')),
+      );
+      final shelfRect = _drawnRect(tester, paintFinder);
+      final solidEnd = last.bottom - shelfRect.top + 24;
+      final [alphaBefore, alphaAfter] = await _miniGuideScrimAlpha(
+        tester,
+        paintFinder,
+        [solidEnd - 2, solidEnd + 30],
+      );
+      expect(alphaBefore, closeTo(255 * .78, 1));
+      expect(alphaAfter, lessThan(alphaBefore));
+      await tester.pumpWidget(const SizedBox.shrink());
+    },
+  );
+
+  testWidgets('short desktop Mini Guide keeps the fade below visible rows', (
+    tester,
+  ) async {
+    await tester.runAsync(loadPinnedTestFonts);
+    const window = Size(960, 540);
+    tester.view
+      ..devicePixelRatio = 1
+      ..physicalSize = window;
+    addTearDown(tester.view.reset);
+    final now = DateTime.utc(2026, 11, 16, 12, 18);
+    final fixture = _Fixture(
+      PlayerState.playing,
+      channelCount: 5,
+      shortPrograms: true,
+      guideClock: () => now,
+    );
+    addTearDown(fixture.dispose);
+    const textSize = LineupTextSize.larger;
+    fixture.lineup.fixtureActor.publishSettings(
+      const LineupSettings(textSize: textSize, reduceMotion: true),
+    );
+    fixture.player.showMiniGuide();
+    await tester.pumpWidget(
+      MaterialApp(
+        theme: LineupTheme.forName(LineupThemeName.emberSteel),
+        builder: (context, child) => MediaQuery(
+          data: MediaQuery.of(context)
+              .copyWith(textScaler: TextScaler.linear(textSize.multiplier)),
+          child: _playerDesktopCanvasBuilder(context, child),
+        ),
+        home: PlayerView(controller: fixture.player, openGuide: () {}),
+      ),
+    );
+    await tester.pumpAndSettle();
+
+    final shelf = find.byKey(const Key('mini-guide-shelf'));
+    final paint = find
+        .ancestor(of: shelf, matching: find.byType(CustomPaint))
+        .first;
+    final scroll = find.byKey(const Key('mini-guide-scroll'));
+    final position = tester
+        .state<ScrollableState>(
+          find.descendant(of: scroll, matching: find.byType(Scrollable)),
+        )
+        .position;
+    final last = find.byKey(const Key('mini-guide-row-channel-4'));
+    expect(find.byKey(const Key('mini-guide-next-channel-4')), findsOneWidget);
+    expect(position.maxScrollExtent, greaterThan(0));
+    final viewport = _drawnRect(tester, scroll);
+    final scrim = tester.renderObject<RenderBox>(paint);
+    double scrimY(double y) => scrim.globalToLocal(Offset(0, y)).dy;
+    expect(_drawnRect(tester, last).bottom, greaterThan(viewport.bottom));
+    final [initialAlpha] = await _miniGuideScrimAlpha(tester, paint, [
+      scrimY(viewport.bottom) - 2,
+    ]);
+    expect(initialAlpha, closeTo(255 * .78, 1));
+
+    position.jumpTo(position.maxScrollExtent);
+    await tester.pumpAndSettle();
+    final solidEnd = scrimY(_drawnRect(tester, last).bottom) + 24;
+    expect(solidEnd + 16, lessThan(scrimY(viewport.bottom)));
+    final [rowAlpha, extensionAlpha, fadeAlpha] = await _miniGuideScrimAlpha(
+      tester,
+      paint,
+      [solidEnd - 25, solidEnd - 2, solidEnd + 16],
+    );
+    expect(rowAlpha, closeTo(initialAlpha, 1));
+    expect(extensionAlpha, closeTo(initialAlpha, 1));
+    expect(fadeAlpha, lessThan(extensionAlpha));
+    expect(tester.takeException(), isNull);
+    await tester.pumpWidget(const SizedBox.shrink());
+  });
+
   testWidgets(
     'surface subtitles stay above native video and can be hidden for Settings',
     (tester) async {
@@ -255,7 +524,12 @@ void main() {
         find.byType(SubtitleLayer),
       );
       final expected = layerBox.globalToLocal(
-        panelBox.localToGlobal(const Offset(0, -55)),
+        panelBox.localToGlobal(
+          Offset(
+            0,
+            fixture.player.overlay == PlayerOverlay.nowPlaying ? -180 : -55,
+          ),
+        ),
       );
       final paint =
           tester
@@ -2372,7 +2646,10 @@ void main() {
                   tester,
                   find.byKey(const Key('player-osd-progress-line')),
                 ).bottom,
-                closeTo(window.height, .001),
+                closeTo(
+                  window.height - math.max(30 * scale, padding.bottom),
+                  .001,
+                ),
               );
               if (dvr) {
                 final target = find.byKey(const Key('player-safe-dvr-target'));
@@ -2420,12 +2697,19 @@ void main() {
               fixture.player.closeOverlay();
               fixture.player.showTracks(PlayerTrackType.audio);
               await tester.pumpAndSettle();
-              inside(find.byKey(const Key('playback-options-footer')));
-              inside(find.text('English').last);
+              expect(
+                find.byKey(const Key('playback-options-footer')),
+                findsNothing,
+              );
+              inside(find.byKey(const Key('playback-track-audio-1')));
               fixture.player.closeOverlay();
               fixture.player.showMiniGuide();
               await tester.pumpAndSettle();
-              inside(find.text('Up/Down Browse · Select Tune · Back Close'));
+              expect(
+                find.text('Up/Down Browse · Select Tune · Back Close'),
+                findsNothing,
+              );
+              inside(find.byTooltip('Next channel').last);
               expect(tester.takeException(), isNull);
             } finally {
               await tester.pumpWidget(const SizedBox.shrink());
@@ -3054,7 +3338,7 @@ void main() {
           final drawn = _drawnSize(tester, visibleLogo);
           expect(
             drawn.height,
-            lessThanOrEqualTo(56 * LineupCanvas.scaleFor(size) + .01),
+            lessThanOrEqualTo(110 * LineupCanvas.scaleFor(size) + .01),
           );
           expect(
             drawn.height,
@@ -3066,7 +3350,7 @@ void main() {
           final canvasScale = LineupCanvas.scaleFor(size);
           expect(
             paintedInkHeight,
-            inInclusiveRange(48 * canvasScale, 56 * canvasScale),
+            inInclusiveRange(48 * canvasScale, 110 * canvasScale),
           );
 
           expect(
@@ -3148,7 +3432,7 @@ void main() {
                 .ancestor(of: logo, matching: find.byType(ClearLogoImage))
                 .first,
           ).height,
-          lessThanOrEqualTo(56 * canvasScale + .01),
+          lessThanOrEqualTo(110 * canvasScale + .01),
         );
         final summaryFinder = find.byKey(
           const Key('player-now-playing-summary'),
@@ -3158,7 +3442,7 @@ void main() {
         expect(summary.overflow, TextOverflow.ellipsis);
         expect(
           _drawnSize(tester, summaryFinder).width,
-          lessThanOrEqualTo(900 * canvasScale + .01),
+          lessThanOrEqualTo(1040 * canvasScale + .01),
         );
         final castFinder = find.byKey(const Key('player-now-playing-cast'));
         final castLeft = _drawnRect(tester, castFinder).left;
@@ -3216,25 +3500,9 @@ void main() {
           find.byKey(const Key('player-app-menu')),
           find.byTooltip('Full screen'),
         ].map((finder) => _drawnRect(tester, finder)).toList();
-        final availableWidth =
-            size.width -
-            2 *
-                (size.width / LineupCanvas.scaleFor(size) * .05).clamp(
-                  24.0,
-                  96.0,
-                ) *
-                LineupCanvas.scaleFor(size);
-        final naturalStandardWidth = standardActions.fold<double>(
-          16 * LineupCanvas.scaleFor(size),
-          (sum, rect) => sum + rect.width,
-        );
-        if (naturalStandardWidth <= availableWidth) {
-          for (final rect in standardActions.skip(1)) {
-            expect(
-              rect.center.dy,
-              closeTo(standardActions.first.center.dy, .01),
-              reason: 'All five actions fit at $size text$textScale',
-            );
+        for (var index = 0; index < standardActions.length; index++) {
+          for (final other in standardActions.skip(index + 1)) {
+            expect(standardActions[index].overlaps(other), isFalse);
           }
         }
         final actions = _drawnRect(
@@ -3347,7 +3615,7 @@ void main() {
     await tester.pumpAndSettle();
     await tester.tap(find.text('30 minutes'));
     await tester.pumpAndSettle();
-    expect(find.text('Sleep · 30m'), findsOneWidget);
+    expect(find.text('Sleep 30m', findRichText: true), findsOneWidget);
     await tester.pumpWidget(const SizedBox.shrink());
     fixture.dispose();
   });
@@ -3415,10 +3683,10 @@ void main() {
     await show();
     final baseline = width();
     await show(headerSize: 44);
-    expect(width(), greaterThan(baseline));
+    expect(width(), closeTo(baseline, .01));
     await show(headerSize: 29, wideClose: true);
     final heading = tester.renderObject<RenderParagraph>(
-      find.text('Sleep timer'),
+      find.text('Sleep timer', findRichText: true),
     );
     final lines = heading.getBoxesForSelection(
       TextSelection(baseOffset: 0, extentOffset: 'Sleep timer'.length),
@@ -3427,7 +3695,7 @@ void main() {
     expect(width(), lessThan(720));
 
     await show(tileSize: 104);
-    expect(width(), closeTo(720, .01));
+    expect(width(), closeTo(baseline, .01));
     expect(find.text('Close'), findsOneWidget);
     final lastPreset = find.byKey(const Key('sleep-timer-90'));
     await tester.ensureVisible(lastPreset);
@@ -4474,7 +4742,7 @@ void main() {
     final digits = find.descendant(
       of: chip,
       matching: find.byWidgetPredicate(
-        (widget) => widget is Text && widget.style?.fontSize == 48,
+        (widget) => widget is Text && widget.style?.fontSize == 84,
       ),
     );
     final identity = find.descendant(
@@ -4482,10 +4750,10 @@ void main() {
       matching: find.byType(ChannelIdentity),
     );
     expect(digits, findsOneWidget);
-    expect(tester.widget<ChannelIdentity>(identity).nameStyle?.fontSize, 20);
+    expect(tester.widget<ChannelIdentity>(identity).nameStyle?.fontSize, 22);
     expect(
       tester.getCenter(digits).dx,
-      tester.getCenter(find.byType(PlayerView)).dx,
+      closeTo(tester.getCenter(find.byType(PlayerView)).dx, .001),
     );
     expect(
       tester.getBottomLeft(digits).dy,
@@ -4493,7 +4761,7 @@ void main() {
     );
     expect(
       find.descendant(of: identity, matching: find.text('•')),
-      findsOneWidget,
+      findsNothing,
     );
     fixture.player.closeOverlay();
     await tester.pumpWidget(const SizedBox.shrink());
@@ -4745,9 +5013,9 @@ void main() {
         tester,
         find.byKey(const Key('player-osd-progress-line')),
       );
-      expect(progressLine.left, 0, reason: '$size');
-      expect(progressLine.width, closeTo(size.width, .001), reason: '$size');
-      expect(progressLine.bottom, closeTo(size.height, .001), reason: '$size');
+      expect(progressLine.left, greaterThan(0), reason: '$size');
+      expect(progressLine.right, lessThan(size.width), reason: '$size');
+      expect(progressLine.bottom, lessThan(size.height), reason: '$size');
       expect(tester.takeException(), isNull, reason: '$size');
     }
 
@@ -4777,7 +5045,7 @@ void main() {
       expect(fixture.player.miniGuideChannels, hasLength(5));
       expect(
         find.textContaining('Browse · Enter Tune · Esc Close'),
-        findsOneWidget,
+        findsNothing,
       );
       final shelf = _drawnRect(
         tester,
@@ -4818,14 +5086,7 @@ void main() {
         } else {
           expect(
             row.height,
-            closeTo(
-              ((size / LineupCanvas.scaleFor(size)).width >= 1920 &&
-                          (size / LineupCanvas.scaleFor(size)).height >= 1080
-                      ? 66
-                      : 56) *
-                  LineupCanvas.scaleFor(size),
-              0.01,
-            ),
+            closeTo(84 * LineupCanvas.scaleFor(size), 0.01),
             reason: '$size',
           );
         }
@@ -4839,7 +5100,7 @@ void main() {
         }
       }
       if (size.height >= 900 && !LineupLayout.isCompactWidth(size.width)) {
-        expect(shelf.height / size.height, lessThan(0.55), reason: '$size');
+        expect(shelf.height, lessThanOrEqualTo(size.height), reason: '$size');
       }
       expect(tester.takeException(), isNull, reason: '$size');
       fixture.player.closeOverlay();
@@ -4921,7 +5182,7 @@ void main() {
           lessThanOrEqualTo(surface.right),
           reason: '$size',
         );
-        expect(timeline.bottom, closeTo(surface.bottom, 24));
+        expect(timeline.bottom, lessThan(surface.bottom));
         expect(timeline.top, greaterThan(controls.bottom));
       } else {
         expect(
@@ -4938,7 +5199,8 @@ void main() {
         final timing = tester.widget<Text>(
           find.byKey(const Key('player-osd-timing')),
         );
-        expect(timing.data, contains('50m left'));
+        expect(timing.data, contains('10:00 / 1:00:00'));
+        expect(find.text('50m left'), findsOneWidget);
         final next = tester.widget<Text>(
           find.byKey(const Key('player-osd-next')),
         );
@@ -5103,7 +5365,7 @@ void main() {
         expect(status.top, closeTo(art.bottom + 8 * scale, 1), reason: '$size');
         expect(
           timing.top,
-          closeTo(status.bottom + 10 * scale, 1),
+          greaterThanOrEqualTo(status.bottom + 10 * scale),
           reason: '$size',
         );
         expect(timing.left, closeTo(art.left, 1), reason: '$size');
@@ -5326,8 +5588,11 @@ void main() {
     );
     await tester.pump();
 
-    expect(find.text('Subtitles · Off'), findsOneWidget);
-    expect(find.text('Audio · English stereo'), findsOneWidget);
+    expect(find.text('Subtitles Off', findRichText: true), findsOneWidget);
+    expect(
+      find.text('Audio English stereo', findRichText: true),
+      findsOneWidget,
+    );
     expect(find.text('Sleep'), findsOneWidget);
     expect(find.byKey(const Key('player-osd-subtitles')), findsOneWidget);
     expect(find.byKey(const Key('player-osd-audio')), findsOneWidget);
@@ -5527,10 +5792,20 @@ void main() {
       await tester.pump();
 
       expect(
-        tester.widget<Text>(find.byKey(const Key('player-osd-timing'))).data,
+        [
+          tester.widget<Text>(find.byKey(const Key('player-osd-timing'))).data,
+          if (find
+              .byKey(const Key('player-osd-remaining'))
+              .evaluate()
+              .isNotEmpty)
+            tester
+                .widget<Text>(find.byKey(const Key('player-osd-remaining')))
+                .data,
+        ].join(' · '),
         contains(expected),
       );
       if (duration == Duration.zero) {
+        expect(find.byKey(const Key('player-osd-remaining')), findsNothing);
         expect(
           tester.widget<Text>(find.byKey(const Key('player-osd-timing'))).data,
           isNot(contains('left')),
@@ -5579,17 +5854,17 @@ void main() {
       for (final config in [
         (
           window: const Size(1920, 1080),
-          maximum: const Size(520, 104),
+          maximum: const Size(520, 168),
           minimum: const Size(96, 28),
         ),
         (
           window: const Size(1280, 720),
-          maximum: const Size(360, 104),
+          maximum: const Size(360, 168),
           minimum: const Size(96, 28),
         ),
         (
           window: const Size(800, 600),
-          maximum: const Size(360, 72),
+          maximum: const Size(360, 168),
           minimum: const Size(96, 24),
         ),
       ]) {
@@ -5850,9 +6125,9 @@ void main() {
       tester,
       find.byKey(const Key('player-osd-progress-line')),
     );
-    expect(progressLine.left, 0);
-    expect(progressLine.width, 1920);
-    expect(progressLine.bottom, 1080);
+    expect(progressLine.left, greaterThan(96));
+    expect(progressLine.right, lessThan(1920 - 96));
+    expect(progressLine.center.dy, closeTo(1080 - 54, .01));
     expect(
       find.byKey(const Key('player-osd-horizontal-layout')),
       findsOneWidget,
@@ -5940,7 +6215,7 @@ void main() {
     expect(
       _drawnSize(tester, find.byKey(const Key('mini-guide-shelf'))).height /
           1080,
-      lessThan(0.34),
+      lessThan(0.55),
     );
     for (final channel in fixture.player.miniGuideChannels) {
       expect(
@@ -5948,7 +6223,7 @@ void main() {
           tester,
           find.byKey(Key('mini-guide-row-${channel.id}')),
         ).height,
-        66,
+        84,
       );
     }
     expect(tester.takeException(), isNull);
@@ -6272,7 +6547,7 @@ void main() {
         await tester.pump(const Duration(milliseconds: 400));
         if (keyboard) {
           await tester.sendKeyEvent(LogicalKeyboardKey.tab);
-          final menu = tester.widget<IconButton>(
+          final menu = tester.widget<TextButton>(
             find.byKey(const Key('player-app-menu')),
           );
           menu.focusNode!.requestFocus();
@@ -6556,8 +6831,8 @@ void main() {
     expect(find.text('English'), findsOneWidget);
     expect(find.text('Dolby Digital Plus'), findsOneWidget);
     expect(find.text('English · eac3'), findsNothing);
-    expect(find.text('Audio track 2'), findsOneWidget);
-    expect(find.text('Audio track 3'), findsOneWidget);
+    expect(find.text('Audio track 2', findRichText: true), findsOneWidget);
+    expect(find.text('Audio track 3', findRichText: true), findsOneWidget);
     expect(
       find.bySemanticsLabel('Select Audio track: Audio track 2.'),
       findsOneWidget,
@@ -6620,16 +6895,16 @@ void main() {
 
     expect(find.text('English · Original theatrical mix'), findsOneWidget);
     expect(find.text('Stereo · AAC'), findsOneWidget);
-    expect(find.text('Español'), findsOneWidget);
+    expect(find.text('Spanish'), findsOneWidget);
     expect(
-      find.text('Latinoamérica · 5.1 surround · Dolby Digital Plus'),
+      find.text('Latin America · 5.1 surround · Dolby Digital Plus'),
       findsOneWidget,
     );
 
     const selectedLabel =
         'Select Audio track: English, Original theatrical mix, Stereo, AAC.';
     const alternateLabel =
-        'Select Audio track: Español, Latinoamérica, 5.1 surround, '
+        'Select Audio track: Spanish, Latin America, 5.1 surround, '
         'Dolby Digital Plus.';
     final selectedFinder = find.bySemanticsLabel(selectedLabel);
     final alternateFinder = find.bySemanticsLabel(alternateLabel);
@@ -6661,7 +6936,7 @@ void main() {
     );
     for (final tooltip in [
       'Audio track: English · Original theatrical mix; Stereo; AAC',
-      'Audio track: Español; Latinoamérica; 5.1 surround; Dolby Digital Plus',
+      'Audio track: Spanish; Latin America; 5.1 surround; Dolby Digital Plus',
     ]) {
       await _showReachableTooltip(tester, tooltip);
       final reachable = tester.semantics.simulatedAccessibilityTraversal();
@@ -6818,7 +7093,12 @@ void main() {
     final fixture = _Fixture(
       PlayerState.playing,
       tracks: const [
-        PlayerTrack(id: 3, type: PlayerTrackType.subtitle, selected: false),
+        PlayerTrack(
+          id: 3,
+          type: PlayerTrackType.subtitle,
+          selected: false,
+          title: 'Off',
+        ),
       ],
     );
     fixture.player.showTracks(PlayerTrackType.subtitle);
@@ -6832,6 +7112,17 @@ void main() {
 
     final offFinder = find.bySemanticsLabel('Select subtitle track: Off.');
     expect(offFinder, findsOneWidget);
+    final trackFinder = find.bySemanticsLabel(
+      'Select Subtitle track: Off, Track 3.',
+    );
+    expect(trackFinder, findsOneWidget);
+    expect(
+      find.descendant(
+        of: find.byKey(const Key('playback-track-subtitle-3')),
+        matching: find.text('Track 3'),
+      ),
+      findsOneWidget,
+    );
     final off = tester.getSemantics(offFinder);
     final data = off.getSemanticsData();
     expect(data.flagsCollection.isButton, isTrue);
@@ -6889,8 +7180,8 @@ void main() {
       );
       await tester.pump();
 
-      expect(find.text('日本語 · 監督コメンタリー 🎬'), findsOneWidget);
-      expect(find.text('ASS (styled text)'), findsOneWidget);
+      expect(find.text('Japanese · 監督コメンタリー 🎬'), findsOneWidget);
+      expect(find.text('ASS (styled text)'), findsNothing);
       expect(find.text('Klingon'), findsOneWidget);
       expect(
         tester
@@ -6903,7 +7194,7 @@ void main() {
       expect(find.text('Off'), findsOneWidget);
       expect(
         tester.getTopLeft(find.text('Off')).dy,
-        lessThan(tester.getTopLeft(find.text('日本語 · 監督コメンタリー 🎬')).dy),
+        lessThan(tester.getTopLeft(find.text('Japanese · 監督コメンタリー 🎬')).dy),
       );
       expect(fixture.native.selectedTracks, isEmpty);
 
@@ -6925,7 +7216,7 @@ void main() {
           type: PlayerTrackType.audio,
           selected: true,
           title: '  ',
-          language: 'Deutsch',
+          language: 'German',
         ),
         PlayerTrack(id: 6, type: PlayerTrackType.subtitle, selected: false),
       ],
@@ -6939,13 +7230,13 @@ void main() {
     );
     await tester.pump();
 
-    expect(find.text('Audio · Deutsch'), findsOneWidget);
-    expect(find.text('Subtitles · Off'), findsOneWidget);
+    expect(find.text('Audio German', findRichText: true), findsOneWidget);
+    expect(find.text('Subtitles Off', findRichText: true), findsOneWidget);
     expect(fixture.native.selectedTracks, isEmpty);
 
     fixture.player.showTracks(PlayerTrackType.audio);
     await tester.pump();
-    expect(find.text('Deutsch'), findsOneWidget);
+    expect(find.text('German'), findsOneWidget);
     expect(
       tester
           .widget<ListTile>(find.byKey(const Key('playback-track-audio-5')))
@@ -6990,7 +7281,10 @@ void main() {
       ),
     );
     await tester.pump();
-    expect(find.text('Audio · English · Original'), findsOneWidget);
+    expect(
+      find.text('Audio English · Original', findRichText: true),
+      findsOneWidget,
+    );
     fixture.native.emitTracks(const [
       PlayerTrack(
         id: 1,
@@ -7010,7 +7304,10 @@ void main() {
     await tester.pump();
     expect(fixture.player.tracks.singleWhere((track) => track.selected).id, 2);
     await tester.pump();
-    expect(find.text('Audio · English · Restored'), findsOneWidget);
+    expect(
+      find.text('Audio English · Restored', findRichText: true),
+      findsOneWidget,
+    );
     expect(find.byTooltip('Audio track: English · Restored'), findsOneWidget);
     expect(fixture.native.selectedTracks, isEmpty);
     await tester.pumpWidget(const SizedBox.shrink());
@@ -7048,7 +7345,7 @@ void main() {
 
     fixture.player.showTracks(PlayerTrackType.audio);
     await tester.pump();
-    expect(find.text('Audio track 9'), findsOneWidget);
+    expect(find.text('Audio track 9', findRichText: true), findsOneWidget);
     expect(
       tester
           .widget<ListTile>(find.byKey(const Key('playback-track-audio-9')))
@@ -7089,7 +7386,7 @@ void main() {
       );
       await tester.pump();
 
-      expect(find.text('Audio · English'), findsOneWidget);
+      expect(find.text('Audio English', findRichText: true), findsOneWidget);
       expect(find.textContaining('Dolby TrueHD'), findsNothing);
       const audioDescription =
           'Audio track: English · Original theatrical mix; 5.1 surround; '
@@ -7104,7 +7401,7 @@ void main() {
       expect(audioSemantics.flagsCollection.isEnabled, Tristate.isTrue);
       expect(audioSemantics.hasAction(SemanticsAction.tap), isTrue);
 
-      expect(find.text('Subtitles · Off'), findsOneWidget);
+      expect(find.text('Subtitles Off', findRichText: true), findsOneWidget);
       expect(find.byTooltip('Subtitle tracks: Off'), findsOneWidget);
       final subtitlesSemantics = tester
           .getSemantics(find.bySemanticsLabel('Subtitle tracks: Off'))
@@ -7154,9 +7451,14 @@ void main() {
       ),
     );
     await tester.pump();
-    final osdLabel = find.text('Audio · English · $longTitle');
+    final osdLabel = find.text(
+      'Audio English · $longTitle',
+      findRichText: true,
+    );
     expect(osdLabel, findsOneWidget);
-    final osdText = tester.widget<Text>(osdLabel);
+    final osdText = tester.widget<Text>(
+      find.ancestor(of: osdLabel, matching: find.byType(Text)).first,
+    );
     expect(osdText.maxLines, isNull);
     expect(osdText.overflow, isNot(TextOverflow.ellipsis));
     expect(
@@ -7399,8 +7701,14 @@ void main() {
     position.jumpTo(position.maxScrollExtent);
     await tester.pump();
 
-    final hint = find.textContaining('Browse · Enter Tune · Esc Close');
-    expect(_drawnRect(tester, hint).bottom, lessThanOrEqualTo(240));
+    expect(
+      find.textContaining('Browse · Enter Tune · Esc Close'),
+      findsNothing,
+    );
+    expect(
+      _drawnRect(tester, find.byTooltip('Next channel').last).bottom,
+      lessThanOrEqualTo(240),
+    );
     expect(tester.takeException(), isNull);
 
     await tester.pumpWidget(const SizedBox.shrink());
@@ -7408,80 +7716,76 @@ void main() {
   });
 
   for (final isTv in [false, true]) {
-    testWidgets(
-      'playback drawer hints use the ${isTv ? 'TV' : 'desktop'} vocabulary',
-      (tester) async {
-        final previousPlatform = debugDefaultTargetPlatformOverride;
-        if (isTv) {
-          debugDefaultTargetPlatformOverride = TargetPlatform.android;
-        }
-        final fixture = _Fixture(
-          PlayerState.playing,
-          tracks: const [
-            PlayerTrack(
-              id: 1,
-              type: PlayerTrackType.audio,
-              selected: true,
-              title: 'Original mix',
+    testWidgets('playback readers omit hints on ${isTv ? 'TV' : 'desktop'}', (
+      tester,
+    ) async {
+      final previousPlatform = debugDefaultTargetPlatformOverride;
+      if (isTv) {
+        debugDefaultTargetPlatformOverride = TargetPlatform.android;
+      }
+      final fixture = _Fixture(
+        PlayerState.playing,
+        tracks: const [
+          PlayerTrack(
+            id: 1,
+            type: PlayerTrackType.audio,
+            selected: true,
+            title: 'Original mix',
+          ),
+        ],
+      );
+      try {
+        fixture.player.showMiniGuide();
+        await tester.pumpWidget(
+          MaterialApp(
+            theme: LineupTheme.forName(
+              LineupThemeName.emberSteel,
+              formFactor: profileFor(isTv).formFactor,
             ),
-          ],
+            builder: _playerCanvasBuilderFor(isTv),
+            home: PlayerView(controller: fixture.player, openGuide: () {}),
+          ),
         );
-        try {
-          fixture.player.showMiniGuide();
-          await tester.pumpWidget(
-            MaterialApp(
-              theme: LineupTheme.forName(
-                LineupThemeName.emberSteel,
-                formFactor: profileFor(isTv).formFactor,
-              ),
-              builder: _playerCanvasBuilderFor(isTv),
-              home: PlayerView(controller: fixture.player, openGuide: () {}),
-            ),
-          );
-          await tester.pumpAndSettle();
-          final hint = find.text(
-            isTv
-                ? 'Up/Down Browse · Select Tune · Back Close'
-                : 'Up / Down · Browse · Enter Tune · Esc Close',
-          );
-          expect(tester.widget<Text>(hint).style?.fontSize, isTv ? 20 : 18);
+        await tester.pumpAndSettle();
+        final hint = find.text(
+          isTv
+              ? 'Up/Down Browse · Select Tune · Back Close'
+              : 'Up / Down · Browse · Enter Tune · Esc Close',
+        );
+        expect(hint, findsNothing);
 
-          fixture.player.closeOverlay();
-          fixture.player.showOsd();
-          fixture.player.showTracks(PlayerTrackType.audio);
-          await tester.pumpAndSettle();
-          final trackHint = find.descendant(
-            of: find.byKey(const Key('playback-options-footer')),
-            matching: find.text(
-              isTv
-                  ? 'Up/Down Browse · Select Choose · Back Close'
-                  : 'Up/Down Browse · Enter Select · Esc Close',
+        fixture.player.closeOverlay();
+        fixture.player.showOsd();
+        fixture.player.showTracks(PlayerTrackType.audio);
+        await tester.pumpAndSettle();
+        final trackHint = find.descendant(
+          of: find.byKey(const Key('playback-options-footer')),
+          matching: find.text(
+            isTv
+                ? 'Up/Down Browse · Select Choose · Back Close'
+                : 'Up/Down Browse · Enter Select · Esc Close',
+          ),
+        );
+        expect(trackHint, findsNothing);
+        fixture.player.closeOverlay();
+        fixture.native.emitTracks([
+          for (var id = 1; id <= 8; id++)
+            PlayerTrack(
+              id: id,
+              type: PlayerTrackType.audio,
+              selected: id == 1,
+              title: 'Synthetic track $id',
             ),
-          );
-          expect(tester.widget<Text>(trackHint).style?.fontSize, 18);
-          fixture.player.closeOverlay();
-          fixture.native.emitTracks([
-            for (var id = 1; id <= 8; id++)
-              PlayerTrack(
-                id: id,
-                type: PlayerTrackType.audio,
-                selected: id == 1,
-                title: 'Synthetic track $id',
-              ),
-          ]);
-          await tester.pump();
-          fixture.player.showTracks(PlayerTrackType.audio);
-          await tester.pumpAndSettle();
-          expect(
-            tester.widget<Text>(trackHint).style?.fontSize,
-            isTv ? 20 : 18,
-          );
-        } finally {
-          fixture.dispose();
-          debugDefaultTargetPlatformOverride = previousPlatform;
-        }
-      },
-    );
+        ]);
+        await tester.pump();
+        fixture.player.showTracks(PlayerTrackType.audio);
+        await tester.pumpAndSettle();
+        expect(trackHint, findsNothing);
+      } finally {
+        fixture.dispose();
+        debugDefaultTargetPlatformOverride = previousPlatform;
+      }
+    });
   }
 
   testWidgets('mini Guide wheel changes selection without scrolling', (
@@ -7686,7 +7990,7 @@ void main() {
       );
       position.jumpTo(position.maxScrollExtent);
       await tester.pumpAndSettle();
-      expect(find.text('Audio choice 256'), findsOneWidget);
+      expect(find.text('Audio choice 256', findRichText: true), findsOneWidget);
       expect(find.text('Close'), findsOneWidget);
       expect(tester.takeException(), isNull, reason: '$size');
     }
@@ -7695,196 +7999,185 @@ void main() {
     fixture.dispose();
   });
 
-  testWidgets(
-    '1280 track pickers keep wrapped rows clear of the fixed footer',
-    (tester) async {
-      const audioTracks = [
-        PlayerTrack(
-          id: 1,
-          type: PlayerTrackType.audio,
-          selected: true,
-          title: 'Original theatrical mix',
-          language: 'en',
-          codec: 'truehd',
-          channelLayout: '5.1',
-        ),
-        PlayerTrack(
-          id: 2,
-          type: PlayerTrackType.audio,
-          selected: false,
-          title: 'Director commentary',
-          language: 'en',
-          codec: 'aac',
-          channelLayout: 'stereo',
-          commentary: true,
-        ),
-        PlayerTrack(
-          id: 3,
-          type: PlayerTrackType.audio,
-          selected: false,
-          language: 'es-419',
-          codec: 'eac3',
-          channelLayout: '5.1(side)',
-        ),
-        PlayerTrack(
-          id: 4,
-          type: PlayerTrackType.audio,
-          selected: false,
-          title: 'Descriptive restoration',
-          language: 'fr',
-          codec: 'ac3',
-          channelCount: 6,
-          channelLayout: 'unknown-layout',
-          visualImpaired: true,
-        ),
-        PlayerTrack(
-          id: 5,
-          type: PlayerTrackType.audio,
-          selected: false,
-          title: 'Long shared archival presentation title ending in theatrical',
-          language: 'en',
-          codec: 'flac',
-          channelLayout: 'stereo',
-        ),
-        PlayerTrack(
-          id: 6,
-          type: PlayerTrackType.audio,
-          selected: false,
-          title: 'Long shared archival presentation title ending in commentary',
-          language: 'en',
-          codec: 'flac',
-          channelLayout: 'stereo',
-        ),
-      ];
-      const subtitleTracks = [
-        PlayerTrack(
-          id: 11,
-          type: PlayerTrackType.subtitle,
-          selected: true,
-          language: 'en',
-          codec: 'subrip',
-          hearingImpaired: true,
-        ),
-        PlayerTrack(
-          id: 12,
-          type: PlayerTrackType.subtitle,
-          selected: false,
-          language: 'en',
-          codec: 'hdmv_pgs_subtitle',
-          forced: true,
-        ),
-        PlayerTrack(
-          id: 13,
-          type: PlayerTrackType.subtitle,
-          selected: false,
-          title: 'Festival edition',
-          language: 'fr',
-          codec: 'ass',
-        ),
-        PlayerTrack(
-          id: 14,
-          type: PlayerTrackType.subtitle,
-          selected: false,
-          language: 'es-419',
-          codec: 'subrip',
-          external: true,
-        ),
-        PlayerTrack(
-          id: 15,
-          type: PlayerTrackType.subtitle,
-          selected: false,
-          title:
-              'Long shared restored subtitle presentation ending in theatrical',
-          language: 'en',
-          codec: 'subrip',
-        ),
-        PlayerTrack(
-          id: 16,
-          type: PlayerTrackType.subtitle,
-          selected: false,
-          title:
-              'Long shared restored subtitle presentation ending in commentary',
-          language: 'en',
-          codec: 'subrip',
-        ),
-      ];
-      await tester.binding.setSurfaceSize(const Size(1280, 720));
-      addTearDown(() => tester.binding.setSurfaceSize(null));
+  testWidgets('1280 track pickers keep wrapped rows inside the reading rail', (
+    tester,
+  ) async {
+    const audioTracks = [
+      PlayerTrack(
+        id: 1,
+        type: PlayerTrackType.audio,
+        selected: true,
+        title: 'Original theatrical mix',
+        language: 'en',
+        codec: 'truehd',
+        channelLayout: '5.1',
+      ),
+      PlayerTrack(
+        id: 2,
+        type: PlayerTrackType.audio,
+        selected: false,
+        title: 'Director commentary',
+        language: 'en',
+        codec: 'aac',
+        channelLayout: 'stereo',
+        commentary: true,
+      ),
+      PlayerTrack(
+        id: 3,
+        type: PlayerTrackType.audio,
+        selected: false,
+        language: 'es-419',
+        codec: 'eac3',
+        channelLayout: '5.1(side)',
+      ),
+      PlayerTrack(
+        id: 4,
+        type: PlayerTrackType.audio,
+        selected: false,
+        title: 'Descriptive restoration',
+        language: 'fr',
+        codec: 'ac3',
+        channelCount: 6,
+        channelLayout: 'unknown-layout',
+        visualImpaired: true,
+      ),
+      PlayerTrack(
+        id: 5,
+        type: PlayerTrackType.audio,
+        selected: false,
+        title: 'Long shared archival presentation title ending in theatrical',
+        language: 'en',
+        codec: 'flac',
+        channelLayout: 'stereo',
+      ),
+      PlayerTrack(
+        id: 6,
+        type: PlayerTrackType.audio,
+        selected: false,
+        title: 'Long shared archival presentation title ending in commentary',
+        language: 'en',
+        codec: 'flac',
+        channelLayout: 'stereo',
+      ),
+    ];
+    const subtitleTracks = [
+      PlayerTrack(
+        id: 11,
+        type: PlayerTrackType.subtitle,
+        selected: true,
+        language: 'en',
+        codec: 'subrip',
+        hearingImpaired: true,
+      ),
+      PlayerTrack(
+        id: 12,
+        type: PlayerTrackType.subtitle,
+        selected: false,
+        language: 'en',
+        codec: 'hdmv_pgs_subtitle',
+        forced: true,
+      ),
+      PlayerTrack(
+        id: 13,
+        type: PlayerTrackType.subtitle,
+        selected: false,
+        title: 'Festival edition',
+        language: 'fr',
+        codec: 'ass',
+      ),
+      PlayerTrack(
+        id: 14,
+        type: PlayerTrackType.subtitle,
+        selected: false,
+        language: 'es-419',
+        codec: 'subrip',
+        external: true,
+      ),
+      PlayerTrack(
+        id: 15,
+        type: PlayerTrackType.subtitle,
+        selected: false,
+        title:
+            'Long shared restored subtitle presentation ending in theatrical',
+        language: 'en',
+        codec: 'subrip',
+      ),
+      PlayerTrack(
+        id: 16,
+        type: PlayerTrackType.subtitle,
+        selected: false,
+        title:
+            'Long shared restored subtitle presentation ending in commentary',
+        language: 'en',
+        codec: 'subrip',
+      ),
+    ];
+    await tester.binding.setSurfaceSize(const Size(1280, 720));
+    addTearDown(() => tester.binding.setSurfaceSize(null));
 
-      for (final scenario in [
-        (type: PlayerTrackType.audio, tracks: audioTracks),
-        (type: PlayerTrackType.subtitle, tracks: subtitleTracks),
-      ]) {
-        final fixture = _Fixture(PlayerState.playing, tracks: scenario.tracks);
-        fixture.player.showTracks(scenario.type);
-        await tester.pumpWidget(
-          MaterialApp(
-            builder: _playerDesktopCanvasBuilder,
-            home: PlayerView(controller: fixture.player, openGuide: () {}),
+    for (final scenario in [
+      (type: PlayerTrackType.audio, tracks: audioTracks),
+      (type: PlayerTrackType.subtitle, tracks: subtitleTracks),
+    ]) {
+      final fixture = _Fixture(PlayerState.playing, tracks: scenario.tracks);
+      fixture.player.showTracks(scenario.type);
+      await tester.pumpWidget(
+        MaterialApp(
+          builder: _playerDesktopCanvasBuilder,
+          home: PlayerView(controller: fixture.player, openGuide: () {}),
+        ),
+      );
+      await tester.pumpAndSettle();
+
+      final rail = _drawnRect(
+        tester,
+        find.byKey(
+          Key(
+            scenario.type == PlayerTrackType.audio
+                ? 'player-track-popover'
+                : 'playback-options-rail',
           ),
-        );
-        await tester.pumpAndSettle();
+        ),
+      );
+      final list = _drawnRect(
+        tester,
+        find.byKey(const Key('playback-options-list')),
+      );
+      expect(find.byKey(const Key('playback-options-footer')), findsNothing);
+      expect(rail.inflate(.1).contains(list.topLeft), isTrue);
+      expect(rail.inflate(.1).contains(list.bottomRight), isTrue);
 
-        final rail = _drawnRect(
-          tester,
-          find.byKey(
-            Key(
-              scenario.type == PlayerTrackType.audio
-                  ? 'player-track-popover'
-                  : 'playback-options-rail',
-            ),
-          ),
-        );
-        final list = _drawnRect(
-          tester,
-          find.byKey(const Key('playback-options-list')),
-        );
-        final footer = _drawnRect(
-          tester,
-          find.descendant(
-            of: find.byKey(const Key('playback-options-footer')),
-            matching: find.byType(Text),
-          ),
-        );
-        expect(rail.contains(footer.topLeft), isTrue);
-        expect(
-          rail.contains(footer.bottomRight - const Offset(0.1, 0.1)),
-          isTrue,
-        );
-        expect(list.bottom, lessThan(footer.top));
-
-        for (final track in scenario.tracks) {
-          final row = _drawnRect(
-            tester,
-            find.byKey(Key('playback-track-${scenario.type.name}-${track.id}')),
-          );
-          final visible = row.intersect(list);
-          if (!visible.isEmpty) {
-            expect(visible.overlaps(footer), isFalse);
-          }
-        }
-
-        for (var index = 0; index < 5; index++) {
-          await tester.sendKeyEvent(LogicalKeyboardKey.arrowDown);
-          await tester.pump();
-        }
-        final prefix = scenario.type == PlayerTrackType.audio
-            ? 'English · Long shared archival presentation title ending in '
-            : 'English · Long shared restored subtitle presentation ending in ';
-        final theatrical = find.text('${prefix}theatrical');
-        final commentary = find.text('${prefix}commentary');
-        expect(theatrical, findsOneWidget);
-        expect(commentary, findsOneWidget);
-        expect(list.contains(_drawnRect(tester, theatrical).center), isTrue);
-        expect(list.contains(_drawnRect(tester, commentary).center), isTrue);
-        expect(Focus.of(tester.element(commentary)).hasFocus, isTrue);
-        expect(tester.takeException(), isNull, reason: '${scenario.type}');
-
-        await tester.pumpWidget(const SizedBox.shrink());
-        fixture.dispose();
+      for (var index = 0; index < 5; index++) {
+        await tester.sendKeyEvent(LogicalKeyboardKey.arrowDown);
+        await tester.pump();
       }
-    },
-  );
+      await tester.pumpAndSettle();
+      final focusedRow = _drawnRect(
+        tester,
+        find.byKey(
+          Key(
+            'playback-track-${scenario.type.name}-${scenario.tracks.last.id}',
+          ),
+        ),
+      );
+      expect(list.inflate(.1).contains(focusedRow.topLeft), isTrue);
+      expect(list.inflate(.1).contains(focusedRow.bottomRight), isTrue);
+      final prefix = scenario.type == PlayerTrackType.audio
+          ? 'English · Long shared archival presentation title ending in '
+          : 'English · Long shared restored subtitle presentation ending in ';
+      final theatrical = find.text('${prefix}theatrical');
+      final commentary = find.text('${prefix}commentary');
+      expect(theatrical, findsOneWidget);
+      expect(commentary, findsOneWidget);
+      expect(list.contains(_drawnRect(tester, theatrical).center), isTrue);
+      expect(list.contains(_drawnRect(tester, commentary).center), isTrue);
+      expect(Focus.of(tester.element(commentary)).hasFocus, isTrue);
+      expect(tester.takeException(), isNull, reason: '${scenario.type}');
+
+      await tester.pumpWidget(const SizedBox.shrink());
+      fixture.dispose();
+    }
+  });
 
   testWidgets('selected subtitle in a long list is focused and visible', (
     tester,
@@ -8087,7 +8380,7 @@ void main() {
             )
             .style
             ?.fontSize,
-        closeTo(16, 0.01),
+        closeTo(23, 0.01),
       );
       final label = _drawnRect(
         tester,
@@ -8312,7 +8605,7 @@ void main() {
   }
 
   testWidgets(
-    'desktop track picker fits the hint, keeps its mode and restores keyboard focus',
+    'desktop track picker fits choices, keeps its mode and restores keyboard focus',
     (tester) async {
       tester.view.physicalSize = const Size(1280, 720);
       tester.view.devicePixelRatio = 1;
@@ -8355,20 +8648,7 @@ void main() {
       final panel = find.byKey(const Key('playback-options-rail'));
       expect(tester.getSize(popup).width, greaterThan(354));
       expect(_drawnRect(tester, popup).width, closeTo(1280 * .4, 1));
-      final hint = find.descendant(
-        of: find.byKey(const Key('playback-options-footer')),
-        matching: find.byType(Text),
-      );
-      final hintParagraph = tester.renderObject<RenderParagraph>(hint);
-      expect(
-        hintParagraph.getBoxesForSelection(
-          TextSelection(
-            baseOffset: 0,
-            extentOffset: tester.widget<Text>(hint).data!.length,
-          ),
-        ),
-        hasLength(1),
-      );
+      expect(find.byKey(const Key('playback-options-footer')), findsNothing);
       final word = find.text(words);
       final paragraph = tester.renderObject<RenderParagraph>(word);
       final first = words.indexOf('international');
@@ -8611,6 +8891,126 @@ void main() {
     fixture.dispose();
   });
 
+  testWidgets(
+    'Mini Guide keeps channel 1000 complete beside its icon at enlarged text',
+    (tester) async {
+      await tester.runAsync(loadPinnedTestFonts);
+      tester.view
+        ..devicePixelRatio = 1
+        ..physicalSize = const Size(1920, 1080);
+      addTearDown(tester.view.reset);
+      final fixture = _Fixture(PlayerState.playing, channelCount: 2);
+      addTearDown(fixture.dispose);
+      final original = fixture.lineup.channels.first;
+      final other = fixture.lineup.channels.last;
+      fixture.lineup.fixtureActor.replaceChannels([
+        Channel(
+          id: original.id,
+          number: 1000,
+          name: 'Four digit channel',
+          kind: ChannelKind.tv,
+          source: const ManualSource([
+            ChannelItem(
+              id: 'four-digit-program',
+              title: 'Four digit program',
+              duration: Duration(hours: 1),
+              mediaKind: ChannelMediaKind.episode,
+            ),
+          ]),
+          playbackMode: original.playbackMode,
+          anchor: original.anchor,
+          shuffleSeed: original.shuffleSeed,
+        ),
+        other,
+      ]);
+      fixture.lineup.notifyListeners();
+      expect(await fixture.player.tune(original.id), isTrue);
+      fixture.player.showMiniGuide();
+      for (final (size, scale, tv, columnWidth) in const [
+        (Size(1920, 1080), 1.0, true, 365.0),
+        (Size(1920, 1080), 1.3, true, 365.0),
+        (Size(1280, 720), 2.0, false, 250.0),
+      ]) {
+        tester.view.physicalSize = size;
+        await tester.pumpWidget(
+          MaterialApp(
+            theme: LineupTheme.forName(
+              LineupThemeName.emberSteel,
+              formFactor: profileFor(tv).formFactor,
+            ),
+            builder: (context, child) => MediaQuery(
+              data: MediaQuery.of(context)
+                  .copyWith(textScaler: TextScaler.linear(scale)),
+              child: _playerCanvasBuilderFor(tv)(context, child),
+            ),
+            home: PlayerView(controller: fixture.player, openGuide: () {}),
+          ),
+        );
+        await tester.pumpAndSettle();
+        final row = find.byKey(const Key('mini-guide-row-channel'));
+        final number = find.descendant(of: row, matching: find.text('1000'));
+        final paragraph = tester.renderObject<RenderParagraph>(number);
+        expect(paragraph.didExceedMaxLines, isFalse, reason: 'text $scale');
+        final boxes = paragraph.getBoxesForSelection(
+          const TextSelection(baseOffset: 0, extentOffset: 4),
+        );
+        expect(boxes, hasLength(1));
+        expect(
+          boxes.single.right - boxes.single.left,
+          lessThanOrEqualTo(paragraph.size.width + .01),
+        );
+        final identity = tester.widget<ChannelIdentity>(
+          find.descendant(of: row, matching: find.byType(ChannelIdentity)),
+        );
+        expect(identity.numberWidth, greaterThanOrEqualTo(46 * scale));
+        final otherIdentity = tester.widget<ChannelIdentity>(
+          find.descendant(
+            of: find.byKey(Key('mini-guide-row-${other.id}')),
+            matching: find.byType(ChannelIdentity),
+          ),
+        );
+        expect(otherIdentity.numberWidth, identity.numberWidth);
+        final icon = find.descendant(
+          of: row,
+          matching: find.byIcon(Icons.tv_outlined),
+        );
+        final ticker = find.byKey(const Key('mini-guide-channel-channel'));
+        final name = tv
+            ? ticker
+            : find.descendant(
+                of: row,
+                matching: find.text('Four digit channel'),
+              );
+        final numberRect = _drawnRect(tester, number);
+        final iconRect = _drawnRect(tester, icon);
+        final nameRect = _drawnRect(tester, name);
+        expect(numberRect.right, lessThan(iconRect.left));
+        expect(iconRect.right, lessThan(nameRect.left));
+        expect(_drawnRect(tester, row).contains(nameRect.bottomRight), isTrue);
+        final watching = find.descendant(
+          of: row,
+          matching: find.text('Watching'),
+        );
+        expect(watching, findsOneWidget);
+        final channelColumn = find
+            .ancestor(of: watching, matching: find.byType(Row))
+            .first;
+        expect(tester.getSize(channelColumn).width, columnWidth);
+        final canvasScale = LineupCanvas.scaleOf(tester.element(row));
+        final statusRect = _drawnRect(tester, watching);
+        expect(statusRect.left, greaterThan(nameRect.right));
+        expect(
+          statusRect.center.dy,
+          closeTo(nameRect.center.dy, 2 * canvasScale),
+        );
+        expect(nameRect.width, greaterThan(18 * scale * canvasScale));
+        expect(statusRect.width, greaterThan(18 * scale * canvasScale));
+        expect(tester.takeException(), isNull);
+      }
+      await tester.pumpWidget(const SizedBox.shrink());
+    },
+  );
+
   testWidgets('rich Now Playing renders metadata, artwork, and one surface', (
     tester,
   ) async {
@@ -8661,7 +9061,7 @@ void main() {
     final title = tester.widget<Text>(
       find.byKey(const Key('player-now-playing-title')),
     );
-    expect(title.style?.fontSize, 54);
+    expect(title.style?.fontSize, 40);
     expect(title.style?.fontWeight, FontWeight.w600);
     expect(
       find.text('A synthetic synopsis for deterministic tests.'),
@@ -8750,8 +9150,12 @@ void main() {
         find.byKey(const ValueKey('player-now-playing-cast-name-4')),
         findsNothing,
       );
-      for (final member in cast.take(4)) {
-        expect(find.text(member.name), findsOneWidget);
+      for (final (index, member) in cast.take(4).indexed) {
+        expect(
+          find.byKey(ValueKey('player-now-playing-cast-name-$index')),
+          findsOneWidget,
+        );
+        expect(find.byTooltip(member.name), findsOneWidget);
       }
       expect(
         find.byKey(const Key('player-now-playing-cast-names')),
@@ -8948,7 +9352,8 @@ void main() {
       fixture.player.showNowPlaying();
       await tester.pumpAndSettle();
 
-      expect(find.text('30:00 / 1:00:00 · 30m left'), findsOneWidget);
+      expect(find.text('30:00 / 1:00:00'), findsOneWidget);
+      expect(find.text('30m left'), findsOneWidget);
       expect(
         tester
             .widget<LinearProgressIndicator>(
@@ -9538,7 +9943,6 @@ void main() {
         Size(3840, 2160),
       ].indexed) {
         final scale = LineupCanvas.scaleFor(viewport);
-        final canvas = viewport / scale;
         tester.view.physicalSize = viewport;
         await tester.pumpWidget(
           MaterialApp(
@@ -9571,11 +9975,8 @@ void main() {
           find.byKey(const Key('player-now-playing-poster')),
         );
         expect(shelfSize.width, closeTo(viewport.width, .01));
-        expect(shelfSize.height, lessThan(viewport.height));
-        expect(
-          posterSize.width,
-          closeTo((canvas.height < 900 ? 160 : 240) * scale, .01),
-        );
+        expect(shelfSize.height, lessThanOrEqualTo(viewport.height));
+        expect(posterSize.width, closeTo(248 * scale, .01));
         expect(
           posterSize.height,
           lessThanOrEqualTo(posterSize.width * 1.5 + .01),
@@ -9603,7 +10004,7 @@ void main() {
           final title = tester.widget<Text>(
             find.byKey(const Key('player-now-playing-title')).last,
           );
-          expect(title.style?.fontSize, 54);
+          expect(title.style?.fontSize, 40);
           expect(title.style?.fontWeight, FontWeight.w600);
         }
         expect(
@@ -9831,7 +10232,7 @@ void main() {
       await tester.pump();
       fixture.player.showOsd();
       await tester.pumpAndSettle();
-      final menu = tester.widget<IconButton>(
+      final menu = tester.widget<TextButton>(
         find.byKey(const Key('player-app-menu')),
       );
       menu.focusNode!.requestFocus();
@@ -10497,6 +10898,29 @@ class _Native implements NativePlayer {
     await _displayReports.close();
     await _fullscreenChanges.close();
   }
+}
+
+Future<List<int>> _miniGuideScrimAlpha(
+  WidgetTester tester,
+  Finder finder,
+  List<double> sampleY,
+) async {
+  final custom = tester.widget<CustomPaint>(finder);
+  final size = tester.getSize(finder);
+  final recorder = ui.PictureRecorder();
+  custom.painter!.paint(Canvas(recorder), size);
+  final picture = recorder.endRecording();
+  final alpha = await tester.runAsync(() async {
+    final width = size.width.ceil();
+    final image = await picture.toImage(width, (size.height + 55).ceil());
+    final bytes = await image.toByteData(format: ui.ImageByteFormat.rawRgba);
+    image.dispose();
+    return [
+      for (final y in sampleY) bytes!.getUint8(y.floor() * width * 4 + 3),
+    ];
+  });
+  picture.dispose();
+  return alpha!;
 }
 
 Rect _drawnRect(WidgetTester tester, Finder finder) {

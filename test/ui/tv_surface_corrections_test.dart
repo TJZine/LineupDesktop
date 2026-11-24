@@ -477,7 +477,10 @@ void main() {
           (s) => s.copyWith(largeFocusIndicators: large),
         );
         await tester.pumpAndSettle();
-        for (final label in ['Use title artwork', 'Theme']) {
+        for (final label in [
+          'Use title artwork',
+          'Guide information background',
+        ]) {
           final title = find.text(label).last;
           final surface = find
               .ancestor(of: title, matching: find.byType(LineupRowSurface))

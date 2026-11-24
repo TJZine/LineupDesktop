@@ -84,6 +84,8 @@ void main() {
     'populated Guide keeps its controls for a search with no matches',
     (tester) async {
       final fixture = await _pumpShell(tester, tv: true);
+      await tester.tap(find.byKey(const Key('guide-search-button')));
+      await tester.pumpAndSettle();
       final search = find.byKey(const Key('guide-channel-search'));
       await tester.enterText(search, 'Absent channel');
       await tester.pumpAndSettle();
@@ -92,9 +94,17 @@ void main() {
       expect(find.textContaining('No matching channels'), findsWidgets);
       expect(search, findsOneWidget);
       expect(find.byKey(const Key('guide-control-content')), findsOneWidget);
-      expect(find.byKey(const Key('guide-hours')), findsOneWidget);
+      expect(find.byKey(const Key('guide-channel-filter')), findsOneWidget);
+      expect(find.byKey(const Key('guide-hours')), findsNothing);
       expect(find.text('No channels yet'), findsNothing);
       expect(find.text('Set up channels'), findsNothing);
+      await tester.tap(find.byTooltip('Clear search'));
+      await tester.pumpAndSettle();
+      await tester.sendKeyEvent(LogicalKeyboardKey.escape);
+      await tester.pumpAndSettle();
+      expect(find.byKey(const Key('guide-search-button')), findsOneWidget);
+      expect(find.byKey(const Key('guide-hours')), findsOneWidget);
+      expect(search, findsNothing);
     },
   );
 

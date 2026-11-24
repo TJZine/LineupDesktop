@@ -95,7 +95,7 @@ class SetupLibraryStep extends StatelessWidget {
   final SetupScanIntent onScan;
   final Future<void> Function(Set<String> ready) onCommit;
   final ValueChanged<String> onToggleLibrary;
-  final VoidCallback onToggleAll;
+  final ValueChanged<Set<String>> onToggleAll;
   final FocusNode? entryFocusNode;
   final Future<void> Function()? onRequestLogout;
 
@@ -107,7 +107,15 @@ class SetupLibraryStep extends StatelessWidget {
     _ => false,
   };
 
-  String _summary() {
+  bool _unusable(String id) => switch (data.libraryScanFacts[id]?.status) {
+    LibraryScanStatus.empty ||
+    LibraryScanStatus.unsupported ||
+    LibraryScanStatus.transientFailure => true,
+    LibraryScanStatus.complete => !data.libraryScanCommittableIds.contains(id),
+    _ => false,
+  };
+
+  String _summary(Set<String> usableIds) {
     final statuses = [
       for (final id in selectedLibraryIds)
         data.libraryScanFacts[id]?.status ?? LibraryScanStatus.idle,
@@ -130,7 +138,9 @@ class SetupLibraryStep extends StatelessWidget {
     if (data.libraryScanStatus == LibraryScanStatus.cancelled) {
       return 'Your selections are preserved. Scan again when you’re ready.';
     }
-    if (!_settled || statuses.isEmpty) {
+    if (!_settled ||
+        statuses.isEmpty ||
+        (usableIds.isNotEmpty && !selectedLibraryIds.any(usableIds.contains))) {
       return 'Choose the libraries to build channels from.';
     }
     final ready = data.libraryScanCommittableIds
@@ -201,6 +211,7 @@ class SetupLibraryStep extends StatelessWidget {
     final excluded = selectedLibraryIds.length - ready.length;
     final footer = SetupFooter(
       configuration: true,
+      leading: const [],
       summary: Wrap(
         spacing: 8,
         children: [
@@ -225,32 +236,20 @@ class SetupLibraryStep extends StatelessWidget {
               onPressed: onCancelSetup,
               child: actionLabel('Cancel'),
             ),
+          if (hasLibraries &&
+              !scanning &&
+              data.libraryScanReadyIds
+                  .intersection(selectedLibraryIds)
+                  .isNotEmpty)
+            TextButton(
+              key: const ValueKey('scan-again-libraries'),
+              onPressed: data.busy
+                  ? null
+                  : () => onScan(advanceWhenReady: false),
+              child: actionLabel('Scan again'),
+            ),
         ],
       ),
-      leading: [
-        if (hasLibraries &&
-            !scanning &&
-            data.libraryScanReadyIds
-                .intersection(selectedLibraryIds)
-                .isNotEmpty)
-          OutlinedButton(
-            key: const ValueKey('scan-again-libraries'),
-            onPressed: data.busy ? null : () => onScan(advanceWhenReady: false),
-            child: Text(
-              'Scan again',
-              style: LineupTypography.tvLabelStyle(context),
-            ),
-          ),
-        if (canRetry && canContinue)
-          OutlinedButton(
-            key: const ValueKey('retry-failed-libraries'),
-            onPressed: data.busy ? null : () => onScan(retryFailedOnly: true),
-            child: Text(
-              retryLabel,
-              style: LineupTypography.tvLabelStyle(context),
-            ),
-          ),
-      ],
       trailing: !hasLibraries
           ? Wrap(
               spacing: 12,
@@ -295,6 +294,8 @@ class SetupLibraryStep extends StatelessWidget {
           : canContinue
           ? FilledButton(
               key: const ValueKey('continue-ready-libraries'),
+              focusNode: DeviceProfile.of(context).isTv ? entryFocusNode : null,
+              autofocus: DeviceProfile.of(context).isTv,
               onPressed: data.busy ? null : () => onCommit(ready),
               child: Text(
                 'Continue with ${ready.length} ${ready.length == 1 ? 'library' : 'libraries'}',
@@ -304,6 +305,8 @@ class SetupLibraryStep extends StatelessWidget {
           : canRetry
           ? FilledButton(
               key: const ValueKey('retry-failed-libraries'),
+              focusNode: DeviceProfile.of(context).isTv ? entryFocusNode : null,
+              autofocus: DeviceProfile.of(context).isTv,
               onPressed: selectedLibraryIds.isEmpty || data.busy
                   ? null
                   : () => onScan(retryFailedOnly: true),
@@ -314,6 +317,16 @@ class SetupLibraryStep extends StatelessWidget {
             )
           : FilledButton(
               key: const ValueKey('scan-selected-libraries'),
+              focusNode:
+                  DeviceProfile.of(context).isTv &&
+                      (_settled ||
+                          data.libraryScanStatus == LibraryScanStatus.cancelled)
+                  ? entryFocusNode
+                  : null,
+              autofocus:
+                  DeviceProfile.of(context).isTv &&
+                  (_settled ||
+                      data.libraryScanStatus == LibraryScanStatus.cancelled),
               onPressed: selectedLibraryIds.isEmpty || data.busy
                   ? null
                   : onScan,
@@ -338,19 +351,24 @@ class SetupLibraryStep extends StatelessWidget {
           itemBuilder: (_, index) =>
               _libraryRow(context, data.libraries[index], index),
         );
-        final title = data.libraryScanStatus == LibraryScanStatus.scanning
-            ? 'Scanning your libraries'
-            : _settled
-            ? 'Review your libraries'
-            : 'Choose libraries';
+        final usableIds = {
+          for (final library in data.libraries)
+            if (!_unusable(library.id)) library.id,
+        };
         final content = Column(
           mainAxisSize: MainAxisSize.min,
           crossAxisAlignment: CrossAxisAlignment.stretch,
           children: [
             _header(
               context,
-              title,
-              data.libraries.isEmpty || _settled || scanning ? '' : _summary(),
+              'Choose libraries',
+              usableIds.length < data.libraries.length &&
+                      !scanning &&
+                      data.libraryScanStatus != LibraryScanStatus.cancelled
+                  ? '${data.libraryScanCommittableIds.length} of ${data.libraries.length} libraries can be used. The others are left out; you can scan again at any time.'
+                  : data.libraries.isEmpty || _settled || scanning
+                  ? ''
+                  : _summary(usableIds),
             ),
             if (scanning) ...[
               const SizedBox(height: 10),
@@ -368,7 +386,7 @@ class SetupLibraryStep extends StatelessWidget {
                 ),
               )
             else ...[
-              _selectionSummary(context),
+              _selectionSummary(context, usableIds),
               if (singleScroll)
                 list
               else
@@ -386,7 +404,7 @@ class SetupLibraryStep extends StatelessWidget {
                             ?data.profileCredentialRecoveryNotice,
                           ].join('\n')
                         : ready.isEmpty
-                        ? _summary()
+                        ? _summary(usableIds)
                         : '${ready.length} of ${selectedLibraryIds.length} ${selectedLibraryIds.length == 1 ? 'library' : 'libraries'} ${ready.length == 1 ? 'is' : 'are'} ready. Continuing builds from ${data.libraries.where((library) => ready.contains(library.id)).map((library) => library.title).join(', ')}${excluded > 0 ? ' only' : ''}.',
                     style: bodyStyle,
                   ),
@@ -463,15 +481,15 @@ class SetupLibraryStep extends StatelessWidget {
     ],
   );
 
-  Widget _selectionSummary(BuildContext context) {
+  Widget _selectionSummary(BuildContext context, Set<String> usableIds) {
     final roles = LineupTheme.of(context);
     final summaryStyle = Theme.of(context).textTheme.bodyMedium!
         .copyWith(color: roles.secondaryText, fontSize: 16, height: 1.4);
     final editable =
         !data.busy && data.libraryScanStatus != LibraryScanStatus.scanning;
-    final libraries = data.libraries;
-    final selected = selectedLibraryIds.length;
-    final all = selected == libraries.length;
+    final selected = usableIds.intersection(selectedLibraryIds).length;
+    final all = usableIds.isNotEmpty && selected == usableIds.length;
+    void toggleAll() => onToggleAll(usableIds);
     final value = all
         ? true
         : selected == 0
@@ -481,7 +499,7 @@ class SetupLibraryStep extends StatelessWidget {
       padding: const EdgeInsets.fromLTRB(0, 0, 8, 16),
       child: Row(
         children: [
-          if (libraries.length > 1)
+          if (usableIds.length > 1)
             FocusTraversalOrder(
               order: const NumericFocusOrder(0),
               // One focus target covers the checkbox and its label, matching
@@ -496,7 +514,7 @@ class SetupLibraryStep extends StatelessWidget {
                         EdgeInsets.symmetric(horizontal: 8),
                       ),
                     ),
-                    onPressed: editable ? onToggleAll : null,
+                    onPressed: editable ? toggleAll : null,
                     child: Row(
                       mainAxisSize: MainAxisSize.min,
                       children: [
@@ -505,7 +523,7 @@ class SetupLibraryStep extends StatelessWidget {
                           skipTraversal: true,
                           tristate: true,
                           value: value,
-                          onChanged: editable ? (_) => onToggleAll() : null,
+                          onChanged: editable ? (_) => toggleAll() : null,
                         ),
                         const SizedBox(width: 8),
                         Builder(
@@ -530,7 +548,7 @@ class SetupLibraryStep extends StatelessWidget {
             ),
           const Spacer(),
           Text(
-            '$selected of ${libraries.length} selected',
+            '$selected of ${usableIds.length} selected',
             style: summaryStyle,
           ),
         ],
@@ -566,7 +584,8 @@ class SetupLibraryStep extends StatelessWidget {
 
   Widget _libraryRow(BuildContext context, PlexLibrary library, int index) {
     final tv = DeviceProfile.of(context).isTv;
-    final selected = selectedLibraryIds.contains(library.id);
+    final unavailable = _unusable(library.id);
+    final selected = selectedLibraryIds.contains(library.id) && !unavailable;
     final row = LayoutBuilder(
       builder: (context, constraints) {
         final roles = LineupTheme.of(context);
@@ -574,7 +593,7 @@ class SetupLibraryStep extends StatelessWidget {
         final fact = data.libraryScanFacts[library.id];
         final collectionRecovery = data.collectionRecoveryByLibrary[library.id];
         final titleStyle = textTheme.bodyMedium!.copyWith(
-          color: roles.primaryText,
+          color: unavailable ? roles.mutedText : roles.primaryText,
           fontSize: 20,
           fontWeight: FontWeight.w600,
           height: 1.3,
@@ -594,18 +613,7 @@ class SetupLibraryStep extends StatelessWidget {
         final details = Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-            Wrap(
-              spacing: 12,
-              runSpacing: 4,
-              crossAxisAlignment: WrapCrossAlignment.center,
-              children: [
-                Text(library.title, style: titleStyle),
-                if (selected &&
-                    _settled &&
-                    !data.libraryScanCommittableIds.contains(library.id))
-                  Text("Won't be used", style: typeStyle),
-              ],
-            ),
+            Text(library.title, style: titleStyle),
             if (fact != null) ...[
               const SizedBox(height: 8),
               Wrap(
@@ -613,12 +621,13 @@ class SetupLibraryStep extends StatelessWidget {
                 crossAxisAlignment: WrapCrossAlignment.center,
                 children: [
                   Text(
-                    _scanDetail(fact),
+                    _scanDetail(fact, blocked: _settled && unavailable),
                     style: statusStyle.copyWith(
                       color: _scanColor(context, fact.status),
                     ),
                   ),
                   if (fact.status == LibraryScanStatus.transientFailure ||
+                      data.libraryScanRetryIds.contains(library.id) ||
                       data.unavailableCollectionLibraryIds.contains(library.id))
                     FocusTraversalOrder(
                       order: NumericFocusOrder(index * 2 + 2),
@@ -656,7 +665,7 @@ class SetupLibraryStep extends StatelessWidget {
                     value: selected,
                     skipTraversal: tv,
                     semanticLabel: library.title,
-                    onChanged: data.busy
+                    onChanged: data.busy || unavailable
                         ? null
                         : (_) => onToggleLibrary(library.id),
                   ),
@@ -680,7 +689,7 @@ class SetupLibraryStep extends StatelessWidget {
                     value: selected,
                     skipTraversal: tv,
                     semanticLabel: library.title,
-                    onChanged: data.busy
+                    onChanged: data.busy || unavailable
                         ? null
                         : (_) => onToggleLibrary(library.id),
                   ),
@@ -693,15 +702,23 @@ class SetupLibraryStep extends StatelessWidget {
         final firstTvRow =
             tv &&
             index == 0 &&
+            !unavailable &&
+            !_settled &&
+            data.libraryScanStatus != LibraryScanStatus.cancelled &&
+            data.libraryScanCommittableIds
+                .intersection(selectedLibraryIds)
+                .isEmpty &&
             !data.busy &&
             data.libraryScanStatus != LibraryScanStatus.scanning;
         return InkWell(
           key: ValueKey('library-row-${library.id}'),
           focusNode: firstTvRow ? entryFocusNode : null,
           autofocus: firstTvRow,
-          canRequestFocus: tv,
+          canRequestFocus: tv && !unavailable,
           excludeFromSemantics: !tv,
-          onTap: data.busy ? null : () => onToggleLibrary(library.id),
+          onTap: data.busy || unavailable
+              ? null
+              : () => onToggleLibrary(library.id),
           child: Padding(
             padding: const EdgeInsets.symmetric(vertical: 18, horizontal: 8),
             child: content,
@@ -714,6 +731,7 @@ class SetupLibraryStep extends StatelessWidget {
             order: NumericFocusOrder(index * 2 + 1),
             child: Semantics(
               checked: selected,
+              enabled: !unavailable,
               // The checkbox alone shows checked state; the surface carries
               // focus and hover only.
               child: LineupRowSurface(selected: false, child: row),
@@ -733,7 +751,10 @@ class SetupLibraryStep extends StatelessWidget {
     return focusedTv ? roles.primaryText : Theme.of(context).colorScheme.error;
   }
 
-  String _scanDetail(LibraryScanFact fact) => switch (fact.status) {
+  String _scanDetail(
+    LibraryScanFact fact, {
+    required bool blocked,
+  }) => switch (fact.status) {
     LibraryScanStatus.idle => 'Waiting to scan',
     LibraryScanStatus.scanning => switch (fact.phase) {
       PlexLibraryScanPhase.items =>
@@ -742,7 +763,7 @@ class SetupLibraryStep extends StatelessWidget {
       PlexLibraryScanPhase.showGenres => 'Loading show details',
     },
     LibraryScanStatus.complete =>
-      'Ready · ${fact.completedItems} ${fact.completedItems == 1 ? 'item' : 'items'} checked',
+      '${blocked ? '' : 'Ready · '}${fact.completedItems} ${fact.completedItems == 1 ? 'item' : 'items'} checked',
     LibraryScanStatus.empty => 'No media found',
     LibraryScanStatus.unsupported => 'No playable media found',
     LibraryScanStatus.transientFailure => 'Couldn’t scan · Try again.',

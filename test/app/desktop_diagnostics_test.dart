@@ -22,6 +22,8 @@ void main() {
     bool largeFocus = false,
     VoidCallback? onRecordingSettings,
     PlayerState playbackState = PlayerState.stopped,
+    PlayerTelemetry? telemetry,
+    DiagnosticPlaybackMethod method = DiagnosticPlaybackMethod.unknown,
   }) async {
     await tester.pumpWidget(
       DeviceProfileScope(
@@ -38,7 +40,11 @@ void main() {
             child: Scaffold(
               body: DiagnosticsView(
                 controller: controller,
-                playback: PlaybackDiagnosticSnapshot(state: playbackState),
+                playback: PlaybackDiagnosticSnapshot(
+                  state: playbackState,
+                  receivedTelemetry: telemetry,
+                  method: method,
+                ),
                 onRecordingSettings: onRecordingSettings ?? () {},
               ),
             ),
@@ -48,6 +54,87 @@ void main() {
     );
   }
 
+  for (final gamma in ['pq', 'hlg', 'bt.1886', null]) {
+    testWidgets(
+      'diagnostic cards format reported picture $gamma and unknown method',
+      (tester) async {
+        tester.view
+          ..physicalSize = const Size(1920, 1080)
+          ..devicePixelRatio = 1;
+        addTearDown(tester.view.reset);
+        final controller = FixtureController();
+        addTearDown(controller.dispose);
+        await show(
+          tester,
+          controller,
+          playbackState: PlayerState.playing,
+          telemetry: PlayerTelemetry(
+            width: 3840,
+            height: 2160,
+            videoCodec: 'hevc',
+            hardwareDecoder: 'videotoolbox',
+            gamma: gamma,
+            primaries: 'bt.2020',
+            signalPeak: 1.23456,
+          ),
+        );
+        await tester.pumpAndSettle();
+        final playbackText = find.descendant(
+          of: find.byKey(const ValueKey('diagnostics-summary-Playback')),
+          matching: find.byType(Text),
+        );
+        expect(tester.widgetList<Text>(playbackText).map((text) => text.data), [
+          'Playback',
+          'Playing',
+        ]);
+        expect(
+          find.text(
+            gamma == null
+                ? 'Unknown'
+                : (gamma == 'pq' || gamma == 'hlg')
+                ? 'HDR'
+                : 'SDR',
+          ),
+          findsOneWidget,
+        );
+        expect(find.text('3840 × 2160'), findsOneWidget);
+        final cards = [
+          for (final title in ['Playback', 'Video', 'Picture', 'Plex'])
+            tester.getRect(find.byKey(ValueKey('diagnostics-summary-$title'))),
+        ];
+        expect(cards.map((r) => r.top).toSet(), hasLength(1));
+        expect(cards.map((r) => r.height).toSet(), hasLength(1));
+        await tester.tap(find.text('Technical details'));
+        await tester.pumpAndSettle();
+        expect(
+          find.descendant(
+            of: find.byKey(
+              const ValueKey('diagnostics-technical-fact-Primaries'),
+            ),
+            matching: find.text('BT.2020'),
+          ),
+          findsOneWidget,
+        );
+        expect(find.text('1.23'), findsOneWidget);
+        if (gamma == 'pq') expect(find.text('PQ'), findsOneWidget);
+        expect(tester.takeException(), isNull);
+      },
+      variant: const TargetPlatformVariant({TargetPlatform.macOS}),
+    );
+  }
+  testWidgets('known method is a separate supporting line', (tester) async {
+    final controller = FixtureController();
+    addTearDown(controller.dispose);
+    await show(
+      tester,
+      controller,
+      playbackState: PlayerState.playing,
+      method: DiagnosticPlaybackMethod.directPlay,
+    );
+    await tester.pumpAndSettle();
+    expect(find.text('Playing'), findsOneWidget);
+    expect(find.text('Direct Play'), findsOneWidget);
+  });
   for (final tv in [false, true]) {
     testWidgets('Diagnostics notices use the reading size (TV: $tv)', (
       tester,
@@ -600,90 +687,92 @@ void main() {
     );
   }
 
-  testWidgets('technical details reuse the summary grid and media subcolumns', (
-    tester,
-  ) async {
-    tester.view.physicalSize = const Size(1280, 2000);
-    tester.view.devicePixelRatio = 1;
-    addTearDown(tester.view.resetPhysicalSize);
-    addTearDown(tester.view.resetDevicePixelRatio);
-    final controller = FixtureController();
-    addTearDown(controller.dispose);
-    controller.diagnostics.enabled = true;
-    controller.diagnostics.add(DiagnosticEvent.guideScheduleLoadTimedOut);
-    debugDefaultTargetPlatformOverride = TargetPlatform.windows;
-    try {
-      await show(tester, controller, playbackState: PlayerState.playing);
-      await tester.tap(find.text('Technical details'));
-      await tester.pumpAndSettle();
-    } finally {
-      debugDefaultTargetPlatformOverride = null;
-    }
+  testWidgets(
+    'technical details reuse the summary grid and shared fact columns',
+    (tester) async {
+      tester.view.physicalSize = const Size(1280, 2000);
+      tester.view.devicePixelRatio = 1;
+      addTearDown(tester.view.resetPhysicalSize);
+      addTearDown(tester.view.resetDevicePixelRatio);
+      final controller = FixtureController();
+      addTearDown(controller.dispose);
+      controller.diagnostics.enabled = true;
+      controller.diagnostics.add(DiagnosticEvent.guideScheduleLoadTimedOut);
+      debugDefaultTargetPlatformOverride = TargetPlatform.windows;
+      try {
+        await show(tester, controller, playbackState: PlayerState.playing);
+        await tester.tap(find.text('Technical details'));
+        await tester.pumpAndSettle();
+      } finally {
+        debugDefaultTargetPlatformOverride = null;
+      }
 
-    final summaryPlayback = tester.getRect(
-      find.byKey(const ValueKey('diagnostics-summary-Playback')),
-    );
-    final summaryVideo = tester.getRect(
-      find.byKey(const ValueKey('diagnostics-summary-Video')),
-    );
-    final summarySignal = tester.getRect(
-      find.byKey(const ValueKey('diagnostics-summary-Media signal')),
-    );
-    final application = tester.getRect(
-      find.byKey(const ValueKey('diagnostics-technical-Application')),
-    );
-    final videoOutput = tester.getRect(
-      find.byKey(const ValueKey('diagnostics-technical-Video output')),
-    );
-    final mediaSignal = tester.getRect(
-      find.byKey(const ValueKey('diagnostics-technical-Media signal')),
-    );
+      final summaryPlayback = tester.getRect(
+        find.byKey(const ValueKey('diagnostics-summary-Playback')),
+      );
+      final summaryVideo = tester.getRect(
+        find.byKey(const ValueKey('diagnostics-summary-Video')),
+      );
+      final summarySignal = tester.getRect(
+        find.byKey(const ValueKey('diagnostics-summary-Picture')),
+      );
+      final application = tester.getRect(
+        find.byKey(const ValueKey('diagnostics-technical-Application')),
+      );
+      final videoOutput = tester.getRect(
+        find.byKey(const ValueKey('diagnostics-technical-Video output')),
+      );
+      final mediaSignal = tester.getRect(
+        find.byKey(const ValueKey('diagnostics-technical-Media signal')),
+      );
 
-    expect(application.left, closeTo(summaryPlayback.left, 0.1));
-    expect(videoOutput.left, closeTo(summaryVideo.left, 0.1));
-    expect(mediaSignal.left, closeTo(summarySignal.left, 0.1));
-    expect(
-      tester
-          .getRect(
-            find.byKey(const ValueKey('diagnostics-technical-fact-Transfer')),
-          )
-          .width,
-      closeTo(
+      expect(application.left, closeTo(summaryPlayback.left, 0.1));
+      expect(videoOutput.left, closeTo(summaryVideo.left, 0.1));
+      expect(mediaSignal.left, closeTo(summarySignal.left, 0.1));
+      expect(
         tester
             .getRect(
-              find.byKey(
-                const ValueKey('diagnostics-technical-fact-Pixel format'),
-              ),
+              find.byKey(const ValueKey('diagnostics-technical-fact-Transfer')),
             )
             .width,
-        0.1,
-      ),
-    );
-    expect(
-      tester
-          .getRect(
-            find.byKey(const ValueKey('diagnostics-technical-fact-Transfer')),
-          )
-          .left,
-      lessThan(
+        closeTo(
+          tester
+              .getRect(
+                find.byKey(
+                  const ValueKey('diagnostics-technical-fact-Pixel format'),
+                ),
+              )
+              .width,
+          0.1,
+        ),
+      );
+      expect(
         tester
             .getRect(
-              find.byKey(
-                const ValueKey('diagnostics-technical-fact-Pixel format'),
-              ),
+              find.byKey(const ValueKey('diagnostics-technical-fact-Transfer')),
             )
             .left,
-      ),
-    );
+        closeTo(
+          tester
+              .getRect(
+                find.byKey(
+                  const ValueKey('diagnostics-technical-fact-Pixel format'),
+                ),
+              )
+              .left,
+          0.1,
+        ),
+      );
 
-    final technicalTile = tester.getRect(
-      find.byKey(const PageStorageKey('diagnostic-technical-details')),
-    );
-    final event = controller.diagnostics.entries.single;
-    await tester.ensureVisible(find.byKey(ObjectKey(event)));
-    expect(
-      tester.getRect(find.byKey(ObjectKey(event))).right,
-      closeTo(technicalTile.right, 0.1),
-    );
-  });
+      final technicalTile = tester.getRect(
+        find.byKey(const PageStorageKey('diagnostic-technical-details')),
+      );
+      final event = controller.diagnostics.entries.single;
+      await tester.ensureVisible(find.byKey(ObjectKey(event)));
+      expect(
+        tester.getRect(find.byKey(ObjectKey(event))).right,
+        closeTo(technicalTile.right, 0.1),
+      );
+    },
+  );
 }

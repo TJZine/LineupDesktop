@@ -48,6 +48,9 @@ class PlayerTrackDisplayProjection {
       for (var i = 0; i < _tracks.length; i++)
         _displayFor(_tracks[i], facts[i], _bases[i]),
     ]);
+    _pickerFacts = List.unmodifiable([
+      for (var i = 0; i < _tracks.length; i++) _pickerFactsFor(i),
+    ]);
   }
 
   final List<PlayerTrack> _tracks;
@@ -56,6 +59,7 @@ class PlayerTrackDisplayProjection {
   late final List<String> _compactKeys;
   late final List<String?> _titleKeys;
   late final List<PlayerTrackDisplay> _displays;
+  late final List<List<String>> _pickerFacts;
 
   _TrackFacts _factsFor(PlayerTrack track) {
     final index = _tracks.indexOf(track);
@@ -88,16 +92,22 @@ class PlayerTrackDisplayProjection {
   ) {
     final compactKey = _compactKey(facts);
     final titleKey = _equivalenceKey(base.titleText);
+    final needsOffDiscriminator =
+        track.type == PlayerTrackType.subtitle &&
+        _equivalenceKey(base.primaryText) == 'off' &&
+        base.secondaryFacts.isEmpty;
     return _display(
       track,
       facts,
       base,
-      needsTrackDiscriminator: _tracks.indexed.any(
-        (entry) =>
-            entry.$2.type == track.type &&
-            entry.$2.id != track.id &&
-            _bases[entry.$1].visibleKey == base.visibleKey,
-      ),
+      needsTrackDiscriminator:
+          needsOffDiscriminator ||
+          _tracks.indexed.any(
+            (entry) =>
+                entry.$2.type == track.type &&
+                entry.$2.id != track.id &&
+                _bases[entry.$1].visibleKey == base.visibleKey,
+          ),
       sameCompact: _tracks.indexed.any(
         (entry) =>
             entry.$2.type == track.type &&
@@ -111,6 +121,44 @@ class PlayerTrackDisplayProjection {
             _titleKeys[entry.$1] != titleKey,
       ),
     );
+  }
+
+  /// Subtitle rows need supporting text only to distinguish equal first lines.
+  /// Full track facts remain available in tooltips and accessibility labels.
+  List<String> pickerSecondaryFactsFor(PlayerTrack track) {
+    final index = _tracks.indexWhere(
+      (entry) => entry.type == track.type && entry.id == track.id,
+    );
+    if (index < 0) {
+      throw ArgumentError.value(track.id, 'track', 'Not in this snapshot');
+    }
+    return _pickerFacts[index];
+  }
+
+  List<String> _pickerFactsFor(int index) {
+    final track = _tracks[index];
+    final display = _displays[index];
+    if (track.type != PlayerTrackType.subtitle) return display.secondaryFacts;
+    final primaryKey = _equivalenceKey(display.primaryText);
+    // The synthetic Off action has no supporting facts.
+    if (primaryKey == 'off') return display.secondaryFacts;
+    final peers = [
+      for (final (peerIndex, other) in _tracks.indexed)
+        if (other.type == track.type &&
+            other.id != track.id &&
+            _equivalenceKey(_displays[peerIndex].primaryText) == primaryKey)
+          _displays[peerIndex],
+    ];
+    if (peers.isEmpty) return const [];
+    return List.unmodifiable([
+      for (final fact in display.secondaryFacts)
+        if (peers.any(
+          (peer) => !peer.secondaryFacts.any(
+            (other) => _equivalenceKey(other) == _equivalenceKey(fact),
+          ),
+        ))
+          fact,
+    ]);
   }
 
   /// Reuses labels across position, pending-command and selection updates.
@@ -426,7 +474,7 @@ String? _language(String? value) {
       })
       .join('_');
   for (final code in LanguageCodes.values) {
-    if (code.code == normalized) return code.nativeName;
+    if (code.code == normalized) return code.englishName;
   }
   return cleaned;
 }

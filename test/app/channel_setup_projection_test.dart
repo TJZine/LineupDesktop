@@ -91,6 +91,63 @@ void main() {
   });
 
   test(
+    'alternate grouping is available only while current eligibility is zero',
+    () {
+      const genres = BuilderStrategy.genres;
+      const empty = BuilderStrategy.studios;
+      items = [
+        for (var i = 0; i < 6; i++)
+          PlexMediaItem(
+            id: '$i',
+            title: 'Item $i',
+            type: 'movie',
+            duration: const Duration(minutes: 20),
+            libraryId: '${i % 2}',
+            parts: [PlexMediaPart(path: '/part/$i')],
+            genres: const ['Drama'],
+          ),
+      ];
+      libraries = [
+        for (var i = 0; i < 2; i++)
+          PlexLibrary(
+            id: '$i',
+            title: 'Library $i',
+            type: PlexLibraryType.movie,
+          ),
+      ];
+      strategies = {genres, empty};
+
+      ChannelPlanAllocation configure() {
+        project();
+        return projection.configure(existing: const [], options: _options);
+      }
+
+      final separate = configure();
+      expect(separate.eligibleOriginalsByStrategy[genres], 0);
+      expect(separate.channels, isEmpty);
+      expect(projection.hasEligibleAlternateGrouping(genres), isTrue);
+      expect(projection.hasEligibleAlternateGrouping(empty), isFalse);
+
+      strategies.remove(genres);
+      expect(configure().channels, isEmpty);
+      expect(projection.disabledEligibility(genres), 0);
+      expect(projection.hasEligibleAlternateGrouping(genres), isTrue);
+
+      selected = {'0'};
+      expect(configure().channels, isEmpty);
+      expect(projection.hasEligibleAlternateGrouping(genres), isFalse);
+
+      selected = {'0', '1'};
+      strategies.add(genres);
+      grouped.add(genres);
+      final combined = configure();
+      expect(combined.eligibleOriginalsByStrategy[genres], 1);
+      expect(combined.channels, hasLength(1));
+      expect(projection.hasEligibleAlternateGrouping(genres), isFalse);
+    },
+  );
+
+  test(
     'tied playlist titles retain selected-only ordering at sort thresholds',
     () {
       libraries = [

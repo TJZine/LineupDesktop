@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 """Prepare offline R-03 materials from pinned local inputs; never fetch or sign.
 
-assets regenerates the small in-app source/recipe texts. prepare creates a new
+assets prepares the offline inventory, engine notice and recipe index. prepare creates a new
 companion directory, binding sources to a candidate and verified engine. It uses
 canonical engine verification before archiving Git source snapshots. No app,
 runtime or engine output is modified. verify checks all delivered hashes.
@@ -127,7 +127,6 @@ def catalog(runtime_root):
             'Vulkan-Tools': 'KhronosGroup/Vulkan-Tools', 'Volk': 'zeux/volk', 'cereal': 'USCiLab/cereal'}
     for name, revision in external.items():
         lines += [name + ': https://github.com/' + urls[name] + '/tree/' + revision]
-    # Exact nested pin is in the parent Git tree, not an independently selected version.
     lines += ['', 'libplacebo nested sources:',
         'https://code.videolan.org/videolan/libplacebo/-/tree/' + values['LIBPLACEBO_COMMIT'] + '/3rdparty',
         'fast_float and other recursive submodule commits are pinned by this exact parent tree.',
@@ -140,9 +139,37 @@ def catalog(runtime_root):
     return '\n'.join(lines) + '\n'
 
 
+def source_index():
+    for relative in HELPERS:
+        source = REPOSITORY / relative
+        require(source.is_file() and source.resolve().is_relative_to(REPOSITORY),
+                'Recipe input must be a repository file')
+    return {'Credits and library replacement notice': 'docs/licenses-and-rebuilding.md',
+            'Exact source inventory': 'assets/licenses/source-inventory.txt',
+            **{relative: relative for relative in HELPERS}}
+
+
+class StaleAssets(ValueError):
+    pass
+
+
+def with_source_assets(pubspec):
+    begin = '    # BEGIN generated source materials'
+    end = '    # END generated source materials'
+    lines = pubspec.splitlines(keepends=True)
+    markers = [(i, line.rstrip('\r\n')) for i, line in enumerate(lines)
+               if line.rstrip('\r\n') in (begin, end)]
+    if [marker for _, marker in markers] != [begin, end]:
+        raise StaleAssets('Restore the generated source material markers in pubspec.yaml')
+    start, stop = (i for i, _ in markers)
+    newline = '\r\n' if lines[start].endswith('\r\n') else '\n'
+    paths = sorted(set(source_index().values()))
+    lines[start + 1:stop] = [f'    - {json.dumps(path)}{newline}' for path in paths]
+    return ''.join(lines)
+
+
 def asset_files(flutter_sdk, runtime_root):
     files = {'source-inventory.txt': catalog(runtime_root).encode(),
-             'rebuilding.txt': (REPOSITORY / 'docs/licenses-and-rebuilding.md').read_bytes(),
              'engine-notices.txt': ('''Lineup macOS Flutter engine notices
 
 The macOS engine uses Flutter's BSD-3-Clause sources with the repository's
@@ -153,26 +180,26 @@ The exact framework pin, patch hashes and build instructions are readable under
 Sources and rebuilding. The selected engine receipt accompanies the candidate.
 
 ''' + (flutter_sdk / 'LICENSE').read_text()).encode()}
-    entries = [('Credits and library replacement notice', 'rebuilding.txt'),
-               ('Exact source inventory', 'source-inventory.txt')]
-    for relative in HELPERS:
-        filename = relative.replace('/', '__') + '.txt'
-        files[filename] = (REPOSITORY / relative).read_bytes()
-        entries.append((relative, filename))
-    files['index.txt'] = ''.join(title + '\t' + name + '\n' for title, name in entries).encode()
+    files['sources.json'] = (json.dumps(source_index(), indent=2) + '\n').encode()
     return files
 
 
 def write_assets(flutter_sdk, output, check=False, runtime_root=REPOSITORY / 'build/macos-runtime'):
     files = asset_files(flutter_sdk, runtime_root)
-    if check:
-        require(set(p.name for p in output.iterdir()) == set(files), 'Stale generated asset set')
-        require(all((output / name).read_bytes() == data for name, data in files.items()), 'Stale generated assets')
-    else:
+    expected = {output / name: data for name, data in files.items()}
+    if output.resolve() == (REPOSITORY / 'assets/licenses').resolve():
+        pubspec = REPOSITORY / 'pubspec.yaml'
+        expected[pubspec] = with_source_assets(pubspec.read_bytes().decode('utf-8')).encode()
+    if output.is_dir() and any(p.name not in files for p in output.iterdir()):
+        raise StaleAssets('Remove unlisted files from the generated asset directory')
+    if not check:
         output.mkdir(parents=True, exist_ok=True)
-        require(not any(p.name not in files for p in output.iterdir()), 'Unexpected asset destination content')
-        for name, data in files.items():
-            (output / name).write_bytes(data)
+    for path, data in expected.items():
+        if path.is_file() and path.read_bytes() == data:
+            continue
+        if check:
+            raise StaleAssets(f'{path.name} is missing or out of date')
+        path.write_bytes(data)
 
 
 def path_parts(name, directory=False):
@@ -422,6 +449,8 @@ def main():
         if args.command == 'assets': write_assets(args.flutter_sdk, args.output, args.check, args.runtime_root)
         elif args.command == 'prepare': prepare(args)
         else: verify(args.output)
+    except StaleAssets as error:
+        parser.exit(1, f'{error}. Run python3 tool/macos/source_materials.py assets --flutter-sdk "$FLUTTER_ROOT"\n')
     except (ValueError, OSError, subprocess.CalledProcessError, KeyError, zipfile.BadZipFile) as error:
         parser.exit(1, 'Source material preparation failed: ' + type(error).__name__ + '\n')
 

@@ -4,6 +4,7 @@ class _StudioFilterEditor extends StatefulWidget {
   const _StudioFilterEditor({
     required this.draft,
     required this.inventory,
+    required this.controller,
     required this.selectedLibraries,
     required this.libraries,
     required this.picker,
@@ -17,6 +18,7 @@ class _StudioFilterEditor extends StatefulWidget {
   });
   final ChannelStudioDraft draft;
   final _StudioInventory inventory;
+  final LineupController controller;
   final List<PlexLibrary> selectedLibraries;
   final List<PlexLibrary> libraries;
   final _FilterPickerController picker;
@@ -248,7 +250,20 @@ class _StudioFilterEditorState extends State<_StudioFilterEditor>
             ),
             child: Padding(
               padding: EdgeInsets.symmetric(vertical: 8),
-              child: Text(item.title, style: _studioBodyStyle(context)),
+              child: Row(
+                children: [
+                  StudioProgramArtwork(
+                    controller: widget.controller,
+                    path: item.thumbPath == null
+                        ? null
+                        : Uri.tryParse(item.thumbPath!),
+                  ),
+                  const SizedBox(width: 12),
+                  Expanded(
+                    child: Text(item.title, style: _studioBodyStyle(context)),
+                  ),
+                ],
+              ),
             ),
           ),
         if (matches.length > 5)

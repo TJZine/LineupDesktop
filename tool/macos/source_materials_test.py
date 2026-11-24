@@ -20,8 +20,6 @@ spec.loader.exec_module(m)
 
 class SourceMaterialsTests(unittest.TestCase):
     def test_generated_assets_match_recipe_and_pins(self):
-        # Assets are content-addressable source snapshots, including the recipe
-        # helper closure and Mac patches; no Windows DC patch is selected.
         with tempfile.TemporaryDirectory() as temporary:
             root = Path(temporary)
             sdk = root / 'sdk'
@@ -33,9 +31,10 @@ class SourceMaterialsTests(unittest.TestCase):
                 m.write_assets(sdk, output, check=True)
             self.assertIn('fast_float', (output / 'source-inventory.txt').read_text())
             self.assertIn('SPIRV-Headers', (output / 'source-inventory.txt').read_text())
+            sources = json.loads((output / 'sources.json').read_bytes())
             for helper in m.HELPERS:
-                self.assertEqual((output / (helper.replace('/', '__') + '.txt')).read_bytes(),
-                                 (m.REPOSITORY / helper).read_bytes())
+                self.assertEqual(sources[helper], helper)
+                self.assertTrue((m.REPOSITORY / helper).is_file())
             (output / 'source-inventory.txt').write_text('stale')
             with patch.object(m, 'runtime_sources', return_value=[]):
                 with self.assertRaises(ValueError): m.write_assets(sdk, output, check=True)

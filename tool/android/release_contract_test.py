@@ -295,10 +295,10 @@ class ReleaseContractTest(unittest.TestCase):
         dependencies = module('resolved', 'check-resolved-dependencies.py')
         report = ('+--- org.jetbrains.kotlin:kotlin-gradle-plugin:2.4.21\n'
                   '+--- com.android.tools.build:gradle:9.1.0\n'
-                  '+--- com.google.guava:guava:31.1-android -> 33.7.2-android\n')
+                  '+--- com.google.guava:guava:31.1-android -> 33.8.0-android\n')
         dependencies.check(report)
         for invalid in (report.replace('2.4.21', '2.4.0'),
-                        report.replace('33.7.2-android', '31.1-android'),
+                        report.replace('33.8.0-android', '31.1-android'),
                         report.replace('com.android.tools.build:gradle', 'missing:gradle'),
                         report + '+--- org.jetbrains.kotlin:kotlin-gradle-plugin:2.4.0\n',
                         report + '+--- missing:artifact:1 FAILED\n'):
