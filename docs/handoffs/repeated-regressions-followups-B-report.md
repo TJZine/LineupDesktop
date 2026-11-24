@@ -51,3 +51,14 @@ cmake --build build/followup-b/core --parallel 4
 ctest --test-dir build/followup-b/core --output-on-failure
 build/followup-b/core/playback_lifecycle_model
 ```
+
+## Hosted verification
+
+The macOS shared-core CTest job and the Windows player build with its native contract tests both passed on PR head `d78d2a88f25045e43205d78c7c9078419d795106`. The source is `b05b6ebc4`; the additional commit contains the review report. [macOS core contracts](https://github.com/TJZine/LineupDesktop/actions/runs/45483245739/job/138762022963) · [Windows player and native contracts](https://github.com/TJZine/LineupDesktop/actions/runs/45483245739/job/138762023136)
+
+All required CI checks passed on the same review head. [Required CI run](https://github.com/TJZine/LineupDesktop/actions/runs/45483245739)
+
+## Scheduling findings closed in the handoff
+
+- **FU3.** Studio restores an existing channel’s seed and stages a new seed only for a new channel. Retaining the seed on a metadata edit preserves the schedule behavior verified in #92. Closed without a code change. [Studio draft](https://github.com/TJZine/LineupDesktop/blob/76419674e/lib/app/channel_studio_draft.dart#L284) · [Save policy](https://github.com/TJZine/LineupDesktop/blob/76419674e/lib/app/lineup_controller.dart#L2192)
+- **FU4.** The disputed transition is created during legacy schedule migration. Under the fresh-lineups-only MVP decision recorded in the handoff, close this finding without changing migration behavior. Reopen the product decision if support for legacy lineups returns. [Legacy schedule migration](https://github.com/TJZine/LineupDesktop/blob/76419674e/lib/channels/scheduler.dart#L267)
