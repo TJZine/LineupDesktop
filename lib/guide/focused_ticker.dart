@@ -2,7 +2,8 @@ import 'dart:async';
 
 import 'package:flutter/material.dart';
 
-/// Counts real text measurements for memoization tests.
+import '../ui/text_measure.dart';
+
 @visibleForTesting
 int debugFocusedTickerMeasureCount = 0;
 
@@ -152,26 +153,13 @@ class _FocusedTickerState extends State<FocusedTicker>
     if (key == _measuredKey) return _measuredSize;
     debugFocusedTickerMeasureCount++;
     _measuredKey = key;
-    return _measuredSize = _layoutText(textDirection, textScaler, style);
-  }
-
-  Size _layoutText(
-    TextDirection textDirection,
-    TextScaler textScaler,
-    TextStyle style,
-  ) {
-    final painter = TextPainter(
-      text: TextSpan(text: widget.text, style: style),
+    return _measuredSize = TextMeasure.size(
+      text: widget.text,
+      style: style,
       textDirection: textDirection,
       textScaler: textScaler,
       maxLines: 1,
     );
-    try {
-      painter.layout();
-      return painter.size;
-    } finally {
-      painter.dispose();
-    }
   }
 
   double _offset(double distance) => distance * _animationController.value;

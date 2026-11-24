@@ -8,6 +8,7 @@ import '../../channels/channel.dart';
 import '../../channels/channel_builder.dart';
 import '../../ui/app_theme.dart';
 import '../../ui/app_ui.dart';
+import '../../ui/text_measure.dart';
 import '../channel_setup_projection.dart';
 import 'step_scaffold.dart';
 
@@ -339,33 +340,18 @@ class _SetupConfigureStepState extends State<SetupConfigureStep> {
     final textScaler = MediaQuery.textScalerOf(context);
     final textDirection = Directionality.of(context);
 
-    double measure(String label, {double maxWidth = double.infinity}) {
-      final painter = TextPainter(
-        text: TextSpan(text: label, style: style),
-        textDirection: textDirection,
-        textScaler: textScaler,
-      );
-      try {
-        painter.layout(maxWidth: maxWidth);
-        return painter.height;
-      } finally {
-        painter.dispose();
-      }
-    }
+    Size measure(String label, {double maxWidth = double.infinity}) =>
+        TextMeasure.size(
+          text: label,
+          style: style,
+          textDirection: textDirection,
+          textScaler: textScaler,
+          maxWidth: maxWidth,
+        );
 
     var intrinsicWidth = 0.0;
     for (final label in labels) {
-      final painter = TextPainter(
-        text: TextSpan(text: label, style: style),
-        textDirection: textDirection,
-        textScaler: textScaler,
-      );
-      try {
-        painter.layout();
-        intrinsicWidth = math.max(intrinsicWidth, painter.width);
-      } finally {
-        painter.dispose();
-      }
+      intrinsicWidth = math.max(intrinsicWidth, measure(label).width);
     }
     final width = math.min(
       maxWidth,
@@ -383,7 +369,10 @@ class _SetupConfigureStepState extends State<SetupConfigureStep> {
     );
     var textHeight = 0.0;
     for (final label in labels) {
-      textHeight = math.max(textHeight, measure(label, maxWidth: textWidth));
+      textHeight = math.max(
+        textHeight,
+        measure(label, maxWidth: textWidth).height,
+      );
     }
     return (
       width: width,

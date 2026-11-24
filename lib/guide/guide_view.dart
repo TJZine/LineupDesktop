@@ -17,6 +17,7 @@ import '../ui/app_theme.dart';
 import '../ui/app_ui.dart';
 import '../ui/channel_identity.dart';
 import '../ui/lineup_canvas.dart';
+import '../ui/text_measure.dart';
 import 'focused_ticker.dart';
 import 'guide_controller.dart';
 import 'guide_playback_placeholder.dart';
@@ -527,14 +528,12 @@ class _GuideViewState extends State<GuideView>
       _railNumbers = numbers;
       _railMetricsKey = key;
       final largest = numbers.fold<int>(99, math.max);
-      final painter = TextPainter(
+      _numberColumnWidth = TextPainter.computeWidth(
         text: TextSpan(text: '$largest', style: key.style),
         textScaler: key.scaler,
         textDirection: key.direction,
         maxLines: 1,
-      )..layout();
-      _numberColumnWidth = painter.width.ceilToDouble();
-      painter.dispose();
+      ).ceilToDouble();
     }
     return _numberColumnWidth;
   }
@@ -1901,7 +1900,6 @@ typedef _GuideControlsKey = ({
   double pickerWidth,
 });
 
-/// Counts real [_GuideControlsMetrics] measurements for memoization tests.
 @visibleForTesting
 int debugGuideControlsMeasureCount = 0;
 
@@ -2024,15 +2022,16 @@ class _GuideControlsMetrics {
     final remaining = width - pickerWidth - 8 - 340 - 8 - navigationWidth;
     var wrap = remaining < 0;
     if (label != null) {
-      final painter = TextPainter(
-        text: TextSpan(text: label, style: labelStyle),
+      final clipped = TextMeasure.exceedsMaxLines(
+        text: label,
+        style: labelStyle,
         textScaler: MediaQuery.textScalerOf(context),
         textDirection: direction,
         maxLines: 2,
         ellipsis: '…',
-      )..layout(maxWidth: math.max(0.0, remaining - iconWidth));
-      wrap = remaining <= iconWidth || painter.didExceedMaxLines;
-      painter.dispose();
+        maxWidth: math.max(0.0, remaining - iconWidth),
+      );
+      wrap = remaining <= iconWidth || clipped;
     }
     final labelTextWidth = math.max(
       0.0,
@@ -4326,15 +4325,13 @@ double _textHeight(
       direction: direction,
     ),
     () {
-      final painter = TextPainter(
-        text: TextSpan(text: 'Ag', style: style),
+      return TextMeasure.size(
+        text: 'Ag',
+        style: style,
         textDirection: direction,
         textScaler: scaler,
         maxLines: 1,
-      )..layout();
-      final height = painter.height;
-      painter.dispose();
-      return height;
+      ).height;
     },
   );
   return roundUp ? height.ceilToDouble() : height;
@@ -4368,15 +4365,14 @@ Size _guideMeasuredText(
   double width = double.infinity,
   int? maxLines,
 }) {
-  final painter = TextPainter(
-    text: TextSpan(text: text, style: style),
+  return TextMeasure.size(
+    text: text,
+    style: style,
     textScaler: MediaQuery.textScalerOf(context),
     textDirection: Directionality.of(context),
     maxLines: maxLines,
-  )..layout(maxWidth: width);
-  final size = painter.size;
-  painter.dispose();
-  return size;
+    maxWidth: width,
+  );
 }
 
 abstract final class _GuideStyles {

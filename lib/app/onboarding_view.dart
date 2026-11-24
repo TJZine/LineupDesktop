@@ -9,6 +9,7 @@ import 'package:lineup_desktop/platform/device_profile.dart';
 import '../plex/plex_models.dart';
 import '../ui/app_theme.dart';
 import '../ui/app_ui.dart';
+import '../ui/text_measure.dart';
 import 'lineup_controller.dart';
 import 'navigation_shortcuts.dart';
 import 'plex_link_launcher.dart';
@@ -656,14 +657,13 @@ class UpstreamOnboardingViewState extends State<UpstreamOnboardingView>
     final bodyStyle = Theme.of(context).textTheme.bodyMedium!
         .copyWith(fontSize: 18, height: 1.45, color: roles.secondaryText);
     double textHeight(String text, TextStyle style) {
-      final painter = TextPainter(
-        text: TextSpan(text: text, style: style),
+      return TextMeasure.size(
+        text: text,
+        style: style,
         textDirection: Directionality.of(context),
         textScaler: scaler,
-      )..layout(maxWidth: innerWidth);
-      final height = painter.height;
-      painter.dispose();
-      return height;
+        maxWidth: innerWidth,
+      ).height;
     }
 
     final buttonStyle = Theme.of(context).textTheme.labelLarge!;
@@ -1526,14 +1526,14 @@ class _ProfileCardState extends State<_ProfileCard> {
       return;
     }
     final style = LineupTypography.body.copyWith(fontWeight: FontWeight.w600);
-    final painter = TextPainter(
-      text: TextSpan(text: widget.user.name, style: style),
+    final clipped = TextMeasure.exceedsMaxLines(
+      text: widget.user.name,
+      style: style,
       maxLines: 2,
       textDirection: Directionality.of(context),
       textScaler: MediaQuery.textScalerOf(context),
-    )..layout(maxWidth: _nameAnchor.leaderSize?.width ?? 200);
-    final clipped = painter.didExceedMaxLines;
-    painter.dispose();
+      maxWidth: _nameAnchor.leaderSize?.width ?? 200,
+    );
     if (next && clipped) {
       _nameOverlay.show();
     } else {

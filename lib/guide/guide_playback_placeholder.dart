@@ -4,6 +4,7 @@ import 'package:flutter/material.dart';
 
 import '../playback/player_coordinator.dart';
 import '../ui/app_theme.dart';
+import '../ui/text_measure.dart';
 
 /// Keeps the Guide's video region stable when there is no usable picture.
 class GuidePlaybackPlaceholder extends StatefulWidget {
@@ -43,15 +44,13 @@ class GuidePlaybackPlaceholder extends StatefulWidget {
     final scaler = MediaQuery.textScalerOf(context);
     final direction = Directionality.of(context);
     Size text(String value, TextStyle? style) {
-      final painter = TextPainter(
-        text: TextSpan(text: value, style: inherited.merge(style)),
+      return TextMeasure.size(
+        text: value,
+        style: inherited.merge(style),
         textScaler: scaler,
         textDirection: direction,
         maxLines: 1,
-      )..layout();
-      final size = painter.size;
-      painter.dispose();
-      return size;
+      );
     }
 
     final idle = text('Choose a channel to watch', _titleStyle(context));
