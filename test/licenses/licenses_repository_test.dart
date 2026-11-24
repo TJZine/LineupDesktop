@@ -1,3 +1,4 @@
+import 'dart:convert';
 import 'dart:io';
 
 import 'package:flutter/foundation.dart';
@@ -263,21 +264,43 @@ void main() {
     'all font, engine and source assets load without network or caches',
     () async {
       final sources = LicensesRepository().sources;
-      for (final name in [
-        'Fonts and engine notices',
-        'Sources and rebuilding',
-      ]) {
-        final items = await sources.singleWhere((s) => s.title == name).load();
-        expect(items, isNotEmpty);
-        for (final parent in items) {
-          for (final item in parent.children ?? [parent]) {
-            expect(await item.read!(), isNotEmpty);
-          }
-        }
+      final groups = await sources
+          .singleWhere((s) => s.title == 'Sources and rebuilding')
+          .load();
+      final documents = groups.single.children!;
+      final index = await File('assets/licenses/sources.json').readAsString();
+      final expected = (jsonDecode(index) as Map<String, dynamic>)
+          .cast<String, String>();
+      expect(
+        documents.map((item) => item.title),
+        unorderedEquals(expected.keys),
+      );
+      for (final entry in expected.entries) {
+        final document = documents.singleWhere(
+          (item) => item.title == entry.key,
+        );
+        final contents = await document.read!();
+        expect(contents, isNotEmpty);
+        final expectedBytes = await File(entry.value).readAsBytes();
+        expect(contents, utf8.decode(expectedBytes), reason: entry.value);
+      }
+      for (final source in expected.values.toSet()) {
+        final bundled = await rootBundle.load(source);
+        expect(
+          bundled.buffer.asUint8List(
+            bundled.offsetInBytes,
+            bundled.lengthInBytes,
+          ),
+          await File(source).readAsBytes(),
+          reason: source,
+        );
       }
       final notices = await sources
           .singleWhere((s) => s.title == 'Fonts and engine notices')
           .load();
+      for (final notice in notices) {
+        expect(await notice.read!(), isNotEmpty);
+      }
       expect(await notices.first.read!(), contains('SIL OPEN FONT LICENSE'));
       for (final name in [
         'JetBrains Mono',
