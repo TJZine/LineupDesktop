@@ -41,15 +41,15 @@ may cover multiple listed states only when that scope is clear to the user.
 | surface-13 | Library scan outcomes · corrected | Approved at 1080p | Behavior checks passed; adaptive/Windows pending | Candidate03 state family; `692083fc` |
 | surface-14 | Setup progress | Approved at 1080p | Behavior checks passed; adaptive/Windows pending | Candidate02 family; `22743fd6` |
 | surface-15 | Setup complete | Approved at 1080p | Behavior checks passed; adaptive/Windows pending | Candidate02 family; `22743fd6` |
-| surface-16 | Channel directory | Approved at 1080p | Behavior checks passed; adaptive/Windows pending | Candidate05/06; `d98e9761` |
+| surface-16 | Manage channels · Channel order / Grouped by source | Approved at 1080p | Portable behavior/layout passed; physical Windows/Fire TV pending | UI audit 2, delegated Astra approval, 2026-11-17; Channels package; earlier Candidate05/06 `d98e9761` |
 | surface-17 | Channel selection | Approved at 1080p | Behavior checks passed; adaptive/Windows pending | Candidate05/06; `d98e9761` |
 | surface-18 | Channel reorder | Approved at 1080p | Behavior checks passed; adaptive/Windows pending | Candidate05/06; `d98e9761` |
 | surface-19 | Delete confirmation | Approved at 1080p | Behavior checks passed; adaptive/Windows pending | Text-only final amendment; recapture waived; `aa25168f` |
-| surface-20 | Studio · hand-picked | Approved at 1080p | Behavior checks passed; adaptive/Windows pending | Candidate07; `8c0617c7` |
-| surface-21 | Studio · full authoring | Approved at 1080p | Behavior checks passed; adaptive/Windows pending | Candidate07; `8c0617c7` |
-| surface-22 | Studio · browse sources | Approved at 1080p | Behavior checks passed; adaptive/Windows pending | Candidate07; `8c0617c7` |
-| surface-23 | Studio · library programming | Approved at 1080p | Behavior checks passed; adaptive/Windows pending | Candidate07; `8c0617c7` |
-| surface-24 | Studio · filter picker | Approved at 1080p | Behavior checks passed; adaptive/Windows pending | Candidate07; `8c0617c7` |
+| surface-20 | Studio · hand-picked | Approved at 1080p | Portable behavior/layout passed; physical Windows/Fire TV pending | UI audit 2, delegated Astra approval, 2026-11-17; earlier Candidate07 `8c0617c7` |
+| surface-21 | Studio · full authoring | Approved at 1080p | Portable behavior/layout passed; physical Windows/Fire TV pending | UI audit 2, delegated Astra approval, 2026-11-17; earlier Candidate07 `8c0617c7` |
+| surface-22 | Studio · browse sources | Approved at 1080p | Portable behavior/layout passed; physical Windows/Fire TV pending | UI audit 2, delegated Astra approval, 2026-11-17; earlier Candidate07 `8c0617c7` |
+| surface-23 | Studio · library programming | Approved at 1080p | Portable behavior/layout passed; physical Windows/Fire TV pending | UI audit 2, delegated Astra approval, 2026-11-17; earlier Candidate07 `8c0617c7` |
+| surface-24 | Studio · filter picker | Approved at 1080p | Portable behavior/layout passed; physical Windows/Fire TV pending | UI audit 2, delegated Astra approval, 2026-11-17; earlier Candidate07 `8c0617c7` |
 | surface-25 | Guide · no playback | Approved at 1080p | Behavior checks passed; adaptive/accessibility/motion/Windows pending | September 12 candidate04; `e0834448` |
 | surface-26 | Guide · PiP | Approved at 1080p | Behavior checks passed; adaptive/accessibility/motion/Windows pending | September 12 candidate04; `e0834448` |
 | surface-27 | Mini Guide | Approved at 1080p | Behavior checks passed; adaptive/accessibility/moving footage/Windows pending | September12 candidate01; `90497d12` |
@@ -61,7 +61,7 @@ may cover multiple listed states only when that scope is clear to the user.
 | surface-33 | Settings · Appearance | Approved at 1080p (shared treatment) | Behavior checks passed; adaptive/Windows pending | Account representative review; `6baa7a9b` |
 | surface-34 | Settings · Guide | Approved at 1080p (shared treatment) | Behavior checks passed; adaptive/Windows pending | Account representative review; `6baa7a9b` |
 | surface-35 | Settings · Playback | Approved at 1080p (shared treatment) | Behavior checks passed; adaptive/Windows pending | Account representative review; `6baa7a9b` |
-| surface-36 | Settings · Accessibility | Approved at 1080p (shared treatment) | Behavior checks passed; adaptive/Windows pending | Account representative review; `6baa7a9b` |
+| surface-36 | Settings · Accessibility | Approved at 1080p | Portable behavior checks passed; physical Windows/Fire TV pending | UI audit 2, delegated Astra approval, 2026-11-17; Shared package; earlier shared treatment `6baa7a9b` |
 | surface-37 | Settings · Account | Approved at 1080p (shared treatment) | Behavior checks passed; adaptive/Windows pending | Account representative review; `6baa7a9b` |
 | surface-38 | Settings · Support | Approved at 1080p (shared treatment) | Behavior checks passed; adaptive/Windows pending | Account representative review; `6baa7a9b` |
 | surface-39 | Settings over playback | Approved at 1080p (shared treatment) | Behavior checks passed; adaptive/Windows pending | Account representative review; `6baa7a9b` |
@@ -72,10 +72,38 @@ may cover multiple listed states only when that scope is clear to the user.
 | surface-44 | Diagnostics · technical details | Approved at 1080p | Behavior checks passed; adaptive/Windows pending | September12 conditional lock completed; `7193d52e` |
 | surface-45 | Diagnostics · events and details | Approved at 1080p | Behavior checks passed; adaptive/Windows pending | September12 conditional lock completed; `7193d52e` |
 
+## November 17, 2026 — accepted UX refinements
+
+Authority: UI audit 2 decision, 2026-11-16. On November 17 the maintainer explicitly
+required Astra as the visual judge and delegated Claude's package decisions to
+Astra high. The maintainer then authorized “Allow local merges into ux/refine
+after Astra approval.” The approvals below are delegated Astra judgments, not
+new direct visual approvals from the maintainer.
+
+Each package (S, G, P, C, T, U and F) had its own code review, visual review and
+whole-suite run; G, C, U and F also had Android TV emulator checks. Channel Studio
+(T) was accepted later the same day, after its preview-height correction. A
+follow-up package applied Claude's review of the merged work.
+
+The approved scope is shared identity/Text size/PIN treatment; Guide layout and
+cells; Player controls/details/Mini Guide/pickers/number entry; both Manage
+channels views; Channel Studio; Welcome/Sign in/setup; and Settings/Diagnostics
+as described in the current amendments.
+
+Headless production-widget captures use synthetic media and establish no real
+native-media output. Emulator checks use credential-free fixtures and establish
+remote focus/navigation, not real account, scan, persistence or playback proof.
+Physical Fire TV readability/input and Windows native composition, media, HDR
+and input acceptance remain maintainer-owned and unclaimed. Production Sign-in
+emulator focus was unavailable without signing out, as the U contract permits.
+
+
 ## November 13–14 visual-system assessment
 
-UX assessment decision, 2026-11-13/14 (N20–N22, D8, N6). Use the bullet only
-for channel number and name, and the middle dot between metadata items. The
+UI audit 2 decision, 2026-11-16. Channel number and name no longer use a
+bullet; shared identities keep number, kind icon, name and optional library tag
+in order, and plain-text identities use two spaces. Keep the middle dot
+between metadata items. The
 LINEUP wordmark uses the bundled [Arimo Regular](licenses-and-rebuilding.md#arimo-wordmark)
 at the approved size, weight and letter spacing. Earlier captures retain their
 recorded font from the time of approval.
@@ -921,8 +949,9 @@ UX assessment decision, 2026-11-13/14 (N9, N10 and change 13). On unresolved
 first run, a sole server that connects opens Choose libraries directly.
 Several servers or a failed connection open the picker. Server ownership
 labels read “Yours” or “Shared with you.” A measured connection shows its path
-and latency. The affected row shows one “Unreachable” status with “Retry”
-after a failed reachability probe. Focus starts on the first server when
+and latency. The affected row shows one alert-colored “Unreachable” status directly
+before “Retry” after a failed reachability probe. Refresh servers aligns left
+and Sign out right below the list (UI audit 2 decision, 2026-11-16). Focus starts on the first server when
 available, and the whole row activates its action. On the first Libraries
 step, use “Back to profiles” or “Back to sign-in” when setup has that origin.
 
@@ -1093,9 +1122,14 @@ Independent review is not specifically recommended.
 ### Manage channels amendment — surfaces 16–19
 
 UX assessment decision, 2026-11-13/14 (Q5, N17, D3, D9). The directory is
-**Manage channels**. A Custom tag follows custom names and replaces the Type
-column. Source is one ellipsized line showing the type and, where known, the
-library. Person source details display the original inventory label where
+**Manage channels**. UI audit 2 decision, 2026-11-16. An outlined Custom tag and filled accent
+favourite star follow the name and applicable plain secondary library label;
+markers keep the existing row height, with bounded names. Channel order keeps
+Source as one ellipsized line showing type and library. The session-only
+Grouped by source view groups Custom first, then source kinds in lineup source
+order, with collapsible headers and lazy rows. Its rows omit Custom tags and
+replace Source with current program/time left; unavailable schedules show —. Person
+source details display the original inventory label where
 available. The filters are All channels, Favourites when populated, source
 types and libraries. In a populated lineup, **Add a custom channel** has
 primary emphasis and **Update lineup…** has secondary emphasis. In an empty
@@ -1115,9 +1149,12 @@ UX assessment decision, 2026-11-13/14 (Q1b, Q1c, Q11, N12, N13/D10, D11,
 change 13). Channel identity uses the number, an outlined media-kind glyph
 and name, with a quiet library tag when names collide across libraries. The
 existing rail and row sizes apply. Choose channels adds the saved Channel order
-choice under Lineup rules. Empty Playlists is off and disabled. The setup
-header uses Libraries / Channels / Review and the Review roster reports its
-channel count. The November 14 Wave 1 review keeps word wrapping in Channels,
+choice under Lineup rules. Source kinds with no available channels display
+unchecked and disabled after available sources, retaining their saved choices.
+The setup header uses Libraries / Channels / Review. UI audit 2 decision,
+2026-11-16: updating Review uses nonempty Added / Removed / Updated / Unchanged
+tabs with scoped search and no Change column or separate roster count;
+first-lineup Review retains its roster count. The November 14 Wave 1 review keeps word wrapping in Channels,
 Move to and Review, with a single-line ellipsis when a word exceeds the
 available name width. Update and add keeps existing channel numbers unless the
 Channel order setting changes.
@@ -1214,6 +1251,8 @@ unchanged.
   more available height. Preserve loading/stale/error and selection behavior.
 - Give filter picker B a clear heading, readable choices and stable Done/Cancel
   actions. Preserve pending choices, cancellation and focus restoration.
+  (Superseded by UI audit 2 decision, 2026-11-16: choices apply immediately and
+  stay when the picker closes; Done and Cancel are removed.)
 
 Worker assignment: existing `worker_luna` / GPT-5.6 Luna / xhigh, exclusive
 `lib/app/channel_studio_view.dart`; Astra owns schedule-preview presentation,
@@ -1265,6 +1304,8 @@ uses flat underlined view tabs, a persistent Media type label with All types,
 unified labeled Library/Collection/filter fields, a quieter watched-items control
 and a separated Matching programs section. Required validation explanations,
 filter pending-state/focus behavior and five-item sample remain unchanged.
+(UI audit 2 decision, 2026-11-16: filter values now apply immediately; focus
+restoration and the five-item sample remain.)
 Existing worker_luna / GPT-5.6 Luna / xhigh owns only the Studio view file for
 this bounded correction; root retains tests, capture and acceptance review.
 
@@ -1501,6 +1542,15 @@ Controls alignment candidate (N23, maintainer visual gate): share the rail's
 filter box inside the rail's trailing content edge. The toolbar's right inset
 and the header and picture positions remain unchanged. This candidate requires
 maintainer acceptance of the matched renders (UX assessment decision, 2026-11-13/14).
+
+UI audit 2 decision, 2026-11-16. The G package supersedes the earlier
+separate-control-row placement, fixed TV five-row rule and right-aligned episode code
+for current Guide code. Its isolated header commit provides matched desktop/TV 1920×1080
+before/after evidence. The Guide focus and layout checks passed. Physical Fire TV
+and Windows acceptance remains pending.
+The merged header is 72 px, with the original 80 px/wrapping fallback, and TV shows six
+rows where its measured minimum permits, otherwise five. Program-derived information
+styling and the TV picture/information size are preserved.
 
 ## September 12 — surface27 Mini Guide proposal
 
@@ -1803,6 +1853,27 @@ Windows moving-video/input checks remain pending. Independent review not
 specifically recommended. No push or remote publication. Next surface:33,
 Settings Appearance; do not reopen30–32.
 
+UI audit 2 decision, 2026-11-16: Package P supersedes corresponding current Player
+geometry with the 168-art/26-episode/60-action OSD, 54-above-bottom inset timing row,
+refined Now Playing 110-art/40-title/248×372-poster/56-cast targets, five Mini Guide
+rows, 84 px high with inline provenance/Watching and no hints, 36/26 picker headings and
+English track names, duplicate-only subtitle support, and 84 px number-entry digits with
+current program/time left. Existing tokens, overlay setting/opacity, interaction and
+four stacked cast columns remain. Astra approved the Player changes. Physical
+Fire TV and Windows acceptance remains pending.
+
+Use a shared right-aligned number column with a 46 reference floor, scaled by platform
+text settings and expanded only to the actual largest rendered number extent plus one
+pixel when needed; keep type, style and icon/name gaps unchanged (UI audit 2 decision,
+2026-11-16; Astra P-D3 measured-fit interpretation, 2026-11-17).
+
+At short window heights, expanded Now Playing reserves the actual resting channel badge
+bottom plus at least 8 logical pixels above the header and full Close hit region, using
+the same badge text/scaler/padding/safe-inset metrics. Keep bottom anchoring, fixed
+controls and timing/progress; reduce only the existing scrolling details allocation when
+needed. The constraint is inert where the approved content already fits. UI audit 2
+decision, 2026-11-16; Astra P-D4 adaptive-clearance decision, 2026-11-17.
+
 ## September 12 — Settings surfaces33–39 locked
 
 **UX assessment decision, 2026-11-13/14:** Settings has seven sections. “Settings” is a 16px supporting label and the
@@ -1850,6 +1921,14 @@ formatting and diff checks passed. Grouped adaptive/DPI/enlarged-text/accessibil
 visual checks and exact-commit physical Windows input/native-video validation
 remain pending. Independent review is not specifically recommended. No push.
 Next surface:40. Do not reopen33–39 without a new user request.
+
+UI audit 2 decision, 2026-11-16. Settings surfaces 33–39 retain their seven sections,
+existing controls and TV rail behavior. Ordinary detail content is capped at 1040;
+Appearance now uses theme swatches. Subtitles uses main and Customise pages and a
+proportional 16:9 preview. At detail widths of 1212 canvas units or more the preview
+appears beside the 620-unit controls column. On narrower panes it appears above the
+controls. Astra approved the Settings changes. Physical Fire TV and
+Windows acceptance remains pending.
 
 ## September 12 — Lineup menu41 locked
 
@@ -1920,3 +1999,8 @@ Windows-target fixture and pinned fonts are portable evidence only. Grouped
 adaptive/DPI/enlarged-text/accessibility and exact-commit physical Windows checks
 remain pending. Independent review not specifically recommended. No push.
 This completes the requested visual sequence; skipped surfaces are not approved.
+
+UI audit 2 decision, 2026-11-16. Diagnostics surfaces 42–45 now use equal Playback,
+Video, Picture and Plex summary cards and four technical groups. Idle remains inline;
+unknown method has no supporting line. Reported signal and display facts retain their
+platform/physical-evidence limits. Astra approved these Diagnostics changes.

@@ -4,6 +4,7 @@ class _StudioProgramming extends StatefulWidget {
   const _StudioProgramming({
     required this.draft,
     required this.inventory,
+    required this.controller,
     required this.readInventory,
     required this.selectedLibraries,
     required this.libraries,
@@ -22,6 +23,7 @@ class _StudioProgramming extends StatefulWidget {
   });
   final ChannelStudioDraft draft;
   final _StudioInventory inventory;
+  final LineupController controller;
   final _StudioInventory Function() readInventory;
   final List<PlexLibrary> selectedLibraries;
   final List<PlexLibrary> libraries;
@@ -91,11 +93,7 @@ class _StudioProgrammingState extends State<_StudioProgramming> {
   }
 
   void _publishPending() => widget.onPendingChanged(
-    _picker.activeKey != null
-        ? _StudioPendingChoice.filter
-        : _selectionPending
-        ? _StudioPendingChoice.selection
-        : null,
+    _selectionPending ? _StudioPendingChoice.selection : null,
   );
 
   bool cancelPendingChoice() {
@@ -187,16 +185,18 @@ class _StudioProgrammingState extends State<_StudioProgramming> {
           ),
           SizedBox(height: 16),
           if (_session.sourceReadOnly) ...[
-            const Text(
+            Text(
               'Programming is read-only and will be preserved exactly.',
+              style: _studioSupportStyle(context),
             ),
             _studioSourceExplanation(context, widget.sourceExplanation),
           ] else ...[
             if (_session.source is MixedSource &&
                 _session.sourceChoice == null) ...[
               widget.inventoryStatus,
-              const Text(
+              Text(
                 'This mixed source is preserved exactly. Choose a source below only if you want to replace it.',
+                style: _studioSupportStyle(context),
               ),
               SizedBox(height: 8),
             ],
@@ -250,6 +250,7 @@ class _StudioProgrammingState extends State<_StudioProgramming> {
               child: ExcludeFocus(
                 excluding: !libraryActive,
                 child: _StudioFilterEditor(
+                  controller: widget.controller,
                   key: _filterKey,
                   draft: _session,
                   active: libraryActive,
@@ -290,6 +291,7 @@ class _StudioProgrammingState extends State<_StudioProgramming> {
               child: ExcludeFocus(
                 excluding: !manualActive,
                 child: _StudioManualEditor(
+                  controller: widget.controller,
                   key: _manualKey,
                   rundown: _session.rundown,
                   inventory: widget.inventory,

@@ -4,6 +4,7 @@ import 'package:flutter/services.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:lineup_desktop/app/diagnostics_view.dart';
 import 'package:lineup_desktop/app/lineup_controller.dart';
+import 'package:lineup_desktop/app/channel_studio_view.dart';
 import 'package:lineup_desktop/app/settings_view.dart';
 import 'package:lineup_desktop/channels/channel.dart';
 import 'package:lineup_desktop/licenses/licenses_view.dart';
@@ -98,7 +99,34 @@ void main() {
       await toggle(find.byKey(const Key('channels-app-menu')));
       await tester.tap(channel);
       await tester.pumpAndSettle();
-      await toggle(find.text('Edit custom channel'));
+      final studio = find.byType(ChannelStudioView);
+      expect(studio, findsOneWidget);
+      final view = tester.widget<ChannelStudioView>(studio);
+      expect(view.mode, ChannelStudioMode.editCustom);
+      expect(view.channel?.id, 'custom');
+      expect(
+        find.descendant(
+          of: find.ancestor(
+            of: find.byKey(const Key('studio-status-tag')),
+            matching: find.byWidgetPredicate(
+              (widget) =>
+                  widget is Semantics && widget.properties.header == true,
+            ),
+          ),
+          matching: find.byWidgetPredicate(
+            (widget) => widget is Text && widget.data == 'Synthetic channel',
+          ),
+        ),
+        findsOneWidget,
+      );
+      expect(
+        find.descendant(
+          of: find.byKey(const Key('studio-status-tag')),
+          matching: find.text('Saved'),
+        ),
+        findsOneWidget,
+      );
+      await toggle(studio);
       await tester.pumpWidget(const SizedBox.shrink());
     } finally {
       debugDefaultTargetPlatformOverride = null;

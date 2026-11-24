@@ -37,6 +37,7 @@ class LineupTopBar extends StatelessWidget {
     this.menuKey,
     this.trailing,
     this.inset = 48,
+    this.height = 80,
     this.divider = true,
     super.key,
   });
@@ -46,6 +47,7 @@ class LineupTopBar extends StatelessWidget {
   final Key? menuKey;
   final Widget? trailing;
   final double inset;
+  final double height;
   final bool divider;
 
   @override
@@ -92,7 +94,7 @@ class LineupTopBar extends StatelessWidget {
       );
       return Container(
         key: const ValueKey('lineup-top-bar'),
-        height: 80,
+        height: height,
         padding: EdgeInsets.symmetric(horizontal: inset),
         decoration: BoxDecoration(
           border: divider

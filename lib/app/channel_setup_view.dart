@@ -65,6 +65,7 @@ class UpstreamChannelSetupViewState extends State<UpstreamChannelSetupView> {
   int _minimum = 5;
   SetupPhase? _phase;
   SetupReviewFilter _reviewFilter = SetupReviewFilter.all;
+  bool _restoreReviewFilter = false;
   String _reviewSearch = '';
   bool _discoveryRetry = false;
   String? _notice;
@@ -275,6 +276,7 @@ class UpstreamChannelSetupViewState extends State<UpstreamChannelSetupView> {
     if (!mounted) return;
     setState(() {
       _step = _SetupStep.review;
+      _restoreReviewFilter = phase is Failed;
       _phase = Reviewing(
         phase.review,
         confirmed: phase is Failed && phase.confirmed,
@@ -534,7 +536,7 @@ class UpstreamChannelSetupViewState extends State<UpstreamChannelSetupView> {
         Text(
           subtitleText ??
               switch (_configurationSection) {
-                0 => 'Choose the channels you want from your libraries.',
+                0 => 'Choose which kinds of channels Lineup builds from your libraries.',
                 1 => 'Choose how your generated channels will play.',
                 _ => 'Choose the size and balance of your generated lineup.',
               },
@@ -594,15 +596,13 @@ class UpstreamChannelSetupViewState extends State<UpstreamChannelSetupView> {
         if (!_selectedLibraries.remove(id)) _selectedLibraries.add(id);
       });
     },
-    onToggleAll: () {
+    onToggleAll: (usableIds) {
       if (_setupActionsBlocked) return;
       setState(() {
-        if (_selectedLibraries.length == widget.controller.libraries.length) {
-          _selectedLibraries.clear();
+        if (_selectedLibraries.containsAll(usableIds)) {
+          _selectedLibraries.removeAll(usableIds);
         } else {
-          _selectedLibraries
-            ..clear()
-            ..addAll(widget.controller.libraries.map((library) => library.id));
+          _selectedLibraries.addAll(usableIds);
         }
       });
     },
@@ -741,6 +741,12 @@ class UpstreamChannelSetupViewState extends State<UpstreamChannelSetupView> {
         for (final strategy in BuilderStrategy.values)
           if (_configurationSection == 0 && !_strategies.contains(strategy))
             strategy: _projection.disabledEligibility(strategy),
+      }),
+      eligibleAlternateGrouping: Set.unmodifiable({
+        for (final strategy in BuilderStrategy.values)
+          if (_configurationSection == 0 &&
+              _projection.hasEligibleAlternateGrouping(strategy))
+            strategy,
       }),
       discoveryFailures: Map.unmodifiable({
         for (final strategy in BuilderStrategy.values)
@@ -897,6 +903,7 @@ class UpstreamChannelSetupViewState extends State<UpstreamChannelSetupView> {
     if (base.isEmpty && review.finalChannels.isEmpty) return;
     setState(() {
       _phase = Reviewing(review, confirmed: false);
+      _restoreReviewFilter = false;
       _error = null;
       _notice = null;
       _step = _SetupStep.review;
@@ -914,6 +921,7 @@ class UpstreamChannelSetupViewState extends State<UpstreamChannelSetupView> {
       sourceOrder: List.unmodifiable(_sourceOrder),
       sourceLabel: _reviewSourceLabel,
       initialFilter: _reviewFilter,
+      restoreInitialFilter: _restoreReviewFilter,
       initialSearch: _reviewSearch,
       onFilterChanged: (filter) => setState(() => _reviewFilter = filter),
       onSearchChanged: (search) => setState(() => _reviewSearch = search),
@@ -993,6 +1001,7 @@ class UpstreamChannelSetupViewState extends State<UpstreamChannelSetupView> {
       if (result == ChannelPlanApplyResult.stale) {
         final base = widget.controller.channels;
         setState(() {
+          _restoreReviewFilter = false;
           _phase = Reviewing(
             _allocateReview(
               base,

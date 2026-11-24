@@ -2094,6 +2094,46 @@ void main() {
     },
   );
 
+  for (final withTune in [false, true]) {
+    test(
+      'Guide replaces directory demand (committed tune: $withTune)',
+      () async {
+        final lineup = _TestLineup(_channels(12));
+        final started = <String>[];
+        final directoryLoad = Completer<ScheduleIndex>();
+        final guide = GuideController(
+          lineup: lineup,
+          maximumConcurrentLoads: 1,
+          loadSchedule: (channel) async {
+            started.add(channel.id);
+            if (channel.id == 'channel-0') return directoryLoad.future;
+            return _schedule(channel);
+          },
+        );
+        addTearDown(lineup.dispose);
+        addTearDown(guide.dispose);
+
+        guide.requestDirectoryRows(lineup.channels.take(3));
+        final tune = withTune ? guide.ensureCurrentProgram('channel-2') : null;
+        guide.requestViewport(10, 1);
+        expect(started, ['channel-0']);
+
+        directoryLoad.complete(_schedule(lineup.channels.first));
+        await _settle();
+        expect(started, [
+          'channel-0',
+          if (withTune) 'channel-2',
+          'channel-10',
+          'channel-11',
+          'channel-9',
+          'channel-8',
+          'channel-7',
+        ]);
+        if (tune != null) expect(await tune, isNotNull);
+      },
+    );
+  }
+
   test('clock transitions and Guide settings preserve logical focus', () async {
     var now = DateTime(2026, 8, 13, 12, 10);
     final channel = Channel(

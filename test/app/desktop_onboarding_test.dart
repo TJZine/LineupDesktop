@@ -820,6 +820,7 @@ void main() {
     WidgetTester tester,
     LineupController controller, {
     Future<void> Function()? browser,
+    Future<void> Function()? requestLogout,
     bool accountOrigin = false,
     bool isTv = false,
     double textScale = 1,
@@ -852,6 +853,7 @@ void main() {
           },
           onLogout: () async {},
           openBrowser: browser ?? () async {},
+          onRequestLogout: requestLogout,
           accountOrigin: accountOrigin,
         ),
       ),
@@ -1092,6 +1094,51 @@ void main() {
     await tester.pumpAndSettle();
 
     expect(controller.selections, ['profile:1234']);
+  });
+
+  testWidgets('TV PIN keypad takes focus from persistent onboarding controls', (
+    tester,
+  ) async {
+    final controller = _AuthorizationController(
+      scenario: const LineupScenario(
+        stage: SetupStage.profiles,
+        profiles: [
+          PlexHomeUser(
+            id: 'protected',
+            name: 'Protected viewer',
+            protected: true,
+          ),
+          PlexHomeUser(id: 'open', name: 'Open viewer', protected: false),
+        ],
+      ),
+    );
+    await tester.pumpWidget(
+      UiFixture(controller: controller, profile: tvProfile).build(),
+    );
+    await tester.pumpAndSettle();
+
+    final settings = tester.widget<TextButton>(
+      find.widgetWithText(TextButton, 'Settings'),
+    );
+    settings.focusNode!.requestFocus();
+    await tester.pump();
+    expect(settings.focusNode!.hasPrimaryFocus, isTrue);
+
+    await tester.tap(find.widgetWithText(TextButton, 'Protected viewer'));
+    await tester.pumpAndSettle();
+
+    expect(find.byKey(const Key('profile-pin-sheet')), findsOneWidget);
+    expect(
+      FocusManager.instance.primaryFocus?.debugLabel,
+      'Profile PIN digit 1',
+    );
+    await tester.sendKeyEvent(LogicalKeyboardKey.arrowRight);
+    await tester.sendKeyEvent(LogicalKeyboardKey.select);
+    await tester.pumpAndSettle();
+    final progress = tester.widget<Semantics>(
+      find.byKey(const Key('profile-pin-progress')),
+    );
+    expect(progress.properties.label, '1 of 4 digits entered');
   });
 
   testWidgets('NAV-I2 desktop picker ignores non-Back navigation keys', (
@@ -1762,6 +1809,180 @@ void main() {
     expect(controller.error, 'The Plex link code expired. Request a new code.');
   });
 
+  testWidgets('U server status precedes its button and footer spans list', (
+    tester,
+  ) async {
+    tester.view
+      ..physicalSize = const Size(1920, 1080)
+      ..devicePixelRatio = 1;
+    addTearDown(tester.view.reset);
+    final controller = _ServerController(
+      scenario: const LineupScenario(
+        stage: SetupStage.servers,
+        servers: [
+          PlexServer(
+            id: 'one',
+            name: 'Synthetic server',
+            owned: true,
+            connections: [],
+          ),
+        ],
+      ),
+    )..unreachable = 'one';
+    addTearDown(controller.dispose);
+    await show(tester, controller, requestLogout: () async {});
+    await tester.pumpAndSettle();
+    final status = tester.getRect(find.text('Unreachable'));
+    final action = tester.getRect(find.widgetWithText(OutlinedButton, 'Retry'));
+    expect(status.right, lessThan(action.left));
+    expect(status.center.dy, closeTo(action.center.dy, .1));
+    expect(
+      tester.widget<Text>(find.text('Unreachable')).style?.color,
+      Theme.of(tester.element(find.text('Unreachable'))).colorScheme.error,
+    );
+    expect(
+      tester.getTopLeft(find.text('Refresh servers')).dx,
+      lessThan(tester.getTopLeft(find.text('Sign out')).dx),
+    );
+    expect(find.text('Yours'), findsOneWidget);
+  });
+
+  testWidgets('slow relay status and Continue fit at narrow width and 2×', (
+    tester,
+  ) async {
+    tester.view
+      ..physicalSize = const Size(640, 560)
+      ..devicePixelRatio = 1;
+    addTearDown(tester.view.reset);
+    final connection = PlexConnection(
+      uri: Uri.parse('https://example.invalid'),
+      local: false,
+      relay: true,
+      latency: const Duration(milliseconds: 1200),
+    );
+    final server = PlexServer(
+      id: 'relay',
+      name: 'Synthetic server',
+      owned: true,
+      connections: [connection],
+    );
+    final controller = FixtureController(
+      scenario: LineupScenario(
+        stage: SetupStage.servers,
+        server: server,
+        connection: connection,
+        servers: [server],
+      ),
+    );
+    addTearDown(controller.dispose);
+    await show(tester, controller, textScale: 2);
+    await tester.pumpAndSettle();
+
+    final status = find.text('Relay · Limited · Very slow · 1200 ms');
+    final action = find.widgetWithText(FilledButton, 'Continue');
+    await tester.ensureVisible(action);
+    await tester.pumpAndSettle();
+    final card = find
+        .ancestor(
+          of: find.text('Yours'),
+          matching: find.byType(GestureDetector),
+        )
+        .first;
+    final cardRect = tester.getRect(card);
+    final statusRect = tester.getRect(status);
+    final actionRect = tester.getRect(action);
+    expect(statusRect.left, greaterThanOrEqualTo(cardRect.left));
+    expect(statusRect.right, lessThan(actionRect.left));
+    expect(actionRect.right, lessThanOrEqualTo(cardRect.right));
+    expect(action.hitTestable(), findsOneWidget);
+    expect(tester.takeException(), isNull);
+
+    await tester.tap(action);
+    await tester.pump();
+    expect(controller.stage, SetupStage.channelSetup);
+  });
+
+  for (final tv in [false, true]) {
+    for (final state in ['fresh', 'near expiry', 'expired', 'failed']) {
+      testWidgets('U sign-in paired panels and actions $state TV=$tv', (
+        tester,
+      ) async {
+        tester.view
+          ..physicalSize = tv ? const Size(1920, 1080) : const Size(1280, 720)
+          ..devicePixelRatio = 1;
+        addTearDown(tester.view.reset);
+        final now = DateTime.utc(2026, 10, 15, 12);
+        final controller = FixtureController(
+          clock: () => now,
+          scenario: LineupScenario(
+            stage: SetupStage.linking,
+            settings: const LineupSettings(reduceMotion: true),
+            activePin: PlexPin(
+              id: 1,
+              code: 'ABCD',
+              expiresAt: now.add(
+                Duration(
+                  seconds: state == 'expired'
+                      ? -1
+                      : state == 'near expiry'
+                      ? 15
+                      : 240,
+                ),
+              ),
+            ),
+            error: state == 'failed' ? 'Synthetic safe Plex failure.' : null,
+          ),
+        );
+        addTearDown(controller.dispose);
+        await show(tester, controller, isTv: tv);
+        await tester.pumpAndSettle();
+        expect(
+          find.text(
+            'Use whichever is easier. Lineup continues by itself once you have signed in.',
+          ),
+          findsOneWidget,
+        );
+        expect(find.text('With your phone'), findsOneWidget);
+        expect(find.text('On another device'), findsOneWidget);
+        expect(find.text('or'), findsNothing);
+        final phone = tester.getRect(
+          find.byKey(const ValueKey('linking-phone-panel')),
+        );
+        final device = tester.getRect(
+          find.byKey(const ValueKey('linking-device-panel')),
+        );
+        expect(phone.width, closeTo(device.width, .1));
+        expect(phone.height, closeTo(device.height, .1));
+        expect(phone.left, lessThan(device.left));
+        if (state == 'fresh' || state == 'near expiry') {
+          expect(
+            find.text(tv ? 'Open on this TV' : 'Open browser'),
+            findsOneWidget,
+          );
+          expect(find.text('Copy code'), tv ? findsNothing : findsOneWidget);
+          expect(find.text('Scan with your camera'), findsOneWidget);
+          if (tv) {
+            expect(
+              FocusManager.instance.primaryFocus?.debugLabel,
+              'Retry secure cancellation',
+            );
+          }
+        } else {
+          expect(find.text('Get a new code'), findsOneWidget);
+          expect(
+            find.text(
+              state == 'expired'
+                  ? 'That code expired before sign-in finished.'
+                  : 'Synthetic safe Plex failure.',
+            ),
+            findsOneWidget,
+          );
+        }
+        expect(tester.takeException(), isNull);
+      });
+    }
+  }
+
   testWidgets('linking slots stay aligned across code and failure states', (
     tester,
   ) async {
@@ -1849,12 +2070,7 @@ void main() {
         reason: 'failure slot $index',
       );
     }
-    final separator = tester.widget<Visibility>(
-      find
-          .ancestor(of: find.text('or'), matching: find.byType(Visibility))
-          .first,
-    );
-    expect(separator.visible, isFalse);
+    expect(find.text('or'), findsNothing);
     expect(
       find.text('That code expired before sign-in finished.'),
       findsNothing,
@@ -2793,6 +3009,9 @@ class _PinController extends FixtureController {
 
 class _ServerController extends FixtureController {
   _ServerController({super.scenario});
+  String? unreachable;
+  @override
+  String? get unreachableServerId => unreachable ?? super.unreachableServerId;
 
   Completer<void>? pendingSelection;
   bool failSelection = false;

@@ -24,8 +24,8 @@ track drawer, and retains enough supporting detail to distinguish real choices.
 
 Completion means that:
 
-- language is presented with a recognizable self-name when the supplied code can
-  be resolved safely;
+- language is presented with a recognizable English name when the supplied code
+  can be resolved safely;
 - meaningful titles and explicit purpose/accessibility facts distinguish tracks;
 - channel layout and codec/format facts are readable rather than raw identifiers
   without inferring speaker topology from channel count;
@@ -69,9 +69,11 @@ answers two questions in order:
 
 Use the existing two-tier row:
 
-- **Primary:** self-named language plus a meaningful title or purpose.
-- **Secondary:** explicit purpose/accessibility facts, audio channel layout, and
-  friendly codec or subtitle-format facts, in that order.
+- **Primary:** English language name plus a meaningful title or purpose.
+- **Secondary:** explicit purpose/accessibility facts, any region omitted from
+  the primary label, audio channel layout, and friendly codec or
+  subtitle-format facts, in that order. Subtitle rows show supporting facts
+  only when their primary labels match.
 
 Examples are target grammar, not fixture claims:
 
@@ -80,10 +82,12 @@ Examples are target grammar, not fixture claims:
 | Audio | `English — Original theatrical mix` | `5.1 surround • DTS` |
 | Audio | `English — Audio description` | `5.1 surround • Dolby Digital` |
 | Audio | `English — Director commentary` | `Stereo • AAC` |
-| Audio | `Español (Latinoamérica)` | `5.1 surround • AAC` |
-| Subtitle | `English — SDH` | `SRT (text)` |
-| Subtitle | `English — Forced` | `PGS (image)` |
-| Subtitle | `Español (Latinoamérica)` | `External • SRT (text)` |
+| Audio, lone `es-419` | `Spanish` | `Latin America • 5.1 surround • AAC` |
+| Audio, `es-419` with an `es-ES` peer | `Spanish (Latin America)` | `5.1 surround • AAC` |
+| Audio, `es-ES` with an `es-419` peer | `Spanish (Spain)` | `Stereo • AAC` |
+| Subtitle with a unique primary label | `English — SDH` | |
+| Subtitle with a unique primary label | `English — Forced` | |
+| Subtitle, lone `es-419` | `Spanish` | |
 
 The `5.1 surround` examples assume an exact recognized `demux-channels` value.
 A source that supplies only a count is labeled conservatively, such as
@@ -91,12 +95,13 @@ A source that supplies only a count is labeled conservatively, such as
 
 The following decisions are fixed:
 
-- Use recognizable language self-names such as `Español`, `Français`, and
-  `Deutsch`. The approved October 7 polish plan's P3 supersedes the original
-  always-regional primary label: show a supplied regional qualifier in primary
-  text only when it distinguishes same-language tracks of the same type with
-  differing supplied regions. Otherwise retain the region as a secondary fact
-  in the drawer. Compact OSD labels use the same policy.
+- The November 17, 2026 UI audit 2 decision supersedes the original self-name
+  requirement. Use English language names from `language_code.englishName`, such
+  as `Spanish`, `French`, `German` and `Japanese`. Show a supplied regional
+  qualifier in primary text only when it distinguishes same-language tracks of
+  the same type with differing supplied regions. The full tooltip and semantics
+  description retain the region. Compact OSD labels use the same primary-label
+  policy.
 - Language leads when present. A meaningful native title is an editorial
   qualifier; it does not replace language.
 - Explicit accessibility and purpose facts outrank codec details.
@@ -129,7 +134,7 @@ The following decisions are fixed:
   OSD structure redesign.
 - No dependency added merely to avoid a small formatter. A language-data
   dependency is allowed only if the evidence gate below demonstrates that it is
-  the smallest reliable way to satisfy the approved self-name coverage.
+  the smallest reliable way to satisfy the approved language coverage.
 
 ## Current flow and owners
 
@@ -348,7 +353,7 @@ the smallest complete current choice.
 The P2 adapter remains small and deterministic: trim input; normalize `_`/`-`,
 primary/script/region casing only for lookup; perform an exact enum-code match;
 and return `null` on unknown or unsupported suffixes. It must never use device
-locale fallback. Use the package's native name. Preserve the cleaned original tag
+locale fallback. Use the package's English name. Preserve the cleaned original tag
 when lookup returns `null`. Treat `und` as unavailable rather than a language name;
 render `mul` as `Multiple languages` and `zxx` as `No linguistic content`. Lock
 fixtures for `en`/`eng`, terminology/bibliographic pairs such as `fra`/`fre` and
@@ -520,7 +525,7 @@ authorities, or command identities.
 - If all human-facing facts are absent, use `Audio track N` or
   `Subtitle track N`.
 
-### Language self-names
+### English language names
 
 The implementation must resolve the actual code shapes observed at the evidence
 gate, including relevant ISO 639-1, ISO 639-2 terminology/bibliographic aliases,
@@ -531,7 +536,7 @@ Before adding a package, compare candidate data sources against the captured cod
 matrix. A candidate must allow Lineup's resolver to:
 
 - be pure Dart or Flutter and work on Windows and macOS;
-- supply self-names, not only English exonyms;
+- supply English language names from the existing offline language-code data (UI audit 2 decision, 2026-11-16);
 - cover the observed two-letter, three-letter, and regional forms or permit a
   small explicit alias layer;
 - have an acceptable license, active maintenance, bounded transitive cost, and
@@ -617,7 +622,8 @@ does not establish.
 
 Keep the OSD action concise:
 
-- selected language self-name when available;
+- the selected track's English language name when available, with the same
+  regional qualification as the primary label;
 - a short explicit purpose such as `SDH`, `Forced`, or `Audio description` when
   it materially distinguishes the selected track;
 - a concise literal title discriminator after language when peers would otherwise
@@ -767,7 +773,7 @@ achieved state and the specific remaining gate.
 | --- | --- |
 | Native encoder | Required identity survives optional-string exhaustion; late selected track; multiple oversized strings; 256/257 tracks; UTF-8 truncation boundary; malformed map; non-whitelisted sentinel absent. |
 | Native decode | Old and new optional fields present, false, absent, null, wrong type; zero/negative/non-integer ID; malformed count; valid selected track after malformed data; successive snapshot removes a former fact; immutable track list; unknown remains null. |
-| Language | Two-letter, three-letter terminology and bibliographic alias, mixed case/separator, already-human name, Unicode self-name, `es-419`, `pt-BR`, `zh-Hans`, `zh-Hant`, unknown suffix, `und`, `mul`, `zxx`, blank value. |
+| Language | Two-letter, three-letter terminology and bibliographic alias, mixed case/separator, already-human name including Unicode, `es-419` alone and with a same-type `es-ES` peer, `pt-BR`, `zh-Hans`, `zh-Hant`, unknown suffix, `und`, `mul`, `zxx`, blank value. |
 | Title | Blank, language duplicate, codec duplicate, commentary, audio description, long Unicode, punctuation/case variants, arbitrary user title. |
 | Purpose | Unrelated meaningful title plus each applicable true flag; commentary without title; overlapping title/flag; simultaneous flags; false/unknown; generated wording restricted to relevant track type; forced never claims cue content. |
 | Channels | Recognized and unknown layouts; equal counts with different layouts; known count without layout; 1, 2, 6, 8, unusual positive count; zero/negative/malformed/absent; no invented LFE/topology. |

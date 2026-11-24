@@ -461,7 +461,9 @@ void main() {
           ),
         );
         await tester.pumpAndSettle();
-        final firstRow = find.byKey(const ValueKey('review-channel-review-1'));
+        final firstRow = find.byKey(
+          ValueKey('review-channel-review-${existing ? 2 : 1}'),
+        );
         final roster = find.byKey(
           const ValueKey('channel-setup-review-roster'),
         );
@@ -487,32 +489,15 @@ void main() {
         await tester.testTextInput.receiveAction(TextInputAction.done);
         await tester.pumpAndSettle();
         expect(tester.testTextInput.isVisible, isFalse);
-        if (existing) {
-          await _keys(tester, [_down]);
-          _focusedIn(tester, find.byKey(const ValueKey('review-show-all')));
-        }
-        for (var i = 1; i <= channels.length; i++) {
+        for (var i = existing ? 2 : 1; i <= channels.length; i++) {
           await _keys(tester, [_down]);
           final row = find.byKey(ValueKey('review-channel-review-$i'));
           _focusedIn(tester, row);
-          if (existing && i == 1) {
-            await _keys(tester, [_select]);
-            expect(
-              find.text('Name: Before → Review channel 1'),
-              findsOneWidget,
-            );
-            await _keys(tester, [_select]);
-          }
           final rect = tester.getRect(row);
           expect(rect.top, greaterThanOrEqualTo(0));
           expect(rect.bottom, lessThanOrEqualTo(540));
         }
         if (existing) {
-          await _keys(tester, [_down]);
-          _focusedIn(
-            tester,
-            find.byKey(const ValueKey('review-channel-review-99')),
-          );
           await _keys(tester, [_down]);
           _focusedIn(
             tester,
@@ -543,14 +528,54 @@ void main() {
           await _keys(tester, [_up]);
           _focusedIn(
             tester,
-            find.byKey(const ValueKey('review-channel-review-99')),
+            find.byKey(const ValueKey('review-channel-review-12')),
           );
           expect(consent, isTrue);
           expect(applyCalls, 0);
         }
-        for (var i = channels.length; i >= 1; i--) {
+        for (
+          var i = existing ? channels.length - 1 : channels.length;
+          i >= (existing ? 2 : 1);
+          i--
+        ) {
           await _keys(tester, [_up]);
           _focusedIn(tester, find.byKey(ValueKey('review-channel-review-$i')));
+        }
+        if (existing) {
+          Future<void> tab(String label) async {
+            await tester.scrollUntilVisible(
+              find.text(label),
+              -200,
+              scrollable: find
+                  .descendant(of: roster, matching: find.byType(Scrollable))
+                  .first,
+            );
+            await tester.tap(find.text(label));
+            await tester.pumpAndSettle();
+          }
+
+          await tab('Updated 1');
+          final updated = find.byKey(const ValueKey('review-channel-review-1'));
+          await tester.ensureVisible(updated);
+          await tester.tap(
+            find.descendant(of: updated, matching: find.byType(ExpansionTile)),
+          );
+          await tester.pumpAndSettle();
+          expect(find.text('Name: Before → Review channel 1'), findsOneWidget);
+          expect(
+            find.byKey(const ValueKey('review-channel-review-2')),
+            findsNothing,
+          );
+          await tab('Removed 1');
+          final removed = find.byKey(
+            const ValueKey('review-channel-review-99'),
+          );
+          await tester.ensureVisible(removed);
+          expect(removed, findsOneWidget);
+          expect(
+            find.byKey(const ValueKey('review-channel-review-1')),
+            findsNothing,
+          );
         }
         expect(consent, existing ? isTrue : isNull);
         expect(applyCalls, 0);
@@ -585,8 +610,13 @@ void main() {
     );
     await tester.pumpWidget(fixture.build());
     await tester.pumpAndSettle();
-    _focusedIn(tester, find.byKey(const ValueKey('library-row-failed')));
-    await _keys(tester, [_down]);
+    final failed = find.byKey(const ValueKey('library-row-failed'));
+    expect(tester.widget<InkWell>(failed).onTap, isNull);
+    final retry = find.byKey(const ValueKey('retry-library-failed'));
+    _focusedIn(tester, find.byKey(const ValueKey('retry-failed-libraries')));
+    for (var step = 0; step < 8 && !_hasFocusIn(tester, retry); step++) {
+      await _keys(tester, [_up]);
+    }
     _focusedIn(tester, find.byKey(const ValueKey('retry-library-failed')));
     await _keys(tester, [_down]);
     _focusedIn(tester, find.byKey(const ValueKey('library-row-next')));
@@ -606,6 +636,10 @@ void main() {
     );
     await tester.pumpWidget(fixture.build());
     await tester.pumpAndSettle();
+    final searchButton = find.byKey(const Key('guide-search-button'));
+    tester.widget<IconButton>(searchButton).focusNode!.requestFocus();
+    await tester.pumpAndSettle();
+    await _keys(tester, [_select]);
     final field = find.byKey(const Key('guide-channel-search'));
     final activation = tester.widget<LineupTextFieldActivation>(
       find.ancestor(
@@ -613,22 +647,49 @@ void main() {
         matching: find.byType(LineupTextFieldActivation),
       ),
     );
-    // Grid-to-toolbar access is UX4. Establish toolbar focus, then prove actual
-    // arrow arrival/exit and activation using the production Guide controls.
-    activation.focusNode!.requestFocus();
-    await tester.pumpAndSettle();
-    await _keys(tester, [_left]);
-    expect(activation.focusNode!.hasPrimaryFocus, isFalse);
+    expect(activation.focusNode!.hasPrimaryFocus, isTrue);
+    expect(tester.testTextInput.isVisible, isFalse);
+    // Search is the final merged-bar control. Right stays inside the bar;
+    // Left returns to the filter and closes the empty field.
     await _keys(tester, [_right]);
     expect(activation.focusNode!.hasPrimaryFocus, isTrue);
+    expect(tester.testTextInput.isVisible, isFalse);
+    await _keys(tester, [_left]);
+    expect(field, findsNothing);
+    final filter = tester.widget<InkWell>(
+      find.byKey(const Key('guide-channel-filter')),
+    );
+    expect(filter.focusNode!.hasPrimaryFocus, isTrue);
+    for (
+      var step = 0;
+      step < 8 &&
+          !tester.widget<IconButton>(searchButton).focusNode!.hasPrimaryFocus;
+      step++
+    ) {
+      await _keys(tester, [_right]);
+    }
+    expect(
+      tester.widget<IconButton>(searchButton).focusNode!.hasPrimaryFocus,
+      isTrue,
+    );
+    expect(tester.testTextInput.isVisible, isFalse);
+    await _keys(tester, [_select]);
+    expect(field, findsOneWidget);
     expect(tester.testTextInput.isVisible, isFalse);
     await _keys(tester, [_select]);
     expect(tester.testTextInput.isVisible, isTrue);
     await _keys(tester, [_back]);
     expect(tester.testTextInput.isVisible, isFalse);
-    expect(activation.focusNode!.hasPrimaryFocus, isTrue);
-    await _keys(tester, [_right]);
-    expect(activation.focusNode!.hasPrimaryFocus, isFalse);
+    final reopened = tester.widget<LineupTextFieldActivation>(
+      find.ancestor(
+        of: field,
+        matching: find.byType(LineupTextFieldActivation),
+      ),
+    );
+    expect(reopened.focusNode!.hasPrimaryFocus, isTrue);
+    await _keys(tester, [_left]);
+    expect(field, findsNothing);
+    expect(filter.focusNode!.hasPrimaryFocus, isTrue);
   });
 }
 

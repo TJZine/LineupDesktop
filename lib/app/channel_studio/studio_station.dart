@@ -184,8 +184,9 @@ class _StudioStationState extends State<_StudioStation> {
               child: Semantics(
                 key: const Key('studio-mini-marathon-explanation'),
                 focusable: true,
-                child: const Text(
+                child: Text(
                   'Mini-marathons are available when this source includes episodes with series information.',
+                  style: _studioSupportStyle(context),
                 ),
               ),
             ),
@@ -193,6 +194,7 @@ class _StudioStationState extends State<_StudioStation> {
             SizedBox(height: 12),
             Text(
               'Generator recipe: ${widget.sourceSummary}. Schedule timing stays the same.',
+              style: _studioSupportStyle(context),
             ),
           ] else if (_session.playbackMode == PlaybackMode.block) ...[
             if (!hasShowGrouping) SizedBox(height: 12),
@@ -201,8 +203,9 @@ class _StudioStationState extends State<_StudioStation> {
                 child: Semantics(
                   key: const Key('studio-mini-marathon-explanation'),
                   focusable: true,
-                  child: const Text(
+                  child: Text(
                     'Mini-marathons needs episodes grouped by show title or show artwork. Choose another rhythm or add grouped episodes.',
+                    style: _studioSupportStyle(context),
                   ),
                 ),
               ),
@@ -306,7 +309,10 @@ class _StudioStationState extends State<_StudioStation> {
               ),
             ),
             if (_session.includeSpecials)
-              const Text('Season 0 specials play after regular seasons.'),
+              Text(
+                'Season 0 specials play after regular seasons.',
+                style: _studioSupportStyle(context),
+              ),
           ],
         ],
       );

@@ -1,5 +1,5 @@
 import 'dart:async';
-import 'dart:ui' show PointerDeviceKind;
+import 'dart:ui' show PointerDeviceKind, Tristate;
 
 import 'package:flutter/material.dart';
 import 'package:flutter/semantics.dart';
@@ -14,6 +14,24 @@ import 'package:lineup_desktop/settings/lineup_settings.dart';
 import 'package:lineup_desktop/ui/app_theme.dart';
 
 import '../support/ui_fixture.dart';
+
+Finder themeSwatch(LineupThemeName theme) =>
+    find.byKey(ValueKey('settings-theme-${theme.name}'));
+Future<void> chooseTheme(WidgetTester tester, LineupThemeName theme) async {
+  final swatch = themeSwatch(theme);
+  await tester.ensureVisible(swatch);
+  await tester.pumpAndSettle();
+  await tester.tap(swatch);
+  await tester.pumpAndSettle();
+}
+
+bool themeSelected(WidgetTester tester, LineupThemeName theme) =>
+    tester
+        .getSemantics(themeSwatch(theme))
+        .getSemanticsData()
+        .flagsCollection
+        .isSelected ==
+    Tristate.isTrue;
 
 void main() {
   testWidgets('Settings applies and persists a theme immediately', (
@@ -35,11 +53,8 @@ void main() {
     );
 
     await openDestination(tester, 'Settings');
-    final themeDropdown = find.byType(DropdownButton<LineupThemeName>);
-    await tester.tap(themeDropdown);
-    await tester.pumpAndSettle();
-    await tester.tap(find.text(LineupThemeName.slatePine.label).last);
-    await tester.pumpAndSettle();
+    final themeDropdown = themeSwatch(LineupThemeName.slatePine);
+    await chooseTheme(tester, LineupThemeName.slatePine);
 
     expect(fixture.controller.settings.theme, LineupThemeName.slatePine);
     expect(
@@ -110,38 +125,32 @@ void main() {
         .selected;
     expect(selectedBefore, isTrue);
 
-    final dropdown = find.byType(DropdownButton<LineupThemeName>);
-    await tester.ensureVisible(dropdown);
-    await tester.pumpAndSettle();
-    await tester.tap(dropdown);
-    await tester.pumpAndSettle();
-    await tester.tap(find.text(LineupThemeName.slatePine.label).last);
-    await tester.pump();
-    final field = find
-        .descendant(of: dropdown, matching: find.byType(InputDecorator))
-        .first;
-    BorderSide fieldSide() =>
-        (Theme.of(tester.element(field)).inputDecorationTheme.focusedBorder!
-                as OutlineInputBorder)
-            .borderSide;
+    final swatch = themeSwatch(LineupThemeName.slatePine);
+    await chooseTheme(tester, LineupThemeName.slatePine);
+    final swatchMaterial = find.descendant(
+      of: swatch,
+      matching: find.byType(Material),
+    );
+    BorderSide swatchSide() =>
+        (tester.widget<Material>(swatchMaterial).shape! as OutlinedBorder).side;
     expect(controller.settings.theme, LineupThemeName.emberSteel);
     expect(
-      Theme.of(tester.element(field)).colorScheme.primary,
+      Theme.of(tester.element(swatch)).colorScheme.primary,
       LineupTheme.forName(LineupThemeName.slatePine).colorScheme.primary,
     );
-    expect(fieldSide().width, 1);
-    expect(tester.widget<InputDecorator>(field).isFocused, isTrue);
+    expect(swatchSide().width, 1);
+    expect(tester.widget<OutlinedButton>(swatch).focusNode!.hasFocus, isTrue);
     await tester.sendKeyEvent(LogicalKeyboardKey.arrowRight);
     await tester.pump();
-    expect(fieldSide().width, 3);
+    expect(swatchSide().width, 3);
     expect(
-      fieldSide().color,
-      LineupTheme.of(tester.element(field)).focusBorder,
+      swatchSide().color,
+      LineupTheme.of(tester.element(swatch)).focusBorder,
     );
     final focused = FocusManager.instance.primaryFocus;
     await mouse.moveTo(const Offset(720, 500));
     await tester.pump();
-    expect(fieldSide().width, 1);
+    expect(swatchSide().width, 1);
     expect(FocusManager.instance.primaryFocus, same(focused));
     expect(
       tester
@@ -157,98 +166,102 @@ void main() {
     controller.fail();
     await tester.pumpAndSettle();
     expect(
-      Theme.of(tester.element(field)).colorScheme.primary,
+      Theme.of(tester.element(swatch)).colorScheme.primary,
       LineupTheme.forName(LineupThemeName.emberSteel).colorScheme.primary,
     );
-    expect(fieldSide().width, 1);
+    expect(swatchSide().width, 1);
     expect(FocusManager.instance.primaryFocus, same(focused));
+
     await mouse.removePointer();
     await tester.pumpWidget(const SizedBox.shrink());
   });
 
-  testWidgets('theme dropdown exposes selection and keyboard traversal', (
+  testWidgets('theme swatches expose selection and keyboard traversal', (
     tester,
   ) async {
     final fixture = UiFixture(
-      scenario: LineupScenario(stage: SetupStage.ready),
+      scenario: const LineupScenario(stage: SetupStage.ready),
     );
     await tester.pumpWidget(fixture.build());
     await tester.pumpAndSettle();
     await openDestination(tester, 'Settings');
-
-    final dropdown = find.byType(DropdownButton<LineupThemeName>);
-    final widget = tester.widget<DropdownButton<LineupThemeName>>(dropdown);
-    expect(widget.value, LineupThemeName.emberSteel);
-    expect(widget.onChanged, isNotNull);
+    final first = themeSwatch(LineupThemeName.emberSteel);
+    expect(themeSelected(tester, LineupThemeName.emberSteel), isTrue);
     expect(
       tester
-          .getSemantics(dropdown)
+          .getSemantics(first)
           .getSemanticsData()
           .hasAction(SemanticsAction.tap),
       isTrue,
     );
-
-    await tester.tap(dropdown);
+    tester.widget<OutlinedButton>(first).focusNode!.requestFocus();
+    await tester.pump();
+    await tester.sendKeyEvent(LogicalKeyboardKey.arrowRight);
     await tester.pumpAndSettle();
-    await tester.sendKeyEvent(LogicalKeyboardKey.arrowDown);
+    final slate = tester.getSemantics(themeSwatch(LineupThemeName.slatePine));
+    expect(
+      slate,
+      matchesSemantics(
+        label: 'Slate & Pine',
+        isButton: true,
+        hasEnabledState: true,
+        isEnabled: true,
+        hasSelectedState: true,
+        isFocusable: true,
+        isFocused: true,
+        hasTapAction: true,
+        hasFocusAction: true,
+      ),
+    );
+    expect(
+      tester.getSemantics(first).getSemanticsData().flagsCollection.isFocused,
+      Tristate.isFalse,
+    );
     await tester.sendKeyEvent(LogicalKeyboardKey.select);
     await tester.pumpAndSettle();
-
     expect(fixture.controller.settings.theme, LineupThemeName.slatePine);
-    expect(
-      tester.widget<DropdownButton<LineupThemeName>>(dropdown).value,
-      LineupThemeName.slatePine,
-    );
+    expect(themeSelected(tester, LineupThemeName.slatePine), isTrue);
+    expect(themeSelected(tester, LineupThemeName.emberSteel), isFalse);
   }, semanticsEnabled: true);
 
-  testWidgets('theme dropdown applies every approved palette', (tester) async {
+  testWidgets('theme swatches apply every approved palette', (tester) async {
     final fixture = UiFixture(
-      scenario: LineupScenario(stage: SetupStage.ready),
+      scenario: const LineupScenario(stage: SetupStage.ready),
     );
     await tester.pumpWidget(fixture.build());
     await tester.pumpAndSettle();
     await openDestination(tester, 'Settings');
-
     for (final theme in LineupThemeName.values.skip(1)) {
-      final dropdown = find.byType(DropdownButton<LineupThemeName>);
-      await tester.tap(dropdown);
-      await tester.pumpAndSettle();
-      await tester.tap(find.text(theme.label).last);
-      await tester.pumpAndSettle();
-
+      await chooseTheme(tester, theme);
       expect(fixture.controller.settings.theme, theme);
-      expect(
-        tester.widget<DropdownButton<LineupThemeName>>(dropdown).value,
-        theme,
-      );
+      expect(themeSelected(tester, theme), isTrue);
     }
   });
 
-  testWidgets('theme dropdown remains reachable at accessible text scale', (
+  testWidgets('theme swatches remain reachable at accessible text scale', (
     tester,
   ) async {
     tester.view
       ..devicePixelRatio = 1
       ..physicalSize = const Size(800, 600);
     tester.platformDispatcher.textScaleFactorTestValue = 2;
-    addTearDown(tester.view.resetDevicePixelRatio);
-    addTearDown(tester.view.resetPhysicalSize);
+    addTearDown(tester.view.reset);
     addTearDown(tester.platformDispatcher.clearTextScaleFactorTestValue);
     final fixture = UiFixture(
-      scenario: LineupScenario(stage: SetupStage.ready),
+      scenario: const LineupScenario(stage: SetupStage.ready),
     );
     await tester.pumpWidget(fixture.build());
     await tester.pumpAndSettle();
     await openDestination(tester, 'Settings');
-
-    expect(find.byType(DropdownButton<LineupThemeName>), findsOneWidget);
+    for (final theme in LineupThemeName.values) {
+      await chooseTheme(tester, theme);
+      expect(fixture.controller.settings.theme, theme);
+    }
     final menu = find.byKey(const Key('settings-app-menu'));
-    expect(menu, findsOneWidget);
-    final menuButton = tester.widget<TextButton>(menu);
-    expect(menuButton.focusNode, isNotNull);
-    menuButton.focusNode!.requestFocus();
+    final node = tester.widget<TextButton>(menu).focusNode!;
+    node.requestFocus();
     await tester.pump();
-    expect(FocusManager.instance.primaryFocus, same(menuButton.focusNode));
+    expect(FocusManager.instance.primaryFocus, same(node));
     await tester.sendKeyEvent(LogicalKeyboardKey.enter);
     await tester.pumpAndSettle();
     expect(find.byKey(const Key('immersive-app-menu')), findsOneWidget);
@@ -288,15 +301,16 @@ void main() {
     await tester.pumpAndSettle();
     await openDestination(tester, 'Settings');
 
-    final dropdown = find.byType(DropdownButton<LineupThemeName>);
-    await tester.tap(dropdown);
-    await tester.pumpAndSettle();
-    await tester.tap(find.text(LineupThemeName.slatePine.label).last);
+    final dropdown = themeSwatch(LineupThemeName.slatePine);
+    await chooseTheme(tester, LineupThemeName.slatePine);
     await tester.pump(const Duration(milliseconds: 350));
-
     final focused = FocusManager.instance.primaryFocus;
     expect(focused, isNotNull);
     expect(find.text('Saving…'), findsOneWidget);
+    final pending = tester.getSemantics(dropdown).getSemanticsData();
+    expect(pending.flagsCollection.isFocused, Tristate.isTrue);
+    expect(pending.flagsCollection.isEnabled, Tristate.isFalse);
+    expect(pending.hasAction(SemanticsAction.tap), isFalse);
     expect(
       tester
           .widget<TextButton>(find.widgetWithText(TextButton, 'Playback'))
@@ -309,10 +323,8 @@ void main() {
     expect(controller.settings.theme, LineupThemeName.emberSteel);
     expect(find.byKey(const Key('setting-error-theme')), findsOneWidget);
     expect(FocusManager.instance.primaryFocus, same(focused));
-    expect(
-      tester.widget<DropdownButton<LineupThemeName>>(dropdown).value,
-      LineupThemeName.emberSteel,
-    );
+    expect(themeSelected(tester, LineupThemeName.emberSteel), isTrue);
+    expect(tester.widget<OutlinedButton>(dropdown).focusNode!.hasFocus, isTrue);
   });
 
   testWidgets('Guide and player use the immersive shell policy', (

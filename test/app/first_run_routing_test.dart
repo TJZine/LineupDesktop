@@ -623,7 +623,7 @@ void main() {
             );
             expect(
               tester
-                  .widget<OutlinedButton>(
+                  .widget<TextButton>(
                     find.byKey(const ValueKey('scan-again-libraries')),
                   )
                   .onPressed,
