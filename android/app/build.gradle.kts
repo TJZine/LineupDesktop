@@ -77,6 +77,21 @@ dependencies {
     testImplementation("com.squareup.okhttp3:okhttp-tls:4.12.1")
 }
 
+repositories {
+    exclusiveContent {
+        forRepository {
+            maven {
+                name = "RobolectricTestArtifacts"
+                url = uri("https://maven-central.storage-download.googleapis.com/maven2/")
+            }
+        }
+        filter {
+            includeModule("org.robolectric", "android-all-instrumented")
+            includeModule("org.robolectric", "nativeruntime-dist-compat")
+        }
+    }
+}
+
 val robolectricSdkDirectory = layout.buildDirectory.dir("robolectric-sdks")
 val prepareRobolectricSdks by tasks.registering(Sync::class) {
     into(robolectricSdkDirectory)
