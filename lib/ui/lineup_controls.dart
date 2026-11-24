@@ -439,6 +439,8 @@ class _LineupFocusRevealState extends State<LineupFocusReveal> {
 
 /// Reuses the child's real focus/traversal, with independent selection and focus.
 class LineupRowSurface extends StatefulWidget {
+  static const selectionBorderWidth = 3.0;
+
   const LineupRowSurface({
     required this.selected,
     required this.child,
@@ -541,7 +543,7 @@ Widget _rowSurfaceContainer({
     border: Border(
       left: BorderSide(
         color: selected ? roles.progressFill : Colors.transparent,
-        width: 3,
+        width: LineupRowSurface.selectionBorderWidth,
       ),
     ),
   ),

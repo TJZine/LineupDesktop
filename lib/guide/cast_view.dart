@@ -20,7 +20,6 @@ CastView mergeCast(
   Uri? portrait(PlexCastMember? member) => canonicalPlexCastPortrait(
     member?.thumbPath == null ? null : Uri.tryParse(member!.thumbPath!),
   );
-  // Empty detail cannot replace an empty catalog with useful information.
   final replace =
       detail.isNotEmpty && catalogByName.keys.every(detailByName.containsKey);
   return CastView(

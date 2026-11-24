@@ -345,6 +345,8 @@ class _SettingsViewState extends State<SettingsView> {
   }
 
   static const _rowInset = 16.0;
+  static const _toggleContentInset =
+      _rowInset - LineupRowSurface.selectionBorderWidth;
 
   Widget _detailPane(BuildContext context, bool compact) => Padding(
     key: const Key('settings-detail-pane'),
@@ -697,7 +699,6 @@ class _SettingsViewState extends State<SettingsView> {
             ],
             SettingsCategory.account => [
               _SettingsRow(
-                revealOnFocus: true,
                 label: const Text('Plex Home profile'),
                 helper: Row(
                   crossAxisAlignment: CrossAxisAlignment.center,
@@ -757,7 +758,6 @@ class _SettingsViewState extends State<SettingsView> {
                 ),
               ),
               _SettingsRow(
-                revealOnFocus: true,
                 label: const Text('Plex Media Server'),
                 helper: widget.controller.server == null
                     ? const Text('No server selected')
@@ -782,7 +782,6 @@ class _SettingsViewState extends State<SettingsView> {
               ),
               SizedBox(height: 24),
               _SettingsRow(
-                revealOnFocus: true,
                 label: const Text('Signed-in Plex account'),
                 helper: Text(
                   '${widget.controller.account?.name ?? 'Plex account'}\n'
@@ -816,7 +815,6 @@ class _SettingsViewState extends State<SettingsView> {
                 ),
               ),
               _SettingsRow(
-                revealOnFocus: true,
                 label: const Text('Diagnostics'),
                 helper: const Text(
                   'Review redacted support events from this session.',
@@ -831,7 +829,6 @@ class _SettingsViewState extends State<SettingsView> {
               ),
               if (defaultTargetPlatform == TargetPlatform.macOS || isTv)
                 _SettingsRow(
-                  revealOnFocus: true,
                   label: const Text('Licenses'),
                   helper: const Text(
                     'Read third-party licenses, notices, and source information.',
@@ -1280,16 +1277,14 @@ class _SettingsRow extends StatelessWidget {
     required this.helper,
     required this.control,
     this.first = false,
-    this.revealOnFocus = false,
-    this.filledOnFocus = false,
+    this.toggleSurface = false,
   });
 
   final Widget label;
   final Widget helper;
   final Widget control;
   final bool first;
-  final bool revealOnFocus;
-  final bool filledOnFocus;
+  final bool toggleSurface;
 
   @override
   Widget build(BuildContext context) {
@@ -1330,8 +1325,9 @@ class _SettingsRow extends StatelessWidget {
         return Container(
           constraints: BoxConstraints(minHeight: 132),
           padding: EdgeInsets.fromLTRB(
-            // LineupToggleSurface already reserves 3px for its leading edge.
-            inset - (inset > 0 && filledOnFocus ? 3 : 0),
+            inset > 0 && toggleSurface
+                ? _SettingsViewState._toggleContentInset
+                : inset,
             (first ? 16 : 28),
             inset,
             28,
@@ -1362,9 +1358,10 @@ class _SettingsRow extends StatelessWidget {
         );
       },
     );
-    return revealOnFocus && DeviceProfile.of(context).isTv
-        ? LineupFocusReveal(child: row)
-        : row;
+    if (toggleSurface) {
+      return LineupToggleSurface(child: MergeSemantics(child: row));
+    }
+    return DeviceProfile.of(context).isTv ? LineupFocusReveal(child: row) : row;
   }
 }
 
@@ -1385,33 +1382,29 @@ class _SettingsSwitchTile extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return LineupToggleSurface(
-      child: MergeSemantics(
-        child: _SettingsRow(
-          filledOnFocus: true,
-          label: title,
-          helper: subtitle,
-          control: Builder(
-            builder: (context) {
-              return SizedBox(
-                height: 48,
-                child: Align(
-                  alignment: Alignment.centerRight,
-                  child: SizedBox(
-                    width: 56,
-                    child: Switch(
-                      value: value,
-                      onChanged: onChanged,
-                      padding: EdgeInsets.zero,
-                    ),
-                  ),
+    return _SettingsRow(
+      toggleSurface: true,
+      label: title,
+      helper: subtitle,
+      control: Builder(
+        builder: (context) {
+          return SizedBox(
+            height: 48,
+            child: Align(
+              alignment: Alignment.centerRight,
+              child: SizedBox(
+                width: 56,
+                child: Switch(
+                  value: value,
+                  onChanged: onChanged,
+                  padding: EdgeInsets.zero,
                 ),
-              );
-            },
-          ),
-          first: first,
-        ),
+              ),
+            ),
+          );
+        },
       ),
+      first: first,
     );
   }
 }
@@ -1469,41 +1462,37 @@ class _Dropdown<T> extends StatelessWidget {
       );
       selectedItems.add(Text(label));
     }
-    return LineupToggleSurface(
-      child: MergeSemantics(
-        child: _SettingsRow(
-          filledOnFocus: true,
-          label: Text(label),
-          helper: Text(description),
-          control: SizedBox(
-            width: double.infinity,
-            child: lineupDropdownField<T>(
-              context: context,
-              key: ValueKey('settings-field-$label'),
-              initialValue: value,
-              isExpanded: true,
-              itemHeight: null,
-              icon: const Icon(Icons.arrow_drop_down, size: 20),
-              style: theme.textTheme.bodyLarge?.copyWith(
-                fontSize: DeviceProfile.of(context).isTv
-                    ? LineupTypography.tvTextFloor
-                    : 18,
-              ),
-              decoration: InputDecoration(),
-              items: items,
-              selectedItemChildren: choiceDescription == null
-                  ? null
-                  : selectedItems,
-              onChanged: changed == null
-                  ? null
-                  : (item) {
-                      if (item != null) changed!(item);
-                    },
-            ),
+    return _SettingsRow(
+      toggleSurface: true,
+      label: Text(label),
+      helper: Text(description),
+      control: SizedBox(
+        width: double.infinity,
+        child: lineupDropdownField<T>(
+          context: context,
+          key: ValueKey('settings-field-$label'),
+          initialValue: value,
+          isExpanded: true,
+          itemHeight: null,
+          icon: const Icon(Icons.arrow_drop_down, size: 20),
+          style: theme.textTheme.bodyLarge?.copyWith(
+            fontSize: DeviceProfile.of(context).isTv
+                ? LineupTypography.tvTextFloor
+                : 18,
           ),
-          first: first,
+          decoration: InputDecoration(),
+          items: items,
+          selectedItemChildren: choiceDescription == null
+              ? null
+              : selectedItems,
+          onChanged: changed == null
+              ? null
+              : (item) {
+                  if (item != null) changed!(item);
+                },
         ),
       ),
+      first: first,
     );
   }
 }
