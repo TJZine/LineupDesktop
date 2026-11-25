@@ -4,6 +4,7 @@ import importlib.util
 import json
 import os
 import plistlib
+import re
 import stat
 import shutil
 from pathlib import Path
@@ -19,6 +20,65 @@ spec.loader.exec_module(m)
 
 
 class SourceMaterialsTests(unittest.TestCase):
+    def test_macos_build_recipe_inputs_are_bundled(self):
+        macos = m.REPOSITORY / 'tool/macos'
+        app_recipe = macos / 'build_app.dart'
+        runtime_recipe = macos / 'build-mpv.sh'
+        inputs = {recipe.relative_to(m.REPOSITORY).as_posix() for recipe in (app_recipe, runtime_recipe)}
+        references = re.findall(r"""\$\{repository\.path\}/([^'"]+)""", app_recipe.read_text())
+        inputs.update(path for path in references if not path.startswith('build/'))
+
+        shell = runtime_recipe.read_text()
+        for variable, directory in [('script_dir', macos), ('repo_root', m.REPOSITORY)]:
+            paths = re.findall(r'\$(?:' + variable + r'|\{' + variable + r'\})/([\w./-]+)', shell)
+            for path in paths:
+                member = directory / path
+                if member.is_file():
+                    inputs.add(member.relative_to(m.REPOSITORY).as_posix())
+
+        for path in sorted(inputs):
+            with self.subTest(path=path):
+                self.assertIn(path, m.HELPERS, f'{path}: add it to HELPERS in tool/macos/source_materials.py')
+
+    def test_verify_app_checks_manifest_and_every_bundled_source(self):
+        with tempfile.TemporaryDirectory() as temporary:
+            app = Path(temporary) / 'Fixture.app'
+            framework = app / 'Contents/Frameworks/App.framework'
+            assets = framework / 'Versions/A/Resources/flutter_assets'
+            assets.mkdir(parents=True)
+            (framework / 'Resources').symlink_to('Versions/A/Resources', target_is_directory=True)
+            manifest = 'assets/licenses/sources.json'
+            for relative in sorted(set(m.source_index().values()) | {manifest}):
+                target = assets / relative
+                target.parent.mkdir(parents=True, exist_ok=True)
+                shutil.copyfile(m.REPOSITORY / relative, target)
+            m.verify_app(app)
+
+            helper = 'tool/macos/native_assets.py'
+            with (assets / helper).open('ab') as stream:
+                stream.write(b'!')
+            with self.assertRaisesRegex(m.BundledSourceError, re.escape(helper)):
+                m.verify_app(app)
+            (assets / helper).unlink()
+            with self.assertRaisesRegex(m.BundledSourceError, re.escape(helper)):
+                m.verify_app(app)
+            shutil.copyfile(m.REPOSITORY / helper, assets / helper)
+
+            index = m.source_index()
+            del index[helper]
+            for contents in [json.dumps(index).encode(), (m.REPOSITORY / manifest).read_bytes() + b'\n']:
+                (assets / manifest).write_bytes(contents)
+                with self.assertRaisesRegex(m.BundledSourceError, re.escape(manifest)):
+                    m.verify_app(app)
+
+            # The package and checkout can agree on the same incomplete inventory.
+            (assets / manifest).write_bytes(m.source_index_bytes(index))
+            stale_repository = Path(temporary) / 'checkout'
+            shutil.copytree(assets, stale_repository)
+            with patch.object(m, 'REPOSITORY', stale_repository.resolve()):
+                with self.assertRaisesRegex(m.StaleAssets, re.escape(manifest)):
+                    m.verify_app(app)
+
     def test_generated_assets_match_recipe_and_pins(self):
         with tempfile.TemporaryDirectory() as temporary:
             root = Path(temporary)

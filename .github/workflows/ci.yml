@@ -26,6 +26,8 @@ jobs:
       - run: dart tool/check_toolchain.dart
       - name: Check source inventory, engine notice and Flutter asset declarations
         run: python3 tool/macos/source_materials.py assets --flutter-sdk "$FLUTTER_ROOT" --check
+      - name: Test macOS source inventory and package verification
+        run: python3 tool/macos/source_materials_test.py
       - name: Run macOS notice collector tests
         run: python3 tool/macos/collect_notices_test.py
       - name: Run portable engine tooling fixtures (platform skips visible)
@@ -249,6 +251,8 @@ jobs:
           # universal frameworks that fail native-asset verification.
           flutter config --enable-macos-arm64-only
           dart tool/macos/build_app.dart build --release
+      - name: Verify bundled macOS source materials
+        run: python3 tool/macos/source_materials.py verify-app "build/macos/Build/Products/Release/Lineup Desktop.app"
       - name: Run NativePlayerTests in Debug without code signing
         shell: bash
         run: |

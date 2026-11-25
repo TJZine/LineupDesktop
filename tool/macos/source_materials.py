@@ -4,7 +4,8 @@
 assets prepares the offline inventory, engine notice and recipe index. prepare creates a new
 companion directory, binding sources to a candidate and verified engine. It uses
 canonical engine verification before archiving Git source snapshots. No app,
-runtime or engine output is modified. verify checks all delivered hashes.
+runtime or engine output is modified. verify checks the companion hashes.
+verify-app checks the source inventory and recipe bytes packaged in a macOS app.
 """
 import argparse
 import hashlib
@@ -149,6 +150,10 @@ def source_index():
             **{relative: relative for relative in HELPERS}}
 
 
+def source_index_bytes(index):
+    return (json.dumps(index, indent=2) + '\n').encode()
+
+
 class StaleAssets(ValueError):
     pass
 
@@ -180,7 +185,7 @@ The exact framework pin, patch hashes and build instructions are readable under
 Sources and rebuilding. The selected engine receipt accompanies the candidate.
 
 ''' + (flutter_sdk / 'LICENSE').read_text()).encode()}
-    files['sources.json'] = (json.dumps(source_index(), indent=2) + '\n').encode()
+    files['sources.json'] = source_index_bytes(source_index())
     return files
 
 
@@ -426,6 +431,30 @@ def verify(output):
                 digest(path) == expected, 'Companion hash or containment mismatch')
 
 
+class BundledSourceError(ValueError):
+    pass
+
+
+def verify_app(app):
+    app = app.resolve()
+    assets = (app / 'Contents/Frameworks/App.framework/Resources/flutter_assets').resolve()
+    if not assets.is_dir() or not assets.is_relative_to(app):
+        raise BundledSourceError('Missing Flutter assets inside the macOS app')
+
+    index = source_index()
+    manifest = 'assets/licenses/sources.json'
+    repository_manifest = REPOSITORY / manifest
+    if not repository_manifest.is_file() or repository_manifest.read_bytes() != source_index_bytes(index):
+        raise StaleAssets(f'{manifest} is missing or out of date')
+
+    for relative in sorted(set(index.values()) | {manifest}):
+        packaged = (assets / relative).resolve()
+        if not packaged.is_relative_to(assets) or not packaged.is_file():
+            raise BundledSourceError(f'Missing bundled source inside the Flutter assets: {relative}')
+        if digest(packaged) != digest(REPOSITORY / relative):
+            raise BundledSourceError(f'Bundled source bytes differ from the repository: {relative}')
+
+
 def main():
     parser = argparse.ArgumentParser(description=__doc__)
     sub = parser.add_subparsers(dest='command', required=True)
@@ -444,13 +473,18 @@ def main():
     assembly.add_argument('--max-gib', type=int, required=True)
     validate = sub.add_parser('verify')
     validate.add_argument('--output', type=Path, required=True)
+    package = sub.add_parser('verify-app')
+    package.add_argument('app', type=Path)
     args = parser.parse_args()
     try:
         if args.command == 'assets': write_assets(args.flutter_sdk, args.output, args.check, args.runtime_root)
         elif args.command == 'prepare': prepare(args)
+        elif args.command == 'verify-app': verify_app(args.app)
         else: verify(args.output)
     except StaleAssets as error:
         parser.exit(1, f'{error}. Run python3 tool/macos/source_materials.py assets --flutter-sdk "$FLUTTER_ROOT"\n')
+    except BundledSourceError as error:
+        parser.exit(1, f'{error}\n')
     except (ValueError, OSError, subprocess.CalledProcessError, KeyError, zipfile.BadZipFile) as error:
         parser.exit(1, 'Source material preparation failed: ' + type(error).__name__ + '\n')
 
