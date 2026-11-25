@@ -295,6 +295,8 @@ void main() {
     (tester) async {
       tester.view.devicePixelRatio = 1;
       addTearDown(tester.view.reset);
+      final now = DateTime.utc(2026, 1, 15, 3, 17);
+      final anchor = DateTime.utc(2026, 1, 14, 3, 20);
       for (final (size, textScale, rowCount) in [
         (const Size(1280, 720), 1.0, 5),
         (const Size(1920, 1080), 1.0, 5),
@@ -304,10 +306,10 @@ void main() {
         (const Size(1920, 1080), 1.5, 5),
       ]) {
         tester.view.physicalSize = size;
-        final lineup = _Lineup(40);
+        final lineup = _Lineup(40, anchor: anchor);
         final guide = GuideController(
           lineup: lineup,
-          clock: () => DateTime.utc(2026, 1, 15, 3, 17),
+          clock: () => now,
           loadSchedule: (c) async => _schedule(c),
         );
         await tester.pumpWidget(
@@ -374,10 +376,17 @@ void main() {
         expectSnapped();
         position().jumpTo(0);
         await tester.pumpAndSettle();
-        await tester.dragFrom(
-          Offset(bounds.right - 4, bounds.top + 12),
-          const Offset(0, 100),
-        );
+        final thumb = Offset(bounds.right - 4, bounds.top + 12);
+        final mouse = await tester.createGesture(kind: PointerDeviceKind.mouse);
+        await mouse.addPointer(location: thumb - const Offset(24, 0));
+        await mouse.moveTo(thumb);
+        await tester.pumpAndSettle();
+        await mouse.down(thumb);
+        await mouse.moveBy(const Offset(0, 50));
+        await tester.pump();
+        await mouse.moveBy(const Offset(0, 50));
+        await mouse.up();
+        await mouse.removePointer();
         await tester.pumpAndSettle();
         expect(position().pixels, greaterThan(0));
         expectSnapped();
