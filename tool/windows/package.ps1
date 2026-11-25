@@ -149,7 +149,7 @@ try {
 }
 
 $runtime = Join-Path $BuildDirectory 'libmpv-2.dll'
-$pinnedMpvDllHash = '4BA364226FD2EA5DD2C6F2333F0118462DA549FEED92360FB766A3924E313A51'
+$pinnedMpvDllHash = '7E8292C962C2F96C43A122DF7836F4C901A95FF9B59B9B55A43A71859E42DD89'
 if ((Get-FileHash -Algorithm SHA256 -LiteralPath $runtime).Hash.ToUpperInvariant() -ne $pinnedMpvDllHash) {
   throw 'Release build does not contain the pinned LGPL libmpv runtime.'
 }
@@ -178,7 +178,7 @@ if ($provenanceDllHash -ne $pinnedMpvDllHash) {
 $expectedProvenance = @{
   LINEUP_MPV_DISTRIBUTION = 'production'
   LINEUP_MPV_LICENSE = 'LGPL-2.1-or-later'
-  LINEUP_MPV_ASSET_SHA256 = '322CB0040B97B15F97069F631F665FD63DA331CED92705F757DA13B99380DA5F'
+  LINEUP_MPV_ASSET_SHA256 = 'C5A583DCDD9106BC125C6A69A9533FA1445193AE7082A56EFDA62D37F7EDC775'
 }
 foreach ($entry in $expectedProvenance.GetEnumerator()) {
   if ((Get-ProvenanceValue $entry.Key) -ne $entry.Value) {
