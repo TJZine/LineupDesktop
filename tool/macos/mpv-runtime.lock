@@ -45,17 +45,17 @@ CURL_FLAGS=(--with-openssl --with-apple-sectrust
   --disable-ipfs --disable-websockets --disable-manual --disable-docs
   --disable-ntlm --disable-kerberos-auth --disable-negotiate-auth)
 
-LCMS2_VERSION=2.19.1
-LCMS2_URL=https://github.com/mm2/Little-CMS/releases/download/lcms2.19.1/lcms2-2.19.1.tar.gz
-LCMS2_SHA256=bfc54f7bab59fbc921012014a8032e4cba4abd46db47d46b76416a8c0b2815c8
+LCMS2_VERSION=2.20
+LCMS2_URL=https://github.com/mm2/Little-CMS/releases/download/lcms2.20/lcms2-2.20.tar.gz
+LCMS2_SHA256=18ff5504fa9cc8a2b1f3591180d90ead16c8a2ea78e530523b46eab70e1ca6b9
 LCMS2_LICENSE=MIT
 # The fast-float and threaded plugins are GPL-3.0 and stay disabled.
 LCMS2_FLAGS=(-Dauto_features=disabled -Dtests=disabled -Dutils=false
   -Dfastfloat=false -Dthreaded=false)
 
-DAV1D_VERSION=1.5.4
-DAV1D_URL=https://downloads.videolan.org/pub/videolan/dav1d/1.5.4/dav1d-1.5.4.tar.xz
-DAV1D_SHA256=686616b7c69eb88d44459391ab25cac13b6647a3b288835c5784e71c1514a5c5
+DAV1D_VERSION=1.5.5
+DAV1D_URL=https://downloads.videolan.org/pub/videolan/dav1d/1.5.5/dav1d-1.5.5.tar.xz
+DAV1D_SHA256=ca96b1d0ba3f01f55de7231d775892b64994ba061aaeeaaa4f662a390b3abf9e
 DAV1D_LICENSE=BSD-2-Clause
 DAV1D_FLAGS=(-Dauto_features=disabled -Denable_tools=false
   -Denable_tests=false -Denable_examples=false -Denable_docs=false)
@@ -70,15 +70,15 @@ FREETYPE_LICENSE=FTL
 FREETYPE_FLAGS=(-Dauto_features=disabled -Dzlib=system -Dharfbuzz=disabled
   -Dmmap=enabled)
 
-FRIBIDI_VERSION=1.0.17
-FRIBIDI_URL=https://github.com/fribidi/fribidi/releases/download/v1.0.17/fribidi-1.0.17.tar.xz
-FRIBIDI_SHA256=6949dcde27d41cebad1fd741fcafc36d55a1020d2d872d4a6eb3914caabbada2
+FRIBIDI_VERSION=1.0.18
+FRIBIDI_URL=https://github.com/fribidi/fribidi/releases/download/v1.0.18/fribidi-1.0.18.tar.xz
+FRIBIDI_SHA256=1de5e8073d035388b71d0b2d452b1da1f8caeea8a7702997b401fe1b6250727f
 FRIBIDI_LICENSE=LGPL-2.1-or-later
 FRIBIDI_FLAGS=(-Ddocs=false -Dbin=false -Dtests=false)
 
-HARFBUZZ_VERSION=14.6.0
-HARFBUZZ_URL=https://github.com/harfbuzz/harfbuzz/releases/download/14.6.0/harfbuzz-14.6.0.tar.xz
-HARFBUZZ_SHA256=d07a007327277708a2a73ae437887cdbaf282937f6d03ca5467723e9099af586
+HARFBUZZ_VERSION=15.2.0
+HARFBUZZ_URL=https://github.com/harfbuzz/harfbuzz/releases/download/15.2.0/harfbuzz-15.2.0.tar.xz
+HARFBUZZ_SHA256=e2ec49090744383cdbe7df808c1cedaafba06a97be8dc4211fe546ba585f12cb
 HARFBUZZ_LICENSE=MIT
 # Only the shaping library. Features that default to enabled (not auto) are
 # switched off explicitly.
@@ -95,9 +95,9 @@ LIBASS_FLAGS=(--disable-fontconfig --enable-coretext --disable-libunibreak
   --disable-directwrite --disable-test --disable-compare --disable-profile
   --disable-fuzz)
 
-FFMPEG_VERSION=9.0.2
-FFMPEG_URL=https://ffmpeg.org/releases/ffmpeg-9.0.2.tar.xz
-FFMPEG_SHA256=8c3850283eb25fa026482078a04051e0be17347b09ef81a0849bec15a96e002e
+FFMPEG_VERSION=9.1
+FFMPEG_URL=https://ffmpeg.org/releases/ffmpeg-9.1.tar.xz
+FFMPEG_SHA256=1a4d394ae63d190a526cd052eb4415c156b5c5e2df37efab41a7de0b8fde2433
 FFMPEG_LICENSE=LGPL-2.1-or-later
 # LGPL 2.1+ only (no gpl, version3 or nonfree). --disable-autodetect stops
 # configure from picking up anything not listed here.
@@ -111,8 +111,7 @@ FFMPEG_LICENSE=LGPL-2.1-or-later
 # HTTPS connection FFmpeg would make itself (header-free fallback opens,
 # curl-enabled=no) fails closed instead of connecting unverified.
 #
-# iconv stays off: mpv converts subtitle charsets itself, and FFmpeg 9.0.2
-# does not add -liconv to libavcodec when iconv is outside libc.
+# mpv converts subtitle charsets. This build uses FFmpeg without external libiconv.
 FFMPEG_FLAGS=(--disable-gpl --disable-version3 --disable-nonfree
   --disable-autodetect --disable-programs --disable-doc --disable-avdevice
   --disable-debug --enable-pic
@@ -169,9 +168,9 @@ MOLTENVK_EXTERNAL_REVISIONS=(
   cereal=a56bad8bbb770ee266e930c95d37fff2a5be7fea
 )
 
-LIBPLACEBO_VERSION=7.360.1
+LIBPLACEBO_VERSION=7.387.0
 LIBPLACEBO_GIT=https://code.videolan.org/videolan/libplacebo.git
-LIBPLACEBO_COMMIT=cee9b076f2c63104ccfd497fa79c39a867293ec4
+LIBPLACEBO_COMMIT=275f7dea27924cdd34ab2e6c20e448b6bc4fab65
 LIBPLACEBO_LICENSE=LGPL-2.1-or-later
 # dovi: Dolby Vision reshaping (libplacebo's own implementation; libdovi is
 # an optional Rust RPU parser that FFmpeg's built-in RPU parsing makes
@@ -180,9 +179,9 @@ LIBPLACEBO_FLAGS=(-Dauto_features=disabled -Dprefer_static=true
   -Dvulkan=enabled -Dvk-proc-addr=enabled -Dglslang=enabled -Dlcms=enabled
   -Ddovi=enabled -Ddemos=false -Dtests=false -Dbench=false -Dfuzz=false)
 
-MPV_VERSION=0.41.0-1092-g3186d369f
+MPV_VERSION=0.42.0-229-gd32c910be
 MPV_GIT=https://github.com/mpv-player/mpv.git
-MPV_COMMIT=3186d369f9f090cd1363be0ac46a037824b702c6
+MPV_COMMIT=d32c910be63d1dd325c7b3efeaa09c3c4c8d51ce
 MPV_LICENSE=LGPL-2.1-or-later
 # auto_features=disabled: only the features listed here can be enabled.
 MPV_FLAGS=(-Dauto_features=disabled -Dgpl=false -Dcplayer=false
