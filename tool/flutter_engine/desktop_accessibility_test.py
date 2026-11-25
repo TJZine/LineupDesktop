@@ -111,7 +111,7 @@ FlutterEnginePatchSha256 = 'REPLACE'
         for name in ['dart-sdk/bin/dart', 'dart-sdk/bin/snapshots/frontend_server_aot.dart.snapshot',
                      'flutter_patched_sdk/platform_strong.dill', 'flutter_patched_sdk/vm_outline_strong.dill',
                      'gen/dart-pkg/sky_engine/lib/_embedder.yaml', 'gen/frontend_server_aot.dart.snapshot',
-                     'gen/const_finder.dart.snapshot', 'font-subset', 'impellerc', 'gen_snapshot',
+                     'font-subset', 'impellerc', 'gen_snapshot',
                      'shader_lib/flutter/runtime_effect.glsl']:
             self.write(output, name, 'fixture host artifact\n')
         return output
@@ -148,7 +148,7 @@ FlutterEnginePatchSha256 = 'REPLACE'
         for name in ('dart-sdk/bin/dart.exe', 'dart-sdk/bin/snapshots/frontend_server_aot.dart.snapshot',
                      'flutter_patched_sdk/platform_strong.dill', 'flutter_patched_sdk/vm_outline_strong.dill',
                      'gen/dart-pkg/sky_engine/lib/_embedder.yaml', 'gen/frontend_server_aot.dart.snapshot',
-                     'gen/const_finder.dart.snapshot', 'font-subset.exe', 'impellerc.exe', 'gen_snapshot.exe',
+                     'font-subset.exe', 'impellerc.exe', 'gen_snapshot.exe',
                      'shader_lib/flutter/runtime_effect.glsl', 'icudtl.dat', 'flutter_windows.dll.lib',
                      'flutter_windows.h', 'flutter_export.h', 'flutter_messenger.h',
                      'flutter_plugin_registrar.h', 'flutter_texture_registrar.h',
