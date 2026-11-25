@@ -4,7 +4,7 @@ Baseline: complete published objective_c 9.6.2 archive from
 https://pub.dev/api/archives/objective_c-9.6.2.tar.gz, SHA-256
 `5c80c2ad6e2c0397de5db38c6d653e69616a3397e13aa7633bf39eb668f2041b`.
 UPSTREAM.json records all 204 original file hashes. Runtime, generated bindings,
-native sources, package version/pubspec and license bytes are unchanged.
+native sources, package version and license bytes retain their upstream identities.
 
 LOCAL.patch records the complete delta to published files:
 
@@ -19,6 +19,8 @@ LOCAL.patch records the complete delta to published files:
   verifier rejects old receipt schemas and stale cached identities, and requires
   matching raw UUID/text and final bundle evidence. SDKSettings identifies the
   selected SDK; this is not a hash of the entire SDK installation.
+- pubspec.yaml requires code_assets ^2.2.0. The hook reads the major
+  deployment version through that API on macOS and iOS.
 - analysis_options.yaml uses the root analysis policy for the owned hook while
   excluding unchanged foreign lib/test/example/benchmark/tool files and the
   upstream monorepo-only pubspec dev paths. Only existing hook logging/exception

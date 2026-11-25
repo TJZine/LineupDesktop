@@ -220,7 +220,11 @@ class InputTests(unittest.TestCase):
                 write(name, 'fixture')
             foreign = write(n.VENDOR + '/src/immutable.c', 'native baseline')
             hook = write(n.VENDOR + '/hook/build.dart', 'owned hook')
-            write(n.VENDOR + '/UPSTREAM.json', json.dumps({'files': {'src/immutable.c': n.sha(foreign)}}))
+            manifest = write(n.VENDOR + '/pubspec.yaml', 'version: 9.6.2\n  code_assets: ^2.0.0\n')
+            write(n.VENDOR + '/UPSTREAM.json', json.dumps({'files': {
+                'src/immutable.c': n.sha(foreign), 'pubspec.yaml': n.sha(manifest)}}))
+            local_manifest = manifest.read_text().replace('^2.0.0', '^2.2.0')
+            manifest.write_text(local_manifest)
             with patch.object(n, 'native_toolchain_identity', return_value={}):
                 before = n.project_inputs(root)
                 hook.write_text('changed owned hook')
@@ -232,6 +236,11 @@ class InputTests(unittest.TestCase):
                 xcode.write_text('MACOSX_DEPLOYMENT_TARGET = 13.0;')
                 with self.assertRaisesRegex(ValueError, 'target mismatch'): n.project_inputs(root)
                 xcode.write_text('MACOSX_DEPLOYMENT_TARGET = 12.0;')
+                manifest.write_text(local_manifest.replace('^2.2.0', '^2.0.0'))
+                with self.assertRaisesRegex(ValueError, 'code_assets constraint'): n.project_inputs(root)
+                manifest.write_text(local_manifest.replace('9.6.2', '9.6.4'))
+                with self.assertRaisesRegex(ValueError, 'Foreign baseline changed'): n.project_inputs(root)
+                manifest.write_text(local_manifest)
                 foreign.write_text('changed runtime')
                 with self.assertRaisesRegex(ValueError, 'Foreign baseline changed'): n.project_inputs(root)
 

@@ -229,3 +229,10 @@
 -    discarded_futures: true
 +    avoid_print: false
 +    only_throw_errors: false
+--- a/pubspec.yaml
++++ b/pubspec.yaml
+@@ -19,3 +19,3 @@
+ dependencies:
+-  code_assets: ^2.0.0
++  code_assets: ^2.2.0
+   collection: ^1.19.1

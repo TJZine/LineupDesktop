@@ -60,6 +60,7 @@ flutter:
     - "third_party/objective_c/VENDOR.md"
     - "third_party/objective_c/analysis_options.yaml"
     - "third_party/objective_c/hook/build.dart"
+    - "third_party/objective_c/pubspec.yaml"
     - "tool/flutter_engine/0001-windows-direct-composition.patch"
     - "tool/flutter_engine/0002-desktop-accessibility.patch"
     - "tool/flutter_engine/0003-macos-apple-linker.patch"

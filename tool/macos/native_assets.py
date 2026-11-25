@@ -125,8 +125,18 @@ def project_inputs(repository):
     vendor = repository / VENDOR
     baseline = json.loads((vendor / 'UPSTREAM.json').read_text())
     for name, digest in baseline['files'].items():
-        if name not in ('hook/build.dart', 'analysis_options.yaml'):
-            require(sha(vendor / name) == digest, 'Foreign baseline changed: ' + name)
+        if name in ('hook/build.dart', 'analysis_options.yaml'):
+            continue
+        if name == 'pubspec.yaml':
+            contents = (vendor / name).read_bytes()
+            # Only the local hook's minimum code_assets version may differ.
+            constraint = b'  code_assets: ^2.2.0\n'
+            require(contents.count(constraint) == 1, 'Incorrect code_assets constraint for the local hook.')
+            upstream = contents.replace(constraint, b'  code_assets: ^2.0.0\n')
+            actual = hashlib.sha256(upstream).hexdigest()
+        else:
+            actual = sha(vendor / name)
+        require(actual == digest, 'Foreign baseline changed: ' + name)
     names = [str(p.relative_to(repository)) for p in vendor.rglob('*') if p.is_file()]
     names += ['pubspec.yaml', 'pubspec.lock', 'analysis_options.yaml', 'macos/Runner.xcodeproj/project.pbxproj',
               'tool/macos/build_app.dart', 'tool/macos/native_assets.py']

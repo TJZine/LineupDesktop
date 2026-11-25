@@ -24,6 +24,7 @@
   "third_party/objective_c/LOCAL.patch": "third_party/objective_c/LOCAL.patch",
   "third_party/objective_c/hook/build.dart": "third_party/objective_c/hook/build.dart",
   "third_party/objective_c/analysis_options.yaml": "third_party/objective_c/analysis_options.yaml",
+  "third_party/objective_c/pubspec.yaml": "third_party/objective_c/pubspec.yaml",
   "pubspec.yaml": "pubspec.yaml",
   "pubspec.lock": "pubspec.lock",
   "analysis_options.yaml": "analysis_options.yaml",
