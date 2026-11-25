@@ -200,14 +200,18 @@ def bundle_closure(app, target=(12, 0, 0), architecture='arm64'):
     assets = json.loads(manifest.read_text())
     mappings = assets.get('native-assets', {})
     require('macos_arm64' in mappings, 'Required native asset architecture missing')
-    asset_paths = set()
+    relative_asset = 'objective_c.framework/objective_c'
+    asset = (frameworks / relative_asset).resolve(strict=True)
+    require(asset in binaries, 'Missing objective_c native asset')
     for key, values in mappings.items():
         require(key in ('macos_arm64', 'macos_x64') and ASSET in values, 'Unexpected native asset platform/identity')
-        mapping = values[ASSET]
-        require(mapping == ['absolute', 'objective_c.framework/objective_c'], 'Incorrect objective_c asset mapping')
-        asset_paths.add((frameworks / mapping[1]).resolve(strict=True))
-    require(len(asset_paths) == 1 and next(iter(asset_paths)) in binaries, 'Missing objective_c native asset')
-    asset = next(iter(asset_paths))
+        require(values[ASSET] == ['absolute', '@rpath/' + relative_asset], 'Incorrect objective_c asset mapping')
+        arch = key.split('_', 1)[1]
+        main_slice = next((r for r in binaries[executable] if r['architecture'] == arch), None)
+        require(main_slice is not None, 'Main executable lacks native asset architecture')
+        candidates = [expand(rpath, executable) / relative_asset for rpath in main_slice['rpaths']]
+        require({p.resolve() for p in candidates if p.is_file()} == {asset},
+                'Executable runpaths must resolve the bundled objective_c asset')
     require(all(r['fileType'] == 6 for r in binaries[asset]), 'Native asset is not a dylib')
     asset_info = plistlib.loads((asset.parent / 'Resources/Info.plist').read_bytes())
     require(asset_info.get('CFBundleIdentifier') == 'io.flutter.flutter.native-assets.objective-c' and

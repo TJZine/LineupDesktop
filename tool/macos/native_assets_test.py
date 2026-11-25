@@ -45,12 +45,15 @@ class BundleTests(unittest.TestCase):
         self.addCleanup(self.temp.cleanup)
         self.app = Path(self.temp.name) / 'Lineup.app'
         self.write('Contents/Info.plist', plistlib.dumps({'CFBundleExecutable': 'Lineup'}))
-        self.write('Contents/MacOS/Lineup', thin(kind=2))
+        runpath = b'@executable_path/../Frameworks\0'
+        size = (12 + len(runpath) + 7) // 8 * 8
+        command = struct.pack('<3I', 0x8000001c, size, 12) + runpath.ljust(size - 12, b'\0')
+        self.executable = self.write('Contents/MacOS/Lineup', with_commands(thin(kind=2), command))
         self.asset = self.write('Contents/Frameworks/objective_c.framework/objective_c', thin())
         self.write('Contents/Frameworks/objective_c.framework/Resources/Info.plist', plistlib.dumps({
             'CFBundleIdentifier': 'io.flutter.flutter.native-assets.objective-c', 'CFBundleExecutable': 'objective_c'}))
         self.manifest = self.write('Contents/Frameworks/App.framework/Resources/flutter_assets/NativeAssetsManifest.json',
-                                  json.dumps({'native-assets': {'macos_arm64': {n.ASSET: ['absolute', 'objective_c.framework/objective_c']}}}).encode())
+                                  json.dumps({'native-assets': {'macos_arm64': {n.ASSET: ['absolute', '@rpath/objective_c.framework/objective_c']}}}).encode())
 
     def write(self, name, data):
         path = self.app / name
@@ -82,7 +85,13 @@ class BundleTests(unittest.TestCase):
         original = self.manifest.read_bytes()
         self.manifest.write_text(original.decode().replace('package:objective_c/', 'package:other/'))
         with self.assertRaises(ValueError): n.bundle_closure(self.app)
+        self.manifest.write_bytes(original.replace(b'@rpath/', b'/external/'))
+        with self.assertRaisesRegex(ValueError, 'Incorrect objective_c asset mapping'): n.bundle_closure(self.app)
         self.manifest.write_bytes(original)
+        main = self.executable.read_bytes()
+        self.executable.write_bytes(thin(kind=2))
+        with self.assertRaisesRegex(ValueError, 'runpaths'): n.bundle_closure(self.app)
+        self.executable.write_bytes(main)
         self.asset.unlink()
         self.asset.symlink_to(Path(self.temp.name) / 'external')
         with self.assertRaises((ValueError, OSError)): n.bundle_closure(self.app)
