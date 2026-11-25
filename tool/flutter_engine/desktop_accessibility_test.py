@@ -912,6 +912,18 @@ FlutterEnginePatchSha256 = 'REPLACE'
         self.write(nested, 'source.cc', 'source')
         self.write(nested, '.gitignore', 'output/\n')
         self.commit(nested)
+        # The parent tracks the child's original commit, but Flutter's DEPS
+        # independently selects its later annotated tag.
+        parent = nested.parent
+        ax.git(parent, 'init', '--quiet')
+        ax.git(parent, 'config', 'user.name', 'Tool fixture')
+        ax.git(parent, 'config', 'user.email', 'fixture@example.invalid')
+        # This sibling has no separate DEPS entry, so its parent gitlink is binding.
+        sibling = parent / 'sibling'
+        ax.git(parent, 'clone', '--quiet', str(nested), str(sibling))
+        self.commit(parent)
+        self.write(nested, 'source.cc', 'independently pinned source')
+        self.commit(nested)
         expected = ax.git(nested, 'rev-parse', 'HEAD').decode().strip()
         ax.git(nested, 'tag', '-a', 'pinned', '-m', 'annotated DEPS object')
         declared_object = ax.git(nested, 'rev-parse', 'pinned').decode().strip()
@@ -932,6 +944,8 @@ FlutterEnginePatchSha256 = 'REPLACE'
             launcher = self.write(depot, 'gclient.bat', '@echo off\n"' + sys.executable + '" "%~dp0generator.py" %*\n')
         launcher.chmod(0o755)
         graph = {'.': {'url': standard['url'], 'rev': None}, dependency_name: {'url': 'https://example.invalid/nested.git', 'rev': declared_object}}
+        graph[parent.relative_to(self.root).as_posix()] = {
+            'url': 'https://example.invalid/parent.git', 'rev': ax.git(parent, 'rev-parse', 'HEAD').decode().strip()}
         self.write(depot, 'graph.json', json.dumps(graph))
         self.commit(depot)
         metadata = self.repository / 'tool/windows/build-metadata.psd1'
@@ -952,6 +966,19 @@ FlutterEnginePatchSha256 = 'REPLACE'
         self.assertEqual(identity()['gitDependencies'][dependency_name]['declaredRevision'], declared_object)
         self.write(nested, 'output/generated', 'ignored build output')
         identity()
+        ax.git(sibling, 'fetch', '--quiet', 'origin')
+        ax.git(sibling, 'checkout', '--quiet', expected)
+        with self.assertRaisesRegex(ax.VerificationError, 'source changes'):
+            identity()
+        ax.git(sibling, 'checkout', '--quiet', 'HEAD^')
+        ax.git(parent, 'add', 'nested')
+        with self.assertRaisesRegex(ax.VerificationError, 'source changes'):
+            identity()
+        ax.git(parent, 'reset', '--quiet', 'HEAD', '--', 'nested')
+        untracked = self.write(nested, 'extra.cc', 'untracked source')
+        with self.assertRaisesRegex(ax.VerificationError, 'source changes'):
+            identity()
+        untracked.unlink()
         self.write(nested, 'source.cc', 'dirty source')
         with self.assertRaisesRegex(ax.VerificationError, 'source changes'):
             identity()

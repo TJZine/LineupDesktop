@@ -309,7 +309,18 @@ def dependency_identity(repository, root, gclient=None):
         resolved_revision = git(directory, 'rev-parse', '--verify', entry['rev'] + '^{commit}').decode().strip()
         require(git(directory, 'rev-parse', 'HEAD').decode().strip() == resolved_revision,
                 f'Git dependency revision differs from evaluated DEPS: {name}')
-        require(not git(directory, 'status', '--porcelain').strip(), f'Git dependency has source changes: {name}')
+        # Flutter DEPS can pin a child checkout independently of its parent's
+        # gitlink. Accept only an unstaged change to that clean child's commit.
+        # The same loop checks the child's HEAD against its own evaluated pin.
+        status = git(directory, 'status', '--porcelain=v2', '-z', '--ignore-submodules=none',
+                     '--untracked-files=normal')
+        for change in status.split(b'\0'):
+            if not change:
+                continue
+            fields = change.split(b' ', 8)
+            require(len(fields) == 9 and fields[:6] == [b'1', b'.M', b'SC..', b'160000', b'160000', b'160000']
+                    and name + '/' + os.fsdecode(fields[8]) in expected,
+                    f'Git dependency has source changes: {name}')
         dependencies[name] = {'declaredRevision': entry['rev'], 'revision': resolved_revision, 'url': entry['url']}
     return {'gclient': str(executable), 'depotToolsRevision': windows['DepotToolsRevision'],
             'gclientConfigSha256': file_hash(config), 'gitDependencies': dependencies}
