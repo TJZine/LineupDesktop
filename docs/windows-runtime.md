@@ -103,6 +103,7 @@ libmpv again when this manifest changes.
 | SDL | 2.33.0 (b53be5bb) | Zlib | [Upstream source](https://github.com/libsdl-org/SDL/tree/b53be5bb) | `SDL-LICENSE.txt` |
 | Shaderc | 2026.5.0 (0581495) | Apache-2.0 | [Upstream source](https://github.com/google/shaderc/tree/0581495) | `Shaderc-LICENSE` |
 | Speex | 1.2.1 (09b569d) | BSD-3-Clause | [Upstream source](https://github.com/xiph/speex/tree/09b569d) | `Speex-COPYING` |
+| SPIRV-Cross | 0.68.0 (57e4efcc, patched 70f0c77) | Apache-2.0 or MIT, with Khronos header notices | [Upstream source](https://github.com/KhronosGroup/SPIRV-Cross/tree/57e4efcc84112abcd426dc5ec248b5339bee04f2), [builder update](https://github.com/zhongfly/mpv-winbuild/actions/runs/40750345969/job/123035148373) | `SPIRV-Cross-LICENSE`, `SPIRV-Cross-MIT.txt`, `SPIRV-Cross-KhronosFreeUse.txt`, `SPIRV-Cross-source-notices.txt` |
 | SPIRV-Headers | fb13794 | MIT and CC-BY-4.0 for identified files | [Upstream source](https://github.com/KhronosGroup/SPIRV-Headers/tree/fb13794) | `SPIRV-Headers-LICENSE`, `SPIRV-Headers-LICENSES-CC-BY-4.0.txt`, `SPIRV-Headers-LICENSES-MIT.txt` |
 | SPIRV-Tools | 340b4c4 | Apache-2.0 and source-specific BSD-3-Clause | [Upstream source](https://github.com/KhronosGroup/SPIRV-Tools/tree/340b4c4) | `SPIRV-Tools-LICENSE` |
 | subrandr | 1.4.0 (5a3e258) | MPL-2.0 | [Upstream source](https://github.com/afishhh/subrandr/tree/5a3e258) | `subrandr-LICENSE` |
@@ -164,7 +165,7 @@ do not enumerate every source file or archive member that entered the DLL.
 | --- | --- |
 | FFmpeg and mpv | BZip2 1.1.0, LAME, libmysofa and its embedded data, libsoxr, libva 2.25.0.1 (API 1.25.0), FFmpeg’s Media SDK backend, LuaJIT 2.1.1794918119 and uavs3d 1.2.1798. The oneVPL loader notice above covers its own distribution. |
 | Network and archive | The exact curl 8.23.0-DEV checkout and the embedded libpsl suffix data. |
-| Shaders and headers | SPIRV-Cross 0.68.0 (build log suffix `70f0c77`), glad, AMF headers, and NVIDIA codec headers 13.1.15.1.2. |
+| Shaders and headers | glad, AMF headers, and NVIDIA codec headers 13.1.15.1.2. |
 | Compiler and other source notices | MinGW-w64 headers and startup objects, remaining Rust dependencies, and embedded data or source-specific notices beyond the files listed above. The fontconfig log shows that its libintl fallback configured zero targets and that the intl dependency was unavailable. |
 
 Flutter's generated notices have a separate dependency graph. Inspection of
