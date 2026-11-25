@@ -77,6 +77,7 @@ class _LineupShellState extends State<LineupShell> {
     widget.controller.contentGeneration,
   );
   final _channelsKey = GlobalKey<ChannelsViewState>();
+  final _shellFocus = FocusNode(debugLabel: 'Lineup shell');
   final _guideFocus = FocusNode(debugLabel: 'Guide');
   final _guideSetupFocus = FocusNode(debugLabel: 'Guide set up channels');
   final _channelsFocus = FocusNode(debugLabel: 'Channels');
@@ -113,7 +114,7 @@ class _LineupShellState extends State<LineupShell> {
         _lastStage == SetupStage.channelSetup &&
         !widget.controller.restoringSavedLineup;
     HardwareKeyboard.instance.addHandler(_trackKeyboardInput);
-    FocusManager.instance.addEarlyKeyEventHandler(_handleTvMenuKey);
+    FocusManager.instance.addEarlyKeyEventHandler(_handleEarlyKey);
     if (defaultTargetPlatform != TargetPlatform.android) {
       _appMenuChannel.setMethodCallHandler(_handleAppMenuCall);
     }
@@ -230,7 +231,7 @@ class _LineupShellState extends State<LineupShell> {
   @override
   void dispose() {
     HardwareKeyboard.instance.removeHandler(_trackKeyboardInput);
-    FocusManager.instance.removeEarlyKeyEventHandler(_handleTvMenuKey);
+    FocusManager.instance.removeEarlyKeyEventHandler(_handleEarlyKey);
     if (defaultTargetPlatform != TargetPlatform.android) {
       _appMenuChannel.setMethodCallHandler(null);
     }
@@ -238,6 +239,7 @@ class _LineupShellState extends State<LineupShell> {
     _player.removeListener(_playerChanged);
     _player.dispose();
     _guide.dispose();
+    _shellFocus.dispose();
     _guideFocus.dispose();
     _guideSetupFocus.dispose();
     _channelsFocus.dispose();
@@ -598,6 +600,21 @@ class _LineupShellState extends State<LineupShell> {
     setState(
       () => _appMenu = (id: Object(), anchor: anchor, invokerFocus: invoker),
     );
+  }
+
+  KeyEventResult _handleEarlyKey(KeyEvent event) {
+    // RawTooltip consumes Escape before focused controls receive it. Dismiss the
+    // tooltip and deliver this press to the shell's ordinary handlers once.
+    // A popup route owns its own focus and keeps Flutter's usual Escape policy.
+    if (event is KeyDownEvent &&
+        event.logicalKey == LogicalKeyboardKey.escape &&
+        _shellFocus.hasFocus &&
+        ModalRoute.isCurrentOf(context) == true &&
+        Tooltip.dismissAllToolTips()) {
+      dispatchFocusedKeyWithin(_shellFocus, event);
+      return KeyEventResult.handled;
+    }
+    return _handleTvMenuKey(event);
   }
 
   KeyEventResult _handleTvMenuKey(KeyEvent event) {
@@ -1271,7 +1288,14 @@ class _LineupShellState extends State<LineupShell> {
             child: child,
           )
         : child;
-    return DeviceProfileScope(profile: widget.profile, child: rooted);
+    return DeviceProfileScope(
+      profile: widget.profile,
+      child: Focus(
+        focusNode: _shellFocus,
+        canRequestFocus: false,
+        child: rooted,
+      ),
+    );
   }
 
   Widget _buildShell(BuildContext context) {

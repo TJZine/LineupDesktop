@@ -543,7 +543,6 @@ class _GuideViewState extends State<GuideView>
   void initState() {
     super.initState();
     WidgetsBinding.instance.addObserver(this);
-    FocusManager.instance.addEarlyKeyEventHandler(_dismissTooltipAndNavigate);
     _lastFocusedChannelId = widget.controller.focusedChannelId;
     _presentationClock = ValueNotifier(widget.controller.now);
     _searchController.text = widget.controller.searchQuery;
@@ -590,9 +589,6 @@ class _GuideViewState extends State<GuideView>
 
   @override
   void dispose() {
-    FocusManager.instance.removeEarlyKeyEventHandler(
-      _dismissTooltipAndNavigate,
-    );
     WidgetsBinding.instance.removeObserver(this);
     _retryFocus.dispose();
     _internalSetupFocus.dispose();
@@ -866,21 +862,6 @@ class _GuideViewState extends State<GuideView>
     _lastViewportDemand = demand;
     widget.controller.requestViewport(first, _visibleRows);
     _syncActivityPulse();
-  }
-
-  // Flutter handles Escape for open tooltips before the focused widget sees it.
-  // Keep the Guide's single-key Back action when a toolbar tooltip is visible.
-  KeyEventResult _dismissTooltipAndNavigate(KeyEvent event) {
-    final guide = widget.focusNode ?? _guideFocus;
-    if (event is! KeyDownEvent ||
-        event.logicalKey != LogicalKeyboardKey.escape ||
-        !guide.hasFocus ||
-        _searchFocus.hasFocus ||
-        ModalRoute.isCurrentOf(context) == false ||
-        !Tooltip.dismissAllToolTips()) {
-      return KeyEventResult.ignored;
-    }
-    return _key(guide, event);
   }
 
   KeyEventResult _key(FocusNode node, KeyEvent event) {

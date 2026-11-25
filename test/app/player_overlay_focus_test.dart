@@ -65,6 +65,31 @@ void main() {
   }
 
   testWidgets(
+    'Escape dismisses each Player layer with a visible Pause tooltip',
+    (tester) async {
+      final h = await _Harness.mount(tester);
+      await h.sendKey(LogicalKeyboardKey.keyI);
+      await tester.pumpAndSettle();
+      expect(h.player.overlay, PlayerOverlay.nowPlaying);
+      for (final next in [PlayerOverlay.osd, PlayerOverlay.none]) {
+        final pause = find.byWidgetPredicate(
+          (widget) => widget is Tooltip && widget.message == 'Pause',
+        );
+        expect(
+          tester.state<TooltipState>(pause).ensureTooltipVisible(),
+          isTrue,
+        );
+        await tester.pumpAndSettle();
+        expect(find.text('Pause'), findsOneWidget);
+        await h.sendKey(LogicalKeyboardKey.escape);
+        await tester.pumpAndSettle();
+        expect(h.player.overlay, next);
+      }
+    },
+    variant: TargetPlatformVariant.only(TargetPlatform.macOS),
+  );
+
+  testWidgets(
     'OSD retirement keeps an open menu focused',
     (tester) async {
       final h = await _Harness.mount(tester);
@@ -102,7 +127,10 @@ void main() {
           actions: [
             TextButton(
               onPressed: () => Navigator.pop(context),
-              child: const Text('Dismiss'),
+              child: const Tooltip(
+                message: 'Dismiss dialog',
+                child: Text('Dismiss'),
+              ),
             ),
           ],
         ),
@@ -119,6 +147,20 @@ void main() {
       expect(find.byType(AlertDialog), findsOneWidget);
       expect(FocusManager.instance.primaryFocus, same(dialogFocus));
       expect(h.rootFocus.hasFocus, isFalse);
+      final tooltip = find.byWidgetPredicate(
+        (widget) => widget is Tooltip && widget.message == 'Dismiss dialog',
+      );
+      expect(
+        tester.state<TooltipState>(tooltip).ensureTooltipVisible(),
+        isTrue,
+      );
+      await tester.pumpAndSettle();
+      expect(find.text('Dismiss dialog'), findsOneWidget);
+      await tester.sendKeyEvent(LogicalKeyboardKey.escape);
+      await tester.pumpAndSettle();
+      expect(find.text('Dismiss dialog'), findsNothing);
+      expect(find.byType(AlertDialog), findsOneWidget);
+      expect(h.player.overlay, PlayerOverlay.none);
       await tester.tap(find.text('Dismiss'));
       await tester.pumpAndSettle();
       await dialog;
