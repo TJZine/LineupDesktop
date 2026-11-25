@@ -47,21 +47,21 @@ each archive against the lock and checks Git sources by full commit.
 ### Static-linkage license audit
 
 For each shipped dylib, this table lists the third-party code compiled into it
-and the shipped license file that covers it. The symbol counts below were measured with `nm` on the October
-2026 runtime at mpv `3186d369f`. FFmpeg's libraries are stripped of local symbols, so they
-were checked against the unstripped build-tree libraries. The count after each
+and the shipped license file that covers it. The symbol counts below come from `nm -C` on the November 2026
+arm64 runtime. FFmpeg's libraries are stripped of local symbols, so they were
+checked against the unstripped build-tree libraries. The count after each
 item is the number of matching symbols.
 
 | Dylib | Code compiled in (symbol evidence) | Shipped license files (`dist/arm64/licenses/…`) |
 | --- | --- | --- |
-| libmpv | mpv, including its Swift code (1878 `$s5swift` symbols) and `ta` (42) | `mpv/LICENSE.LGPL`, `mpv/Copyright`, and the generated `mpv/NOTICES.txt` for files under other terms (below) |
+| libmpv | mpv, including its Swift code (1951 `$s5swift` symbols) and `ta` (42) | `mpv/LICENSE.LGPL`, `mpv/Copyright`, and the generated `mpv/NOTICES.txt` for files under other terms (below) |
 | libavcodec, libavformat, libavutil, libavfilter, libswscale, libswresample | FFmpeg. libavcodec includes the IJG DCT code (8: `ff_j_rev_dct*`, `ff_fdct_ifast*`, `ff_jpeg_fdct_islow*`). No GPL filters are present: 0 `ff_vf_{hqdn3d,boxblur,delogo,eq,pp7,spp,uspp}` | `ffmpeg/LICENSE.md`, `ffmpeg/COPYING.LGPLv2.1`, `ffmpeg/IJG-NOTICE.txt` (IJG notice plus the required credit) |
-| libplacebo | libplacebo; glslang (2144 `glslang::`, 352 `spv::` builder); fast_float (23); the generated Vulkan code from `vk.xml`. No xxhash (0) | `libplacebo/LICENSE`, `glslang/LICENSE.txt`, `fast_float/LICENSE-{MIT,APACHE,BOOST}`, `vulkan-headers/*` |
-| libMoltenVK | MoltenVK; SPIRV-Cross (5404 `MVK_spirv_cross::`); SPIRV-Tools (337 `spvtools::`); SPIRV-Headers grammar (57 `spvOpcode*`/operand-table symbols); cereal (80 `cereal::`). No Volk (0) | `moltenvk/LICENSE`, `spirv-cross/*`, `spirv-tools/LICENSE`, `spirv-headers/LICENSE`, `cereal/LICENSE`, `vulkan-headers/*` |
+| libplacebo | libplacebo; glslang (2144 `glslang::`, 300 `spv::Builder`); fast_float (23); the generated Vulkan code from `vk.xml`. No xxhash (0) | `libplacebo/LICENSE`, `glslang/LICENSE.txt`, `fast_float/LICENSE-{MIT,APACHE,BOOST}`, `vulkan-headers/*` |
+| libMoltenVK | MoltenVK; SPIRV-Cross (5404 `MVK_spirv_cross::`); SPIRV-Tools (337 `spvtools::`); SPIRV-Headers grammar (32 `spvOpcode` symbols); cereal (80 `cereal::`). No Volk (0) | `moltenvk/LICENSE`, `spirv-cross/*`, `spirv-tools/LICENSE`, `spirv-headers/LICENSE`, `cereal/LICENSE`, `vulkan-headers/*` |
 | libcurl | curl; ISC `curlx_inet_ntop`/`curlx_inet_pton` (2) | `curl/COPYING`, `curl/inet_ntop-ISC.txt`, `curl/inet_pton-ISC.txt` |
 | libssl, libcrypto | OpenSSL only (Apache-2.0 for the whole tree) | `openssl/LICENSE.txt` |
 | libfreetype | FreeType; BDF driver (26 `_bdf_`), PCF driver (33 `_pcf_`), `fthash` (11 `ft_hash_`) | `freetype/LICENSE.TXT`, `freetype/FTL.TXT`, `freetype/BDF-README`, `freetype/PCF-README`, `freetype/fthash-NOTICE.txt` |
-| libharfbuzz | HarfBuzz, including the USE shaper tables (114 `use` symbols) | `harfbuzz/COPYING`, `harfbuzz/ms-use-COPYING` |
+| libharfbuzz | HarfBuzz, including the USE shaper tables (127 `use` symbols) | `harfbuzz/COPYING`, `harfbuzz/ms-use-COPYING` |
 | libass, libdav1d, libfribidi, liblcms2 | Own code only (exported symbols are all `ass_`, `dav1d_`, `fribidi_`, or `cms`) | `libass/COPYING`, `dav1d/COPYING`, `fribidi/COPYING`, `lcms2/LICENSE` |
 
 That table covers whole third-party libraries. Individual files inside a
@@ -93,18 +93,18 @@ comments, or in generated files, are not detected.
 
 | Component | Compiled files scanned | Files with notice-bearing headers | Distinct notices emitted |
 | --- | ---: | ---: | ---: |
-| mpv | 413 | 17 | 8 |
-| ffmpeg | 3090 | 59 | 49 |
-| libplacebo | 130 | 5 | 4 |
+| mpv | 421 | 17 | 8 |
+| ffmpeg | 3136 | 58 | 48 |
+| libplacebo | 136 | 5 | 4 |
 | glslang | 102 | 98 | 75 |
 | moltenvk (incl. SPIRV-Cross, SPIRV-Tools, cereal) | 425 | 282 | 119 |
 | openssl | 1556 | 0 | 0 |
 | curl | 460 | 2 | 2 |
 | lcms2 | 29 | 0 | 0 |
-| dav1d | 127 | 1 | 1 |
+| dav1d | 129 | 1 | 1 |
 | freetype | 416 | 17 | 17 |
 | fribidi | 59 | 0 | 0 |
-| harfbuzz | 399 | 1 | 1 |
+| harfbuzz | 402 | 1 | 1 |
 | libass | 58 | 2 | 2 |
 
 "Compiled files" includes the headers each source included, as long as they
@@ -130,7 +130,10 @@ The generated notices include, for example:
 - **curl:** the ISC `inet_ntop`/`inet_pton`.
 
 No compiled file has a GPL-only header. FFmpeg's GPL-headered files are no
-longer built (see the component table).
+longer built (see the component table). Among the files added between the 9.0.2
+and 9.1 release archives, four GPL-only sources belong to `tests/checkasm`
+(`base64.c`, `bitpackeddec.c`, `ttadsp.c` and `vvc_pred.c`). That test binary
+is outside the runtime build.
 
 ### Build configuration
 
@@ -267,6 +270,20 @@ by default in FFmpeg 9 and there are no trust anchors, so any HTTPS connection
 FFmpeg makes itself **fails closed**. That covers the header-free fallback
 opens in [the authenticated-reference audit](libmpv-authenticated-reference-investigation.md)
 and `curl-enabled=no`. The verification below shows this.
+
+## Runtime verification on November 25, 2026
+
+On an M1 Pro running macOS 27.2.1 with Xcode 27.0, a clean arm64 build at mpv
+`d32c910be` produced 18 dylibs. The lock SHA-256 was
+`c68c6f79763511eb4bf2528e3a8412bc1a6565d6f607da45f4cae11121a4cae3`.
+The runtime verifier passed the install-name, closure, path, configuration and
+license checks. The embed test signed a fixture app with these libraries and
+verified the deep, strict signature and the bundled notices and patches.
+
+The production-adapter authenticated-reference suite passed all 55 cases on
+this runtime. Offscreen playback of synthetic BT.709 H.264 through a host
+`CAMetalLayer` reported `gpu-next`, `macvk` and `videotoolbox`. The final
+candidate still needs the Sonoma playback, HDR and VoiceOver pass.
 
 ## Verification evidence (2026-10-17, M1 Pro, macOS 27.0.1, Xcode 27.0)
 
