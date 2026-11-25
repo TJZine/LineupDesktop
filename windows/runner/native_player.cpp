@@ -23,7 +23,7 @@ using lineup::player::ValueMap;
 
 constexpr char kChannelName[] = "lineup/native_player";
 constexpr wchar_t kCompositionMarker[] =
-    L"deb287481e3ce9468f3434937ced4240a70539ca";
+    L"4d35714800b9266b6693a58e1225ecd7e9e45ed7";
 
 void SendResult(flutter::MethodResult<flutter::EncodableValue>& result,
                 const CallResult& outcome) {

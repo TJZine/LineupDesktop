@@ -16,7 +16,9 @@ spec = importlib.util.spec_from_file_location('assets', Path(__file__).with_name
 n = importlib.util.module_from_spec(spec)
 spec.loader.exec_module(n)
 ROOT = Path(__file__).resolve().parents[2]
-DART = Path.home() / '.cache/lineup-flutter/3.47.7/flutter/bin/dart'
+FLUTTER_VERSION = json.loads((ROOT / 'tool/flutter_version.json').read_text())['version']
+FLUTTER_ROOT = Path(os.environ.get('FLUTTER_ROOT', Path.home() / '.cache/lineup-flutter' / FLUTTER_VERSION / 'flutter'))
+DART = FLUTTER_ROOT / 'bin/dart'
 
 
 def thin(target=12, cpu=0x100000c, platform=1, kind=6):

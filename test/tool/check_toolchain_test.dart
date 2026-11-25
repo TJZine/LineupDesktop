@@ -7,9 +7,9 @@ import 'package:flutter_test/flutter_test.dart';
 import '../../tool/check_toolchain.dart';
 
 void main() {
-  const expectedVersion = '3.47.7';
+  const expectedVersion = '3.50.1';
   const expectedRevision = 'aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa';
-  const actualVersion = '3.47.7';
+  const actualVersion = '3.50.1';
   const actualRevision = 'bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb';
 
   FlutterPin pin() {
@@ -26,7 +26,7 @@ void main() {
     return FlutterToolchain(
       version: version,
       frameworkRevision: frameworkRevision,
-      flutterRoot: '/opt/flutter/3.47.7/flutter',
+      flutterRoot: '/opt/flutter/3.50.1/flutter',
     );
   }
 
@@ -37,7 +37,7 @@ void main() {
     return jsonEncode({
       'frameworkVersion': version,
       'frameworkRevision': frameworkRevision,
-      'flutterRoot': '/opt/flutter/3.47.7/flutter',
+      'flutterRoot': '/opt/flutter/3.50.1/flutter',
     });
   }
 

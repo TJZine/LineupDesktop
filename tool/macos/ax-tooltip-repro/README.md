@@ -8,7 +8,7 @@ against the failing default.
 
 ## Run
 
-Use the repository's pinned Flutter **3.47.7**, Dart **3.13.5**, framework
+Reproduce the original observation with Flutter **3.47.7**, Dart **3.13.5**, framework
 `abaf9c523780a608bd46686fd5e53740a07077f8`, engine
 `deb287481e3ce9468f3434937ced4240a70539ca`. The observed host was arm64,
 macOS **27.0.1 (26A434)**. Other versions/platforms are untested.

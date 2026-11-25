@@ -150,7 +150,7 @@ never overwrite stock caches or relabel an older native observation.
 
 Lineup requires Flutter's ANGLE surface to use a premultiplied-alpha
 DirectComposition swapchain so native mpv video can remain beneath Flutter in
-the same application window. Stock Flutter 3.47.7 does not request that
+the same application window. Stock Flutter 3.50.1 does not request that
 surface mode.
 
 The owned patch targets only the framework and engine revisions recorded in
@@ -180,7 +180,7 @@ The patch was adapted from the BSD-3-Clause `flutter-plezy` Windows patch at
 commit `e721699fd4857afcd5a3414dccc55edc24c6680f`:
 https://github.com/edde746/flutter-plezy/tree/e721699fd4857afcd5a3414dccc55edc24c6680f
 
-The unchanged patch logic was contextually checked against Flutter 3.47.7
-framework `abaf9c523780a608bd46686fd5e53740a07077f8` and engine
-`deb287481e3ce9468f3434937ced4240a70539ca`. The identity marker retains that
+The unchanged patch logic was contextually checked against Flutter 3.50.1
+framework `ae9b586f34a8443573f82ef57c3bf914a908cbf7` and engine
+`4d35714800b9266b6693a58e1225ecd7e9e45ed7`. The identity marker retains that
 engine revision; integrity metadata covers the comment-pruned patch and source.
