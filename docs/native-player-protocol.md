@@ -334,6 +334,7 @@ kept in Dart and projected onto `PlayerEvent`; it is not sent as a native
 argument.
 
 A Dart hot restart can reuse a wire ID while the same native player survives.
+If two fallback loads share that wire ID, attribution remains ambiguous when mpv skips the first load.
 The desktop worker records the acceptance order of successful replace commands.
 A keyed or fallback START_FILE reclaims all unstarted entries owned by earlier
 commands, including their pending fallback identities and redirect children.
