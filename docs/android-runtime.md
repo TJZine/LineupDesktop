@@ -81,8 +81,8 @@ D8 does not establish its one-display-frame transition bound.
 ## Toolchain and builds
 
 Use the Flutter identity in [tool/flutter_version.json](../tool/flutter_version.json)
-(currently 3.47.7). Android uses the stock Flutter engine; desktop engine patches
-are unrelated. The host uses Gradle 9.3.1, Android Gradle Plugin 9.1.0,
+(currently 3.50.1). Android uses the stock Flutter engine; desktop engine patches
+are unrelated. The host uses Gradle 9.5.0, Android Gradle Plugin 9.3.1,
 application KGP 2.4.21 and JDK 17. Compile/target SDK and NDK follow the pinned Flutter
 SDK defaults (currently API 36 and NDK 28.2.13676358); minimum SDK is 28.
 Install Android SDK platform-tools, platform 36 and build-tools 36.0.0, and the
@@ -93,7 +93,7 @@ Back path; it cannot establish physical HDR, Dolby Vision or audio passthrough.
 On the maintainer's Mac:
 
 ```sh
-export PATH="$HOME/.cache/lineup-flutter/3.47.7/flutter/bin:$HOME/Library/Android/sdk/platform-tools:$PATH"
+export PATH="$HOME/.cache/lineup-flutter/3.50.1/flutter/bin:$HOME/Library/Android/sdk/platform-tools:$PATH"
 export JAVA_HOME=/opt/homebrew/opt/openjdk@17/libexec/openjdk.jdk/Contents/Home
 flutter pub get
 # Disposable Android development key:
@@ -116,7 +116,7 @@ disposable emulator/device and preserve existing production installations and
 data. Keep the authorized production key and protected backups in the isolated
 signing context. Losing that key prevents in-place production updates.
 
-The wrapper scripts and JAR are committed official Gradle 9.3.1 bytes.
+The wrapper scripts and JAR are committed official Gradle 9.5.0 bytes.
 `python3 tool/android/check-wrapper.py` checks their published identities and the
 distribution checksum before Gradle execution. CI also runs the maintained
 Gradle wrapper-validation action. Wrapper regeneration is a reviewed toolchain
@@ -127,10 +127,10 @@ constraint addresses the affected older transitive Android dependency. Actual
 settings buildscript classpath and `releaseRuntimeClasspath` reports establish selected
 versions through `check-resolved-dependencies.py`. [Kotlin advisory](https://github.com/advisories/GHSA-r937-wjx7-w2jp),
 [Guava advisory](https://github.com/google/guava/security/advisories/GHSA-xxph-c9ww-hj94).
-The pinned Flutter SDK's separate included build still compiles its Gradle
-plugin with KGP 2.2.20, and the build-tool classpath includes Guava 33.3.1-jre.
-The app's resolved settings classpath selects KGP 2.4.21 and its shipped runtime
-selects Guava 33.8.0-android. Keep the older SDK/build-tool advisory exposure
+Flutter's included Gradle build requests KGP 2.2.20 and resolves 2.3.20
+through Gradle's Kotlin DSL plugin. The app's settings classpath selects
+KGP 2.4.21 and Guava 33.4.0-jre. The shipped runtime selects Guava
+33.8.0-android. Keep the older SDK/build-tool advisory exposure
 visible separately from those application dependency results.
 
 
@@ -138,9 +138,8 @@ Gradle verifies downloaded Maven metadata and artifacts against the committed
 SHA-256 digests in `android/gradle/verification-metadata.xml`. After an Android
 dependency or Flutter SDK change, regenerate it on macOS using a clean Gradle
 user home, a disposable copy of the pinned Flutter SDK and Gradle's
-`--write-verification-metadata sha256` option. Resolve both ARM APK variants
-(debug and release), `:app:testDebugUnitTest` and the notice generator's Gradle
-report. Review the updated digests and use **Verify Android TV build** to
+`--write-verification-metadata sha256` option. Resolve ARM debug and release,
+x64 debug, `:app:testDebugUnitTest` and the notice generator's Gradle report. Review the updated digests and use **Verify Android TV build** to
 identify any Linux-only artifacts. The root metadata also covers Flutter's
 included Gradle build. Robolectric fetches its Android runtime JARs at test time
 outside Gradle's verification. Those JARs do not ship.
@@ -172,7 +171,6 @@ flutter --version
 dart tool/check_toolchain.dart
 
 apk_properties=(
-  -Ptarget-platform=android-arm,android-arm64
   -Ptarget=lib/main.dart
   -Pbase-application-name=android.app.Application
   -Pdart-obfuscation=false
@@ -182,14 +180,16 @@ apk_properties=(
   cd android
   ./gradlew --write-verification-metadata sha256 \
     --no-daemon :app:assembleDebug :app:testDebugUnitTest \
-    "${apk_properties[@]}" -Ptree-shake-icons=false
+    "${apk_properties[@]}" -Ptarget-platform=android-arm,android-arm64 -Ptree-shake-icons=false
+  ./gradlew --write-verification-metadata sha256 --no-daemon :app:assembleDebug \
+    "${apk_properties[@]}" -Ptarget-platform=android-x64 -Ptree-shake-icons=false
 )
 
 # Release is unsigned, including during metadata generation.
 (
   cd android
   ./gradlew --write-verification-metadata sha256 --no-daemon :app:assembleRelease \
-    "${apk_properties[@]}" -Ptree-shake-icons=true \
+    "${apk_properties[@]}" -Ptarget-platform=android-arm,android-arm64 -Ptree-shake-icons=true \
     "-Pflutter.androidSdkRoot=$sdk" -Pflutter.installedNdkVersions=28.2.13676358 \
     "-Pflutter.sdkManagerPath=$sdk/cmdline-tools/latest/bin/sdkmanager"
 )
@@ -233,7 +233,7 @@ Supply the full 40-character reviewed commit and the applicable GitHub CI run UR
 The release verifier independently checks that run and its artifact digest.
 
 ```sh
-export PATH="$HOME/.cache/lineup-flutter/3.47.7/flutter/bin:$HOME/Library/Android/sdk/platform-tools:$PATH"
+export PATH="$HOME/.cache/lineup-flutter/3.50.1/flutter/bin:$HOME/Library/Android/sdk/platform-tools:$PATH"
 export JAVA_HOME=/opt/homebrew/opt/openjdk@17/libexec/openjdk.jdk/Contents/Home
 export GRADLE_OPTS=-Dorg.gradle.project.android.builder.sdkDownload=false
 tool/android/build-release.sh "$REVIEWED_COMMIT" "$CI_RUN_URL"
@@ -249,8 +249,8 @@ notices before building:
 ```sh
 python3 tool/android/generate-licenses.py --gradle-project android \
   --output android/app/src/main/assets \
-  --flutter-root "$HOME/.cache/lineup-flutter/3.47.7/flutter" \
-  --flutter-version 3.47.7 --license-cache build/android-license-cache
+  --flutter-root "$HOME/.cache/lineup-flutter/3.50.1/flutter" \
+  --flutter-version 3.50.1 --license-cache build/android-license-cache
 ```
 
 Add `--check` to verify the same graph without changing the asset tree; the
@@ -325,7 +325,7 @@ Debug/profile APKs use the `.dev` application ID and may use
 default, and `flutter run` can uninstall after an install failure, losing
 sign-in and lineups. Use those tools only on disposable emulators.
 
-For development media, Flutter 3.47.7 requires a **String ArrayList** extra
+For development media, Flutter 3.50.1 requires a **String ArrayList** extra
 (`--esal`); `--esa` produces a `String[]` and crashes the embedding. Stop the
 existing process first so the entrypoint runs again:
 

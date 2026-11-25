@@ -5,7 +5,7 @@ Lineup state or Plex credentials. Obtain a device assignment before running adb,
 and reserve ports 18443/18444 before starting the server. The server binds only
 `127.0.0.1`; use adb reverse. No LAN/firewall or device-setting changes are needed.
 
-Use pinned Flutter 3.47.7 and JDK 17 as documented in
+Use pinned Flutter 3.50.1 and JDK 17 as documented in
 [Android runtime](../../../docs/android-runtime.md). FFmpeg/FFprobe need x264,
 x265, SVT-AV1, AC3/EAC3, TrueHD and DCA encoders. Generated media and Python
 caches are ignored. PGS has no installed encoder and remains a separate fixture

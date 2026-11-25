@@ -1,17 +1,17 @@
 #!/usr/bin/env python3
-"""Verify the committed Gradle 9.3.1 wrapper against upstream release bytes."""
+"""Verify the committed Gradle 9.5.0 wrapper against upstream release bytes."""
 import hashlib
 from pathlib import Path
 import sys
 
-# gradlew scripts from gradle/gradle v9.3.1. JAR digest is published at
-# https://services.gradle.org/distributions/gradle-9.3.1-wrapper.jar.sha256
+# gradlew scripts from gradle/gradle v9.5.0. JAR digest is published at
+# https://services.gradle.org/distributions/gradle-9.5.0-wrapper.jar.sha256
 HASHES = {
-    'gradlew': 'b2fe376b143a459ba5d0bd290dc89beed5399fc6d159cd1214bd642ea94bcf07',
-    'gradlew.bat': '9386e790d58b9368ca8e034536a5baa688643d51cb37bfa462503d36fd0291a6',
+    'gradlew': '45bda8deaef01b732f07bd317f962a736e349c6faa6662829bc0f41293b51212',
+    'gradlew.bat': '9e62ee9a1c6eb7cecc90e55acc3ff09a1631ccfe3edddf180538a1e42b1532dc',
     # Project distribution URL/checksum pin, including all properties bytes.
-    'gradle/wrapper/gradle-wrapper.properties': '67ce033cdd43a5af2686f7ecae3b527d70041824260d6f15a7c2c3a100a8d1c2',
-    'gradle/wrapper/gradle-wrapper.jar': 'b3a875ddc1f044746e1b1a55f645584505f4a10438c1afea9f15e92a7c42ec13',
+    'gradle/wrapper/gradle-wrapper.properties': '923c1393c10ac8563be1cac6f24633c0b8f0e50d8da9d89efac1504923f7e0f3',
+    'gradle/wrapper/gradle-wrapper.jar': '497c8c2a7e5031f6aa847f88104aa80a93532ec32ee17bdb8d1d2f67a194a9c7',
 }
 
 def check(root):
@@ -24,4 +24,4 @@ if __name__ == '__main__':
         check(Path(__file__).resolve().parents[2] / 'android')
     except (ValueError, OSError) as error:
         sys.exit(str(error))
-    print('Official Gradle 9.3.1 wrapper bytes and distribution pin verified.')
+    print('Official Gradle 9.5.0 wrapper bytes and distribution pin verified.')
