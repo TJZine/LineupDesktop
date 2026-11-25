@@ -741,16 +741,19 @@ void FirstOpenProbeContract() {
     for (int i = 0; i < 10; ++i) ProbeMessage(core, "curl", "Could not resolve hostname SENTINEL");
     mpv_event_end_file redirect{};
     redirect.playlist_entry_id = 21001;
+    redirect.playlist_insert_id = 21002;
+    redirect.playlist_insert_num_entries = 1;
     redirect.reason = MPV_END_FILE_REASON_REDIRECT;
     mpv_event redirect_event{};
     redirect_event.event_id = MPV_EVENT_END_FILE;
     redirect_event.data = &redirect;
     PlayerCoreTestAccess::Event(core, redirect_event);
     PlayerCoreTestAccess::Event(core, redirect_event);
+    Start(core, 21002);
     PlayerCoreTestAccess::Event(core, loaded);
     PlayerCoreTestAccess::Event(core, loaded);
-    End(core, 21001, MPV_ERROR_LOADING_FAILED);
-    End(core, 21001, MPV_ERROR_LOADING_FAILED);
+    End(core, 21002, MPV_ERROR_LOADING_FAILED);
+    End(core, 21002, MPV_ERROR_LOADING_FAILED);
     Reply cleanup, duplicate_cleanup;
     Call(core, "stop", cleanup, {{"stopId", Value(int64_t{3})}});
     Call(core, "stop", duplicate_cleanup, {{"stopId", Value(int64_t{4})}});
@@ -892,6 +895,18 @@ void CorrelationAndPressure(PlayerCore& core) {
   CloseWorkerless(core);
   OpenWorkerless(core);
   received.clear();
+  ParsedLoad(core, 41, 411);
+  Start(core, 411);
+  ParsedLoad(core, 41, 412);
+  Start(core, 412);
+  End(core, 412);
+  Drain(core, events);
+  received.clear();
+  End(core, 411, MPV_ERROR_LOADING_FAILED);
+  Drain(core, events);
+  Check(received.empty(), "an older duplicate END must not overwrite the replacement's terminal state");
+  CloseWorkerless(core);
+  OpenWorkerless(core);
   ParsedLoad(core, 41, 401);
   Start(core, 401);
   Drain(core, events);
@@ -1038,7 +1053,8 @@ void Commands(PlayerCore& core) {
         "invalid request id cannot construct queued track payload");
   Reply late;
   Call(core, "selectTrack", late, track);
-  PlayerCoreTestAccess::State(core).RetireLoad(11);
+  auto& playback = PlayerCoreTestAccess::State(core);
+  playback.RetireLoad(playback.EndFile(101));
   PlayerCoreTestAccess::RunQueuedCommands(core);
   Drain(core, events);
   Check(received.size() == 1 && Has(received[0], "success", Value(false)) &&
@@ -1196,7 +1212,7 @@ void SeekPolicyAndObservation(PlayerCore& core) {
   event(MPV_EVENT_PLAYBACK_RESTART);
   check(log.str() == recovered_seek, "recovered explicit seek logs at most once");
   const auto& seek_detail = PlayerCoreTestAccess::State(core).failure();
-  check(seek_detail && seek_detail->load_id == 85 && seek_detail->code == "audio_output_error",
+  check(seek_detail && seek_detail->owner.wire_id == 85 && seek_detail->code == "audio_output_error",
         "explicit landing retains the classified log detail for a later terminal error");
   log.str("");
   seek(2, "keyframes");
@@ -1355,7 +1371,7 @@ void InitialJoinObservation(PlayerCore& core) {
   event(MPV_EVENT_PLAYBACK_RESTART);
   check(log.str() == recovered_initial, "recovered initial join logs at most once");
   const auto& initial_detail = PlayerCoreTestAccess::State(core).failure();
-  check(initial_detail && initial_detail->load_id == 205 && initial_detail->code == "audio_output_error",
+  check(initial_detail && initial_detail->owner.wire_id == 205 && initial_detail->code == "audio_output_error",
         "initial landing retains the classified log detail for a later terminal error");
 
   for (int failure = 0; failure < 8; ++failure) {
@@ -1683,7 +1699,10 @@ void SessionLoads(PlayerCore& core) {
     fake->playlist_id.reset();
     if (failure == SessionFailure::start_capacity) {
       auto& playback = PlayerCoreTestAccess::State(core);
-      Check(playback.Redirect(99, 1, 1024), "retained redirect siblings fill START_FILE capacity");
+      for (int64_t id = 1; id <= 1024; ++id) {
+        Check(playback.AcceptLoad(id, id) && playback.StartFile(id).within_capacity,
+              "started entries awaiting END_FILE fill START_FILE capacity");
+      }
     }
     if (failure == SessionFailure::overflow_before_start) {
       ParsedLoad(core, 500, 1000);
@@ -1780,8 +1799,8 @@ void FreshSessionClock(PlayerCore& core) {
   OpenWorkerless(core);
   const std::string uri = "https://clock.invalid/video/:/transcode/universal/session/opaque/base/index.m3u8";
   const std::string text = "#EXTM3U\n#EXT-X-TARGETDURATION:10\n#EXT-X-MEDIA-SEQUENCE:0\n#EXT-X-MAP:URI=\"init.mp4\"\n#EXTINF:10,\n0.m4s\n#EXT-X-ENDLIST\n";
-  const auto load = [&](int64_t id) {
-    fake->playlist_id = id;
+  const auto load = [&](int64_t id, int64_t entry) {
+    fake->playlist_id = entry;
     ValueMap arguments{{"uri",uri},{"kind","plexSession"},{"loadId",id},
                        {"sessionPlaylist",ValueMap{{"text",text},{"offsetMicroseconds",int64_t{0}}}}};
     Reply reply; Record(reply, *core.HandleCommand("load", &arguments));
@@ -1800,7 +1819,7 @@ void FreshSessionClock(PlayerCore& core) {
   PlayerCoreTestAccess::Drain(core, events.Sink()); events.received.clear();
   fake->demuxer_start_available = true; fake->demuxer_start = 12.5;
   for (int64_t id : {int64_t{701}, int64_t{702}}) {
-    load(id);
+    load(id, id);
     if (id == 702) {
       mpv_event stale{}; stale.event_id = MPV_EVENT_FILE_LOADED;
       PlayerCoreTestAccess::Event(core,stale);
@@ -1830,6 +1849,41 @@ void FreshSessionClock(PlayerCore& core) {
   }
   fake->demuxer_start_available = false; changed(99); PlayerCoreTestAccess::Drain(core,events.Sink());
   Check(events.received.size() == 1 && Has(events.received[0],"value",Value()), "unavailable D is unknown");
+  events.received.clear();
+  load(702, 703);
+  ready(703);
+  load(702, 704);
+  ready(704);
+  mpv_stream_cb_info cookie{};
+  const auto capability = fake->authenticated_uri;
+  Check(PlayerCoreTestAccess::OpenSession(core, capability, &cookie) == 0,
+        "replacement with a reused wire ID has a readable private session");
+  Drain(core, events);
+  events.received.clear();
+  mpv_event_end_file old_redirect{};
+  old_redirect.playlist_entry_id = 703;
+  old_redirect.reason = MPV_END_FILE_REASON_REDIRECT;
+  old_redirect.playlist_insert_id = 800;
+  old_redirect.playlist_insert_num_entries = 1;
+  mpv_event redirected{};
+  redirected.event_id = MPV_EVENT_END_FILE;
+  redirected.data = &old_redirect;
+  PlayerCoreTestAccess::Event(core, redirected);
+  End(core, 702, MPV_ERROR_LOADING_FAILED);
+  End(core, 999);
+  Drain(core, events);
+  char byte;
+  Check(events.received.empty() && cookie.read_fn(cookie.cookie, &byte, 1) == 1,
+        "late and unknown keyed END must not publish or revoke the reused ID's session");
+  cookie.close_fn(cookie.cookie);
+  fake->demuxer_start_available = true;
+  fake->demuxer_start = 19.25;
+  changed(-999);
+  Drain(core, events);
+  Check(events.received.size() == 1 &&
+        Has(events.received[0], "loadId", Value(int64_t{702})) &&
+        Has(events.received[0], "value", Value(19.25)),
+        "replacement session clock remains live after an older occurrence ends");
   events.received.clear(); Reply stopped; Call(core,"stop",stopped,{{"stopId",int64_t{703}}});
   PlayerCoreTestAccess::RunQueuedCommands(core); PlayerCoreTestAccess::Drain(core,events.Sink());
   Check(events.received.size() == 1 && Has(events.received[0],"value",Value()), "stop retires the clock to unknown");

@@ -8,6 +8,7 @@
 #include <iostream>
 #include <optional>
 #include <string>
+#include <type_traits>
 #include <utility>
 #include <vector>
 
@@ -55,6 +56,15 @@ int64_t LoadId(int slot) { return 100 + slot; }
 int64_t PlaylistId(int slot) { return 200 + slot; }
 int64_t StopId(int attempt) { return 300 + attempt; }
 
+template <typename Owner>
+int64_t WireId(const Owner& owner) {
+  if constexpr (std::is_same_v<Owner, int64_t>) {
+    return owner;
+  } else {
+    return owner.wire_id;
+  }
+}
+
 void Expand(const Schedule& state, std::deque<Schedule>& queue) {
   state.Require(state.playback.active_load() == state.active,
                 "A late lifecycle event must preserve the accepted replacement.");
@@ -77,7 +87,6 @@ void Expand(const Schedule& state, std::deque<Schedule>& queue) {
       next.Require(start.within_capacity && next.playback.event_load() == LoadId(slot),
                    "START_FILE must publish the load that owns its playlist entry.");
       next.loads[slot] = Lifecycle::owes_end;
-      // mpv's increasing replacement IDs make every earlier unstarted load unreachable.
       std::replace(next.loads.begin(), next.loads.begin() + slot,
                    Lifecycle::may_start, Lifecycle::absent);
       next.CheckCapacity();
@@ -85,11 +94,11 @@ void Expand(const Schedule& state, std::deque<Schedule>& queue) {
     } else if (state.loads[slot] == Lifecycle::owes_end) {
       auto next = state.Next("end load " + std::to_string(slot));
       const auto ended = next.playback.EndFile(PlaylistId(slot));
-      next.Require(ended == LoadId(slot),
+      next.Require(ended && WireId(*ended) == LoadId(slot),
                    "Keep a started predecessor's identity until its own END_FILE.");
       next.playback.RetireLoad(ended);
       next.loads[slot] = Lifecycle::absent;
-      if (next.active == ended) next.active.reset();
+      if (next.active == LoadId(slot)) next.active.reset();
       queue.push_back(std::move(next));
     }
   }

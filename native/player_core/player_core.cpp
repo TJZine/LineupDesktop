@@ -1486,8 +1486,10 @@ void PlayerCore::HandleMpvEvent(const mpv_event& event, uint64_t generation) {
     }
     case MPV_EVENT_END_FILE: {
       const auto* end = static_cast<mpv_event_end_file*>(event.data);
-      const auto load_id = playback_.EndFile(
+      const auto owner = playback_.EndFile(
           end ? std::optional<int64_t>(end->playlist_entry_id) : std::nullopt);
+      if (!owner && end) break;
+      const auto load_id = playback_.PublicId(owner);
       if (first_open_diagnostics_ && end && first_open_probe_.load_id &&
           first_open_probe_.load_id == load_id &&
           load_id == playback_.active_load() &&
@@ -1513,8 +1515,7 @@ void PlayerCore::HandleMpvEvent(const mpv_event& event, uint64_t generation) {
           const auto& failure = playback_.failure();
           WriteFirstOpenProbe(
               ProbeModule::core, cause, end->error,
-              failure && failure->load_id == *load_id ? failure->http_status
-                                                     : std::nullopt);
+              failure && failure->owner == owner ? failure->http_status : std::nullopt);
         }
       }
       if (seek_observation_ && seek_observation_->load_id == load_id) {
@@ -1526,21 +1527,25 @@ void PlayerCore::HandleMpvEvent(const mpv_event& event, uint64_t generation) {
           RetireFailedSession(load_id, generation);
           QueueEvent(generation, FailureStateEvent("source_open_error", std::nullopt,
               load_id, "The private session playlist could not be opened."));
-          playback_.RetireLoad(load_id);
+          playback_.RetireLoad(owner);
           break;
         }
-        if (!playback_.Redirect(load_id, end->playlist_insert_id,
-                                end->playlist_insert_num_entries)) {
+        if (!playback_.Redirect(owner, end->playlist_insert_id,
+                                end->playlist_insert_num_entries) && load_id) {
           QueueEvent(generation,
               FailureStateEvent("correlation_error", std::nullopt, load_id,
                                 "Redirect correlation exceeded native limits"));
         }
         break;
       }
+      if (owner && !load_id) {
+        playback_.RetireLoad(owner);
+        break;
+      }
       if (end && end->error < 0) {
         const auto& failure = playback_.failure();
         const bool has_detail = load_id && failure &&
-                                failure->load_id == *load_id &&
+                                failure->owner == owner &&
                                 !failure->code.empty();
         QueueEvent(
             generation,
@@ -1557,12 +1562,12 @@ void PlayerCore::HandleMpvEvent(const mpv_event& event, uint64_t generation) {
         QueueEvent(generation,
                    StateEvent("stopped", "Playback stopped", load_id));
       }
-      if (load_id && load_id == playback_.active_load()) {
+      if (owner && owner == playback_.active_owner()) {
         session_playlists_.Retire();
         ClearSessionClock(generation);
+        ClearSubtitleCues(generation, load_id);
       }
-      if (load_id == playback_.active_load()) ClearSubtitleCues(generation, load_id);
-      playback_.RetireLoad(load_id);
+      playback_.RetireLoad(owner);
       break;
     }
     case MPV_EVENT_SEEK:
