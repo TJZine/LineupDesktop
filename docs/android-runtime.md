@@ -142,8 +142,9 @@ user home, a disposable copy of the pinned Flutter SDK and Gradle's
 (debug and release), `:app:testDebugUnitTest` and the notice generator's Gradle
 report. Review the updated digests and use **Verify Android TV build** to
 identify any Linux-only artifacts. The root metadata also covers Flutter's
-included Gradle build. Robolectric fetches its Android runtime JARs at test time
-outside Gradle's verification. Those JARs do not ship.
+included Gradle build. Gradle resolves the Android SDK JARs used by Robolectric,
+verifies their pinned digests, and supplies their directory to the tests through
+`robolectric.dependency.dir`. The JARs are test-only dependencies.
 
 ### Regenerate Gradle verification metadata on macOS
 
