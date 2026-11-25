@@ -6,7 +6,7 @@ import 'dart:ui' show SemanticsAction;
 // Clock fixtures intentionally reassign their local time source.
 // ignore_for_file: prefer_final_locals
 
-import 'package:flutter/material.dart';
+import 'package:material_ui/material_ui.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:lineup_desktop/ui/lineup_canvas.dart';

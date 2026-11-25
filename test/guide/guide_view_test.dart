@@ -6,7 +6,7 @@ import 'dart:ui' as ui;
 
 import 'package:flutter/foundation.dart'
     show TargetPlatform, debugDefaultTargetPlatformOverride;
-import 'package:flutter/material.dart';
+import 'package:material_ui/material_ui.dart';
 import 'package:flutter/gestures.dart';
 import 'package:flutter/rendering.dart'
     show RenderParagraph, RenderRepaintBoundary;
@@ -24,6 +24,7 @@ import 'package:lineup_desktop/persistence/app_store.dart';
 import 'package:lineup_desktop/playback/native_player.dart';
 import 'package:lineup_desktop/playback/native_video_surface.dart';
 
+import '../support/material_tooltip.dart';
 import '../support/ui_fixture.dart' show FixturePlayer;
 import '../support/golden_test_support.dart' show loadPinnedTestFonts;
 import '../support/test_doubles.dart';
@@ -4581,7 +4582,7 @@ void main() {
       );
       expect(button.style!.foregroundColor!.resolve({}), roles.primaryText);
       expect(find.text('← Now'), findsOneWidget);
-      expect(find.byTooltip('Return to live'), findsOneWidget);
+      expect(materialTooltip('Return to live'), findsOneWidget);
       await tester.pumpWidget(const SizedBox.shrink());
       now = now.add(const Duration(hours: 8));
       await tester.pumpWidget(app());
@@ -4648,7 +4649,7 @@ void main() {
         await tester.pumpAndSettle();
         void outlined(String label) {
           expect(find.text(label), findsOneWidget);
-          expect(find.byTooltip('Return to live'), findsOneWidget);
+          expect(materialTooltip('Return to live'), findsOneWidget);
           expect(tester.getSemantics(control).label, 'Return to live');
           final button = tester.widget<TextButton>(control);
           final dropdown = find

@@ -2,6 +2,8 @@
 // ignore_for_file: avoid_print
 import 'dart:convert';
 
+// This reproduction runs on the original Flutter 3.47.7 SDK.
+// ignore: deprecated_member_use
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 

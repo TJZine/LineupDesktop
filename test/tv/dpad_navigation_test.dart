@@ -1,7 +1,7 @@
 import 'dart:async';
 
 import 'package:flutter/foundation.dart';
-import 'package:flutter/material.dart';
+import 'package:material_ui/material_ui.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:lineup_desktop/app/lineup_controller.dart';
@@ -139,7 +139,7 @@ void main() {
             final controls = [
               for (var digit = 0; digit <= 9; digit++)
                 find.widgetWithText(OutlinedButton, '$digit'),
-              find.byTooltip('Backspace'),
+              find.widgetWithText(OutlinedButton, '⌫'),
               find.widgetWithText(TextButton, 'Cancel'),
               find.byKey(const Key('profile-pin-progress')),
               find.byKey(const Key('profile-pin-status')),
@@ -217,10 +217,7 @@ void main() {
       await _keys(tester, [_right]);
       _focusedVisible(tester, digit('9'));
       await _keys(tester, [_down]);
-      final delete = find.descendant(
-        of: find.byTooltip('Backspace'),
-        matching: find.byType(OutlinedButton),
-      );
+      final delete = find.widgetWithText(OutlinedButton, '⌫');
       _focusedVisible(tester, delete);
       await _keys(tester, [_left]);
       _focusedVisible(tester, digit('0'));

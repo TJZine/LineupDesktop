@@ -1,7 +1,7 @@
 import 'dart:ui' show SemanticsAction;
 
 import 'package:flutter/gestures.dart';
-import 'package:flutter/material.dart';
+import 'package:material_ui/material_ui.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:lineup_desktop/app/lineup_controller.dart';
@@ -70,7 +70,7 @@ void main() {
       final h = await _Harness.mount(tester);
       await h.restoreNowPlayingMenu();
       await h.collapseWithPointer();
-      await tester.tap(find.byTooltip('Lineup menu'));
+      await tester.tap(find.byKey(const Key('player-app-menu')));
       await tester.pumpAndSettle();
       final menu = find.byKey(const Key('immersive-app-menu'));
       expect(menu, findsOneWidget);
@@ -451,7 +451,7 @@ class _Harness {
       find.byKey(const Key('player-now-playing-collapse')),
       findsOneWidget,
     );
-    await tester.tap(find.byTooltip('Lineup menu'));
+    await tester.tap(find.byKey(const Key('player-app-menu')));
     await tester.pumpAndSettle();
     expect(find.byKey(const Key('immersive-app-menu')), findsOneWidget);
     tester.view.physicalSize = const Size(1728, 1084);

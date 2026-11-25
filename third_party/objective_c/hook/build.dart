@@ -306,7 +306,7 @@ String firstLineOfStdout(String cmd, List<String> args) {
 
 String minOSVersion(CodeConfig codeConfig, {Object? macosTargetVersion}) {
   if (codeConfig.targetOS == OS.iOS) {
-    final targetVersion = codeConfig.iOS.targetVersion;
+    final targetVersion = codeConfig.iOS.deploymentVersion.major;
     return '-mios-version-min=$targetVersion';
   }
   assert(codeConfig.targetOS == OS.macOS);
@@ -318,7 +318,7 @@ String minOSVersion(CodeConfig codeConfig, {Object? macosTargetVersion}) {
       'macos_target_version must be an integer from 10 to 99.',
     );
   }
-  final targetVersion = macosTargetVersion ?? codeConfig.macOS.targetVersion;
+  final targetVersion = macosTargetVersion ?? codeConfig.macOS.deploymentVersion.major;
   return '-mmacos-version-min=$targetVersion';
 }
 
