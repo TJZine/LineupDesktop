@@ -620,7 +620,7 @@ Prepare the ignored x86-64 LGPL libmpv directory before configuring the applicat
 
 ```powershell
 Set-Location C:\path\to\LineupDesktop
-$mpvRoot = 'C:\local\lineup-mpv-20261002-3186d369f9' # New or empty directory.
+$mpvRoot = 'C:\local\lineup-mpv-20261125-d32c910be6' # New or empty directory.
 & .\tool\windows\prepare-mpv.ps1 -Destination $mpvRoot
 $env:LINEUP_MPV_ROOT = $mpvRoot
 flutter build windows
@@ -710,7 +710,7 @@ in the current session as well:
 
 ```powershell
 $engineSource = 'C:\path\to\flutter\engine\src'
-$mpvRoot = 'C:\local\lineup-mpv-20261002-3186d369f9'
+$mpvRoot = 'C:\local\lineup-mpv-20261125-d32c910be6'
 [Environment]::SetEnvironmentVariable('LINEUP_ENGINE_SOURCE', $engineSource, 'User')
 [Environment]::SetEnvironmentVariable('LINEUP_MPV_ROOT', $mpvRoot, 'User')
 $env:LINEUP_ENGINE_SOURCE = $engineSource
@@ -762,7 +762,7 @@ package the portable application:
 
 ```powershell
 Set-Location C:\path\to\LineupDesktop
-$env:LINEUP_MPV_ROOT = 'C:\local\lineup-mpv-20261002-3186d369f9'
+$env:LINEUP_MPV_ROOT = 'C:\local\lineup-mpv-20261125-d32c910be6'
 .\tool\windows\build-release.ps1 -EngineSource 'C:\path\to\flutter\engine\src'
 .\tool\windows\package.ps1
 ```
