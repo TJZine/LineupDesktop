@@ -91,6 +91,7 @@ libmpv again when this manifest changes.
 | libxml2 | 2.16.0 (21c8223) | MIT-style and source-specific terms | [Upstream source](https://github.com/GNOME/libxml2/tree/21c8223) | `libxml2-Copyright` |
 | Little-CMS | 2.20 (be56a99) | MIT | [Upstream source](https://github.com/mm2/Little-CMS/tree/be56a99) | `Little-CMS-LICENSE` |
 | LLVM | 23.1.2 (03b58ead, compiler and C++ runtimes) | Apache-2.0 WITH LLVM-exception | [Upstream source](https://github.com/llvm/llvm-project/tree/03b58ead1a5d7caae4ab76ec69d66cfa896da372) | `LLVM-llvm-LICENSE.TXT`, `LLVM-compiler-rt-LICENSE.TXT`, `LLVM-libcxx-LICENSE.TXT`, `LLVM-libcxxabi-LICENSE.TXT`, `LLVM-libunwind-LICENSE.TXT` |
+| MuJS | 1.3.11-11-g449e235 (builder patch on a968144) | ISC, source-specific notices for floating-point conversions and UTF routines, and Unicode License v3 for the Unicode 16 tables | [Upstream source](https://codeberg.org/ccxvii/mujs/src/commit/a968144dcf3516635e3cb02d1849ccb4401d3668), [recipe and Makefile patch](https://github.com/shinchiro/mpv-winbuild-cmake/tree/7e36e1eab5094a642c5a3c1771551f06b5ec3224/packages) | `MuJS-COPYING`, `MuJS-source-notices.txt`, `MuJS-Unicode-notice.txt` |
 | nghttp2 | 1.71.90 (03fe9f5) | MIT | [Upstream source](https://github.com/nghttp2/nghttp2/tree/03fe9f5) | `nghttp2-COPYING` |
 | nghttp3 | 1.19.90 (27268d1) | MIT | [Upstream source](https://github.com/ngtcp2/nghttp3/tree/27268d1) | `nghttp3-COPYING` |
 | ngtcp2 | 1.26.90 (2ad2b84) | MIT | [Upstream source](https://github.com/ngtcp2/ngtcp2/tree/2ad2b84) | `ngtcp2-COPYING` |
@@ -161,7 +162,7 @@ do not enumerate every source file or archive member that entered the DLL.
 
 | Area | Remaining source or notice evidence |
 | --- | --- |
-| FFmpeg and mpv | BZip2 1.1.0, LAME, libmysofa and its embedded data, libsoxr, libva 2.25.0.1 (API 1.25.0), FFmpeg’s Media SDK backend, LuaJIT 2.1.1794918119, MuJS 1.3.11-11-g449e235, and uavs3d 1.2.1798. The oneVPL loader notice above covers its own distribution. |
+| FFmpeg and mpv | BZip2 1.1.0, LAME, libmysofa and its embedded data, libsoxr, libva 2.25.0.1 (API 1.25.0), FFmpeg’s Media SDK backend, LuaJIT 2.1.1794918119 and uavs3d 1.2.1798. The oneVPL loader notice above covers its own distribution. |
 | Network and archive | The exact curl 8.23.0-DEV checkout and the embedded libpsl suffix data. |
 | Shaders and headers | SPIRV-Cross 0.68.0 (build log suffix `70f0c77`), glad, AMF headers, and NVIDIA codec headers 13.1.15.1.2. |
 | Compiler and other source notices | MinGW-w64 headers and startup objects, remaining Rust dependencies, and embedded data or source-specific notices beyond the files listed above. The fontconfig log shows that its libintl fallback configured zero targets and that the intl dependency was unavailable. |
