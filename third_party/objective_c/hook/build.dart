@@ -318,7 +318,8 @@ String minOSVersion(CodeConfig codeConfig, {Object? macosTargetVersion}) {
       'macos_target_version must be an integer from 10 to 99.',
     );
   }
-  final targetVersion = macosTargetVersion ?? codeConfig.macOS.deploymentVersion.major;
+  final targetVersion =
+      macosTargetVersion ?? codeConfig.macOS.deploymentVersion.major;
   return '-mmacos-version-min=$targetVersion';
 }
 
