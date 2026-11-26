@@ -470,6 +470,9 @@ class _GuideViewState extends State<GuideView>
   final _laterFocus = FocusNode(debugLabel: 'Guide later');
   final _hoursFocus = FocusNode(debugLabel: 'Guide hours picker');
   final _clearSearchFocus = FocusNode(debugLabel: 'Guide clear search');
+  final _clearResultsSearchFocus = FocusNode(
+    debugLabel: 'Guide clear search in results',
+  );
   final _removeChannelFilterFocus = FocusNode(
     debugLabel: 'Guide remove channel filter',
   );
@@ -605,6 +608,7 @@ class _GuideViewState extends State<GuideView>
     _laterFocus.dispose();
     _hoursFocus.dispose();
     _clearSearchFocus.dispose();
+    _clearResultsSearchFocus.dispose();
     _removeChannelFilterFocus.dispose();
     _searchController
       ..removeListener(_searchChanged)
@@ -627,6 +631,26 @@ class _GuideViewState extends State<GuideView>
     } finally {
       _publishingSearchEdit = false;
     }
+  }
+
+  bool get _canClearSearchFromResults =>
+      widget.controller.channels.isEmpty &&
+      widget.controller.searchQuery.isNotEmpty;
+
+  VoidCallback? get _clearSearchAction =>
+      _canClearSearchFromResults ? _clearSearchFromNoMatches : null;
+
+  void _clearSearchFromNoMatches() {
+    _searchController.clear();
+    final guide = widget.controller;
+    if (guide.channels.isEmpty) {
+      _openSearch();
+      return;
+    }
+    if (guide.focusedChannelIndex > 0) {
+      guide.moveVertical(-guide.focusedChannelIndex);
+    }
+    (widget.focusNode ?? _guideFocus).requestFocus();
   }
 
   KeyEventResult _searchKey(FocusNode node, KeyEvent event) {
@@ -961,7 +985,11 @@ class _GuideViewState extends State<GuideView>
         widget.controller.moveVertical(-1);
       }
     } else if (key == LogicalKeyboardKey.arrowDown) {
-      widget.controller.moveVertical(1);
+      if (_canClearSearchFromResults) {
+        _clearResultsSearchFocus.requestFocus();
+      } else {
+        widget.controller.moveVertical(1);
+      }
     } else if (key == LogicalKeyboardKey.arrowLeft) {
       widget.controller.moveHorizontal(-1);
     } else if (key == LogicalKeyboardKey.arrowRight) {
@@ -1200,7 +1228,11 @@ class _GuideViewState extends State<GuideView>
       if (_empty && widget.onSetUpChannels == null) {
         return KeyEventResult.ignored;
       }
-      final target = _empty ? _setupFocus : widget.focusNode ?? _guideFocus;
+      final target = _empty
+          ? _setupFocus
+          : _canClearSearchFromResults
+          ? _clearResultsSearchFocus
+          : widget.focusNode ?? _guideFocus;
       target.requestFocus();
       return KeyEventResult.handled;
     }
@@ -1266,6 +1298,7 @@ class _GuideViewState extends State<GuideView>
         compactLogo: policy.compactLogo,
         minimumIdentityWidth: policy.minimumIdentityWidth,
         playbackMessage: widget.playbackMessage,
+        onClearSearch: _clearSearchAction,
         onOpenPlayer: widget.onOpenPlayer,
       ),
     ),
@@ -1469,10 +1502,14 @@ class _GuideViewState extends State<GuideView>
                       ),
                       Expanded(
                         child: channels.isEmpty
-                            ? const Center(
-                                child: Text(
-                                  'No matching channels\nTry another channel name or number.',
-                                  textAlign: TextAlign.center,
+                            ? Center(
+                                child: _GuideNoMatches(
+                                  centered: true,
+                                  onClearSearch: _clearSearchAction,
+                                  focusNode: _clearResultsSearchFocus,
+                                  actionKey: const Key(
+                                    'guide-clear-search-results',
+                                  ),
                                 ),
                               )
                             : ListView.builder(
@@ -2740,6 +2777,7 @@ class _GuideShowcase extends StatefulWidget {
     required this.compactLogo,
     required this.minimumIdentityWidth,
     required this.playbackMessage,
+    required this.onClearSearch,
     required this.onOpenPlayer,
   });
 
@@ -2750,6 +2788,7 @@ class _GuideShowcase extends StatefulWidget {
   final bool compactLogo;
   final double minimumIdentityWidth;
   final String? playbackMessage;
+  final VoidCallback? onClearSearch;
   final VoidCallback? onOpenPlayer;
 
   @override
@@ -3057,6 +3096,7 @@ class _GuideShowcaseState extends State<_GuideShowcase> {
               compactLogo: widget.compactLogo,
               minimumIdentityWidth: widget.minimumIdentityWidth,
               playbackMessage: widget.playbackMessage,
+              onClearSearch: widget.onClearSearch,
             ),
           ),
         ),
@@ -4503,6 +4543,7 @@ class _Details extends StatelessWidget {
     required this.compactLogo,
     required this.minimumIdentityWidth,
     required this.playbackMessage,
+    required this.onClearSearch,
     required this.bleedLeft,
   });
   final GuideProgram? program;
@@ -4514,6 +4555,7 @@ class _Details extends StatelessWidget {
   final double minimumIdentityWidth;
   final bool bleedLeft;
   final String? playbackMessage;
+  final VoidCallback? onClearSearch;
 
   @override
   Widget build(BuildContext context) {
@@ -4619,6 +4661,7 @@ class _Details extends StatelessWidget {
                             controller: controller,
                             channel: channel,
                             playbackMessage: playbackMessage,
+                            onClearSearch: onClearSearch,
                           )
                         : _ProgramDetails(
                             program: program!,
@@ -4642,24 +4685,70 @@ class _Details extends StatelessWidget {
   }
 }
 
+class _GuideNoMatches extends StatelessWidget {
+  const _GuideNoMatches({
+    required this.centered,
+    required this.onClearSearch,
+    required this.actionKey,
+    this.focusNode,
+  });
+
+  final bool centered;
+  final VoidCallback? onClearSearch;
+  final Key actionKey;
+  final FocusNode? focusNode;
+
+  @override
+  Widget build(BuildContext context) => SingleChildScrollView(
+    child: Column(
+      mainAxisSize: MainAxisSize.min,
+      crossAxisAlignment: centered
+          ? CrossAxisAlignment.center
+          : CrossAxisAlignment.start,
+      children: [
+        Text(
+          'No matching channels\nTry another channel name or number.',
+          textAlign: centered ? TextAlign.center : TextAlign.start,
+        ),
+        if (onClearSearch != null) ...[
+          const SizedBox(height: 8),
+          TextButton(
+            key: actionKey,
+            focusNode: focusNode,
+            onPressed: onClearSearch,
+            child: Text(
+              'Clear search',
+              style: LineupTypography.tvLabelStyle(context),
+            ),
+          ),
+        ],
+      ],
+    ),
+  );
+}
+
 class _GuideDetailsPlaceholder extends StatelessWidget {
   const _GuideDetailsPlaceholder({
     required this.controller,
     required this.channel,
     required this.playbackMessage,
+    required this.onClearSearch,
   });
 
   final GuideController controller;
   final Channel? channel;
   final String? playbackMessage;
+  final VoidCallback? onClearSearch;
 
   @override
   Widget build(BuildContext context) {
     if (controller.channels.isEmpty && controller.lineup.channels.isNotEmpty) {
-      return const Align(
+      return Align(
         alignment: Alignment.centerLeft,
-        child: Text(
-          'No matching channels\nTry another channel name or number.',
+        child: _GuideNoMatches(
+          centered: false,
+          onClearSearch: onClearSearch,
+          actionKey: const Key('guide-clear-search-details'),
         ),
       );
     }

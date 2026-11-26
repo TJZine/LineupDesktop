@@ -58,6 +58,7 @@ class ChannelsViewState extends State<ChannelsView> {
   Channel? _studioChannel;
   String? _returnFocusId;
   final _search = TextEditingController();
+  final _directoryScroll = ScrollController();
   final _searchFocus = FocusNode(debugLabel: 'Search channels');
   ChannelFilterKey _filter = ChannelFilter.all;
   List<Channel>? _filterLineup;
@@ -329,6 +330,7 @@ class ChannelsViewState extends State<ChannelsView> {
       ..removeListener(_healthChanged)
       ..dispose();
     _search.dispose();
+    _directoryScroll.dispose();
     _searchFocus.dispose();
     _addFocus.dispose();
     _selectionFocus.dispose();
@@ -588,6 +590,16 @@ class ChannelsViewState extends State<ChannelsView> {
                     message: _showSelected
                         ? 'Return to results and select channels to inspect.'
                         : 'Adjust the search or channel filter.',
+                    action: !_showSelected && _search.text.trim().isNotEmpty
+                        ? TextButton(
+                            key: const Key('channels-clear-search-results'),
+                            onPressed: _saving ? null : _clearSearch,
+                            child: Text(
+                              'Clear search',
+                              style: actionLabelStyle,
+                            ),
+                          )
+                        : null,
                   )
                 : _directoryList(visible),
           ),
@@ -606,9 +618,41 @@ class ChannelsViewState extends State<ChannelsView> {
     );
   }
 
+  void _clearSearch() {
+    setState(() {
+      _search.clear();
+      if (!_usesFlatDirectory) {
+        final matching = _matchingChannels(_sortedChannels());
+        final first = _groupedEntries(matching).firstOrNull;
+        if (first is _DirectoryGroupHeader) _openGroups.add(first.key);
+      }
+    });
+    final first = _visibleChannels().firstOrNull;
+    if (first == null) {
+      _searchFocus.requestFocus();
+      return;
+    }
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (!mounted || _studioOpen || _search.text.isNotEmpty) return;
+      if (_directoryScroll.hasClients && _directoryScroll.offset != 0) {
+        // The list may restore its previous position from PageStorage.
+        _directoryScroll.jumpTo(0);
+        _restoreNavigationFocus(
+          preferredId: first.id,
+          preferredIndex: 0,
+          visibleIndex: true,
+        );
+      } else {
+        final row = _openFocus[first.id];
+        (_usableFocus(row) ? row! : _searchFocus).requestFocus();
+      }
+    });
+  }
+
   Widget _directoryList(List<Channel> visible) {
     if (_usesFlatDirectory) {
       return ListView.separated(
+        controller: _directoryScroll,
         key: PageStorageKey(
           _showSelected ? 'channels-directory-selected' : 'channels-directory',
         ),
@@ -619,6 +663,7 @@ class ChannelsViewState extends State<ChannelsView> {
     }
     final entries = _groupedEntries(visible);
     return ListView.builder(
+      controller: _directoryScroll,
       key: const PageStorageKey('channels-directory-grouped'),
       itemCount: entries.length,
       itemBuilder: (context, index) {

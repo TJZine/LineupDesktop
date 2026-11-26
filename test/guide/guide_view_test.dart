@@ -5221,6 +5221,78 @@ void main() {
     await tester.pumpWidget(const SizedBox.shrink());
   });
 
+  for (final tv in [false, true]) {
+    testWidgets(
+      'Guide no-match actions clear and focus the first result TV=$tv',
+      (tester) async {
+        tester.view
+          ..devicePixelRatio = 1
+          ..physicalSize = const Size(1920, 1080);
+        addTearDown(tester.view.reset);
+        final lineup = _Lineup(3);
+        final guide = GuideController(
+          lineup: lineup,
+          loadSchedule: (channel) async => _schedule(channel),
+        );
+        final grid = FocusNode();
+        addTearDown(lineup.dispose);
+        addTearDown(guide.dispose);
+        addTearDown(grid.dispose);
+        var tunes = 0;
+        await tester.pumpWidget(
+          MaterialApp(
+            theme: LineupTheme.forName(
+              LineupThemeName.emberSteel,
+              formFactor: profileFor(tv).formFactor,
+            ),
+            builder: _guideCanvasBuilderFor(tv),
+            home: GuideView(
+              controller: guide,
+              focusNode: grid,
+              pictureInPicture: const ColoredBox(color: Colors.black),
+              onClose: (_, _) {},
+              onTune: (_) async => tunes++,
+            ),
+          ),
+        );
+        await tester.pumpAndSettle();
+        guide.moveVertical(1);
+        expect(guide.focusedChannelId, 'channel-1');
+        await _openGuideSearch(tester);
+        final search = find.byKey(const Key('guide-channel-search'));
+        await tester.enterText(search, 'no matching channel');
+        await tester.pumpAndSettle();
+        expect(guide.channels, isEmpty);
+        final results = find.byKey(const Key('guide-clear-search-results'));
+        final details = find.byKey(const Key('guide-clear-search-details'));
+        expect(results, findsOneWidget);
+        expect(details, findsOneWidget);
+        if (tv) {
+          await tester.testTextInput.receiveAction(TextInputAction.done);
+          await tester.pumpAndSettle();
+          await tester.sendKeyEvent(LogicalKeyboardKey.arrowDown);
+          await tester.pumpAndSettle();
+          expect(
+            tester.widget<TextButton>(results).focusNode!.hasPrimaryFocus,
+            isTrue,
+          );
+          await tester.sendKeyEvent(LogicalKeyboardKey.select);
+        } else {
+          await tester.tap(details);
+        }
+        await tester.pumpAndSettle();
+        expect(guide.searchQuery, isEmpty);
+        expect(guide.channels, hasLength(3));
+        expect(guide.focusedChannelId, 'channel-0');
+        expect(grid.hasPrimaryFocus, isTrue);
+        expect(results, findsNothing);
+        expect(details, findsNothing);
+        expect(tunes, 0);
+        await tester.pumpWidget(const SizedBox.shrink());
+      },
+    );
+  }
+
   testWidgets('search owns Escape and Enter focus without tuning', (
     tester,
   ) async {
