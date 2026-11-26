@@ -782,7 +782,7 @@ void main() {
   );
 
   testWidgets(
-    'enlarged Guide metadata wraps with content at the start of each rendered line',
+    'enlarged Guide facts wrap with content at the start of each line and airtime spans the timing row',
     (tester) async {
       tester.view
         ..devicePixelRatio = 1
@@ -843,10 +843,7 @@ void main() {
       await tester.pumpAndSettle();
       final time = find.byKey(const Key('guide-program-meta'));
       final facts = find.byKey(const Key('guide-info-genres'));
-      expect(
-        tester.getRect(facts).top,
-        greaterThan(tester.getRect(time).bottom),
-      );
+      expect(tester.getRect(facts).bottom, lessThan(tester.getRect(time).top));
       expect(
         tester.widget<Text>(time).data!.replaceAll('\u00a0', ' '),
         '${_testTime(start.toLocal())}–${_testTime(start.add(const Duration(minutes: 48)).toLocal())} · 43m left',
@@ -869,7 +866,7 @@ void main() {
           final top = boxes.first.top;
           lines[top] = '${lines[top] ?? ''}$character';
         }
-        expect(lines.length, greaterThan(1), reason: text);
+        expect(lines.length, finder == time ? 1 : greaterThan(1), reason: text);
         for (final line in lines.values) {
           expect(line.startsWith('·'), isFalse, reason: '$text: $line');
         }
@@ -878,6 +875,75 @@ void main() {
       expect(tester.takeException(), isNull);
     },
   );
+
+  testWidgets('dense desktop keeps long merged facts within the timing row', (
+    tester,
+  ) async {
+    tester.view
+      ..devicePixelRatio = 1
+      ..physicalSize = const Size(800, 600);
+    addTearDown(tester.view.reset);
+    final now = DateTime(2026, 1, 15, 3, 17);
+    final lineup = _Lineup(2, anchor: now.subtract(const Duration(minutes: 5)));
+    lineup.fixtureActor.replaceChannels([
+      for (final channel in lineup.channels)
+        Channel(
+          id: channel.id,
+          number: channel.number,
+          name: channel.name,
+          playbackMode: channel.playbackMode,
+          anchor: channel.anchor,
+          shuffleSeed: channel.shuffleSeed,
+          source: ManualSource([
+            ChannelItem(
+              id: 'summary-${channel.id}',
+              title: 'Synthetic program',
+              duration: const Duration(minutes: 48),
+              genres: channel.id == 'channel-0'
+                  ? const [
+                      'Long-form international culture and current affairs',
+                      'Classic historical and archaeological documentaries',
+                      'Independent science fiction and speculative fiction',
+                    ]
+                  : const [],
+            ),
+          ]),
+        ),
+    ]);
+    final guide = GuideController(
+      lineup: lineup,
+      clock: () => now,
+      loadSchedule: (channel) async => _schedule(channel),
+    );
+    addTearDown(lineup.dispose);
+    addTearDown(guide.dispose);
+    await tester.pumpWidget(
+      MaterialApp(
+        builder: _guideCanvasBuilder,
+        home: GuideView(
+          controller: guide,
+          pictureInPicture: const ColoredBox(color: Colors.black),
+          onClose: (_, _) {},
+          onTune: (_) async {},
+        ),
+      ),
+    );
+    await tester.pumpAndSettle();
+    final time = find.byKey(const Key('guide-program-meta'));
+    expect(tester.widget<Text>(time).data, contains('Long-form'));
+    expect(find.byKey(const Key('guide-info-genres')), findsNothing);
+    expect(
+      tester.renderObject<RenderParagraph>(time).didExceedMaxLines,
+      isTrue,
+    );
+    final origin = tester.getTopLeft(time);
+
+    guide.moveVertical(1);
+    await tester.pumpAndSettle();
+    expect(tester.widget<Text>(time).data, isNot(contains('Long-form')));
+    expect(tester.getTopLeft(time), origin);
+    expect(tester.takeException(), isNull);
+  });
 
   testWidgets(
     'Guide detail time line follows start-inclusive and end-exclusive airing boundaries',
@@ -947,6 +1013,8 @@ void main() {
         expect(program.scheduled.end, end);
         final range =
             '${_testTime(start.toLocal())}–${_testTime(end.toLocal())}';
+        final time = find.byKey(const Key('guide-program-meta'));
+        final timeOrigin = tester.getTopLeft(time);
         for (final (at, suffix, progressLabel) in [
           (start.subtract(const Duration(seconds: 1)), ' · 48m', null),
           (start, ' · 48m left', '0m elapsed, 48m remaining'),
@@ -966,10 +1034,9 @@ void main() {
           now = at;
           guide.focusProgram(program);
           await tester.pumpAndSettle();
+          expect(tester.getTopLeft(time), timeOrigin);
           expect(
-            tester
-                .widget<Text>(find.byKey(const Key('guide-program-meta')))
-                .data,
+            tester.widget<Text>(time).data,
             '$range$suffix',
             reason: '$at',
           );

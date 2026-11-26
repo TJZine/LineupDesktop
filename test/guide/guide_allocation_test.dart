@@ -99,18 +99,27 @@ void main() {
         final message = configuration.name.contains('message')
             ? 'Playback unavailable — choose another channel or try again.'
             : null;
+        final timingCases =
+            (configuration.name == 'desktop-1.0' ||
+                configuration.name == 'tv-normal-1.0-largefalse' ||
+                configuration.name == 'tv-normal-1.3-largefalse') &&
+            rich;
+        const movieChannel = 20;
+        const noFactsChannel = 21;
+        bool hasEpisode(int i) => rich && !(timingCases && i == movieChannel);
+        bool hasFacts(int i) => rich && !(timingCases && i == noFactsChannel);
         ChannelItem item(int i) => ChannelItem(
           id: 'program-$i',
           title: rich ? 'The Last Frequency' : 'Synthetic program ${i + 1}',
-          showTitle: rich ? 'Signal House' : null,
-          seasonNumber: rich ? 12 : null,
-          episodeNumber: rich ? 5 : null,
+          showTitle: hasEpisode(i) ? 'Signal House' : null,
+          seasonNumber: hasEpisode(i) ? 12 : null,
+          episodeNumber: hasEpisode(i) ? 5 : null,
           duration: const Duration(hours: 2),
           summary: rich && !configuration.name.contains('no-synopsis')
               ? 'A signal reaches the crew. They follow its source across the city.'
               : null,
-          year: rich ? 2026 : null,
-          genres: rich
+          year: hasFacts(i) ? 2026 : null,
+          genres: hasFacts(i)
               ? (longFacts
                     ? const [
                         'Science Fiction',
@@ -119,9 +128,9 @@ void main() {
                       ]
                     : const ['Drama', 'Science Fiction'])
               : const [],
-          contentRating: rich ? (wide ? 'TV-Y7-FV' : 'TV-14') : null,
-          resolution: rich ? (wide ? '1080p' : '4k') : null,
-          audioCodec: rich ? (wide ? 'dts-hd' : 'eac3') : null,
+          contentRating: hasFacts(i) ? (wide ? 'TV-Y7-FV' : 'TV-14') : null,
+          resolution: hasFacts(i) ? (wide ? '1080p' : '4k') : null,
+          audioCodec: hasFacts(i) ? (wide ? 'dts-hd' : 'eac3') : null,
           audioChannels: rich && (longFacts || wide) ? (wide ? 2 : 8) : null,
           dynamicRange: rich && (longFacts || wide) ? 'dolbyVision' : null,
           clearLogo: logo ? Uri.parse('/clear-logo') : null,
@@ -787,15 +796,127 @@ void main() {
               greaterThan(1),
             );
           }
-          if (configuration.name == 'tv-normal-1.0-largefalse' && rich) {
-            guide.focusProgram(guide.row('channel-1').programs.first);
-            await tester.pumpAndSettle();
+          if (configuration.name == 'desktop-1.0' ||
+              configuration.name.startsWith('tv-normal-') &&
+                  configuration.name.endsWith('largefalse')) {
+            expect(
+              info.height * configuration.dpr,
+              configuration.tv ? 324 : 432,
+            );
+            expect(completeRows, configuration.tv ? 6 : 5);
+            if (configuration.tv && rich) {
+              final synopsis = find.byKey(const Key('guide-program-synopsis'));
+              final expected = switch (scale) {
+                1.0 => (1220.0, 680.0),
+                1.15 => (1273.0, 627.0),
+                _ => (1337.0, 563.0),
+              };
+              final bounds = tester.getRect(synopsis);
+              expect(bounds.left * configuration.dpr, closeTo(expected.$1, .1));
+              expect(
+                bounds.width * configuration.dpr,
+                closeTo(expected.$2, .1),
+              );
+              expect(bounds.right * configuration.dpr, closeTo(1900, .1));
+              expect(tester.widget<Text>(synopsis).style!.fontSize, 20);
+            }
+          }
+          final time = find.byKey(const Key('guide-program-meta'));
+          final progress = find.byKey(const Key('guide-program-progress'));
+          if (message != null) {
             expect(
               tester
-                  .widget<Text>(find.byKey(const Key('guide-info-channel')))
-                  .data,
-              contains('2  Synthetic channel 2'),
+                  .getRect(find.byKey(const Key('guide-playback-message')))
+                  .bottom,
+              closeTo(tester.getTopLeft(time).dy, .1),
             );
+          }
+          if (timingCases ||
+              configuration.name == 'tv-message-1.0-largefalse' && rich) {
+            final semantics = tester.ensureSemantics();
+            try {
+              await tester.pump();
+              final labels = tester.semantics
+                  .simulatedAccessibilityTraversal()
+                  .expand((node) => node.label.split('\n'));
+              expect(
+                labels,
+                containsAllInOrder([
+                  '1  Synthetic channel 1',
+                  'Signal House',
+                  'S12E05 · The Last Frequency',
+                  tester
+                      .widget<Text>(find.byKey(const Key('guide-info-genres')))
+                      .data!,
+                  'TV-14',
+                  'A signal reaches the crew. They follow its source across the city.',
+                  ?message,
+                  tester.widget<Text>(time).data!,
+                  '40m elapsed, 1h 20m remaining',
+                ]),
+              );
+            } finally {
+              semantics.dispose();
+            }
+          }
+          if (timingCases) {
+            final pinned = tester.getTopLeft(time);
+            final bar = tester.getRect(progress);
+            expect(pinned.dx, closeTo(bar.left, .1));
+            expect(
+              tester.getBottomLeft(time).dy +
+                  (scale == 1 ? 10 : 4) * canvasScale,
+              closeTo(bar.top, .1),
+            );
+            if (configuration.tv && scale == 1) {
+              final eyebrow = find.byKey(const Key('guide-info-channel'));
+              expect(
+                tester.getTopLeft(eyebrow).dy * configuration.dpr,
+                closeTo(114, 3),
+              );
+            }
+            guide.requestViewport(movieChannel, 2);
+            await tester.pumpAndSettle();
+            for (final (id, future, episode, facts) in [
+              ('channel-0', false, true, true),
+              ('channel-$movieChannel', false, false, true),
+              ('channel-$noFactsChannel', false, true, false),
+              ('channel-0', true, true, true),
+            ]) {
+              final program = guide
+                  .row(id)
+                  .programs
+                  .firstWhere(
+                    (program) => future
+                        ? program.scheduled.start.isAfter(now)
+                        : program.isCurrentAt(now),
+                  );
+              guide.focusProgram(program);
+              await tester.pumpAndSettle();
+              expect(
+                find.byKey(const Key('guide-info-episode')),
+                episode ? findsOneWidget : findsNothing,
+              );
+              expect(
+                find.byKey(const Key('guide-info-genres')),
+                facts ? findsOneWidget : findsNothing,
+              );
+              expect(
+                find.byKey(const Key('guide-program-badges')),
+                facts ? findsOneWidget : findsNothing,
+              );
+              expect(progress, future ? findsNothing : findsOneWidget);
+              expect(
+                tester.getTopLeft(time),
+                pinned,
+                reason: '$id future=$future',
+              );
+              expect(
+                tester.getRect(find.byKey(const Key('guide-information-area'))),
+                info,
+              );
+              expect(tester.widget<ListView>(list).itemExtent, rowHeight);
+            }
           }
           expect(tester.takeException(), isNull);
         } finally {

@@ -169,8 +169,8 @@ decision, 2026-11-16; Astra P-D4 adaptive-clearance decision, 2026-11-17.
 - The native aperture keeps following Flutter geometry.
 
 **Identity and synopsis.**
-- Identity = `max(schema.identityWidth, fraction × text row)`, giving 568/633/697.
-- The synopsis takes the remainder, with a floor of 400·s. It keeps its existing line clamp and ellipsis.
+- Identity is at least the measured badge schema and the responsive fraction of the text row. It takes any space left over beyond the synopsis measure.
+- The synopsis takes the remainder up to its 34 em measure. It keeps its line clamp and ellipsis.
 - Nothing depends on the focused program.
 
 **Rail number.**
@@ -189,7 +189,7 @@ decision, 2026-11-16; Astra P-D4 adaptive-clearance decision, 2026-11-17.
 - No marquee and no auto-scroll. Arbitrary input is not promised to fit.
 - Fix included: today the support label is dropped whenever the *unbounded* name is taller than the row. The specimen keeps the support line and clamps the name instead.
 
-**Desktop.** The rail fix ships on desktop as approved in §1c. The composition change remains TV-only. Desktop comparison permits only the rail-driven differences listed in the revised acceptance requirements below.
+**Desktop.** The rail fix ships on desktop as approved in §1c. The picture composition change remains TV-only. The information-band timing placement applies to both platforms as recorded below.
 
 ### 1b. Effects of the wider number column on the rest of the Guide
 
@@ -298,6 +298,12 @@ Resulting rail widths at 1920:
 **Evidence**
 - `final-999/` and `final-1000/`: every number on one line, picture 576×324, five rows, on TV at 1/1.15/1.3 Large and desktop at 1/1.3.
 - `current-999/`: the baseline, where 123 and 999 wrap.
+
+### UI audit decision, 2026-11-26
+
+- Airtime and remaining time sit directly above the progress bar on TV and desktop, at a fixed position for every listing. The bar's space remains reserved for listings outside the current airtime.
+- The TV synopsis uses the 20 px TV text floor at the existing 34 em measure. At 1920 × 1080 and 1.0×, that gives a 680 px column starting at approximately x1221.
+- The band height, picture, rows and rail retain their existing dimensions.
 
 ## 3. Focus and highlight per theme
 

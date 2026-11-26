@@ -5,6 +5,7 @@ import 'dart:ui' as ui;
 import 'package:flutter/foundation.dart'
     show TargetPlatform, defaultTargetPlatform, setEquals;
 import 'package:material_ui/material_ui.dart';
+import 'package:flutter/semantics.dart' show OrdinalSortKey;
 import 'package:flutter/services.dart';
 import 'package:lineup_desktop/platform/device_profile.dart';
 
@@ -4441,13 +4442,18 @@ class _TvGuideSchema {
       reserveLogo ? 64.0 : 0.0,
     );
     final badgeHeight = line(_GuideStyles.badge(context)) + 8;
+    final metadataHeight = line(_GuideStyles.metadata);
     final identity =
         line(_GuideStyles.channel) +
         titleHeight +
         line(_GuideStyles.episode) +
-        line(_GuideStyles.metadata) * 2 +
+        metadataHeight +
         badgeHeight +
-        gap * 5;
+        gap * 4;
+    // Airtime moved out of the identity. Its row and leading gap are
+    // reserved here alongside the existing bar and optional message.
+    final timing = gap + metadataHeight + gap + 4;
+    final message = metadataHeight;
     // A finite display budget for the five badge roles, independent of the
     // inspected program. Include the wider supported catalog codes; raw values
     // outside this budget retain their text/semantics but ellipsize on TV.
@@ -4477,7 +4483,7 @@ class _TvGuideSchema {
             .reduce((a, b) => a + b) +
         6 * 4;
     return _TvGuideSchema(
-      (identity + gap + 4 + line(_GuideStyles.metadata) + 28).ceilToDouble(),
+      (identity + timing + message + 28).ceilToDouble(),
       line(_GuideStyles.rowTitle) +
           line(_GuideStyles.rowSecondary(context)) +
           18,
@@ -4772,6 +4778,8 @@ class _ProgramDetails extends StatelessWidget {
           enlarged: enlarged,
         );
         final mergeFacts = dense && !enlarged;
+        // Merged facts share the same row budget at every density.
+        final singleTimingLine = isTv || mergeFacts;
         final gap = dense ? 4.0 : 10.0;
         final unscaledLogoSlot = dense ? 42.0 : 64.0;
         final contentScale = isTv || dense
@@ -4789,7 +4797,9 @@ class _ProgramDetails extends StatelessWidget {
           fontSize: 22 * contentScale,
         );
         final synopsisStyle = bodyStyle.copyWith(
-          fontSize: 18 * (1 + (contentScale - 1) / 2),
+          fontSize: isTv
+              ? LineupTypography.tvTextFloor
+              : 18 * (1 + (contentScale - 1) / 2),
         );
         final identityFlex = _GuideInformationLayout.identityFlex(
           height: box.maxHeight,
@@ -4839,19 +4849,14 @@ class _ProgramDetails extends StatelessWidget {
             math.max(line(scaledTitleStyle), logoSlot) +
             gap +
             line(episodeStyle) +
-            gap +
-            metadataHeight +
             (mergeFacts ? 0 : gap + metadataHeight) +
             gap +
             badgeHeight;
-        final progressReserve = gap + 4;
+        final timingReserve = gap + metadataHeight + gap + 4;
         final messageReserve = playbackMessage == null ? 0 : metadataHeight;
         final centerOffset = math.max(
           0.0,
-          (box.maxHeight -
-                  progressReserve -
-                  messageReserve -
-                  reservedIdentity) /
+          (box.maxHeight - timingReserve - messageReserve - reservedIdentity) /
               2,
         );
         final identity = Column(
@@ -4885,16 +4890,6 @@ class _ProgramDetails extends StatelessWidget {
                 style: episodeStyle,
               ),
             ],
-            SizedBox(height: gap),
-            Text(
-              mergeFacts && factsLine.isNotEmpty
-                  ? '$timeLine · $factsLine'
-                  : timeLine,
-              key: const Key('guide-program-meta'),
-              maxLines: isTv ? 1 : null,
-              overflow: isTv ? TextOverflow.ellipsis : null,
-              style: metadataStyle,
-            ),
             if (!mergeFacts && factsLine.isNotEmpty) ...[
               SizedBox(height: gap),
               Text(
@@ -4942,7 +4937,12 @@ class _ProgramDetails extends StatelessWidget {
             ],
           ],
         );
-        return Column(
+        Widget readingOrder(double order, Widget child) => Semantics(
+          container: true,
+          sortKey: OrdinalSortKey(order),
+          child: child,
+        );
+        final details = Column(
           crossAxisAlignment: CrossAxisAlignment.stretch,
           children: [
             Expanded(
@@ -4951,28 +4951,34 @@ class _ProgramDetails extends StatelessWidget {
                 child: Row(
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
-                    SizedBox(
-                      width: identityWidth,
-                      child: isTv
-                          ? identity
-                          : SingleChildScrollView(child: identity),
+                    readingOrder(
+                      0,
+                      SizedBox(
+                        width: identityWidth,
+                        child: isTv
+                            ? identity
+                            : SingleChildScrollView(child: identity),
+                      ),
                     ),
                     if (hasSynopsis && rowWidth > identityWidth) ...[
                       const SizedBox(width: 32),
                       Expanded(
-                        child: Padding(
-                          padding: EdgeInsets.only(top: eyebrowToTitle),
-                          child: LayoutBuilder(
-                            builder: (context, synopsisBox) => Text(
-                              item.summary!,
-                              key: const Key('guide-program-synopsis'),
-                              maxLines: math.max(
-                                1,
-                                (synopsisBox.maxHeight / line(synopsisStyle))
-                                    .floor(),
+                        child: readingOrder(
+                          1,
+                          Padding(
+                            padding: EdgeInsets.only(top: eyebrowToTitle),
+                            child: LayoutBuilder(
+                              builder: (context, synopsisBox) => Text(
+                                item.summary!,
+                                key: const Key('guide-program-synopsis'),
+                                maxLines: math.max(
+                                  1,
+                                  (synopsisBox.maxHeight / line(synopsisStyle))
+                                      .floor(),
+                                ),
+                                overflow: TextOverflow.ellipsis,
+                                style: synopsisStyle,
                               ),
-                              overflow: TextOverflow.ellipsis,
-                              style: synopsisStyle,
                             ),
                           ),
                         ),
@@ -4982,29 +4988,54 @@ class _ProgramDetails extends StatelessWidget {
                 ),
               ),
             ),
-            if (playbackMessage != null)
-              Text(
-                playbackMessage!,
-                key: const Key('guide-playback-message'),
-                maxLines: 1,
-                overflow: TextOverflow.ellipsis,
-                style: metadataStyle,
-              ),
             SizedBox(height: gap),
-            if (current)
-              Semantics(
-                label: '${_duration(elapsed)} elapsed, $remaining remaining',
-                child: LinearProgressIndicator(
-                  key: const Key('guide-program-progress'),
-                  value: duration.inMilliseconds <= 0
-                      ? 0
-                      : elapsed.inMilliseconds / duration.inMilliseconds,
-                  minHeight: 4,
-                ),
-              )
-            else
-              const SizedBox(height: 4),
+            readingOrder(
+              2,
+              Column(
+                mainAxisSize: MainAxisSize.min,
+                crossAxisAlignment: CrossAxisAlignment.stretch,
+                children: [
+                  if (playbackMessage != null)
+                    Text(
+                      playbackMessage!,
+                      key: const Key('guide-playback-message'),
+                      maxLines: 1,
+                      overflow: TextOverflow.ellipsis,
+                      style: metadataStyle,
+                    ),
+                  Text(
+                    mergeFacts && factsLine.isNotEmpty
+                        ? '$timeLine · $factsLine'
+                        : timeLine,
+                    key: const Key('guide-program-meta'),
+                    maxLines: singleTimingLine ? 1 : null,
+                    overflow: singleTimingLine ? TextOverflow.ellipsis : null,
+                    style: metadataStyle,
+                  ),
+                  SizedBox(height: gap),
+                  if (current)
+                    Semantics(
+                      label:
+                          '${_duration(elapsed)} elapsed, $remaining remaining',
+                      child: LinearProgressIndicator(
+                        key: const Key('guide-program-progress'),
+                        value: duration.inMilliseconds <= 0
+                            ? 0
+                            : elapsed.inMilliseconds / duration.inMilliseconds,
+                        minHeight: 4,
+                      ),
+                    )
+                  else
+                    const SizedBox(height: 4),
+                ],
+              ),
+            ),
           ],
+        );
+        return Semantics(
+          container: true,
+          explicitChildNodes: true,
+          child: details,
         );
       },
     );
