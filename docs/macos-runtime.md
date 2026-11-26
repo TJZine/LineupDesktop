@@ -20,51 +20,48 @@ required before the first paid submission** (see "Distribution notes" below).
 
 | Component | Exact source | License and distribution decision |
 | --- | --- | --- |
-| libmpv (`libmpv.2.dylib`) | mpv `v0.41.0-1092-g3186d369f`, full commit `3186d369f9f090cd1363be0ac46a037824b702c6` (the commit Windows pins), plus `tool/macos/mpv-patches/0001-vulkan-mac-embed-into-host-CAMetalLayer-via-wid.patch` (SHA-256 `9d070fc30414a80b1a418c6b15dee8071086298e7d6aed3236babf331f964b15`) | LGPL-2.1-or-later; built with `-Dgpl=false`. Ship the patch, the LGPL text, and the source links. |
-| FFmpeg (`libavcodec.63`, `libavformat.63`, `libavutil.61`, `libavfilter.12`, `libswscale.10`, `libswresample.7`) | Release 9.0.2, `https://ffmpeg.org/releases/ffmpeg-9.0.2.tar.xz`, SHA-256 `8c3850283eb25fa026482078a04051e0be17347b09ef81a0849bec15a96e002e` | LGPL-2.1-or-later. Configured without `gpl`, `version3`, or `nonfree`; every `*_license()` reports `LGPL version 2.1 or later`. Contains the IJG-derived DCT files (`jfdctfst.c`, `jfdctint_template.c`, `jrevdct.c`): ship the IJG notice and the credit "This software is based in part on the work of the Independent JPEG Group". FFmpeg 9.0.2 (and master) also has a few files with GPL-2.0+ headers that its LGPL configuration still builds. They are excluded, so no GPL file is compiled; `collect-notices.py` fails the build if one is:<br>• `libavfilter/perlin.c` and `qp_table.c/.h`: the `perlin` video source and the `codecview` debug filter are disabled (neither is used in playback).<br>• `libavcodec/aarch64/ac3dsp_init_aarch64.c` and `ac3dsp_neon.S`: not built, by `tool/macos/ffmpeg-patches/0001-…`. The AC-3 DSP falls back to C, and AC-3/E-AC-3 decode is unchanged.<br>• `libavutil/aarch64/crc.S`: not built, by `tool/macos/ffmpeg-patches/0002-…` with `--disable-arm-crc --disable-pmull --disable-eor3`. libavutil uses C CRC. |
-| libplacebo (`libplacebo.360.dylib`) | Tag `v7.360.1`, commit `cee9b076f2c63104ccfd497fa79c39a867293ec4`, with submodules, from `https://code.videolan.org/videolan/libplacebo.git` | LGPL-2.1-or-later. Vulkan, Dolby Vision reshaping (`dovi`), and lcms enabled. It also contains the header-only fast_float (MIT, Apache-2.0, or BSL-1.0) and statically linked glslang (below). |
+| libmpv (`libmpv.2.dylib`) | mpv `v0.42.0-229-gd32c910be`, full commit `d32c910be63d1dd325c7b3efeaa09c3c4c8d51ce` (the commit Windows pins), plus `tool/macos/mpv-patches/0001-vulkan-mac-embed-into-host-CAMetalLayer-via-wid.patch` (SHA-256 `9d070fc30414a80b1a418c6b15dee8071086298e7d6aed3236babf331f964b15`) | LGPL-2.1-or-later; built with `-Dgpl=false`. Ship the patch, the LGPL text, and the source links. |
+| FFmpeg (`libavcodec.63`, `libavformat.63`, `libavutil.61`, `libavfilter.12`, `libswscale.10`, `libswresample.7`) | Release 9.1, `https://ffmpeg.org/releases/ffmpeg-9.1.tar.xz`, SHA-256 `1a4d394ae63d190a526cd052eb4415c156b5c5e2df37efab41a7de0b8fde2433` | LGPL-2.1-or-later. Configured without `gpl`, `version3`, or `nonfree`; every `*_license()` reports `LGPL version 2.1 or later`. Contains the IJG-derived DCT files (`jfdctfst.c`, `jfdctint_template.c`, `jrevdct.c`): ship the IJG notice and the credit "This software is based in part on the work of the Independent JPEG Group". FFmpeg 9.1 also has a few files with GPL-2.0+ headers that its LGPL configuration still builds. They are excluded, so no GPL file is compiled; `collect-notices.py` fails the build if one is:<br>• `libavfilter/perlin.c` and `qp_table.c/.h`: the `perlin` video source and the `codecview` debug filter are disabled (neither is used in playback).<br>• `libavcodec/aarch64/ac3dsp_init_aarch64.c` and `ac3dsp_neon.S`: not built, by `tool/macos/ffmpeg-patches/0001-…`. The AC-3 DSP falls back to C, and AC-3/E-AC-3 decode is unchanged.<br>• `libavutil/aarch64/crc.S`: not built, by `tool/macos/ffmpeg-patches/0002-…` with `--disable-arm-crc --disable-pmull --disable-eor3`. libavutil uses C CRC. |
+| libplacebo (`libplacebo.387.dylib`) | Tag `v7.387.0`, commit `275f7dea27924cdd34ab2e6c20e448b6bc4fab65`, with submodules, from `https://code.videolan.org/videolan/libplacebo.git` | LGPL-2.1-or-later. Vulkan, Dolby Vision reshaping (`dovi`), and lcms enabled. It also contains the header-only fast_float (MIT, Apache-2.0, or BSL-1.0) and statically linked glslang (below). |
 | glslang (static, inside libplacebo) | Release 16.6.0, `https://github.com/KhronosGroup/glslang/archive/refs/tags/16.6.0.tar.gz`, SHA-256 `9c09b901149c729df745057dafa815278aaa101b84d2b6e14f16a42de52f97f2` | BSD-3-Clause, BSD-2-Clause, MIT, and Apache-2.0. Its license file also contains GPL-3.0 text with the Bison exception, for the historical Bison parser skeleton; the exception permits distribution under any terms. **Flagged for the legal review.** |
 | MoltenVK (`libMoltenVK.dylib`) | Tag `v1.4.2`, commit `db66022459ffb663aa2b50f6b018bc2e124f5edf`, from `https://github.com/KhronosGroup/MoltenVK.git`. Its `fetchDependencies` revisions are pinned in the lock file and checked: Vulkan-Headers `e3b1eec0…`, SPIRV-Cross `6c09849f…`, SPIRV-Headers `29981f65…`, SPIRV-Tools `0d6fd73c…`, Vulkan-Tools `8c66b352…`, Volk `77689330…`, cereal `a56bad8b…` | Apache-2.0. Compiled into it: SPIRV-Cross (Apache-2.0 or MIT), SPIRV-Tools (Apache-2.0; its disassembler and utilities), the SPIRV-Headers grammar tables (Khronos MIT-style), and cereal (BSD-3-Clause). Vulkan-Tools and Volk are fetched but not linked. libplacebo and mpv link MoltenVK directly; there is no Vulkan loader and no ICD manifest search. |
 | Vulkan-Headers | Exact MoltenVK pin above (`e3b1eec08173d6b825cd3ac88c885a63b621504a`); also the `vk.xml` used to generate libplacebo's Vulkan code | Apache-2.0 or MIT; headers only. |
 | libcurl (`libcurl.4.dylib`) | Release 8.23.0, `https://curl.se/download/curl-8.23.0.tar.bz2`, SHA-256 `95b22eb32bf6d1fa6e3e9463bdb61cece3efc56d86576a9b3cbd428246a6d854` | curl license (MIT-style). Its `curlx/inet_ntop.c` and `curlx/inet_pton.c` are ISC (Internet Software Consortium), and those notices ship too. HTTP and HTTPS only. See "TLS decision". |
 | OpenSSL (`libssl.3`, `libcrypto.3`) | Release 3.5.9 (LTS), `https://github.com/openssl/openssl/releases/download/openssl-3.5.9/openssl-3.5.9.tar.gz`, SHA-256 `603f5602e2eef00d77fbd429d34dcd5822bb301757a1bc9cdb24c670f1eb859a` | Apache-2.0. Providers built in (`no-module`), no engines, and no DSO loading, so it never loads code at runtime. |
-| dav1d (`libdav1d.7.dylib`) | Release 1.5.4, `https://downloads.videolan.org/pub/videolan/dav1d/1.5.4/dav1d-1.5.4.tar.xz`, SHA-256 `686616b7c69eb88d44459391ab25cac13b6647a3b288835c5784e71c1514a5c5` | BSD-2-Clause. AV1 software decode (M1 has no AV1 hardware decoder). |
+| dav1d (`libdav1d.7.dylib`) | Release 1.5.5, `https://downloads.videolan.org/pub/videolan/dav1d/1.5.5/dav1d-1.5.5.tar.xz`, SHA-256 `ca96b1d0ba3f01f55de7231d775892b64994ba061aaeeaaa4f662a390b3abf9e` | BSD-2-Clause. AV1 software decode (M1 has no AV1 hardware decoder). |
 | libass (`libass.9.dylib`) | Release 0.17.5, `https://github.com/libass/libass/releases/download/0.17.5/libass-0.17.5.tar.xz`, SHA-256 `2dca25c0e0c837ddf00b52011b3f82cac1e4ddd3ad018227806b0c2288864acc` | ISC. CoreText font provider; no fontconfig. |
 | FreeType (`libfreetype.6.dylib`) | Release 2.15.0, `https://download.savannah.gnu.org/releases/freetype/freetype-2.15.0.tar.xz`, SHA-256 `93cd47eb719c325107f2d3cf087d06299e944c3b48a40b55537302304dea1dd5` | Dual FTL or GPL-2.0; **used under the FTL**, which requires a credit in the documentation (the Licenses screen). Its BDF and PCF drivers and `src/base/fthash.c` carry their own MIT-style notices (Computing Research Labs/New Mexico State University, Francesco Zappa Nardelli), and those ship too. The default module set is kept: `fthash.c` is part of FreeType's base library and needs its notice anyway, and dropping the BDF/PCF drivers would need a FreeType source change (`modules.cfg`). |
-| HarfBuzz (`libharfbuzz.0.dylib`) | Release 14.6.0, `https://github.com/harfbuzz/harfbuzz/releases/download/14.6.0/harfbuzz-14.6.0.tar.xz`, SHA-256 `d07a007327277708a2a73ae437887cdbaf282937f6d03ca5467723e9099af586` | MIT ("Old MIT"). Shaping library only. Its Universal Shaping Engine tables derive from Microsoft data under `src/ms-use/COPYING` (MIT), which ships too. |
-| FriBidi (`libfribidi.0.dylib`) | Release 1.0.17, `https://github.com/fribidi/fribidi/releases/download/v1.0.17/fribidi-1.0.17.tar.xz`, SHA-256 `6949dcde27d41cebad1fd741fcafc36d55a1020d2d872d4a6eb3914caabbada2` | LGPL-2.1-or-later for the library. Only the library is built, not its GPL table-generation tools. |
-| Little CMS (`liblcms2.2.dylib`) | Release 2.19.1, `https://github.com/mm2/Little-CMS/releases/download/lcms2.19.1/lcms2-2.19.1.tar.gz`, SHA-256 `bfc54f7bab59fbc921012014a8032e4cba4abd46db47d46b76416a8c0b2815c8` | MIT. The GPL-3.0 fast-float and threaded plugins are disabled. |
+| HarfBuzz (`libharfbuzz.0.dylib`) | Release 15.2.0, `https://github.com/harfbuzz/harfbuzz/releases/download/15.2.0/harfbuzz-15.2.0.tar.xz`, SHA-256 `e2ec49090744383cdbe7df808c1cedaafba06a97be8dc4211fe546ba585f12cb` | MIT ("Old MIT"). Shaping library only. Its Universal Shaping Engine tables derive from Microsoft data under `src/ms-use/COPYING` (MIT), which ships too. |
+| FriBidi (`libfribidi.0.dylib`) | Release 1.0.18, `https://github.com/fribidi/fribidi/releases/download/v1.0.18/fribidi-1.0.18.tar.xz`, SHA-256 `1de5e8073d035388b71d0b2d452b1da1f8caeea8a7702997b401fe1b6250727f` | LGPL-2.1-or-later for the library. Only the library is built, not its GPL table-generation tools. |
+| Little CMS (`liblcms2.2.dylib`) | Release 2.20, `https://github.com/mm2/Little-CMS/releases/download/lcms2.20/lcms2-2.20.tar.gz`, SHA-256 `18ff5504fa9cc8a2b1f3591180d90ead16c8a2ea78e530523b46eab70e1ca6b9` | MIT. The GPL-3.0 fast-float and threaded plugins are disabled. |
 
 macOS supplies zlib, bzip2, iconv, the Swift runtime (`/usr/lib/swift`),
 libc++, and the system frameworks. They are not bundled.
 
-**Independent checksum cross-check.** Homebrew pins the identical upstream
-artifact for FFmpeg, glslang, libass, FreeType, HarfBuzz, FriBidi, OpenSSL,
-Little CMS, and curl (`.tar.bz2`), and every one of those SHA-256 values
-matches. For dav1d, Homebrew pins a different artifact (the GitLab-generated
-`.tar.bz2` archive), so it is no cross-check. The lock file's dav1d `.tar.xz`
-hash matches the `.sha256` file VideoLAN publishes beside the release. Git
-sources (mpv, libplacebo, MoltenVK, and MoltenVK's dependencies) are verified
-by full commit after checkout.
+The SHA-256 digests for HarfBuzz, FriBidi and Little CMS match the release
+assets in their upstream GitHub repositories. VideoLAN publishes the matching
+`.sha256` alongside the dav1d archive. FFmpeg's 9.1 tarball verified with the
+release key `FCF986EA15E6E293A5644F10B4322F04D67658D8`. The build checks
+each archive against the lock and checks Git sources by full commit.
 
 ### Static-linkage license audit
 
 For each shipped dylib, this table lists the third-party code compiled into it
-and the shipped license file that covers it. The evidence is the symbols in the
-shipped dylib (`nm`). FFmpeg's libraries are stripped of local symbols, so they
-were checked against the unstripped build-tree libraries. The count after each
+and the shipped license file that covers it. The symbol counts below come from `nm -C` on the November 2026
+arm64 runtime. FFmpeg's libraries are stripped of local symbols, so they were
+checked against the unstripped build-tree libraries. The count after each
 item is the number of matching symbols.
 
 | Dylib | Code compiled in (symbol evidence) | Shipped license files (`dist/arm64/licenses/…`) |
 | --- | --- | --- |
-| libmpv | mpv, including its Swift code (1878 `$s5swift` symbols) and `ta` (42) | `mpv/LICENSE.LGPL`, `mpv/Copyright`, and the generated `mpv/NOTICES.txt` for files under other terms (below) |
+| libmpv | mpv, including its Swift code (1951 `$s5swift` symbols) and `ta` (42) | `mpv/LICENSE.LGPL`, `mpv/Copyright`, and the generated `mpv/NOTICES.txt` for files under other terms (below) |
 | libavcodec, libavformat, libavutil, libavfilter, libswscale, libswresample | FFmpeg. libavcodec includes the IJG DCT code (8: `ff_j_rev_dct*`, `ff_fdct_ifast*`, `ff_jpeg_fdct_islow*`). No GPL filters are present: 0 `ff_vf_{hqdn3d,boxblur,delogo,eq,pp7,spp,uspp}` | `ffmpeg/LICENSE.md`, `ffmpeg/COPYING.LGPLv2.1`, `ffmpeg/IJG-NOTICE.txt` (IJG notice plus the required credit) |
-| libplacebo | libplacebo; glslang (2144 `glslang::`, 352 `spv::` builder); fast_float (23); the generated Vulkan code from `vk.xml`. No xxhash (0) | `libplacebo/LICENSE`, `glslang/LICENSE.txt`, `fast_float/LICENSE-{MIT,APACHE,BOOST}`, `vulkan-headers/*` |
-| libMoltenVK | MoltenVK; SPIRV-Cross (5404 `MVK_spirv_cross::`); SPIRV-Tools (337 `spvtools::`); SPIRV-Headers grammar (57 `spvOpcode*`/operand-table symbols); cereal (80 `cereal::`). No Volk (0) | `moltenvk/LICENSE`, `spirv-cross/*`, `spirv-tools/LICENSE`, `spirv-headers/LICENSE`, `cereal/LICENSE`, `vulkan-headers/*` |
+| libplacebo | libplacebo; glslang (2144 `glslang::`, 300 `spv::Builder`); fast_float (23); the generated Vulkan code from `vk.xml`. No xxhash (0) | `libplacebo/LICENSE`, `glslang/LICENSE.txt`, `fast_float/LICENSE-{MIT,APACHE,BOOST}`, `vulkan-headers/*` |
+| libMoltenVK | MoltenVK; SPIRV-Cross (5404 `MVK_spirv_cross::`); SPIRV-Tools (337 `spvtools::`); SPIRV-Headers grammar (32 `spvOpcode` symbols); cereal (80 `cereal::`). No Volk (0) | `moltenvk/LICENSE`, `spirv-cross/*`, `spirv-tools/LICENSE`, `spirv-headers/LICENSE`, `cereal/LICENSE`, `vulkan-headers/*` |
 | libcurl | curl; ISC `curlx_inet_ntop`/`curlx_inet_pton` (2) | `curl/COPYING`, `curl/inet_ntop-ISC.txt`, `curl/inet_pton-ISC.txt` |
 | libssl, libcrypto | OpenSSL only (Apache-2.0 for the whole tree) | `openssl/LICENSE.txt` |
 | libfreetype | FreeType; BDF driver (26 `_bdf_`), PCF driver (33 `_pcf_`), `fthash` (11 `ft_hash_`) | `freetype/LICENSE.TXT`, `freetype/FTL.TXT`, `freetype/BDF-README`, `freetype/PCF-README`, `freetype/fthash-NOTICE.txt` |
-| libharfbuzz | HarfBuzz, including the USE shaper tables (114 `use` symbols) | `harfbuzz/COPYING`, `harfbuzz/ms-use-COPYING` |
+| libharfbuzz | HarfBuzz, including the USE shaper tables (127 `use` symbols) | `harfbuzz/COPYING`, `harfbuzz/ms-use-COPYING` |
 | libass, libdav1d, libfribidi, liblcms2 | Own code only (exported symbols are all `ass_`, `dav1d_`, `fribidi_`, or `cms`) | `libass/COPYING`, `dav1d/COPYING`, `fribidi/COPYING`, `lcms2/LICENSE` |
 
 That table covers whole third-party libraries. Individual files inside a
@@ -96,18 +93,18 @@ comments, or in generated files, are not detected.
 
 | Component | Compiled files scanned | Files with notice-bearing headers | Distinct notices emitted |
 | --- | ---: | ---: | ---: |
-| mpv | 413 | 17 | 8 |
-| ffmpeg | 3090 | 59 | 49 |
-| libplacebo | 130 | 5 | 4 |
+| mpv | 421 | 17 | 8 |
+| ffmpeg | 3136 | 58 | 48 |
+| libplacebo | 136 | 5 | 4 |
 | glslang | 102 | 98 | 75 |
 | moltenvk (incl. SPIRV-Cross, SPIRV-Tools, cereal) | 425 | 282 | 119 |
 | openssl | 1556 | 0 | 0 |
 | curl | 460 | 2 | 2 |
 | lcms2 | 29 | 0 | 0 |
-| dav1d | 127 | 1 | 1 |
+| dav1d | 129 | 1 | 1 |
 | freetype | 416 | 17 | 17 |
 | fribidi | 59 | 0 | 0 |
-| harfbuzz | 399 | 1 | 1 |
+| harfbuzz | 402 | 1 | 1 |
 | libass | 58 | 2 | 2 |
 
 "Compiled files" includes the headers each source included, as long as they
@@ -133,7 +130,10 @@ The generated notices include, for example:
 - **curl:** the ISC `inet_ntop`/`inet_pton`.
 
 No compiled file has a GPL-only header. FFmpeg's GPL-headered files are no
-longer built (see the component table).
+longer built (see the component table). Among the files added between the 9.0.2
+and 9.1 release archives, four GPL-only sources belong to `tests/checkasm`
+(`base64.c`, `bitpackeddec.c`, `ttadsp.c` and `vvc_pred.c`). That test binary
+is outside the runtime build.
 
 ### Build configuration
 
@@ -201,7 +201,8 @@ file under `dist/` contains the output directory, the repository path, or
 - **Strip.** `dist` strips debugging symbol-table entries (`strip -S`), which
   removes Swift's AST path.
 
-**Byte identity across directories.** Two `--clean` builds from different
+**Byte identity across directories (October 2026, mpv `3186d369f`).** Two
+`--clean` builds from different
 directories were compared: `build/macos-runtime` in the worktree, and a
 scratch directory outside the repository. 16 of the 18 dylibs are
 byte-identical, and the licenses and headers are identical.
@@ -237,7 +238,7 @@ Why:
 - In this mpv version, mpv's own libcurl stream handles `http` and `https`
   (the `curl-max-redirects` and `http-header-fields` behavior the Windows
   player relies on). It is enabled by default with libavformat ≥ 62.15.101;
-  FFmpeg 9.0.2 is libavformat 63. mpv sets `CURLSSLOPT_NATIVE_CA` and maps
+  FFmpeg 9.1 is libavformat 63. mpv sets `CURLSSLOPT_NATIVE_CA` and maps
   `tls-verify` to `CURLOPT_SSL_VERIFYPEER` and `CURLOPT_SSL_VERIFYHOST`.
 - curl removed its Secure Transport backend. Its `CURLSSLOPT_NATIVE_CA`
   documentation lists OpenSSL's native CA support for Windows only. Since
@@ -269,6 +270,20 @@ by default in FFmpeg 9 and there are no trust anchors, so any HTTPS connection
 FFmpeg makes itself **fails closed**. That covers the header-free fallback
 opens in [the authenticated-reference audit](libmpv-authenticated-reference-investigation.md)
 and `curl-enabled=no`. The verification below shows this.
+
+## Runtime verification on November 25, 2026
+
+On an M1 Pro running macOS 27.2.1 with Xcode 27.0, a clean arm64 build at mpv
+`d32c910be` produced 18 dylibs. The lock SHA-256 was
+`c68c6f79763511eb4bf2528e3a8412bc1a6565d6f607da45f4cae11121a4cae3`.
+The runtime verifier passed the install-name, closure, path, configuration and
+license checks. The embed test signed a fixture app with these libraries and
+verified the deep, strict signature and the bundled notices and patches.
+
+The production-adapter authenticated-reference suite passed all 55 cases on
+this runtime. Offscreen playback of synthetic BT.709 H.264 through a host
+`CAMetalLayer` reported `gpu-next`, `macvk` and `videotoolbox`. The final
+candidate still needs the Sonoma playback, HDR and VoiceOver pass.
 
 ## Verification evidence (2026-10-17, M1 Pro, macOS 27.0.1, Xcode 27.0)
 
@@ -604,14 +619,14 @@ This is an engineering list of review items, not legal advice.
   missing.
 - **Byte identity:** libharfbuzz and libmpv still differ between build
   directories (see "Path-neutral builds").
-- **Patch upkeep:** the embedding patch applies to `3186d369f` only, and each
-  mpv bump needs it rebased.
+- **Patch upkeep:** the embedding patch applies to `d32c910be`. Recheck its
+  context and behavior with each mpv update.
 
 ## Source and license locations
 
-- mpv: <https://github.com/mpv-player/mpv/tree/3186d369f9f090cd1363be0ac46a037824b702c6>
-- FFmpeg 9.0.2: <https://ffmpeg.org/releases/ffmpeg-9.0.2.tar.xz>
-- libplacebo: <https://code.videolan.org/videolan/libplacebo/-/tree/cee9b076f2c63104ccfd497fa79c39a867293ec4>
+- mpv: <https://github.com/mpv-player/mpv/tree/d32c910be63d1dd325c7b3efeaa09c3c4c8d51ce>
+- FFmpeg 9.1: <https://ffmpeg.org/releases/ffmpeg-9.1.tar.xz>
+- libplacebo: <https://code.videolan.org/videolan/libplacebo/-/tree/275f7dea27924cdd34ab2e6c20e448b6bc4fab65>
 - glslang 16.6.0: <https://github.com/KhronosGroup/glslang/tree/16.6.0>
 - MoltenVK 1.4.2: <https://github.com/KhronosGroup/MoltenVK/tree/db66022459ffb663aa2b50f6b018bc2e124f5edf>
 - SPIRV-Tools (MoltenVK pin): <https://github.com/KhronosGroup/SPIRV-Tools/tree/0d6fd73ca73830ccab5fa1f00ed5ed40124e2c55>
@@ -620,12 +635,12 @@ This is an engineering list of review items, not legal advice.
 - cereal (MoltenVK pin): <https://github.com/USCiLab/cereal/tree/a56bad8bbb770ee266e930c95d37fff2a5be7fea>
 - curl 8.23.0: <https://curl.se/download/curl-8.23.0.tar.bz2>; Apple SecTrust: <https://curl.se/docs/sslcerts.html>, <https://curl.se/docs/install.html>
 - OpenSSL 3.5.9: <https://github.com/openssl/openssl/releases/tag/openssl-3.5.9>
-- dav1d 1.5.4: <https://downloads.videolan.org/pub/videolan/dav1d/1.5.4/>
+- dav1d 1.5.5: <https://downloads.videolan.org/pub/videolan/dav1d/1.5.5/>
 - libass 0.17.5: <https://github.com/libass/libass/releases/tag/0.17.5>
 - FreeType 2.15.0: <https://download.savannah.gnu.org/releases/freetype/>
-- HarfBuzz 14.6.0: <https://github.com/harfbuzz/harfbuzz/releases/tag/14.6.0>
-- FriBidi 1.0.17: <https://github.com/fribidi/fribidi/releases/tag/v1.0.17>
-- Little CMS 2.19.1: <https://github.com/mm2/Little-CMS/releases/tag/lcms2.19.1>
+- HarfBuzz 15.2.0: <https://github.com/harfbuzz/harfbuzz/releases/tag/15.2.0>
+- FriBidi 1.0.18: <https://github.com/fribidi/fribidi/releases/tag/v1.0.18>
+- Little CMS 2.20: <https://github.com/mm2/Little-CMS/releases/tag/lcms2.20>
 
 ## Subtitle presentation
 

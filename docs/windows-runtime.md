@@ -9,21 +9,19 @@ binaries; `tool/windows/prepare-mpv.ps1` downloads and verifies them.
 
 | Component | Exact source/build | License and distribution decision |
 | --- | --- | --- |
-| libmpv | mpv `v0.41.0-1092-g3186d369f`, full commit `3186d369f9f090cd1363be0ac46a037824b702c6`; configured with `-Dgpl=false`; DLL SHA-256 `4BA364226FD2EA5DD2C6F2333F0118462DA549FEED92360FB766A3924E313A51` | LGPL-2.1-or-later; selected for dynamic bundling with license, source/build links, and replacement permitted. |
-| FFmpeg | `N-127094-gf68e1afc1`, full commit `f68e1afc1b7cf4275d09f1a9026ff80228cf99a8`; companion LGPL x86-64 FFmpeg executable reports LGPL version 3 or later | LGPLv3; statically combined into the replaceable libmpv DLL. Package the LGPLv3 and GPLv3 texts plus the exact source/build recipe. |
-| libplacebo | Embedded build version `7.374.0` (`v7.360.0-149-g92b5ac6-dirty`); base source commit `92b5ac6db79f4d680eb656692f7bf51e9606f42a` | LGPL-2.1-or-later; statically combined into the replaceable libmpv DLL. Package its license and exact source/build link. |
-| Windows build | zhongfly/mpv-winbuild commit `88bdc4db67bb476a7606921eb2d68b273440d59b`, successful run `37004200613`, LGPL x86-64 job `110828586306` | Reproducible public build recipe. Its LGPL patch disables x264, x265, Rubber Band, DVD navigation, and other incompatible components while retaining decode, D3D11, gpu-next, hardware decode, HDR/tone mapping, and subtitles. |
-| Release asset | `mpv-dev-lgpl-x86_64-20261002-git-3186d369f9.7z` | SHA-256 `322CB0040B97B15F97069F631F665FD63DA331CED92705F757DA13B99380DA5F`; pinned acquisition. |
+| libmpv | mpv `v0.42.0-229-gd32c910be`, full commit `d32c910be63d1dd325c7b3efeaa09c3c4c8d51ce`; configured with `-Dgpl=false`; DLL SHA-256 `7E8292C962C2F96C43A122DF7836F4C901A95FF9B59B9B55A43A71859E42DD89` | LGPL-2.1-or-later; selected for dynamic bundling with license, source/build links, and replacement permitted. |
+| FFmpeg | `N-129288-gc81e35cf2`, full commit `c81e35cf2b6ea570f3363ec3ffa7318281f5f6be`; the LGPL job’s FFmpeg configuration report records “LGPL version 3 or later” | LGPLv3; statically combined into the replaceable libmpv DLL. Package the LGPLv3 and GPLv3 texts plus the exact source/build recipe. |
+| libplacebo | Embedded build version `7.401.0` (`v7.387.0-168-gbfdb8de-dirty`); base source commit `bfdb8dec6ef659a3c2dcb8c976f99b740635cf0f` | LGPL-2.1-or-later; statically combined into the replaceable libmpv DLL. Package its license and exact source/build link. |
+| Windows build | zhongfly/mpv-winbuild commit `49520b9987f0e6dc7cf0db83634e45c416bd58b6`, successful run `45609693015`, LGPL x86-64 job `139189777607` | Public build recipe. Its LGPL patch disables x264, x265, Rubber Band, DVD navigation, and other incompatible components while retaining decode, D3D11, gpu-next, hardware decode, HDR/tone mapping, and subtitles. |
+| Release asset | `mpv-dev-lgpl-x86_64-20261125-git-d32c910be6.7z` | SHA-256 `C5A583DCDD9106BC125C6A69A9533FA1445193AE7082A56EFDA62D37F7EDC775`; pinned acquisition. |
 
-The verified archive is mirrored in the project-controlled
-[`runtime-mpv-20261002-3186d369f9` release](https://github.com/TJZine/LineupDesktop/releases/tag/runtime-mpv-20261002-3186d369f9).
-The upstream builder retains releases for only 30 days. After its October 2
-release expired, the exact archive was recovered from
-[build artifact `11226476657`](https://github.com/zhongfly/mpv-winbuild/actions/runs/37004200613/artifacts/11226476657).
-Its archive, header and DLL SHA-256 values match the existing pins;
-`tool/windows/prepare-mpv.ps1` downloads the mirror and retains those checks.
-Keep the mirror immutable and preserve these exact bytes; do not substitute
-a rebuilt archive under the existing provenance identity.
+The [upstream release](https://github.com/zhongfly/mpv-winbuild/releases/tag/2026-11-25-d32c910be6)
+and [build artifact 15021981574](https://github.com/zhongfly/mpv-winbuild/actions/runs/45609693015/artifacts/15021981574)
+contain identical archive bytes. The upstream builder retains releases for
+about 30 days. `tool/windows/prepare-mpv.ps1` downloads the archive from the
+[project mirror](https://github.com/TJZine/LineupDesktop/releases/tag/runtime-mpv-20261125-d32c910be6)
+and checks its SHA-256 before extraction. It also checks the DLL and public
+`include/mpv/client.h` (SHA-256 `BA4E134B75AD48CCDA90C56292B04A5222B815795682BFB946300AB6EDBBB12A`).
 
 ## Static runtime notice inventory
 
@@ -31,70 +29,92 @@ This software is based in part on the work of the Independent JPEG Group.
 Portions of this software are copyright © 1996–2026 The FreeType Project
 (https://freetype.org). All rights reserved.
 
-The LGPL x86-64 [job 110828586306](https://github.com/zhongfly/mpv-winbuild/actions/runs/37004200613/job/110828586306)
-checked out [mpv-winbuild-cmake at `05a60b3cfd04e3e3b89918f4a27f3dde2935dff2`](https://github.com/shinchiro/mpv-winbuild-cmake/tree/05a60b3cfd04e3e3b89918f4a27f3dde2935dff2)
-and applied the [LGPL build patch](https://github.com/zhongfly/mpv-winbuild/blob/88bdc4db67bb476a7606921eb2d68b273440d59b/compile-lgpl-libmpv.patch).
-The [`64-lgpl_logs` artifact](https://github.com/zhongfly/mpv-winbuild/actions/runs/37004200613/artifacts/11226606392)
+The LGPL x86-64 [job 139189777607](https://github.com/zhongfly/mpv-winbuild/actions/runs/45609693015/job/139189777607)
+checked out [mpv-winbuild-cmake at `7e36e1eab5094a642c5a3c1771551f06b5ec3224`](https://github.com/shinchiro/mpv-winbuild-cmake/tree/7e36e1eab5094a642c5a3c1771551f06b5ec3224)
+and applied the [LGPL build patch](https://github.com/zhongfly/mpv-winbuild/blob/49520b9987f0e6dc7cf0db83634e45c416bd58b6/compile-lgpl-libmpv.patch).
+The [`64-lgpl_logs` artifact](https://github.com/zhongfly/mpv-winbuild/actions/runs/45609693015/artifacts/15021652403)
 contains the mpv and FFmpeg configuration reports and dependency build logs.
 The inventory uses those logs, the patched recipe, and version strings and
-imports from the pinned PE DLL. FFmpeg was configured static and mpv used
-`--prefer-static`. The PE import table identifies Windows libraries and the
+imports from the pinned PE DLL. When a cached library had no source update in
+this run, the source link uses the last recorded update on the recipe branch
+in preceding LGPL x86-64 jobs, the upstream release matching the reported
+version, or a notice from the same upstream source tree. These links identify the notice sources. For example, upstream [November 24](https://github.com/zhongfly/mpv-winbuild/actions/runs/45389381112)
+and [November 14](https://github.com/zhongfly/mpv-winbuild/actions/runs/43592714705) update logs supply
+cached source references. The current job records any
+updated repositories in its `force-update` steps. FFmpeg was configured static
+and mpv used `--prefer-static`. The PE import table identifies Windows libraries and the
 external Vulkan loader. The archived logs do not include a final linker map or
-a complete source revision manifest. Static archive selection can omit
+a complete list of linked objects. Static archive selection can omit
 individual objects, and a build dependency alone does not prove inclusion.
 
 The package carries the four mpv, FFmpeg and libplacebo texts identified above
-and the additional source notices below in `licenses/`. A source link points
-to the observed commit when available, or to the upstream release matching the
-version reported by the build. A reported version alone does not establish
-the exact checkout of a floating branch. License descriptions summarize the
-listed upstream texts. The package preserves the texts with LF line endings
+and the additional source notices below in `licenses/`. License descriptions
+summarize the listed upstream texts. The package preserves the texts with LF line endings
 and verifies each file against `third_party/libmpv/notice-hashes.psd1`. Prepare
 libmpv again when this manifest changes.
 
 | Component | Build identity or reported version | Upstream terms | Source for notice | Packaged files |
 | --- | --- | --- | --- | --- |
-| Brotli | 1.2.0 | MIT | [Upstream source](https://github.com/google/brotli/tree/v1.2.0) | `Brotli-LICENSE` |
-| c-ares | 1.34.5 | MIT | [Upstream source](https://github.com/c-ares/c-ares/tree/v1.34.5) | `c-ares-LICENSE.md` |
-| dav1d | 1.5.4-30-g7f12cf2 | BSD-2-Clause | [Upstream source](https://code.videolan.org/videolan/dav1d/-/tree/7f12cf2) | `dav1d-COPYING` |
-| fontconfig | 2.18.3 | MIT-style | [Upstream source](https://gitlab.freedesktop.org/fontconfig/fontconfig/-/tree/2.18.3) | `fontconfig-COPYING` |
-| FreeType | 2.14.3 (aff94e1) | FTL or GPL-2.0-or-later, plus source-specific terms | [Upstream source](https://github.com/freetype/freetype/tree/aff94e1) | `FreeType-FTL.TXT`, `FreeType-GPLv2.TXT`, `FreeType-LICENSE.TXT`, `FreeType-src-bdf-README`, `FreeType-src-pcf-README` |
-| FriBidi | 1.0.17 | LGPL-2.1-or-later | [Upstream source](https://github.com/fribidi/fribidi/tree/v1.0.17) | `FriBidi-COPYING` |
-| HarfBuzz | 14.5.1 (f20f4c20) | Old MIT and source-specific terms | [Upstream source](https://github.com/harfbuzz/harfbuzz/tree/f20f4c20) | `HarfBuzz-COPYING` |
-| Highway | 1.4.0 (741eaa5) | Apache-2.0 or BSD-3-Clause | [Upstream source](https://github.com/google/highway/tree/741eaa5) | `Highway-LICENSE` |
-| libaom | 3.15.1-59-ge80624b5 | BSD-2-Clause and patent grant | [Upstream source](https://aomedia.googlesource.com/aom/+/e80624b5) | `libaom-LICENSE`, `libaom-PATENTS` |
-| libarchive | 3.9.0 (d294297) | BSD-2-Clause and source-specific terms | [Upstream source](https://github.com/libarchive/libarchive/tree/d294297) | `libarchive-COPYING` |
-| libass | 0.17.5-11-gf61db56 | ISC | [Upstream source](https://github.com/libass/libass/tree/f61db567e6593df3470e91594bcd4ad2d0473aff) | `libass-COPYING` |
-| libbluray | 1.5.1 | LGPL-2.1-or-later | [Upstream source](https://code.videolan.org/videolan/libbluray/-/tree/1.5.1) | `libbluray-COPYING` |
-| libbs2b | 3.1.0 | MIT | [Upstream source](https://downloads.sourceforge.net/project/bs2b/libbs2b/3.1.0/libbs2b-3.1.0.tar.gz) | `libbs2b-COPYING` |
-| libiconv | 1.18 | LGPL-2.1-or-later (library) | [Upstream source](https://ftp.gnu.org/pub/gnu/libiconv/libiconv-1.18.tar.gz) | `libiconv-COPYING.LIB.txt` |
-| libjpeg-turbo | 3.2.1 | IJG, BSD-3-Clause and Zlib | [Upstream source](https://github.com/libjpeg-turbo/libjpeg-turbo/tree/3.2.1) | `libjpeg-turbo-LICENSE.md`, `libjpeg-turbo-README.ijg` |
-| libjxl | 5f92f52 | BSD-3-Clause and patent grant | [Upstream source](https://github.com/libjxl/libjxl/tree/5f92f52) | `libjxl-LICENSE`, `libjxl-PATENTS` |
-| libopenmpt | 0.7.12+release.autotools | BSD-3-Clause and BSL-1.0 | [Upstream source](https://lib.openmpt.org/files/libopenmpt/src/libopenmpt-0.7.12+release.autotools.tar.gz) | `libopenmpt-LICENSE`, `libopenmpt-LICENSE.BSL-1.0.txt`, `libopenmpt-LICENSE.BSD-3-Clause.txt` |
-| libpsl | 0.23.1 (aa3a80e) | MIT | [Upstream source](https://github.com/rockdaboot/libpsl/tree/aa3a80e18f25caf3916636c8668dcc0fff7c016d) | `libpsl-LICENSE` |
-| libsixel | 1.8.7 (af12e5b) | MIT | [Upstream source](https://github.com/saitoha/libsixel/tree/af12e5bc6f3f69ad83479da85ddb371420da9b17) | `libsixel-LICENSE` |
-| libssh | 0.12.0 | LGPL-2.1-or-later | [Upstream source](https://gitlab.com/libssh/libssh-mirror/-/tree/libssh-0.12.0) | `libssh-COPYING` |
+| ANGLE | 83568fba5 | BSD-3-Clause and third-party notices | [Upstream source](https://github.com/google/angle/tree/83568fba5) | `ANGLE-LICENSE` |
+| Brotli | 1.2.0 (a8118cd) | MIT | [Upstream source](https://github.com/google/brotli/tree/a8118cd) | `Brotli-LICENSE` |
+| c-ares | 1.34.5 (46266f4) | MIT | [Upstream source](https://github.com/c-ares/c-ares/tree/46266f4) | `c-ares-LICENSE.md` |
+| dav1d | 1.5.5-8-gf38aa47 | BSD-2-Clause | [Upstream source](https://code.videolan.org/videolan/dav1d/-/tree/f38aa47) | `dav1d-COPYING` |
+| fast_float | 517e6b8 | Apache-2.0, BSL-1.0 or MIT | [Upstream source](https://github.com/fastfloat/fast_float/tree/517e6b8) | `fast_float-LICENSE-APACHE`, `fast_float-LICENSE-BOOST`, `fast_float-LICENSE-MIT` |
+| fmt | 11.2.0 | MIT | [Upstream source](https://github.com/fmtlib/fmt/tree/11.2.0) | `fmt-LICENSE` |
+| fontconfig | 2.18.3 (9ebaed4) | MIT-style | [Upstream source](https://gitlab.freedesktop.org/fontconfig/fontconfig/-/tree/9ebaed4) | `fontconfig-COPYING` |
+| FreeType | 2.15.0 (68db2bb) | FTL or GPL-2.0-or-later, plus source-specific terms | [Upstream source](https://github.com/freetype/freetype/tree/68db2bb) | `FreeType-FTL.TXT`, `FreeType-GPLv2.TXT`, `FreeType-LICENSE.TXT`, `FreeType-src-bdf-README`, `FreeType-src-pcf-README` |
+| FriBidi | 1.0.18 (15393e4) | LGPL-2.1-or-later | [Upstream source](https://github.com/fribidi/fribidi/tree/15393e4) | `FriBidi-COPYING` |
+| glslang | 6334e15 | Source-specific terms listed in LICENSE.txt | [Upstream source](https://github.com/KhronosGroup/glslang/tree/6334e15) | `glslang-LICENSE.txt`, `glslang-LICENSES-AML-glslang.txt`, `glslang-LICENSES-Apache-2.0.txt`, `glslang-LICENSES-BSD-2-Clause.txt`, `glslang-LICENSES-BSD-3-Clause.txt`, `glslang-LICENSES-Bison-exception-2.2.txt`, `glslang-LICENSES-GPL-3.0-or-later.txt`, `glslang-LICENSES-MIT-Khronos-old.txt`, `glslang-LICENSES-MIT.txt` |
+| graphengine | b23cbce | WTFPL-2.0 | [Upstream source](https://github.com/sekrit-twc/graphengine/tree/b23cbce) | `graphengine-COPYING` |
+| HarfBuzz | 15.2.0 (4c4ae970) | Old MIT and source-specific terms | [Upstream source](https://github.com/harfbuzz/harfbuzz/tree/4c4ae970) | `HarfBuzz-COPYING` |
+| Highway | 1.4.0 (8f8bf36) | Apache-2.0 or BSD-3-Clause | [Upstream source](https://github.com/google/highway/tree/8f8bf36) | `Highway-LICENSE` |
+| libaom | 3.15.3-288-g78e26c6d | BSD-2-Clause and patent grant | [Upstream source](https://aomedia.googlesource.com/aom/+/78e26c6d) | `libaom-LICENSE`, `libaom-PATENTS` |
+| libarchive | 3.9.0 (5eee3c7) | BSD-2-Clause and source-specific terms | [Upstream source](https://github.com/libarchive/libarchive/tree/5eee3c7) | `libarchive-COPYING` |
+| libaribcaption | 4a4ef08 | MIT | [Upstream source](https://github.com/xqq/libaribcaption/tree/4a4ef08) | `libaribcaption-LICENSE` |
+| libass | 0.17.5-29-g841c525 (841c5256) | ISC | [Upstream source](https://github.com/libass/libass/tree/841c52561c39df6767e3948efa8e5307efb11f1f) | `libass-COPYING` |
+| libbluray | 1.5.1 (dc73a3d) | LGPL-2.1-or-later | [Upstream source](https://code.videolan.org/videolan/libbluray/-/tree/dc73a3d) | `libbluray-COPYING` |
+| libbs2b | 3.1.0 | MIT | [Upstream source](https://github.com/alexmarsev/libbs2b/tree/5ca2d59888df047f1e4b028e3a2fd5be8b5a7277) | `libbs2b-COPYING` |
+| libiconv | 1.19.1 | LGPL-2.1-or-later (library) | [Upstream source](https://ftp.gnu.org/pub/gnu/libiconv/libiconv-1.19.1.tar.gz) | `libiconv-COPYING.LIB.txt` |
+| libjpeg-turbo | 3.2.2 (5b2e0e9) | IJG, BSD-3-Clause and Zlib | [Upstream source](https://github.com/libjpeg-turbo/libjpeg-turbo/tree/5b2e0e9) | `libjpeg-turbo-LICENSE.md`, `libjpeg-turbo-README.ijg` |
+| libjxl | 12e4bf4 | BSD-3-Clause and patent grant | [Upstream source](https://github.com/libjxl/libjxl/tree/12e4bf4) | `libjxl-LICENSE`, `libjxl-PATENTS` |
+| libmodplug | a526476 | Public-domain declaration | [Upstream source](https://github.com/Konstanty/libmodplug/tree/a526476) | `libmodplug-COPYING` |
+| libopenmpt | 0.8.10+release.autotools | BSD-3-Clause and BSL-1.0 | [Upstream source](https://lib.openmpt.org/files/libopenmpt/src/libopenmpt-0.8.10+release.autotools.tar.gz) | `libopenmpt-LICENSE`, `libopenmpt-LICENSE.BSL-1.0.txt`, `libopenmpt-LICENSE.BSD-3-Clause.txt` |
+| libpng | 1.6.60.git (e88e173) | PNG Reference Library License and source-specific MIT terms | [Upstream source](https://github.com/pnggroup/libpng/tree/e88e173) | `libpng-LICENSE`, `libpng-LICENSES-MIT-0.txt`, `libpng-LICENSES-MIT.txt` |
+| libpsl | 0.23.3 (88331da) | MIT | [Upstream source](https://github.com/rockdaboot/libpsl/tree/88331da) | `libpsl-LICENSE` |
+| libsixel | 1.8.7 | MIT | [Upstream source](https://github.com/saitoha/libsixel/tree/72ed7d6b4a2252a6245567908c32c4e8e8c226ea) | `libsixel-LICENSE` |
+| libssh | 0.12.0 (b6e0f54) | LGPL-2.1-or-later | [Upstream source](https://gitlab.com/libssh/libssh-mirror/-/tree/b6e0f54) | `libssh-COPYING` |
 | libudfread | 1.2.0 | LGPL-2.1-or-later | [Upstream source](https://code.videolan.org/videolan/libudfread/-/tree/1.2.0) | `libudfread-COPYING` |
-| libunibreak | 8.0 | Zlib | [Upstream source](https://github.com/adah1972/libunibreak/tree/libunibreak_8_0) | `libunibreak-LICENCE` |
-| libvpx | 1.17.0-65-g0a6f769e | BSD-3-Clause and patent grant | [Upstream source](https://chromium.googlesource.com/webm/libvpx/+/0a6f769e) | `libvpx-LICENSE`, `libvpx-PATENTS` |
-| libwebp | 91505ed | BSD-3-Clause and patent grant | [Upstream source](https://chromium.googlesource.com/webm/libwebp/+/91505ed) | `libwebp-COPYING`, `libwebp-PATENTS` |
-| Little-CMS | 2.19 (9f9b520) | MIT | [Upstream source](https://github.com/mm2/Little-CMS/tree/9f9b520) | `Little-CMS-LICENSE` |
+| libunibreak | 8.0.1 (9266fa1) | Zlib | [Upstream source](https://github.com/adah1972/libunibreak/tree/9266fa1) | `libunibreak-LICENCE` |
+| libvpl | API 2.17 (ec718e8) | MIT | [Upstream source](https://github.com/intel/libvpl/tree/ec718e8) | `libvpl-LICENSE` |
+| libvpx | 1.17.0-115-gcaddc87f | BSD-3-Clause and patent grant | [Upstream source](https://chromium.googlesource.com/webm/libvpx/+/caddc87f) | `libvpx-LICENSE`, `libvpx-PATENTS` |
+| libwebp | 940c869 | BSD-3-Clause and patent grant | [Upstream source](https://chromium.googlesource.com/webm/libwebp/+/940c869) | `libwebp-COPYING`, `libwebp-PATENTS` |
+| libxml2 | 2.16.0 (21c8223) | MIT-style and source-specific terms | [Upstream source](https://github.com/GNOME/libxml2/tree/21c8223) | `libxml2-Copyright` |
+| Little-CMS | 2.20 (be56a99) | MIT | [Upstream source](https://github.com/mm2/Little-CMS/tree/be56a99) | `Little-CMS-LICENSE` |
 | LLVM | 23.1.2 (03b58ead, compiler and C++ runtimes) | Apache-2.0 WITH LLVM-exception | [Upstream source](https://github.com/llvm/llvm-project/tree/03b58ead1a5d7caae4ab76ec69d66cfa896da372) | `LLVM-llvm-LICENSE.TXT`, `LLVM-compiler-rt-LICENSE.TXT`, `LLVM-libcxx-LICENSE.TXT`, `LLVM-libcxxabi-LICENSE.TXT`, `LLVM-libunwind-LICENSE.TXT` |
+| MuJS | 1.3.11-11-g449e235 (builder patch on a968144) | ISC, source-specific notices for floating-point conversions and UTF routines, and Unicode License v3 for the Unicode 16 tables | [Upstream source](https://codeberg.org/ccxvii/mujs/src/commit/a968144dcf3516635e3cb02d1849ccb4401d3668), [recipe and Makefile patch](https://github.com/shinchiro/mpv-winbuild-cmake/tree/7e36e1eab5094a642c5a3c1771551f06b5ec3224/packages) | `MuJS-COPYING`, `MuJS-source-notices.txt`, `MuJS-Unicode-notice.txt` |
+| nghttp2 | 1.71.90 (03fe9f5) | MIT | [Upstream source](https://github.com/nghttp2/nghttp2/tree/03fe9f5) | `nghttp2-COPYING` |
+| nghttp3 | 1.19.90 (27268d1) | MIT | [Upstream source](https://github.com/ngtcp2/nghttp3/tree/27268d1) | `nghttp3-COPYING` |
+| ngtcp2 | 1.26.90 (2ad2b84) | MIT | [Upstream source](https://github.com/ngtcp2/ngtcp2/tree/2ad2b84) | `ngtcp2-COPYING` |
 | Ogg | 1.3.6 | BSD-3-Clause | [Upstream source](https://github.com/xiph/ogg/tree/v1.3.6) | `Ogg-COPYING` |
-| OpenSSL | 4.1.0-dev (d8bf6cdd) | Apache-2.0 | [Upstream source](https://github.com/openssl/openssl/tree/d8bf6cdd4849925c30e4f1911c7acb49cb34b702) | `OpenSSL-LICENSE.txt` |
-| Opus | 1.6.1-68-g503d81b | BSD-3-Clause and patent grants | [Upstream source](https://github.com/xiph/opus/tree/503d81b) | `Opus-COPYING` |
+| OpenAL-Soft | 0067db5 | LGPL and source-specific terms | [Upstream source](https://github.com/kcat/openal-soft/tree/0067db5) | `OpenAL-Soft-COPYING`, `OpenAL-Soft-LICENSE-pffft`, `OpenAL-Soft-LICENSE.Apache-2.0.txt`, `OpenAL-Soft-LICENSE.BSD-3-Clause.txt` |
+| OpenSSL | 4.2.0-dev (2d1c10a5) | Apache-2.0 | [Upstream source](https://github.com/openssl/openssl/tree/2d1c10a59) | `OpenSSL-LICENSE.txt` |
+| Opus | 1.6.1-109-gfed7c79 | BSD-3-Clause and patent grants | [Upstream source](https://github.com/xiph/opus/tree/fed7c79) | `Opus-COPYING` |
 | Rust standard library | 420ed2a0 | MIT or Apache-2.0 and third-party notices | [Upstream source](https://github.com/rust-lang/rust/tree/420ed2a0c3d7225b1744266fd884d431b4d8cfe0) | `Rust-standard-library-LICENSE-APACHE`, `Rust-standard-library-LICENSE-MIT`, `Rust-standard-library-COPYRIGHT` |
-| SDL | 2.33.0 (4c2d9014) | Zlib | [Upstream source](https://github.com/libsdl-org/SDL/tree/4c2d9014) | `SDL-LICENSE.txt` |
-| Shaderc | 2026.5.0 (ba3e587) | Apache-2.0 | [Upstream source](https://github.com/google/shaderc/tree/ba3e587) | `Shaderc-LICENSE` |
-| Speex | 1.2.1 | BSD-3-Clause | [Upstream source](https://github.com/xiph/speex/tree/Speex-1.2.1) | `Speex-COPYING` |
-| SPIRV-Tools | 4f3a92d | Apache-2.0 | [Upstream source](https://github.com/KhronosGroup/SPIRV-Tools/tree/4f3a92d) | `SPIRV-Tools-LICENSE` |
-| subrandr | 1.4.0 | MPL-2.0 | [Upstream source](https://github.com/afishhh/subrandr/tree/v1.4.0) | `subrandr-LICENSE` |
-| SVT-AV1 | 4.2.0-174-gd235cfc | BSD-3-Clause-Clear and patent grant | [Upstream source](https://gitlab.com/AOMediaCodec/SVT-AV1/-/tree/d235cfc) | `SVT-AV1-LICENSE.md`, `SVT-AV1-PATENTS.md` |
+| SDL | 2.33.0 (b53be5bb) | Zlib | [Upstream source](https://github.com/libsdl-org/SDL/tree/b53be5bb) | `SDL-LICENSE.txt` |
+| Shaderc | 2026.5.0 (0581495) | Apache-2.0 | [Upstream source](https://github.com/google/shaderc/tree/0581495) | `Shaderc-LICENSE` |
+| Speex | 1.2.1 (09b569d) | BSD-3-Clause | [Upstream source](https://github.com/xiph/speex/tree/09b569d) | `Speex-COPYING` |
+| SPIRV-Cross | 0.68.0 (57e4efcc, patched 70f0c77) | Apache-2.0 or MIT, with Khronos header notices | [Upstream source](https://github.com/KhronosGroup/SPIRV-Cross/tree/57e4efcc84112abcd426dc5ec248b5339bee04f2), [builder update](https://github.com/zhongfly/mpv-winbuild/actions/runs/40750345969/job/123035148373) | `SPIRV-Cross-LICENSE`, `SPIRV-Cross-MIT.txt`, `SPIRV-Cross-KhronosFreeUse.txt`, `SPIRV-Cross-source-notices.txt` |
+| SPIRV-Headers | fb13794 | MIT and CC-BY-4.0 for identified files | [Upstream source](https://github.com/KhronosGroup/SPIRV-Headers/tree/fb13794) | `SPIRV-Headers-LICENSE`, `SPIRV-Headers-LICENSES-CC-BY-4.0.txt`, `SPIRV-Headers-LICENSES-MIT.txt` |
+| SPIRV-Tools | 340b4c4 | Apache-2.0 and source-specific BSD-3-Clause | [Upstream source](https://github.com/KhronosGroup/SPIRV-Tools/tree/340b4c4) | `SPIRV-Tools-LICENSE` |
+| subrandr | 1.4.0 (5a3e258) | MPL-2.0 | [Upstream source](https://github.com/afishhh/subrandr/tree/5a3e258) | `subrandr-LICENSE` |
+| SVT-AV1 | 4.3.1-3-gad875ab | BSD-3-Clause-Clear and patent grant | [Upstream source](https://github.com/AOMediaCodec/SVT-AV1/tree/ad875ab) | `SVT-AV1-LICENSE.md`, `SVT-AV1-PATENTS.md` |
 | uchardet | 0.0.8 | MPL-1.1 or GPL-2.0-or-later or LGPL-2.1-or-later | [Upstream source](https://www.freedesktop.org/software/uchardet/releases/uchardet-0.0.8.tar.xz) | `uchardet-COPYING` |
 | Vorbis | 1.3.7 | BSD-3-Clause | [Upstream source](https://github.com/xiph/vorbis/tree/v1.3.7) | `Vorbis-COPYING` |
-| xxHash | 0.8.4 | BSD-2-Clause (library) | [Upstream source](https://github.com/Cyan4973/xxHash/tree/v0.8.4) | `xxHash-LICENSE` |
-| XZ | 5.8.2 (3d078b52) | 0BSD (liblzma core) and source-specific terms | [Upstream source](https://github.com/tukaani-project/xz/tree/3d078b52adbff566ccfc51067dfbf742ecf3ef86) | `XZ-COPYING`, `XZ-COPYING.0BSD`, `XZ-COPYING.LGPLv2.1`, `XZ-COPYING.GPLv2`, `XZ-COPYING.GPLv3` |
-| zlib-ng | 2.3.90 (8b61b4e, zlib API 1.3.1) | Zlib | [Upstream source](https://github.com/zlib-ng/zlib-ng/tree/8b61b4e) | `zlib-ng-LICENSE.md` |
+| xxHash | 0.8.5 (2ec67ca) | BSD-2-Clause (library) | [Upstream source](https://github.com/Cyan4973/xxHash/tree/2ec67ca) | `xxHash-LICENSE` |
+| XZ | 5.8.4 (c308e9f) | 0BSD (liblzma core) and source-specific terms | [Upstream source](https://github.com/tukaani-project/xz/tree/c308e9f) | `XZ-COPYING`, `XZ-COPYING.0BSD`, `XZ-COPYING.LGPLv2.1`, `XZ-COPYING.GPLv2`, `XZ-COPYING.GPLv3` |
+| zimg | 3.0.6 (e2e43d0) | WTFPL-2.0 | [Upstream source](https://github.com/sekrit-twc/zimg/tree/e2e43d0) | `zimg-COPYING` |
+| zlib-ng | 2.3.90 (05699bc, zlib API 1.3.2) | Zlib | [Upstream source](https://github.com/zlib-ng/zlib-ng/tree/05699bc) | `zlib-ng-LICENSE.md` |
+| Zstandard | 1.6.0 (b022b64) | BSD-3-Clause or GPL-2.0 | [Upstream source](https://github.com/facebook/zstd/tree/b022b64) | `Zstandard-COPYING`, `Zstandard-LICENSE` |
 
 ### Rust libraries identified in the DLL
 
@@ -131,26 +151,26 @@ upstream texts below.
 
 | Component | Build identity or reported version | Upstream terms | Source for notice | Packaged files |
 | --- | --- | --- | --- | --- |
-| VapourSynth | R72 (e462044) | LGPL-2.1-or-later (library) | [Upstream source](https://github.com/vapoursynth/vapoursynth/tree/e46204429041e95a881b61eedddd46c08f9a307c) | `VapourSynth-COPYING.LESSER` |
-| Vulkan-Headers | 1.4.365 (c468508) | Apache-2.0 or MIT | [Upstream source](https://github.com/KhronosGroup/Vulkan-Headers/tree/c468508) | `Vulkan-Headers-LICENSE.md`, `Vulkan-Headers-Apache-2.0.txt`, `Vulkan-Headers-MIT.txt` |
-| Vulkan-Loader | 1.4.365 (f866657, import library) | Apache-2.0 | [Upstream source](https://github.com/KhronosGroup/Vulkan-Loader/tree/f866657) | `Vulkan-Loader-LICENSE.txt` |
+| VapourSynth | R72 (21ffd37) | LGPL-2.1-or-later (library) | [Upstream source](https://github.com/vapoursynth/vapoursynth/tree/21ffd37) | `VapourSynth-COPYING.LESSER` |
+| Vulkan-Headers | 1.4.369 (d277a0a) | Apache-2.0 or MIT | [Upstream source](https://github.com/KhronosGroup/Vulkan-Headers/tree/d277a0a) | `Vulkan-Headers-LICENSE.md`, `Vulkan-Headers-Apache-2.0.txt`, `Vulkan-Headers-MIT.txt` |
+| Vulkan-Loader | 1.4.369 (import library) (7d76ff3c) | Apache-2.0 | [Upstream source](https://github.com/KhronosGroup/Vulkan-Loader/tree/7d76ff3c) | `Vulkan-Loader-LICENSE.txt` |
 
 ### Unresolved coverage
 
-The following candidates were identified by the pinned recipe, dependency
-configuration, or DLL strings. Their exact source or applicable notice could
-not be established from the available evidence. Their notices are still open.
+The build configuration and DLL strings also identify the following gaps. The
+available package logs describe the configured libraries and interfaces. They
+do not enumerate every source file or archive member that entered the DLL.
 
-| Area | Components and evidence |
+| Area | Remaining source or notice evidence |
 | --- | --- |
-| FFmpeg and mpv | BZip2 (1.1.0), LAME, libaribcaption, libmodplug, libmysofa, libpng (1.6.60.git), libsoxr, libva (2.25.0.1, API 1.25.0), libvpl/Media SDK (oneVPL API 2.17), libxml2 (2.16.0), LuaJIT (2.1.1789906930), MuJS (1.3.8-23-gad03d60), OpenAL Soft and its fmt dependency (11.2.0), uavs3d (1.2.1798), and zimg (3.0.6) with graphengine. |
-| Network and archive | curl (8.23.0-DEV), nghttp2 (1.70.90), nghttp3 (1.18.90), ngtcp2 (1.25.90), Zstandard (1.6.0), and embedded libpsl suffix data. |
-| Shaders and bundled headers | SPIRV-Cross (0.68.0, build log suffix `99eae2a`), glslang and SPIRV-Headers used by Shaderc, glad and fast_float used by libplacebo, and the ANGLE, AMF and NVIDIA codec headers. |
-| Compiler and other source notices | MinGW-w64 (headers reported as 15.0), remaining Rust crates, fontconfig's libintl fallback, and source-file or embedded data notices beyond the listed upstream texts. |
+| FFmpeg and mpv | BZip2 1.1.0, LAME, libmysofa and its embedded data, libsoxr, libva 2.25.0.1 (API 1.25.0), FFmpeg’s Media SDK backend, LuaJIT 2.1.1794918119 and uavs3d 1.2.1798. The oneVPL loader notice above covers its own distribution. |
+| Network and archive | The exact curl 8.23.0-DEV checkout and the embedded libpsl suffix data. |
+| Shaders and headers | glad, AMF headers, and NVIDIA codec headers 13.1.15.1.2. |
+| Compiler and other source notices | MinGW-w64 headers and startup objects, remaining Rust dependencies, and embedded data or source-specific notices beyond the files listed above. The fontconfig log shows that its libintl fallback configured zero targets and that the intl dependency was unavailable. |
 
 Flutter's generated notices have a separate dependency graph. Inspection of
 [Lineup package artifact 13559480345](https://github.com/TJZine/LineupDesktop/actions/runs/42328608159/artifacts/13559480345)
-(source `43382a529b4e4ed196b96cd71721f1b642671a3c`) confirmed the pinned DLL and
+(source `43382a529b4e4ed196b96cd71721f1b642671a3c`) confirmed the October 2 runtime and
 the original four libmpv-family files. Its
 `data/flutter_assets/NOTICES.Z` (SHA-256
 `b5606b982ec4eff917c02c556a87d49a4891cf1737b570415d7bc70eb1ccc439`)
@@ -293,11 +313,11 @@ package excludes it.
 
 ## Source and license locations
 
-- mpv source and LGPL text: <https://github.com/mpv-player/mpv/tree/3186d369f9f090cd1363be0ac46a037824b702c6>
-- FFmpeg source, LGPLv3 text, and GPLv3 text: <https://github.com/FFmpeg/FFmpeg/tree/f68e1afc1b7cf4275d09f1a9026ff80228cf99a8>
-- libplacebo source and LGPL text: <https://github.com/haasn/libplacebo/tree/92b5ac6db79f4d680eb656692f7bf51e9606f42a>
-- exact builder and LGPL patch: <https://github.com/zhongfly/mpv-winbuild/tree/88bdc4db67bb476a7606921eb2d68b273440d59b>
-- exact successful build: <https://github.com/zhongfly/mpv-winbuild/actions/runs/37004200613>
+- mpv source and LGPL text: <https://github.com/mpv-player/mpv/tree/d32c910be63d1dd325c7b3efeaa09c3c4c8d51ce>
+- FFmpeg source, LGPLv3 text, and GPLv3 text: <https://github.com/FFmpeg/FFmpeg/tree/c81e35cf2b6ea570f3363ec3ffa7318281f5f6be>
+- libplacebo source and LGPL text: <https://github.com/haasn/libplacebo/tree/bfdb8dec6ef659a3c2dcb8c976f99b740635cf0f>
+- exact builder and LGPL patch: <https://github.com/zhongfly/mpv-winbuild/tree/49520b9987f0e6dc7cf0db83634e45c416bd58b6>
+- exact successful build: <https://github.com/zhongfly/mpv-winbuild/actions/runs/45609693015>
 - Microsoft VC runtime redistribution terms: <https://learn.microsoft.com/en-us/visualstudio/releases/2022/redistribution>
 
 ## Disposable credential backend smoke

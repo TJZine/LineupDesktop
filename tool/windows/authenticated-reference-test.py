@@ -20,7 +20,7 @@ import urllib.parse
 
 TOKEN = "lineup-synthetic-reference-test"
 SESSION_PREFIX = "/video/:/transcode/universal/session/synthetic-reference/base"
-DLL_SHA256 = "4ba364226fd2ea5dd2c6f2333f0118462da549feed92360fb766a3924e313a51"
+DLL_SHA256 = "7e8292c962c2f96c43a122df7836f4c901a95ff9b59b9b55a43a71859e42dd89"
 DEADLINE = time.monotonic() + 150
 STAGE = "prerequisites"
 FIXED_FAILURE_CODES = {

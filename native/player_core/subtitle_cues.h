@@ -6,7 +6,7 @@
 
 namespace lineup::player {
 
-// Mirrors sd_ass/sd_lavc at mpv 3186d369. No user decoder options are
+// Mirrors sd_ass/sd_lavc at mpv d32c910be. No user decoder options are
 // accepted by the player, so teletext/ARIB use their bitmap defaults.
 enum class SubtitleCodec { none, text, ass, image };
 SubtitleCodec ClassifySubtitleCodec(std::string_view codec);

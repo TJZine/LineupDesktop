@@ -367,7 +367,7 @@ intent; program rollover resolves the newly scheduled program normally.
 
 Explicit seek commands execute `absolute+exact` or `absolute+keyframes`.
 An exact command overrides the per-file `hr-seek=no` setting. In pinned mpv
-`3186d369f9f090cd1363be0ac46a037824b702c6`, absolute keyframe seeks use the
+`d32c910be63d1dd325c7b3efeaa09c3c4c8d51ce`, absolute keyframe seeks use the
 backward demux preference, while positive relative seeks use `SEEK_FORWARD`.
 The lavf path uses FFmpeg's `AVSEEK_FLAG_BACKWARD`. This is a preference, not a
 strict no-overshoot guarantee: cached demux seeking can select the first later
@@ -834,7 +834,7 @@ subtitle properties are logged with their fixed property name and libmpv error,
 without publishing a playback failure; unchanged property values are not retried
 on every cue.
 
-At mpv `3186d369`, codec `ass` is native styled ASS. The bitmap codecs are
+For embedded tracks at mpv `d32c910be`, codec `ass` is native styled ASS. The bitmap codecs are
 `hdmv_pgs_subtitle`, `dvd_subtitle`, `dvb_subtitle`, `xsub`, and the default
 bitmap configurations of `dvb_teletext` and `arib_caption`. Every other codec,
 including lavf `ssa`, is treated as converted text. Recheck this classification

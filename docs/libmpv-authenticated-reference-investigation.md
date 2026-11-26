@@ -218,6 +218,23 @@ require reference following. An ordered-chapter container can fall back to its
 main file with references ignored; disabling references does not promise that
 every file containing reference metadata is rejected.
 
+### Desktop runtime refresh
+
+Both desktops now build mpv at `d32c910be63d1dd325c7b3efeaa09c3c4c8d51ce`.
+At this revision, `loadfile` attaches the supplied options to one playlist
+entry. The player applies them with `M_SETOPT_BACKUP` and restores the backed-up
+values on unload. This scopes the Direct Play header to the loaded part.
+[Command](https://github.com/mpv-player/mpv/blob/d32c910be63d1dd325c7b3efeaa09c3c4c8d51ce/player/command.c#L6587) ·
+[File options](https://github.com/mpv-player/mpv/blob/d32c910be63d1dd325c7b3efeaa09c3c4c8d51ce/player/loadfile.c#L1276) ·
+[Unload](https://github.com/mpv-player/mpv/blob/d32c910be63d1dd325c7b3efeaa09c3c4c8d51ce/player/loadfile.c#L2163)
+
+The demuxer snapshots `access-references`. When disabled, the lavf demuxer
+installs its rejecting I/O callback before opening the input. The curl stream
+applies the configured redirect limit and TLS peer and host verification.
+[Demux options](https://github.com/mpv-player/mpv/blob/d32c910be63d1dd325c7b3efeaa09c3c4c8d51ce/demux/demux.c#L3577) ·
+[lavf open](https://github.com/mpv-player/mpv/blob/d32c910be63d1dd325c7b3efeaa09c3c4c8d51ce/demux/demux_lavf.c#L1566) ·
+[curl options](https://github.com/mpv-player/mpv/blob/d32c910be63d1dd325c7b3efeaa09c3c4c8d51ce/stream/stream_curl.c#L972)
+
 ### Bounded pinned-source audit
 
 Sources were read at mpv

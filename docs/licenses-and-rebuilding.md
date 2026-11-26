@@ -40,7 +40,7 @@ Rebuilding and replacing libraries in a modified copy
    with @rpath install names and sibling @loader_path references. mpv uses
    libmpv.2.dylib; FFmpeg uses libavcodec.63.dylib, libavformat.63.dylib,
    libavutil.61.dylib, libavfilter.12.dylib, libswscale.10.dylib and
-   libswresample.7.dylib; libplacebo uses libplacebo.360.dylib; FriBidi uses
+   libswresample.7.dylib; libplacebo uses libplacebo.387.dylib; FriBidi uses
    libfribidi.0.dylib. Use a complete compatible dependency closure, not one
    arbitrary dylib from a different architecture or ABI.
 5. Build a modified app from source with that runtime selected, or replace the

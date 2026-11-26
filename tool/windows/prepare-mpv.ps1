@@ -28,9 +28,9 @@ function Invoke-DownloadWithRetry {
 
 $repository = [IO.Path]::GetFullPath((Join-Path $PSScriptRoot '../..'))
 $metadata = Import-PowerShellDataFile -LiteralPath (Join-Path $repository 'tool/windows/build-metadata.psd1')
-$asset = 'mpv-dev-lgpl-x86_64-20261002-git-3186d369f9.7z'
-$sha256 = '322CB0040B97B15F97069F631F665FD63DA331CED92705F757DA13B99380DA5F'
-$url = "https://github.com/TJZine/LineupDesktop/releases/download/runtime-mpv-20261002-3186d369f9/$asset"
+$asset = 'mpv-dev-lgpl-x86_64-20261125-git-d32c910be6.7z'
+$sha256 = 'C5A583DCDD9106BC125C6A69A9533FA1445193AE7082A56EFDA62D37F7EDC775'
+$url = "https://github.com/TJZine/LineupDesktop/releases/download/runtime-mpv-20261125-d32c910be6/$asset"
 $Destination = [IO.Path]::GetFullPath($Destination)
 if (Test-Path -LiteralPath $Destination) {
   if (Get-ChildItem -LiteralPath $Destination -Force | Select-Object -First 1) {
@@ -67,9 +67,9 @@ if (-not (Test-Path -LiteralPath $header) -or -not (Test-Path -LiteralPath $dll)
   throw 'The verified archive did not contain the expected libmpv header and DLL.'
 }
 if ((Get-FileHash -Algorithm SHA256 -LiteralPath $header).Hash -ne
-  '1ACF99EE77C8C2A6F1D1993BD81BBC8A91D27FB5924E80171670E6139A4BD353' -or
+  'BA4E134B75AD48CCDA90C56292B04A5222B815795682BFB946300AB6EDBBB12A' -or
   (Get-FileHash -Algorithm SHA256 -LiteralPath $dll).Hash -ne
-  '4BA364226FD2EA5DD2C6F2333F0118462DA549FEED92360FB766A3924E313A51') {
+  '7E8292C962C2F96C43A122DF7836F4C901A95FF9B59B9B55A43A71859E42DD89') {
   throw 'The verified archive contents do not match the pinned Lineup runtime.'
 }
 
