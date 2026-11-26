@@ -4723,6 +4723,17 @@ class _NowPlayingInfoState extends State<_NowPlayingInfo> {
   final _close = FocusNode(debugLabel: 'More info Close');
   final _reader = FocusNode(debugLabel: 'More info reading');
   final _scroll = ScrollController();
+  bool _hasOverflow = false;
+
+  bool _updateOverflow(ScrollMetricsNotification notification) {
+    if (notification.depth == 0) {
+      final hasOverflow = notification.metrics.maxScrollExtent > 0;
+      if (_hasOverflow != hasOverflow) {
+        setState(() => _hasOverflow = hasOverflow);
+      }
+    }
+    return false;
+  }
 
   @override
   void dispose() {
@@ -4783,7 +4794,14 @@ class _NowPlayingInfoState extends State<_NowPlayingInfo> {
       widget.controller,
       widget.program,
     );
-    return Material(
+    const scrollHint = 'Up/Down Scroll · Back Close';
+    final hintStyle = Theme.of(context).textTheme.bodySmall?.copyWith(
+      color: LineupTheme.of(context).secondaryText,
+      fontSize: DeviceProfile.of(context).isTv
+          ? LineupTypography.tvTextFloor
+          : null,
+    );
+    final view = Material(
       type: MaterialType.transparency,
       child: FocusScope(
         onKeyEvent: _key,
@@ -4996,21 +5014,31 @@ class _NowPlayingInfoState extends State<_NowPlayingInfo> {
               ),
               Padding(
                 padding: const EdgeInsets.only(top: 20),
-                child: Text(
-                  'Up/Down Scroll · Back Close',
-                  key: const Key('player-more-info-hint'),
-                  style: Theme.of(context).textTheme.bodySmall?.copyWith(
-                    color: LineupTheme.of(context).secondaryText,
-                    fontSize: DeviceProfile.of(context).isTv
-                        ? LineupTypography.tvTextFloor
-                        : null,
-                  ),
+                child: Stack(
+                  children: [
+                    // Keep the same footer height even when the full hint
+                    // would wrap at the current width and text scale.
+                    if (!_hasOverflow)
+                      Opacity(
+                        opacity: 0,
+                        child: Text(scrollHint, style: hintStyle),
+                      ),
+                    Text(
+                      _hasOverflow ? scrollHint : 'Back Close',
+                      key: const Key('player-more-info-hint'),
+                      style: hintStyle,
+                    ),
+                  ],
                 ),
               ),
             ],
           ),
         ),
       ),
+    );
+    return NotificationListener<ScrollMetricsNotification>(
+      onNotification: _updateOverflow,
+      child: view,
     );
   }
 }

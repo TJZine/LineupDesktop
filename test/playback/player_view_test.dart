@@ -1518,6 +1518,60 @@ void main() {
     }
   }
 
+  testWidgets('More info advertises scrolling only when the reader overflows', (
+    tester,
+  ) async {
+    await tester.binding.setSurfaceSize(const Size(1280, 720));
+    addTearDown(() => tester.binding.setSurfaceSize(null));
+    final reader = find.byKey(const Key('player-more-info-scroll'));
+    final hint = find.byKey(const Key('player-more-info-hint'));
+    Rect? readerBounds;
+
+    for (final overflow in [false, true]) {
+      final fixture = _Fixture(
+        PlayerState.playing,
+        richItemOverride: _fixtureItem(
+          0,
+          rich: true,
+          duration: const Duration(hours: 24),
+          summary: overflow
+              ? List.filled(100, 'A lengthy program synopsis.').join(' ')
+              : 'Short synopsis.',
+        ),
+      );
+      try {
+        await fixture.player.tune('channel');
+        fixture.player.showNowPlaying();
+        fixture.player.showProgramInfo();
+        await tester.pumpWidget(
+          MaterialApp(
+            theme: LineupTheme.forName(
+              LineupThemeName.emberSteel,
+              formFactor: profileFor(true).formFactor,
+            ),
+            builder: _playerTvCanvasBuilder,
+            home: PlayerView(controller: fixture.player, openGuide: () {}),
+          ),
+        );
+        await tester.pumpAndSettle();
+        final position = tester
+            .widget<SingleChildScrollView>(reader)
+            .controller!
+            .position;
+        expect(position.maxScrollExtent, overflow ? greaterThan(0) : 0);
+        expect(
+          tester.widget<Text>(hint).data,
+          overflow ? 'Up/Down Scroll · Back Close' : 'Back Close',
+        );
+        readerBounds ??= _drawnRect(tester, reader);
+        expect(_drawnRect(tester, reader), readerBounds);
+      } finally {
+        await tester.pumpWidget(const SizedBox.shrink());
+        fixture.dispose();
+      }
+    }
+  });
+
   testWidgets('O1 amendment reader owns initial focus', (tester) async {
     final fixture = _amendmentFixture();
     await _openInfoForAmendment(tester, fixture);
