@@ -7477,6 +7477,29 @@ void main() {
           .getSemanticsData();
       expect(subtitlesSemantics.flagsCollection.isEnabled, Tristate.isTrue);
       expect(subtitlesSemantics.hasAction(SemanticsAction.tap), isTrue);
+
+      fixture.native.emitTracks(const [
+        PlayerTrack(
+          id: 8,
+          type: PlayerTrackType.subtitle,
+          selected: true,
+          title: 'English text',
+          language: 'en',
+        ),
+        PlayerTrack(
+          id: 9,
+          type: PlayerTrackType.subtitle,
+          selected: false,
+          title: 'Styled ASS',
+          language: 'en',
+        ),
+      ]);
+      await tester.pumpAndSettle();
+      expect(
+        find.text('Subtitles English text', findRichText: true),
+        findsOneWidget,
+      );
+      expect(materialTooltip('Subtitle track: English text'), findsOneWidget);
       await tester.pumpWidget(const SizedBox.shrink());
       fixture.dispose();
     },
