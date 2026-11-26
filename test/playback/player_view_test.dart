@@ -3621,6 +3621,74 @@ void main() {
     fixture.dispose();
   });
 
+  for (final scale in [1.0, 1.3]) {
+    testWidgets('TV popovers use the OSD inset at text scale $scale', (
+      tester,
+    ) async {
+      await tester.runAsync(loadPinnedTestFonts);
+      tester.view
+        ..devicePixelRatio = 1
+        ..physicalSize = const Size(1920, 1080);
+      addTearDown(tester.view.reset);
+      final fixture = _Fixture(
+        PlayerState.playing,
+        tracks: const [
+          PlayerTrack(id: 1, type: PlayerTrackType.audio, selected: true),
+          PlayerTrack(id: 2, type: PlayerTrackType.subtitle, selected: false),
+        ],
+      );
+      addTearDown(fixture.dispose);
+      fixture.player.showOsd();
+      await tester.pumpWidget(
+        MaterialApp(
+          theme: LineupTheme.forName(
+            LineupThemeName.emberSteel,
+            formFactor: profileFor(true).formFactor,
+          ),
+          builder: (context, child) => MediaQuery(
+            data: MediaQuery.of(context)
+                .copyWith(textScaler: TextScaler.linear(scale)),
+            child: _playerTvCanvasBuilder(context, child),
+          ),
+          home: PlayerView(controller: fixture.player, openGuide: () {}),
+        ),
+      );
+      await tester.pumpAndSettle();
+
+      for (final (control, key) in [
+        ('sleep', 'sleep-timer-picker'),
+        ('audio', 'player-track-popover'),
+        ('subtitles', 'player-track-popover'),
+      ]) {
+        final button = find.byKey(Key('player-osd-$control'));
+        await tester.tap(button);
+        await tester.pumpAndSettle();
+        final picker = _drawnRect(tester, find.byKey(Key(key)));
+        final timing = _drawnRect(
+          tester,
+          find.byKey(const Key('player-osd-progress-block')),
+        );
+        expect(picker.right, lessThanOrEqualTo(timing.right + .1));
+        expect(picker.bottom, lessThan(_drawnRect(tester, button).top));
+        expect(picker.bottom, lessThanOrEqualTo(timing.top));
+        if (control == 'sleep') {
+          for (final preset in ['off', '30', '60', '90']) {
+            final option = find.byKey(Key('sleep-timer-$preset'));
+            expect(option.hitTestable(), findsOneWidget);
+            final bounds = _drawnRect(tester, option);
+            expect(bounds.top, greaterThanOrEqualTo(picker.top));
+            expect(bounds.bottom, lessThanOrEqualTo(picker.bottom));
+          }
+        }
+        fixture.player.closeOverlay();
+        fixture.player.showOsd();
+        await tester.pumpAndSettle();
+      }
+      expect(tester.takeException(), isNull);
+      await tester.pumpWidget(const SizedBox.shrink());
+    });
+  }
+
   testWidgets('TV Sleep uses the measured header and tile width up to 720 px', (
     tester,
   ) async {

@@ -1883,6 +1883,9 @@ class _Osd extends StatelessWidget {
         _PlayerPickerLayout(
           controller: controller,
           panel: panel,
+          insets: DeviceProfile.of(context).isTv
+              ? safe.copyWith(bottom: bottomInset)
+              : MediaQuery.paddingOf(context),
           anchor: pickerAnchors[anchor],
           preferredWidth: type != null
               ? _trackPopoverWidth(context, controller, displays, type)
@@ -3888,6 +3891,7 @@ class _PlayerPickerLayout extends StatelessWidget {
   const _PlayerPickerLayout({
     required this.controller,
     required this.panel,
+    required this.insets,
     required this.anchor,
     required this.preferredWidth,
     required this.surfaceKey,
@@ -3896,6 +3900,7 @@ class _PlayerPickerLayout extends StatelessWidget {
 
   final PlayerCoordinator controller;
   final Widget panel;
+  final EdgeInsets insets;
   final _PickerAnchorHandle? anchor;
   final double preferredWidth;
   final Key surfaceKey;
@@ -3906,9 +3911,7 @@ class _PlayerPickerLayout extends StatelessWidget {
     delegate: _PlayerPickerPlacement(
       anchor: anchor,
       preferredWidth: preferredWidth,
-      insets: DeviceProfile.of(context).isTv
-          ? LineupCanvas.contentInsets(context)
-          : MediaQuery.paddingOf(context),
+      insets: insets,
     ),
     children: [
       LayoutId(id: _PickerSlot.panel, child: panel),
@@ -4032,7 +4035,10 @@ class _PlayerPickerPlacement extends MultiChildLayoutDelegate {
       insets.left + width,
       math.max(insets.left + width, size.width - insets.right),
     );
-    final bottom = math.max(insets.top, rect.top - gap);
+    final bottom = math.max(
+      insets.top,
+      math.min(rect.top - gap, size.height - insets.bottom),
+    );
     final popover = layoutChild(
       _PickerSlot.popover,
       BoxConstraints.tightFor(width: width)
