@@ -278,15 +278,15 @@ Run `dart tool/check_toolchain.dart` before repository checks; it verifies that
 the Flutter SDK on PATH matches `tool/flutter_version.json`. That configuration
 is the canonical version/revision authority; use it when the pin changes.
 
-Flutter SDK `3.47.7` (revision
-`abaf9c523780a608bd46686fd5e53740a07077f8`, Dart `3.13.5`) is the reproducible
+Flutter SDK `3.50.1` (revision
+`ae9b586f34a8443573f82ef57c3bf914a908cbf7`, Dart `3.14.0`) is the reproducible
 toolchain for macOS, Windows, and CI.
 
 Select the exact Flutter checkout rather than a different SDK already on PATH:
 
 ```sh
 git clone https://github.com/flutter/flutter.git /path/to/flutter
-git -C /path/to/flutter checkout abaf9c523780a608bd46686fd5e53740a07077f8
+git -C /path/to/flutter checkout ae9b586f34a8443573f82ef57c3bf914a908cbf7
 export PATH=/path/to/flutter/bin:$PATH
 flutter doctor -v
 ```
@@ -848,7 +848,7 @@ markers and native presentation still require physical Windows acceptance.
 ## Android TV development
 
 [Android runtime](android-runtime.md) owns the Android host, signing, sideload,
-media-entrypoint and local diagnostic instructions. Use pinned Flutter 3.47.7
+media-entrypoint and local diagnostic instructions. Use pinned Flutter 3.50.1
 first on `PATH`, JDK 17 and the SDK configured for that Flutter installation.
 Android uses the stock engine and supports API 28+ TV devices. Build the
 universal `armeabi-v7a` + `arm64-v8a` debug APK with:

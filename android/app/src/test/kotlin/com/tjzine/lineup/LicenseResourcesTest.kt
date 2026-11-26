@@ -34,7 +34,7 @@ class LicenseResourcesTest {
 
     private fun assets(extra: Map<String, ByteArray> = emptyMap()) = FakeAssets(
         mapOf(
-            "BUILD-INFO.txt" to "Flutter 3.47.7\n".toByteArray(),
+            "BUILD-INFO.txt" to "Flutter 3.50.1\n".toByteArray(),
             "licenses/NOTICES-SUMMARY.txt" to "summary\n".toByteArray(),
             "licenses/media3/LICENSE.txt" to "Apache\n".toByteArray(),
             "licenses/media3/nested/NOTICE.txt" to "Notice\n".toByteArray(),

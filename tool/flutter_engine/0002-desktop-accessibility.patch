@@ -1,5 +1,5 @@
 diff --git a/engine/src/flutter/shell/platform/common/accessibility_bridge.cc b/engine/src/flutter/shell/platform/common/accessibility_bridge.cc
-index d2524d35..5d776055 100644
+index e4cda5b1..7900269a 100644
 --- a/engine/src/flutter/shell/platform/common/accessibility_bridge.cc
 +++ b/engine/src/flutter/shell/platform/common/accessibility_bridge.cc
 @@ -4,7 +4,9 @@
@@ -516,7 +516,7 @@ index d2524d35..5d776055 100644
    FlutterSemanticsAction actions = node.actions;
    if (flags->is_expanded == FlutterTristate::kFlutterTristateTrue) {
      node_data.AddState(ax::mojom::State::kExpanded);
-@@ -433,7 +467,7 @@ void AccessibilityBridge::SetBooleanAttributesFromFlutterUpdate(
+@@ -438,7 +472,7 @@ void AccessibilityBridge::SetBooleanAttributesFromFlutterUpdate(
      ui::AXNodeData& node_data,
      const SemanticsNode& node) {
    FlutterSemanticsAction actions = node.actions;
@@ -525,7 +525,7 @@ index d2524d35..5d776055 100644
    node_data.AddBoolAttribute(ax::mojom::BoolAttribute::kScrollable,
                               actions & kHasScrollingAction);
    node_data.AddBoolAttribute(
-@@ -458,7 +492,7 @@ void AccessibilityBridge::SetBooleanAttributesFromFlutterUpdate(
+@@ -463,7 +497,7 @@ void AccessibilityBridge::SetBooleanAttributesFromFlutterUpdate(
  void AccessibilityBridge::SetIntAttributesFromFlutterUpdate(
      ui::AXNodeData& node_data,
      const SemanticsNode& node) {
@@ -534,7 +534,7 @@ index d2524d35..5d776055 100644
    node_data.AddIntAttribute(ax::mojom::IntAttribute::kTextDirection,
                              node.text_direction);
  
-@@ -514,9 +548,8 @@ void AccessibilityBridge::SetStringListAttributesFromFlutterUpdate(
+@@ -519,9 +553,8 @@ void AccessibilityBridge::SetStringListAttributesFromFlutterUpdate(
    if (actions & FlutterSemanticsAction::kFlutterSemanticsActionCustomAction) {
      std::vector<std::string> custom_action_description;
      for (size_t i = 0; i < node.custom_accessibility_actions.size(); i++) {
@@ -546,7 +546,7 @@ index d2524d35..5d776055 100644
        custom_action_description.push_back(iter->second.label);
      }
      node_data.AddStringListAttribute(
-@@ -550,7 +583,7 @@ void AccessibilityBridge::SetTooltipFromFlutterUpdate(
+@@ -555,7 +588,7 @@ void AccessibilityBridge::SetTooltipFromFlutterUpdate(
  
  void AccessibilityBridge::SetTreeData(const SemanticsNode& node,
                                        ui::AXTreeUpdate& tree_update) {
@@ -555,7 +555,7 @@ index d2524d35..5d776055 100644
    // Set selection of the focused node if:
    // 1. this text field has a valid selection
    // 2. this text field doesn't have a valid selection but had selection stored
-@@ -591,7 +624,7 @@ AccessibilityBridge::FromFlutterSemanticsNode(
+@@ -596,7 +629,7 @@ AccessibilityBridge::FromFlutterSemanticsNode(
    FML_DCHECK(flutter_node.flags2)
        << "FlutterSemanticsNode2::flags2 must not be null";
  
@@ -693,7 +693,7 @@ index 334eb26a..46104778 100644
    void SetLastFocusedId(AccessibilityNodeId node_id) override;
  
 diff --git a/engine/src/flutter/shell/platform/common/accessibility_bridge_unittests.cc b/engine/src/flutter/shell/platform/common/accessibility_bridge_unittests.cc
-index 4a1e1143..749eede1 100644
+index b47ddd36..0724b6b8 100644
 --- a/engine/src/flutter/shell/platform/common/accessibility_bridge_unittests.cc
 +++ b/engine/src/flutter/shell/platform/common/accessibility_bridge_unittests.cc
 @@ -4,6 +4,7 @@
@@ -704,7 +704,7 @@ index 4a1e1143..749eede1 100644
  #include "gmock/gmock.h"
  #include "gtest/gtest.h"
  
-@@ -635,5 +636,373 @@ TEST(AccessibilityBridgeTest, IsSelectedAttribute) {
+@@ -724,5 +725,373 @@ TEST(AccessibilityBridgeTest, IsSelectedAttribute) {
        ax::mojom::BoolAttribute::kSelected));
  }
  
@@ -1257,7 +1257,7 @@ index 9c90d5a9..32943217 100644
    ui::AXUniqueId unique_id_;
  };
 diff --git a/engine/src/flutter/shell/platform/darwin/macos/framework/Source/FlutterPlatformNodeDelegateMac.h b/engine/src/flutter/shell/platform/darwin/macos/framework/Source/FlutterPlatformNodeDelegateMac.h
-index 62014f67..29681739 100644
+index 8ae3edfd..049ee1ec 100644
 --- a/engine/src/flutter/shell/platform/darwin/macos/framework/Source/FlutterPlatformNodeDelegateMac.h
 +++ b/engine/src/flutter/shell/platform/darwin/macos/framework/Source/FlutterPlatformNodeDelegateMac.h
 @@ -25,6 +25,8 @@ class FlutterPlatformNodeDelegateMac : public FlutterPlatformNodeDelegate {
@@ -1269,7 +1269,7 @@ index 62014f67..29681739 100644
    void Init(std::weak_ptr<OwnerBridge> bridge, ui::AXNode* node) override;
  
    void NodeDataChanged(const ui::AXNodeData& old_node_data,
-@@ -52,7 +54,7 @@ class FlutterPlatformNodeDelegateMac : public FlutterPlatformNodeDelegate {
+@@ -55,7 +57,7 @@ class FlutterPlatformNodeDelegateMac : public FlutterPlatformNodeDelegate {
        ui::AXOffscreenResult* offscreen_result) const override;
  
   private:
@@ -1277,9 +1277,9 @@ index 62014f67..29681739 100644
 +  ui::AXPlatformNode* ax_platform_node_ = nullptr;
    std::weak_ptr<AccessibilityBridge> bridge_;
    __weak FlutterViewController* view_controller_;
- 
+   mutable ui::AXNodeData cached_data_;
 diff --git a/engine/src/flutter/shell/platform/darwin/macos/framework/Source/FlutterPlatformNodeDelegateMac.mm b/engine/src/flutter/shell/platform/darwin/macos/framework/Source/FlutterPlatformNodeDelegateMac.mm
-index 5a6c0235..d2c6ad98 100644
+index 744a0c45..9d1ad045 100644
 --- a/engine/src/flutter/shell/platform/darwin/macos/framework/Source/FlutterPlatformNodeDelegateMac.mm
 +++ b/engine/src/flutter/shell/platform/darwin/macos/framework/Source/FlutterPlatformNodeDelegateMac.mm
 @@ -25,6 +25,17 @@ FlutterPlatformNodeDelegateMac::FlutterPlatformNodeDelegateMac(
@@ -1299,8 +1299,8 @@ index 5a6c0235..d2c6ad98 100644
 +
  void FlutterPlatformNodeDelegateMac::Init(std::weak_ptr<OwnerBridge> bridge, ui::AXNode* node) {
    FlutterPlatformNodeDelegate::Init(bridge, node);
-   if (GetData().IsTextField()) {
-@@ -48,15 +59,19 @@ void FlutterPlatformNodeDelegateMac::NodeDataChanged(const ui::AXNodeData& old_n
+   if (GetData().IsTextField() && !GetData().IsReadOnlyOrDisabled()) {
+@@ -62,15 +73,19 @@ const ui::AXNodeData& FlutterPlatformNodeDelegateMac::GetData() const {
  
  FlutterPlatformNodeDelegateMac::~FlutterPlatformNodeDelegateMac() {
    // Destroy() also calls delete on itself.
@@ -1323,7 +1323,7 @@ index 5a6c0235..d2c6ad98 100644
    gfx::NativeViewAccessible parent = FlutterPlatformNodeDelegate::GetParent();
    if (!parent) {
      NSCAssert(view_controller_.viewLoaded, @"Flutter view must be loaded");
-@@ -82,7 +97,7 @@ gfx::NativeViewAccessible FlutterPlatformNodeDelegateMac::GetNSWindow() {
+@@ -96,7 +111,7 @@ gfx::NativeViewAccessible FlutterPlatformNodeDelegateMac::GetNSWindow() {
  }
  
  std::string FlutterPlatformNodeDelegateMac::GetLiveRegionText() const {
@@ -1333,10 +1333,10 @@ index 5a6c0235..d2c6ad98 100644
    }
  
 diff --git a/engine/src/flutter/shell/platform/darwin/macos/framework/Source/FlutterPlatformNodeDelegateMacTest.mm b/engine/src/flutter/shell/platform/darwin/macos/framework/Source/FlutterPlatformNodeDelegateMacTest.mm
-index 9509c03c..232bda94 100644
+index ab91caa2..782a5732 100644
 --- a/engine/src/flutter/shell/platform/darwin/macos/framework/Source/FlutterPlatformNodeDelegateMacTest.mm
 +++ b/engine/src/flutter/shell/platform/darwin/macos/framework/Source/FlutterPlatformNodeDelegateMacTest.mm
-@@ -398,4 +398,106 @@ TEST(FlutterPlatformNodeDelegateMac, ChangingFlagsUpdatesNativeViewAccessible) {
+@@ -482,4 +482,106 @@ TEST(FlutterPlatformNodeDelegateMac, ChangingFlagsUpdatesNativeViewAccessible) {
    EXPECT_TRUE([[native_accessibility className] isEqualToString:@"AXPlatformNodeCocoa"]);
  }
  
@@ -1460,7 +1460,7 @@ index 7a5653b0..0281de8c 100644
    if (!bridge_ptr) {
      return NSZeroRect;
 diff --git a/engine/src/flutter/shell/platform/darwin/macos/framework/Source/FlutterViewController.mm b/engine/src/flutter/shell/platform/darwin/macos/framework/Source/FlutterViewController.mm
-index 09ea8f37..5c0cc77e 100644
+index 9dbf42a4..331930e7 100644
 --- a/engine/src/flutter/shell/platform/darwin/macos/framework/Source/FlutterViewController.mm
 +++ b/engine/src/flutter/shell/platform/darwin/macos/framework/Source/FlutterViewController.mm
 @@ -497,9 +497,15 @@ static void CommonInit(FlutterViewController* controller, FlutterEngine* engine)
@@ -1495,7 +1495,7 @@ index 09ea8f37..5c0cc77e 100644
    // Accessibility tree can only be used when the view is loaded.
    if (!self.viewLoaded) {
 diff --git a/engine/src/flutter/shell/platform/windows/accessibility_bridge_windows_unittests.cc b/engine/src/flutter/shell/platform/windows/accessibility_bridge_windows_unittests.cc
-index 3f7ff3d2..5e0aa6c0 100644
+index ee6eb6cf..a80424c3 100644
 --- a/engine/src/flutter/shell/platform/windows/accessibility_bridge_windows_unittests.cc
 +++ b/engine/src/flutter/shell/platform/windows/accessibility_bridge_windows_unittests.cc
 @@ -245,6 +245,39 @@ void ExpectWinEventFromAXEventOnFocusNode(int32_t node_id,
@@ -1553,10 +1553,10 @@ index a548d70c..66524cb8 100644
    ui::AXOffscreenResult result;
    gfx::Rect rect = GetBoundsRect(ui::AXCoordinateSystem::kScreenPhysicalPixels,
 diff --git a/engine/src/flutter/shell/platform/windows/flutter_windows_engine.cc b/engine/src/flutter/shell/platform/windows/flutter_windows_engine.cc
-index d9f797ca..1a2f779c 100644
+index f22ec26b..0393e91a 100644
 --- a/engine/src/flutter/shell/platform/windows/flutter_windows_engine.cc
 +++ b/engine/src/flutter/shell/platform/windows/flutter_windows_engine.cc
-@@ -434,9 +434,15 @@ bool FlutterWindowsEngine::Run(std::string_view entrypoint) {
+@@ -444,9 +444,15 @@ bool FlutterWindowsEngine::Run(std::string_view entrypoint) {
        return;
      }
  
@@ -1572,7 +1572,7 @@ index d9f797ca..1a2f779c 100644
      }
  
      for (size_t i = 0; i < update->custom_action_count; i++) {
-@@ -444,7 +450,15 @@ bool FlutterWindowsEngine::Run(std::string_view entrypoint) {
+@@ -454,7 +460,15 @@ bool FlutterWindowsEngine::Run(std::string_view entrypoint) {
        accessibility_bridge->AddFlutterSemanticsCustomActionUpdate(*action);
      }
  
@@ -1590,10 +1590,10 @@ index d9f797ca..1a2f779c 100644
    args.root_isolate_create_callback = [](void* user_data) {
      auto host = static_cast<FlutterWindowsEngine*>(user_data);
 diff --git a/engine/src/flutter/shell/platform/windows/flutter_windows_engine_unittests.cc b/engine/src/flutter/shell/platform/windows/flutter_windows_engine_unittests.cc
-index 23e127cb..2a53fb54 100644
+index cd858737..6070c7de 100644
 --- a/engine/src/flutter/shell/platform/windows/flutter_windows_engine_unittests.cc
 +++ b/engine/src/flutter/shell/platform/windows/flutter_windows_engine_unittests.cc
-@@ -1839,6 +1839,71 @@ TEST_F(FlutterWindowsEngineTest, OnViewFocusChangeRequest) {
+@@ -1914,6 +1914,71 @@ TEST_F(FlutterWindowsEngineTest, OnViewFocusChangeRequest) {
    modifier.OnViewFocusChangeRequest(&request);
  }
  

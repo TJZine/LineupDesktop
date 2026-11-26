@@ -70,7 +70,7 @@ fast_float and other recursive submodule commits are pinned by this exact parent
 The companion manifest records each resolved submodule commit and archive hash.
 
 Flutter source:
-https://github.com/flutter/flutter/tree/abaf9c523780a608bd46686fd5e53740a07077f8
+https://github.com/flutter/flutter/tree/ae9b586f34a8443573f82ef57c3bf914a908cbf7
 Flutter DEPS and the selected engine receipt pin its full evaluated Git dependency graph.
 The companion contains baseline source snapshots plus the macOS patches and build recipe.
 Its manifest binds these to the selected engine and final candidate; no stock-engine claim is made.

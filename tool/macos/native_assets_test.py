@@ -16,7 +16,9 @@ spec = importlib.util.spec_from_file_location('assets', Path(__file__).with_name
 n = importlib.util.module_from_spec(spec)
 spec.loader.exec_module(n)
 ROOT = Path(__file__).resolve().parents[2]
-DART = Path.home() / '.cache/lineup-flutter/3.47.7/flutter/bin/dart'
+FLUTTER_VERSION = json.loads((ROOT / 'tool/flutter_version.json').read_text())['version']
+FLUTTER_ROOT = Path(os.environ.get('FLUTTER_ROOT', Path.home() / '.cache/lineup-flutter' / FLUTTER_VERSION / 'flutter'))
+DART = FLUTTER_ROOT / 'bin/dart'
 
 
 def thin(target=12, cpu=0x100000c, platform=1, kind=6):
@@ -43,12 +45,15 @@ class BundleTests(unittest.TestCase):
         self.addCleanup(self.temp.cleanup)
         self.app = Path(self.temp.name) / 'Lineup.app'
         self.write('Contents/Info.plist', plistlib.dumps({'CFBundleExecutable': 'Lineup'}))
-        self.write('Contents/MacOS/Lineup', thin(kind=2))
+        runpath = b'@executable_path/../Frameworks\0'
+        size = (12 + len(runpath) + 7) // 8 * 8
+        command = struct.pack('<3I', 0x8000001c, size, 12) + runpath.ljust(size - 12, b'\0')
+        self.executable = self.write('Contents/MacOS/Lineup', with_commands(thin(kind=2), command))
         self.asset = self.write('Contents/Frameworks/objective_c.framework/objective_c', thin())
         self.write('Contents/Frameworks/objective_c.framework/Resources/Info.plist', plistlib.dumps({
             'CFBundleIdentifier': 'io.flutter.flutter.native-assets.objective-c', 'CFBundleExecutable': 'objective_c'}))
         self.manifest = self.write('Contents/Frameworks/App.framework/Resources/flutter_assets/NativeAssetsManifest.json',
-                                  json.dumps({'native-assets': {'macos_arm64': {n.ASSET: ['absolute', 'objective_c.framework/objective_c']}}}).encode())
+                                  json.dumps({'native-assets': {'macos_arm64': {n.ASSET: ['absolute', '@rpath/objective_c.framework/objective_c']}}}).encode())
 
     def write(self, name, data):
         path = self.app / name
@@ -80,7 +85,13 @@ class BundleTests(unittest.TestCase):
         original = self.manifest.read_bytes()
         self.manifest.write_text(original.decode().replace('package:objective_c/', 'package:other/'))
         with self.assertRaises(ValueError): n.bundle_closure(self.app)
+        self.manifest.write_bytes(original.replace(b'@rpath/', b'/external/'))
+        with self.assertRaisesRegex(ValueError, 'Incorrect objective_c asset mapping'): n.bundle_closure(self.app)
         self.manifest.write_bytes(original)
+        main = self.executable.read_bytes()
+        self.executable.write_bytes(thin(kind=2))
+        with self.assertRaisesRegex(ValueError, 'runpaths'): n.bundle_closure(self.app)
+        self.executable.write_bytes(main)
         self.asset.unlink()
         self.asset.symlink_to(Path(self.temp.name) / 'external')
         with self.assertRaises((ValueError, OSError)): n.bundle_closure(self.app)
@@ -218,7 +229,11 @@ class InputTests(unittest.TestCase):
                 write(name, 'fixture')
             foreign = write(n.VENDOR + '/src/immutable.c', 'native baseline')
             hook = write(n.VENDOR + '/hook/build.dart', 'owned hook')
-            write(n.VENDOR + '/UPSTREAM.json', json.dumps({'files': {'src/immutable.c': n.sha(foreign)}}))
+            manifest = write(n.VENDOR + '/pubspec.yaml', 'version: 9.6.2\n  code_assets: ^2.0.0\n')
+            write(n.VENDOR + '/UPSTREAM.json', json.dumps({'files': {
+                'src/immutable.c': n.sha(foreign), 'pubspec.yaml': n.sha(manifest)}}))
+            local_manifest = manifest.read_text().replace('^2.0.0', '^2.2.0')
+            manifest.write_text(local_manifest)
             with patch.object(n, 'native_toolchain_identity', return_value={}):
                 before = n.project_inputs(root)
                 hook.write_text('changed owned hook')
@@ -230,6 +245,11 @@ class InputTests(unittest.TestCase):
                 xcode.write_text('MACOSX_DEPLOYMENT_TARGET = 13.0;')
                 with self.assertRaisesRegex(ValueError, 'target mismatch'): n.project_inputs(root)
                 xcode.write_text('MACOSX_DEPLOYMENT_TARGET = 12.0;')
+                manifest.write_text(local_manifest.replace('^2.2.0', '^2.0.0'))
+                with self.assertRaisesRegex(ValueError, 'code_assets constraint'): n.project_inputs(root)
+                manifest.write_text(local_manifest.replace('9.6.2', '9.6.4'))
+                with self.assertRaisesRegex(ValueError, 'Foreign baseline changed'): n.project_inputs(root)
+                manifest.write_text(local_manifest)
                 foreign.write_text('changed runtime')
                 with self.assertRaisesRegex(ValueError, 'Foreign baseline changed'): n.project_inputs(root)
 

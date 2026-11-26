@@ -171,14 +171,15 @@
      );
    }
  
-@@ -194,13 +304,21 @@
+@@ -194,13 +304,22 @@
        .first;
  }
  
 -String minOSVersion(CodeConfig codeConfig) {
 +String minOSVersion(CodeConfig codeConfig, {Object? macosTargetVersion}) {
    if (codeConfig.targetOS == OS.iOS) {
-     final targetVersion = codeConfig.iOS.targetVersion;
+-    final targetVersion = codeConfig.iOS.targetVersion;
++    final targetVersion = codeConfig.iOS.deploymentVersion.major;
      return '-mios-version-min=$targetVersion';
    }
    assert(codeConfig.targetOS == OS.macOS);
@@ -191,7 +192,8 @@
 +      'macos_target_version must be an integer from 10 to 99.',
 +    );
 +  }
-+  final targetVersion = macosTargetVersion ?? codeConfig.macOS.targetVersion;
++  final targetVersion =
++      macosTargetVersion ?? codeConfig.macOS.deploymentVersion.major;
    return '-mmacos-version-min=$targetVersion';
  }
  
@@ -227,3 +229,10 @@
 -    discarded_futures: true
 +    avoid_print: false
 +    only_throw_errors: false
+--- a/pubspec.yaml
++++ b/pubspec.yaml
+@@ -19,3 +19,3 @@
+ dependencies:
+-  code_assets: ^2.0.0
++  code_assets: ^2.2.0
+   collection: ^1.19.1

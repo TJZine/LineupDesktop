@@ -1,4 +1,4 @@
-import 'package:flutter/material.dart';
+import 'package:material_ui/material_ui.dart';
 import 'package:flutter/semantics.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_test/flutter_test.dart';
@@ -354,6 +354,32 @@ void main() {
       );
     }
   }
+
+  testWidgets('Escape clears focused Guide search with a visible tooltip', (
+    tester,
+  ) async {
+    final fixture = _guideFocusFixture();
+    await tester.pumpWidget(fixture.build());
+    await tester.pumpAndSettle();
+    final search = find.byKey(const Key('guide-channel-search'));
+    final focus = tester.widget<TextField>(search).focusNode!;
+    final guide = tester.widget<GuideView>(find.byType(GuideView)).controller;
+    await tester.enterText(search, 'News');
+    await tester.pumpAndSettle();
+    final clear = find.byWidgetPredicate(
+      (widget) => widget is Tooltip && widget.message == 'Clear search',
+    );
+    expect(tester.state<TooltipState>(clear).ensureTooltipVisible(), isTrue);
+    await tester.pumpAndSettle();
+    expect(find.text('Clear search'), findsOneWidget);
+    expect(focus.hasPrimaryFocus, isTrue);
+    await tester.sendKeyEvent(LogicalKeyboardKey.escape);
+    await tester.pumpAndSettle();
+    expect(guide.searchQuery, isEmpty);
+    expect(focus.hasPrimaryFocus, isTrue);
+    expect(find.byKey(const Key('immersive-app-menu')), findsNothing);
+    await tester.pumpWidget(const SizedBox.shrink());
+  });
 
   testWidgets('menu return falls back when the Guide invoker is removed', (
     tester,

@@ -1,3 +1,5 @@
+// This reproduction runs on the original Flutter 3.47.7 SDK.
+// ignore: deprecated_member_use
 import 'package:flutter/material.dart';
 
 const _reachableOrigin = bool.fromEnvironment('REPRO_REACHABLE_ORIGIN');

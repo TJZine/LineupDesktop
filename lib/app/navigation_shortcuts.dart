@@ -2,7 +2,7 @@ import 'dart:async';
 
 import 'package:flutter/foundation.dart';
 
-import 'package:flutter/material.dart';
+import 'package:material_ui/material_ui.dart';
 import 'package:flutter/services.dart';
 
 enum ShellDestination { guide, channels, settings, diagnostics, player }
@@ -28,6 +28,19 @@ ShellDestination? navigationShortcutDestination(LogicalKeyboardKey key) {
     LogicalKeyboardKey.keyP => ShellDestination.player,
     _ => null,
   };
+}
+
+/// Walk the focused controls only as far as the owning surface. A handler can
+/// remove its own subtree, so take the same snapshot as Flutter's key dispatch.
+KeyEventResult dispatchFocusedKeyWithin(FocusNode boundary, KeyEvent event) {
+  final primary = FocusManager.instance.primaryFocus;
+  if (primary == null || !boundary.hasFocus) return KeyEventResult.ignored;
+  for (final node in [primary, ...primary.ancestors]) {
+    final result = node.onKeyEvent?.call(node, event);
+    if (result != null && result != KeyEventResult.ignored) return result;
+    if (node == boundary) break;
+  }
+  return KeyEventResult.ignored;
 }
 
 /// Native Android normalizes OS Back to one route request. This single root
@@ -90,17 +103,8 @@ class _AndroidBackScopeState extends State<AndroidBackScope> {
       logicalKey: LogicalKeyboardKey.goBack,
       timeStamp: Duration.zero,
     );
-    final primary = FocusManager.instance.primaryFocus;
-    if (primary != null &&
-        (primary == _focus || primary.ancestors.contains(_focus))) {
-      // Snapshot before callbacks: handling Back may remove a focused subtree.
-      for (final node in [primary, ...primary.ancestors]) {
-        if (node.onKeyEvent?.call(node, event) case final result?
-            when result != KeyEventResult.ignored) {
-          return;
-        }
-        if (node == _focus) break;
-      }
+    if (dispatchFocusedKeyWithin(_focus, event) != KeyEventResult.ignored) {
+      return;
     }
     _dispatchUnhandledBack();
   }

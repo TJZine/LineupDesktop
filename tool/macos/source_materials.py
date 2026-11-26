@@ -39,6 +39,7 @@ HELPERS = [
     'docs/licenses-and-rebuilding.md',
     'third_party/objective_c/VENDOR.md', 'third_party/objective_c/LOCAL.patch',
     'third_party/objective_c/hook/build.dart', 'third_party/objective_c/analysis_options.yaml',
+    'third_party/objective_c/pubspec.yaml',
     'pubspec.yaml', 'pubspec.lock', 'analysis_options.yaml', 'tool/format.dart',
     'tool/macos/native_assets.py',
 ]

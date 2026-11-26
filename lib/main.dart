@@ -3,7 +3,7 @@ import 'dart:ui';
 
 import 'package:flutter/foundation.dart'
     show defaultTargetPlatform, debugPrintSynchronously, kReleaseMode;
-import 'package:flutter/material.dart';
+import 'package:material_ui/material_ui.dart';
 
 import 'app/lineup_app.dart';
 import 'app/lineup_controller.dart';

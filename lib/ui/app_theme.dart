@@ -1,4 +1,4 @@
-import 'package:flutter/material.dart';
+import 'package:material_ui/material_ui.dart';
 
 import '../platform/device_profile.dart';
 import '../settings/lineup_settings.dart';

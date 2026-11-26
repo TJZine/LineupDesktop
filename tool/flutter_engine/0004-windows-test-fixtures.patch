@@ -1,7 +1,7 @@
 diff --git a/engine/src/flutter/shell/platform/windows/testing/windows_test_context.h b/engine/src/flutter/shell/platform/windows/testing/windows_test_context.h
 --- a/engine/src/flutter/shell/platform/windows/testing/windows_test_context.h
 +++ b/engine/src/flutter/shell/platform/windows/testing/windows_test_context.h
-@@ -51,7 +51,7 @@
+@@ -60,7 +60,7 @@
   private:
    std::wstring assets_path_;
    std::wstring icu_data_path_ = L"icudtl.dat";
@@ -13,15 +13,15 @@ diff --git a/engine/src/flutter/shell/platform/windows/testing/windows_test_cont
 diff --git a/engine/src/flutter/shell/platform/windows/testing/windows_test_context.cc b/engine/src/flutter/shell/platform/windows/testing/windows_test_context.cc
 --- a/engine/src/flutter/shell/platform/windows/testing/windows_test_context.cc
 +++ b/engine/src/flutter/shell/platform/windows/testing/windows_test_context.cc
-@@ -3,6 +3,8 @@
- // found in the LICENSE file.
+@@ -4,6 +4,8 @@
  
  #include "flutter/shell/platform/windows/testing/windows_test_context.h"
-+
-+#include <filesystem>
  
++#include <filesystem>
++
  #include "flutter/fml/platform/win/wstring_conversion.h"
  
+ namespace flutter {
 @@ -12,6 +14,13 @@
  WindowsTestContext::WindowsTestContext(std::string_view assets_path)
      : assets_path_(fml::Utf8ToWideString(assets_path)),
@@ -95,7 +95,7 @@ diff --git a/engine/src/flutter/shell/platform/windows/flutter_windows_view_unit
 diff --git a/engine/src/flutter/shell/platform/windows/flutter_windows_engine_unittests.cc b/engine/src/flutter/shell/platform/windows/flutter_windows_engine_unittests.cc
 --- a/engine/src/flutter/shell/platform/windows/flutter_windows_engine_unittests.cc
 +++ b/engine/src/flutter/shell/platform/windows/flutter_windows_engine_unittests.cc
-@@ -57,7 +57,6 @@
+@@ -59,7 +59,6 @@
    std::unique_ptr<FlutterWindowsEngine> engine = builder.Build();
  
    EngineModifier modifier(engine.get());
@@ -103,7 +103,7 @@ diff --git a/engine/src/flutter/shell/platform/windows/flutter_windows_engine_un
  
    ASSERT_TRUE(engine->Run());
    ASSERT_EQ(engine->view(kImplicitViewId), nullptr);
-@@ -195,6 +194,8 @@
+@@ -197,6 +196,8 @@
  
    // The engine should be run with expected configuration values.
    bool run_called = false;
@@ -112,7 +112,7 @@ diff --git a/engine/src/flutter/shell/platform/windows/flutter_windows_engine_un
    modifier.embedder_api().Run = MOCK_ENGINE_PROC(
        Run, ([&run_called, engine_instance = engine.get()](
                  size_t version, const FlutterRendererConfig* config,
-@@ -281,7 +282,7 @@
+@@ -283,7 +284,7 @@
    // Set the EGL manager to !nullptr to test ANGLE rendering.
    modifier.SetEGLManager(std::make_unique<egl::MockManager>());
  
@@ -121,7 +121,7 @@ diff --git a/engine/src/flutter/shell/platform/windows/flutter_windows_engine_un
  
    EXPECT_TRUE(run_called);
    EXPECT_TRUE(update_locales_called);
-@@ -337,6 +338,8 @@
+@@ -339,6 +340,8 @@
  
    // The engine should be run with expected configuration values.
    bool run_called = false;
@@ -130,7 +130,7 @@ diff --git a/engine/src/flutter/shell/platform/windows/flutter_windows_engine_un
    modifier.embedder_api().Run = MOCK_ENGINE_PROC(
        Run, ([&run_called, engine_instance = engine.get()](
                  size_t version, const FlutterRendererConfig* config,
-@@ -366,7 +369,7 @@
+@@ -368,7 +371,7 @@
    // Set the EGL manager to nullptr to test software fallback path.
    modifier.SetEGLManager(nullptr);
  
@@ -139,7 +139,7 @@ diff --git a/engine/src/flutter/shell/platform/windows/flutter_windows_engine_un
  
    EXPECT_TRUE(run_called);
  
-@@ -438,6 +441,8 @@
+@@ -440,6 +443,8 @@
                         ([](auto engine, auto message) { return kSuccess; }));
  
    bool run_called = false;
@@ -148,7 +148,7 @@ diff --git a/engine/src/flutter/shell/platform/windows/flutter_windows_engine_un
    modifier.embedder_api().Run = MOCK_ENGINE_PROC(
        Run, ([&run_called, engine_instance = engine.get()](
                  size_t version, const FlutterRendererConfig* config,
-@@ -465,7 +470,7 @@
+@@ -467,7 +472,7 @@
    // Set the EGL manager to !nullptr to test ANGLE rendering.
    modifier.SetEGLManager(std::make_unique<egl::MockManager>());
  
@@ -157,7 +157,7 @@ diff --git a/engine/src/flutter/shell/platform/windows/flutter_windows_engine_un
  
    EXPECT_TRUE(run_called);
  
-@@ -500,6 +505,8 @@
+@@ -502,6 +507,8 @@
                         ([](auto engine, auto message) { return kSuccess; }));
  
    bool run_called = false;
@@ -166,7 +166,7 @@ diff --git a/engine/src/flutter/shell/platform/windows/flutter_windows_engine_un
    modifier.embedder_api().Run = MOCK_ENGINE_PROC(
        Run, ([&run_called](size_t version, const FlutterRendererConfig* config,
                            const FlutterProjectArgs* args, void* user_data,
-@@ -526,7 +533,7 @@
+@@ -528,7 +535,7 @@
    // Set the EGL manager to !nullptr to test ANGLE rendering.
    modifier.SetEGLManager(std::make_unique<egl::MockManager>());
  
@@ -175,7 +175,16 @@ diff --git a/engine/src/flutter/shell/platform/windows/flutter_windows_engine_un
  
    EXPECT_TRUE(run_called);
  
-@@ -561,6 +568,8 @@
+@@ -558,6 +565,8 @@
+                        ([](auto engine, auto message) { return kSuccess; }));
+ 
+   std::vector<std::string> switches;
++  // Run returns a fake engine handle without starting a Dart VM.
++  modifier.embedder_api().RunsAOTCompiledDartCode = []() { return false; };
+   modifier.embedder_api().Run = MOCK_ENGINE_PROC(
+       Run, ([&switches](size_t version, const FlutterRendererConfig* config,
+                         const FlutterProjectArgs* args, void* user_data,
+@@ -638,6 +647,8 @@
                         ([](auto engine, auto message) { return kSuccess; }));
  
    bool run_called = false;
@@ -184,7 +193,7 @@ diff --git a/engine/src/flutter/shell/platform/windows/flutter_windows_engine_un
    modifier.embedder_api().Run = MOCK_ENGINE_PROC(
        Run, ([&run_called](size_t version, const FlutterRendererConfig* config,
                            const FlutterProjectArgs* args, void* user_data,
-@@ -581,7 +590,7 @@
+@@ -658,7 +669,7 @@
    // Set the EGL manager to !nullptr to test ANGLE rendering.
    modifier.SetEGLManager(std::make_unique<egl::MockManager>());
  
@@ -193,7 +202,7 @@ diff --git a/engine/src/flutter/shell/platform/windows/flutter_windows_engine_un
  
    EXPECT_TRUE(run_called);
  
-@@ -615,6 +624,8 @@
+@@ -692,6 +703,8 @@
                         ([](auto engine, auto message) { return kSuccess; }));
  
    bool run_called = false;
@@ -202,7 +211,7 @@ diff --git a/engine/src/flutter/shell/platform/windows/flutter_windows_engine_un
    modifier.embedder_api().Run = MOCK_ENGINE_PROC(
        Run, ([&run_called](size_t version, const FlutterRendererConfig* config,
                            const FlutterProjectArgs* args, void* user_data,
-@@ -635,7 +646,7 @@
+@@ -712,7 +725,7 @@
    // Set the EGL manager to !nullptr to test ANGLE rendering.
    modifier.SetEGLManager(std::make_unique<egl::MockManager>());
  
@@ -211,7 +220,7 @@ diff --git a/engine/src/flutter/shell/platform/windows/flutter_windows_engine_un
  
    EXPECT_TRUE(run_called);
  
-@@ -670,6 +681,8 @@
+@@ -747,6 +760,8 @@
                         ([](auto engine, auto message) { return kSuccess; }));
  
    bool run_called = false;
@@ -220,7 +229,7 @@ diff --git a/engine/src/flutter/shell/platform/windows/flutter_windows_engine_un
    modifier.embedder_api().Run = MOCK_ENGINE_PROC(
        Run, ([&run_called](size_t version, const FlutterRendererConfig* config,
                            const FlutterProjectArgs* args, void* user_data,
-@@ -688,7 +701,7 @@
+@@ -765,7 +780,7 @@
          return kSuccess;
        }));
  
@@ -229,7 +238,7 @@ diff --git a/engine/src/flutter/shell/platform/windows/flutter_windows_engine_un
  
    EXPECT_TRUE(run_called);
  
-@@ -722,6 +735,8 @@
+@@ -799,6 +814,8 @@
                         ([](auto engine, auto message) { return kSuccess; }));
  
    bool run_called = false;
@@ -238,7 +247,7 @@ diff --git a/engine/src/flutter/shell/platform/windows/flutter_windows_engine_un
    modifier.embedder_api().Run = MOCK_ENGINE_PROC(
        Run, ([&run_called](size_t version, const FlutterRendererConfig* config,
                            const FlutterProjectArgs* args, void* user_data,
-@@ -740,7 +755,7 @@
+@@ -817,7 +834,7 @@
          return kSuccess;
        }));
  
@@ -247,7 +256,7 @@ diff --git a/engine/src/flutter/shell/platform/windows/flutter_windows_engine_un
  
    EXPECT_TRUE(run_called);
  
-@@ -780,12 +795,11 @@
+@@ -857,12 +874,11 @@
  
    std::unique_ptr<FlutterWindowsEngine> engine = builder.Build();
    EngineModifier modifier(engine.get());
@@ -261,7 +270,7 @@ diff --git a/engine/src/flutter/shell/platform/windows/flutter_windows_engine_un
    bool did_call_callback = false;
    bool did_call_reply = false;
    bool did_call_dart_reply = false;
-@@ -826,12 +840,11 @@
+@@ -903,12 +919,11 @@
    std::unique_ptr<FlutterWindowsEngine> engine = builder.Build();
  
    EngineModifier modifier(engine.get());
@@ -275,7 +284,7 @@ diff --git a/engine/src/flutter/shell/platform/windows/flutter_windows_engine_un
    bool did_call_callback = false;
    bool did_call_reply = false;
    bool did_call_dart_reply = false;
-@@ -982,7 +995,7 @@
+@@ -1059,7 +1074,7 @@
    MockEmbedderApiForKeyboard(modifier,
                               std::make_shared<MockKeyResponseController>());
  
@@ -284,7 +293,7 @@ diff --git a/engine/src/flutter/shell/platform/windows/flutter_windows_engine_un
  
    // Verify that destruction handlers don't overwrite each other.
    int result1 = 0;
-@@ -1255,7 +1268,6 @@
+@@ -1329,7 +1344,6 @@
  
    EngineModifier modifier(engine.get());
    modifier.SetImplicitView(&view);
@@ -292,7 +301,7 @@ diff --git a/engine/src/flutter/shell/platform/windows/flutter_windows_engine_un
    auto handler = std::make_unique<MockWindowsLifecycleManager>(engine.get());
    EXPECT_CALL(*handler, Quit)
        .WillOnce([&finished](std::optional<HWND> hwnd,
-@@ -1267,7 +1279,7 @@
+@@ -1341,7 +1355,7 @@
  
    engine->lifecycle_manager()->BeginProcessingExit();
  
@@ -301,7 +310,7 @@ diff --git a/engine/src/flutter/shell/platform/windows/flutter_windows_engine_un
  
    engine->window_proc_delegate_manager()->OnTopLevelWindowProc(0, WM_CLOSE, 0,
                                                                 0);
-@@ -1291,7 +1303,6 @@
+@@ -1365,7 +1379,6 @@
  
    EngineModifier modifier(engine.get());
    modifier.SetImplicitView(&view);
@@ -309,7 +318,7 @@ diff --git a/engine/src/flutter/shell/platform/windows/flutter_windows_engine_un
    auto handler = std::make_unique<MockWindowsLifecycleManager>(engine.get());
    EXPECT_CALL(*handler, IsLastWindowOfProcess).WillRepeatedly(Return(true));
    EXPECT_CALL(*handler, Quit).Times(0);
-@@ -1313,7 +1324,7 @@
+@@ -1387,7 +1400,7 @@
          reply(reinterpret_cast<uint8_t*>(response), 0);
        });
  
@@ -318,7 +327,7 @@ diff --git a/engine/src/flutter/shell/platform/windows/flutter_windows_engine_un
  
    engine->window_proc_delegate_manager()->OnTopLevelWindowProc(0, WM_CLOSE, 0,
                                                                 0);
-@@ -1338,7 +1349,6 @@
+@@ -1412,7 +1425,6 @@
  
    EngineModifier modifier(engine.get());
    modifier.SetImplicitView(&view);
@@ -326,7 +335,7 @@ diff --git a/engine/src/flutter/shell/platform/windows/flutter_windows_engine_un
    auto handler = std::make_unique<MockWindowsLifecycleManager>(engine.get());
    EXPECT_CALL(*handler, IsLastWindowOfProcess).WillOnce(Return(true));
    EXPECT_CALL(*handler, Quit)
-@@ -1357,7 +1367,7 @@
+@@ -1431,7 +1443,7 @@
    modifier.SetLifecycleManager(std::move(handler));
    engine->lifecycle_manager()->BeginProcessingExit();
  
@@ -335,7 +344,7 @@ diff --git a/engine/src/flutter/shell/platform/windows/flutter_windows_engine_un
  
    // This delegate will be registered after the lifecycle manager, so it will be
    // called only when a message is not consumed by the lifecycle manager. This
-@@ -1397,7 +1407,6 @@
+@@ -1471,7 +1483,6 @@
  
    EngineModifier modifier(engine.get());
    modifier.SetImplicitView(&view);
@@ -343,7 +352,7 @@ diff --git a/engine/src/flutter/shell/platform/windows/flutter_windows_engine_un
    auto handler = std::make_unique<MockWindowsLifecycleManager>(engine.get());
    EXPECT_CALL(*handler, IsLastWindowOfProcess).WillOnce([&finished]() {
      finished = true;
-@@ -1408,7 +1417,7 @@
+@@ -1482,7 +1493,7 @@
    modifier.SetLifecycleManager(std::move(handler));
    engine->lifecycle_manager()->BeginProcessingExit();
  
@@ -352,7 +361,7 @@ diff --git a/engine/src/flutter/shell/platform/windows/flutter_windows_engine_un
  
    engine->window_proc_delegate_manager()->OnTopLevelWindowProc(0, WM_CLOSE, 0,
                                                                 0);
-@@ -1428,7 +1437,6 @@
+@@ -1502,7 +1513,6 @@
  
    EngineModifier modifier(engine.get());
    modifier.SetImplicitView(&view);
@@ -360,7 +369,7 @@ diff --git a/engine/src/flutter/shell/platform/windows/flutter_windows_engine_un
    auto handler = std::make_unique<MockWindowsLifecycleManager>(engine.get());
    EXPECT_CALL(*handler, IsLastWindowOfProcess).Times(0);
    modifier.SetLifecycleManager(std::move(handler));
-@@ -1447,7 +1455,6 @@
+@@ -1521,7 +1531,6 @@
  
    EngineModifier modifier(engine.get());
    modifier.SetImplicitView(&view);
@@ -368,7 +377,7 @@ diff --git a/engine/src/flutter/shell/platform/windows/flutter_windows_engine_un
    auto handler = std::make_unique<MockWindowsLifecycleManager>(engine.get());
    EXPECT_CALL(*handler, IsLastWindowOfProcess).WillOnce(Return(false));
    modifier.SetLifecycleManager(std::move(handler));
-@@ -1467,7 +1474,6 @@
+@@ -1541,7 +1550,6 @@
  
    EngineModifier modifier(engine.get());
    modifier.SetImplicitView(&view);
@@ -376,7 +385,7 @@ diff --git a/engine/src/flutter/shell/platform/windows/flutter_windows_engine_un
    auto handler = std::make_unique<MockWindowsLifecycleManager>(engine.get());
    EXPECT_CALL(*handler, IsLastWindowOfProcess).WillOnce(Return(false));
    modifier.SetLifecycleManager(std::move(handler));
-@@ -1486,8 +1492,7 @@
+@@ -1560,8 +1568,7 @@
  
    EngineModifier modifier(engine.get());
    modifier.SetImplicitView(&view);
@@ -386,7 +395,7 @@ diff --git a/engine/src/flutter/shell/platform/windows/flutter_windows_engine_un
  
    engine->window_proc_delegate_manager()->OnTopLevelWindowProc(
        (HWND)1, WM_SIZE, SIZE_RESTORED, 0);
-@@ -1540,9 +1545,8 @@
+@@ -1614,9 +1621,8 @@
  
    EngineModifier modifier(engine.get());
    modifier.SetImplicitView(&view);
@@ -397,7 +406,7 @@ diff --git a/engine/src/flutter/shell/platform/windows/flutter_windows_engine_un
  
    // Ensure HWND(1) is in the set of visible windows before hiding it.
    engine->ProcessExternalWindowMessage(reinterpret_cast<HWND>(1), WM_SHOWWINDOW,
-@@ -1571,9 +1575,8 @@
+@@ -1645,9 +1651,8 @@
  
    EngineModifier modifier(engine.get());
    modifier.SetImplicitView(&view);
@@ -408,7 +417,7 @@ diff --git a/engine/src/flutter/shell/platform/windows/flutter_windows_engine_un
  
    // Show both top-level and Flutter window.
    engine->window_proc_delegate_manager()->OnTopLevelWindowProc(
-@@ -1612,7 +1615,6 @@
+@@ -1686,7 +1691,6 @@
  
    EngineModifier modifier(engine.get());
    modifier.SetImplicitView(&view);
@@ -416,7 +425,7 @@ diff --git a/engine/src/flutter/shell/platform/windows/flutter_windows_engine_un
    auto handler = std::make_unique<MockWindowsLifecycleManager>(engine.get());
    EXPECT_CALL(*handler, SetLifecycleState)
        .WillRepeatedly([handler_ptr = handler.get()](AppLifecycleState state) {
-@@ -1634,7 +1636,7 @@
+@@ -1708,7 +1712,7 @@
          reply(reinterpret_cast<uint8_t*>(response), 0);
        });
  
@@ -425,7 +434,7 @@ diff --git a/engine/src/flutter/shell/platform/windows/flutter_windows_engine_un
  
    // Test that setting the state before enabling lifecycle does nothing.
    HWND hwnd = reinterpret_cast<HWND>(1);
-@@ -1665,7 +1667,6 @@
+@@ -1739,7 +1743,6 @@
  
    EngineModifier modifier(engine.get());
    modifier.SetImplicitView(&view);
@@ -433,7 +442,7 @@ diff --git a/engine/src/flutter/shell/platform/windows/flutter_windows_engine_un
    auto handler = std::make_unique<MockWindowsLifecycleManager>(engine.get());
    EXPECT_CALL(*handler, SetLifecycleState)
        .WillRepeatedly([handler_ptr = handler.get()](AppLifecycleState state) {
-@@ -1686,7 +1687,7 @@
+@@ -1760,7 +1763,7 @@
          reply(reinterpret_cast<uint8_t*>(response), 0);
        });
  
@@ -442,7 +451,7 @@ diff --git a/engine/src/flutter/shell/platform/windows/flutter_windows_engine_un
  
    while (!enabled_lifecycle) {
      engine->task_runner()->ProcessTasks();
-@@ -1712,14 +1713,13 @@
+@@ -1786,14 +1789,13 @@
  
    EngineModifier modifier(engine.get());
    modifier.SetImplicitView(&view);
@@ -458,7 +467,7 @@ diff --git a/engine/src/flutter/shell/platform/windows/flutter_windows_engine_un
  
    while (!lifecycle_began) {
      engine->task_runner()->ProcessTasks();
-@@ -1732,7 +1732,6 @@
+@@ -1806,7 +1808,6 @@
    auto engine = builder.Build();
  
    EngineModifier modifier{engine.get()};
@@ -466,7 +475,7 @@ diff --git a/engine/src/flutter/shell/platform/windows/flutter_windows_engine_un
  
    bool received_call = false;
  
-@@ -1744,7 +1743,7 @@
+@@ -1818,7 +1819,7 @@
        });
    modifier.SetPlatformViewPlugin(std::move(manager));
  
@@ -475,7 +484,7 @@ diff --git a/engine/src/flutter/shell/platform/windows/flutter_windows_engine_un
  
    while (!received_call) {
      engine->task_runner()->ProcessTasks();
-@@ -1757,7 +1756,6 @@
+@@ -1831,7 +1832,6 @@
  
    EngineModifier modifier{engine.get()};
  
@@ -483,7 +492,7 @@ diff --git a/engine/src/flutter/shell/platform/windows/flutter_windows_engine_un
    modifier.embedder_api().AddView = MOCK_ENGINE_PROC(
        AddView,
        [](FLUTTER_API_SYMBOL(FlutterEngine) engine,
-@@ -1791,7 +1789,6 @@
+@@ -1867,7 +1867,6 @@
  
    EngineModifier modifier{engine.get()};
  
@@ -491,15 +500,15 @@ diff --git a/engine/src/flutter/shell/platform/windows/flutter_windows_engine_un
    modifier.embedder_api().RemoveView = MOCK_ENGINE_PROC(
        RemoveView,
        [](FLUTTER_API_SYMBOL(FlutterEngine) engine,
-@@ -1816,6 +1813,7 @@
-   context.AddNativeFunction("Signal", native_entry);
+@@ -1891,6 +1890,7 @@
+   context.AddFfiNativeFunction("Signal", native_entry);
  
    EnginePtr engine{builder.RunHeadless()};
 +  ASSERT_NE(engine, nullptr);
    while (!ui_thread_id) {
      PumpMessage();
    }
-@@ -1873,7 +1871,6 @@
+@@ -2012,7 +2012,6 @@
  
    auto windows_engine = reinterpret_cast<FlutterWindowsEngine*>(engine.get());
    EngineModifier modifier{windows_engine};

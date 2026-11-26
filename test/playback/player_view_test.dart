@@ -1,3 +1,4 @@
+import '../support/material_tooltip.dart';
 import '../support/device_profile_test_support.dart';
 
 import 'dart:async';
@@ -10,7 +11,7 @@ import 'dart:ui' as ui;
 import 'package:flutter/gestures.dart';
 import 'package:flutter/foundation.dart'
     show TargetPlatform, debugDefaultTargetPlatformOverride;
-import 'package:flutter/material.dart';
+import 'package:material_ui/material_ui.dart';
 import 'package:flutter/rendering.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_test/flutter_test.dart';
@@ -3030,7 +3031,7 @@ void main() {
         ),
       );
       await tester.pumpAndSettle();
-      await tester.tap(find.byTooltip('Lineup menu'));
+      await tester.tap(find.byKey(const Key('player-app-menu')));
       await tester.pumpAndSettle();
       await tester.tap(find.text('Settings'));
       await tester.pumpAndSettle();
@@ -5287,7 +5288,7 @@ void main() {
         'Audio tracks unavailable',
         'Subtitles unavailable',
       ]) {
-        expect(find.byTooltip(label), findsOneWidget);
+        expect(materialTooltip(label), findsOneWidget);
         final semantics = tester
             .getSemantics(find.bySemanticsLabel(label))
             .getSemanticsData();
@@ -7308,7 +7309,7 @@ void main() {
       find.text('Audio English · Restored', findRichText: true),
       findsOneWidget,
     );
-    expect(find.byTooltip('Audio track: English · Restored'), findsOneWidget);
+    expect(materialTooltip('Audio track: English · Restored'), findsOneWidget);
     expect(fixture.native.selectedTracks, isEmpty);
     await tester.pumpWidget(const SizedBox.shrink());
     fixture.dispose();
@@ -7391,7 +7392,7 @@ void main() {
       const audioDescription =
           'Audio track: English · Original theatrical mix; 5.1 surround; '
           'Dolby TrueHD';
-      expect(find.byTooltip(audioDescription), findsOneWidget);
+      expect(materialTooltip(audioDescription), findsOneWidget);
       final audioFinder = find.bySemanticsLabel(audioDescription);
       expect(audioFinder, findsOneWidget);
       final audioSemantics = tester
@@ -7402,7 +7403,7 @@ void main() {
       expect(audioSemantics.hasAction(SemanticsAction.tap), isTrue);
 
       expect(find.text('Subtitles Off', findRichText: true), findsOneWidget);
-      expect(find.byTooltip('Subtitle tracks: Off'), findsOneWidget);
+      expect(materialTooltip('Subtitle tracks: Off'), findsOneWidget);
       final subtitlesSemantics = tester
           .getSemantics(find.bySemanticsLabel('Subtitle tracks: Off'))
           .getSemanticsData();
@@ -8354,7 +8355,7 @@ void main() {
       expect(find.text('Close'), findsOneWidget);
       expect(find.text('PLAYBACK OPTIONS'), findsNothing);
       expect(
-        find.byTooltip(
+        materialTooltip(
           'Audio track: English · '
           'A long descriptive English surround audio track label; '
           'Dolby Digital Plus',
@@ -9155,7 +9156,7 @@ void main() {
           find.byKey(ValueKey('player-now-playing-cast-name-$index')),
           findsOneWidget,
         );
-        expect(find.byTooltip(member.name), findsOneWidget);
+        expect(materialTooltip(member.name), findsOneWidget);
       }
       expect(
         find.byKey(const Key('player-now-playing-cast-names')),
@@ -9165,7 +9166,10 @@ void main() {
         find.byKey(const ValueKey('player-now-playing-cast-name-3')),
         findsOneWidget,
       );
-      expect(find.byTooltip('Alexander Maximilian Montgomery'), findsOneWidget);
+      expect(
+        materialTooltip('Alexander Maximilian Montgomery'),
+        findsOneWidget,
+      );
       expect(
         find.bySemanticsLabel(RegExp('Cast:.*Alexander Maximilian Montgomery')),
         findsOneWidget,

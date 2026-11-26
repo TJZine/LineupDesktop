@@ -280,7 +280,7 @@ class ReleaseContractTest(unittest.TestCase):
             for name in wrapper.HASHES:
                 target = root / name
                 original = target.read_bytes()
-                target.write_bytes(original.replace(b'17f277', b'000000') if name.endswith('.properties')
+                target.write_bytes(original.replace(b'a3c4ba', b'000000') if name.endswith('.properties')
                                    else original + b'changed')
                 with self.subTest(name=name), self.assertRaises(ValueError):
                     wrapper.check(root)
@@ -294,7 +294,7 @@ class ReleaseContractTest(unittest.TestCase):
     def test_resolved_dependency_reports_reject_affected_missing_and_multiple(self):
         dependencies = module('resolved', 'check-resolved-dependencies.py')
         report = ('+--- org.jetbrains.kotlin:kotlin-gradle-plugin:2.4.21\n'
-                  '+--- com.android.tools.build:gradle:9.1.0\n'
+                  '+--- com.android.tools.build:gradle:9.3.1\n'
                   '+--- com.google.guava:guava:31.1-android -> 33.8.0-android\n')
         dependencies.check(report)
         for invalid in (report.replace('2.4.21', '2.4.0'),

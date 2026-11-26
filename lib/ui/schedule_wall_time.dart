@@ -1,4 +1,4 @@
-import 'package:flutter/material.dart';
+import 'package:material_ui/material_ui.dart';
 
 extension type ScheduleWallTime._(DateTime _local) {
   ScheduleWallTime(DateTime instant) : this._(instant.toLocal());

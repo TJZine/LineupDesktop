@@ -2,7 +2,7 @@ import 'dart:async';
 import 'dart:ui' show Tristate;
 
 import 'package:flutter/foundation.dart';
-import 'package:flutter/material.dart';
+import 'package:material_ui/material_ui.dart';
 import 'package:flutter/rendering.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_test/flutter_test.dart';
@@ -60,6 +60,13 @@ Future<void> showSettings(
     ),
   );
   await tester.pumpAndSettle();
+}
+
+Future<void> pumpFontNotifications(WidgetTester tester) async {
+  // FontLoader notifies flutter/system on the engine's event loop. Let it
+  // deliver the message, then paint the scheduled text layout before teardown.
+  await tester.runAsync(() => Future<void>.delayed(Duration.zero));
+  await tester.pump();
 }
 
 Future<void> reveal(WidgetTester tester, Finder target) async {
@@ -393,6 +400,7 @@ void main() {
         const SubtitleStyle(useDeviceStyle: true),
       );
       expect(tester.widget<OutlinedButton>(field('Reset')).onPressed, isNull);
+      await pumpFontNotifications(tester);
     },
   );
 
@@ -686,6 +694,7 @@ void main() {
         await tester.pumpAndSettle();
         expect(controller.settings.subtitleStyle, const SubtitleStyle());
       }
+      await pumpFontNotifications(tester);
     },
   );
 

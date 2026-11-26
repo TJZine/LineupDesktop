@@ -309,7 +309,18 @@ def dependency_identity(repository, root, gclient=None):
         resolved_revision = git(directory, 'rev-parse', '--verify', entry['rev'] + '^{commit}').decode().strip()
         require(git(directory, 'rev-parse', 'HEAD').decode().strip() == resolved_revision,
                 f'Git dependency revision differs from evaluated DEPS: {name}')
-        require(not git(directory, 'status', '--porcelain').strip(), f'Git dependency has source changes: {name}')
+        # Flutter DEPS can pin a child checkout independently of its parent's
+        # gitlink. Accept only an unstaged change to that clean child's commit.
+        # The same loop checks the child's HEAD against its own evaluated pin.
+        status = git(directory, 'status', '--porcelain=v2', '-z', '--ignore-submodules=none',
+                     '--untracked-files=normal')
+        for change in status.split(b'\0'):
+            if not change:
+                continue
+            fields = change.split(b' ', 8)
+            require(len(fields) == 9 and fields[:6] == [b'1', b'.M', b'SC..', b'160000', b'160000', b'160000']
+                    and name + '/' + os.fsdecode(fields[8]) in expected,
+                    f'Git dependency has source changes: {name}')
         dependencies[name] = {'declaredRevision': entry['rev'], 'revision': resolved_revision, 'url': entry['url']}
     return {'gclient': str(executable), 'depotToolsRevision': windows['DepotToolsRevision'],
             'gclientConfigSha256': file_hash(config), 'gitDependencies': dependencies}
@@ -370,7 +381,7 @@ def artifact_hashes(output, target):
     for name in [f'dart-sdk/bin/dart{suffix}', 'dart-sdk/bin/snapshots/frontend_server_aot.dart.snapshot',
                  'flutter_patched_sdk/platform_strong.dill', 'flutter_patched_sdk/vm_outline_strong.dill',
                  'gen/dart-pkg/sky_engine/lib/_embedder.yaml', 'gen/frontend_server_aot.dart.snapshot',
-                 'gen/const_finder.dart.snapshot', f'font-subset{suffix}', f'impellerc{suffix}', 'shader_lib/flutter/runtime_effect.glsl']:
+                 f'font-subset{suffix}', f'impellerc{suffix}', 'shader_lib/flutter/runtime_effect.glsl']:
         require((output / name).is_file(), f'Required local engine host artifact is missing: {name}')
     snapshot_directories = ('.', 'universal', 'clang_x64', 'clang_x86', 'clang_i386', 'clang_arm64', 'clang_riscv64')
     require(any((output / directory / name).is_file() for directory in snapshot_directories
@@ -386,7 +397,7 @@ def artifact_hashes(output, target):
     roots = [output / 'FlutterMacOS.xcframework'] if target == 'macos' else [binary]
     relative_roots = ['shader_lib', 'dart-sdk', 'flutter_patched_sdk', 'flutter_patched_sdk_product',
                       'gen/dart-pkg', 'gen/flutter/lib/snapshot', 'gen/frontend_server_aot.dart.snapshot',
-                      'gen/const_finder.dart.snapshot', 'font-subset', 'font-subset.exe', 'impellerc',
+                      'font-subset', 'font-subset.exe', 'impellerc',
                       'impellerc.exe', 'icudtl.dat', 'flutter_windows.dll.lib', 'flutter_windows.dll.exp',
                       'flutter_windows.h', 'flutter_export.h', 'flutter_messenger.h', 'flutter_plugin_registrar.h',
                       'flutter_texture_registrar.h', 'cpp_client_wrapper']
@@ -483,7 +494,7 @@ def build(repository, root, target, architecture, mode, ninja, apple_linker=Fals
     ninja_path = resolve_ninja(ninja)
     ninja_identity = {'path': str(Path(ninja_path).resolve()), 'sha256': file_hash(ninja_path)}
     targets = ['flutter_framework' if target == 'macos' else 'windows', 'dart_sdk',
-               'generate_snapshot_bins', 'sky_engine', 'font_subset', 'const_finder', 'impellerc',
+               'generate_snapshot_bins', 'sky_engine', 'font_subset', 'impellerc',
                'phony/flutter/flutter_frontend_server/frontend_server']
     command = [ninja_path, '-C', output, '-j', str(jobs), *targets]
     run(command, cwd=source, capture=False)

@@ -1,6 +1,6 @@
 import 'dart:ui' show SemanticsAction;
 
-import 'package:flutter/material.dart';
+import 'package:material_ui/material_ui.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:lineup_desktop/app/lineup_controller.dart';
@@ -74,13 +74,11 @@ void main() {
       }
       final before = List<String>.of(player.commands);
       final generation = player.generation;
-      await tester.tap(
-        route == 'Settings'
-            ? find.byKey(const Key('settings-app-menu'))
-            : find.byTooltip(
-                route == 'Player' ? 'Lineup menu' : 'Open Lineup menu',
-              ),
-      );
+      await tester.tap(switch (route) {
+        'Settings' => find.byKey(const Key('settings-app-menu')),
+        'Player' => find.byKey(const Key('player-app-menu')),
+        _ => find.byTooltip('Open Lineup menu'),
+      });
       await tester.pumpAndSettle();
       final action = find.byKey(const Key('app-menu-now-playing'));
       expect(action, findsOneWidget);
@@ -245,7 +243,7 @@ void main() {
     await tester.sendKeyEvent(LogicalKeyboardKey.keyI);
     await tester.pumpAndSettle();
     expect(playback.overlay, PlayerOverlay.nowPlaying);
-    await tester.tap(find.byTooltip('Lineup menu'));
+    await tester.tap(find.byKey(const Key('player-app-menu')));
     await tester.pumpAndSettle();
     await tester.tap(find.text('Manage channels'));
     await tester.pumpAndSettle();

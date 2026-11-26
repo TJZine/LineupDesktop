@@ -501,7 +501,7 @@ int main(int argc, char** argv) {
   FILE* redirected = nullptr;
   if (freopen_s(&redirected, "NUL", "w", stderr) != 0) return 2;
   SetEnvironmentVariableW(L"LINEUP_FLUTTER_DCOMP_ACTIVE",
-                          L"deb287481e3ce9468f3434937ced4240a70539ca");
+                          L"4d35714800b9266b6693a58e1225ecd7e9e45ed7");
   HWND window = CreateWindowExW(0, L"STATIC", L"", WS_OVERLAPPEDWINDOW,
                                 0, 0, 64, 64, nullptr, nullptr,
                                 GetModuleHandle(nullptr), nullptr);

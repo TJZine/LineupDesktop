@@ -11,7 +11,7 @@ import 'dart:ui' show PointerDeviceKind;
 import 'package:lineup_desktop/ui/app_ui.dart';
 import 'package:lineup_desktop/ui/app_theme.dart';
 import 'package:lineup_desktop/settings/lineup_settings.dart';
-import 'package:flutter/material.dart';
+import 'package:material_ui/material_ui.dart';
 import 'package:flutter/rendering.dart'
     show RenderImage, RenderParagraph, RenderRepaintBoundary;
 import 'package:flutter/foundation.dart'
