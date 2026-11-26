@@ -771,7 +771,7 @@ class UpstreamOnboardingViewState extends State<UpstreamOnboardingView>
               height: qrSize,
               padding: const EdgeInsets.all(12),
               decoration: BoxDecoration(
-                color: const Color(0xFFF3E8D2),
+                color: usable ? const Color(0xFFF3E8D2) : roles.elevatedSurface,
                 borderRadius: BorderRadius.circular(8),
                 border: Border.all(color: roles.subtleBorder),
               ),
@@ -786,7 +786,7 @@ class UpstreamOnboardingViewState extends State<UpstreamOnboardingView>
                   : Text(
                       expired ? 'Code expired' : 'Unavailable',
                       textAlign: TextAlign.center,
-                      style: const TextStyle(color: Color(0xFF2D241C)),
+                      style: TextStyle(color: roles.mutedText),
                     ),
             ),
           ),
