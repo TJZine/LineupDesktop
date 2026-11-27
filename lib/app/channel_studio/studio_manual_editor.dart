@@ -226,9 +226,7 @@ class _StudioManualEditorState extends State<_StudioManualEditor>
         ? '${entries.length} ${entries.length == 1 ? 'program' : 'programs'}'
         : '${rundownEntries.length} of ${entries.length} shown';
     final rundownControls = DeviceProfile.of(context).isTv
-        ? rundownQuery.isEmpty
-              ? 'Use Move to… or the arrows on each program to reorder'
-              : 'Clear search to reorder'
+        ? 'Use Move to… or the arrows on each program to reorder'
         : 'Alt+Up/Down reorders · Delete removes${rundownQuery.isEmpty ? '' : ' · Clear search to drag reorder'}';
     return LineupCompactControls(
       child: Column(

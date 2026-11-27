@@ -202,7 +202,10 @@ class _DiagnosticsViewState extends State<DiagnosticsView> {
                                   'diagnostics-recording-settings-message',
                                 ),
                                 onPressed: widget.onRecordingSettings,
-                                child: const Text('Recording settings'),
+                                child: Text(
+                                  'Recording settings',
+                                  style: LineupTypography.tvLabelStyle(context),
+                                ),
                               ),
                             ),
                           )

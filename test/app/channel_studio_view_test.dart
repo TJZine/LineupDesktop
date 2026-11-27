@@ -754,36 +754,30 @@ void main() {
         expect(hint, findsOneWidget);
         if (tv) {
           final text = tester.widget<Text>(hint).data!;
-          for (final key in ['Alt', 'Delete', 'drag']) {
+          for (final key in ['Alt', 'Delete', 'drag', 'Clear search']) {
             expect(text, isNot(contains(key)));
           }
         }
       }
 
-      expectHint(
-        '2 programs',
-        tv
-            ? 'Use Move to… or the arrows on each program to reorder'
-            : 'Alt+Up/Down reorders · Delete removes',
-      );
+      const tvControls =
+          'Use Move to… or the arrows on each program to reorder';
+      const desktopControls = 'Alt+Up/Down reorders · Delete removes';
+      const desktopFilteredControls =
+          '$desktopControls · Clear search to drag reorder';
+      expectHint('2 programs', tv ? tvControls : desktopControls);
       await tester.enterText(
         find.byKey(const Key('studio-rundown-search')),
         's',
       );
       await tester.pumpAndSettle();
-      expectHint(
-        '2 programs',
-        tv ? 'Clear search to reorder' : 'Alt+Up/Down reorders · Delete removes · Clear search to drag reorder',
-      );
+      expectHint('2 programs', tv ? tvControls : desktopFilteredControls);
       await tester.enterText(
         find.byKey(const Key('studio-rundown-search')),
         'Second',
       );
       await tester.pumpAndSettle();
-      expectHint(
-        '1 of 2 shown',
-        tv ? 'Clear search to reorder' : 'Alt+Up/Down reorders · Delete removes · Clear search to drag reorder',
-      );
+      expectHint('1 of 2 shown', tv ? tvControls : desktopFilteredControls);
       expect(tester.takeException(), isNull);
       await tester.pumpWidget(const SizedBox.shrink());
     });

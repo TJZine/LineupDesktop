@@ -520,17 +520,24 @@ void main() {
           expect(text.selectionRegistrar, isNull);
         }
 
+        expect(
+          tester.semantics.simulatedAccessibilityTraversal().where(
+            (node) =>
+                node.label.contains('Could not copy the document. Try again.'),
+          ),
+          isEmpty,
+        );
+
         for (final failed in [false, true]) {
           failCopy = failed;
           await tester.tap(copy);
           await tester.pumpAndSettle();
+          final feedbackLabel = failed
+              ? 'Could not copy the document. Try again.'
+              : 'Document copied';
           final feedback = find.descendant(
             of: find.byKey(const Key('licenses-copy-feedback')),
-            matching: find.text(
-              failed
-                  ? 'Could not copy the document. Try again.'
-                  : 'Document copied',
-            ),
+            matching: find.text(feedbackLabel),
           );
           expect(feedback, findsOneWidget);
           expect(
@@ -552,10 +559,17 @@ void main() {
             expect(feedbackBounds.left, greaterThan(copyBounds.right));
             expect(feedbackBounds.center.dy, closeTo(copyBounds.center.dy, .1));
           }
-          final liveRegion = tester.widget<Semantics>(
-            find.ancestor(of: feedback, matching: find.byType(Semantics)).first,
+          final feedbackNodes = tester.semantics
+              .simulatedAccessibilityTraversal()
+              .where((node) => node.label == feedbackLabel);
+          expect(feedbackNodes, hasLength(1));
+          expect(
+            feedbackNodes.single
+                .getSemanticsData()
+                .flagsCollection
+                .isLiveRegion,
+            isTrue,
           );
-          expect(liveRegion.properties.liveRegion, isTrue);
           final ink = tester
               .renderObject<RenderParagraph>(
                 find.descendant(of: feedback, matching: find.byType(RichText)),
@@ -568,6 +582,7 @@ void main() {
         }
         await tester.pumpWidget(const SizedBox.shrink());
       },
+      semanticsEnabled: true,
     );
   }
 

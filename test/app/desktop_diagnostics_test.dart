@@ -404,6 +404,15 @@ void main() {
         ).hasPrimaryFocus;
 
         if (tv) {
+          final label = find.descendant(
+            of: inline,
+            matching: find.text('Recording settings'),
+          );
+          final paragraph = find.descendant(
+            of: label,
+            matching: find.byType(RichText),
+          );
+          expect(tester.widget<RichText>(paragraph).text.style?.fontSize, 20);
           await tester.sendKeyEvent(LogicalKeyboardKey.arrowDown);
           await tester.pumpAndSettle();
           expect(
