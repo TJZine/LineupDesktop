@@ -3676,71 +3676,106 @@ void main() {
   });
 
   for (final scale in [1.0, 1.3]) {
-    testWidgets('TV popovers use the OSD inset at text scale $scale', (
-      tester,
-    ) async {
-      await tester.runAsync(loadPinnedTestFonts);
-      tester.view
-        ..devicePixelRatio = 1
-        ..physicalSize = const Size(1920, 1080);
-      addTearDown(tester.view.reset);
-      final fixture = _Fixture(
-        PlayerState.playing,
-        tracks: const [
-          PlayerTrack(id: 1, type: PlayerTrackType.audio, selected: true),
-          PlayerTrack(id: 2, type: PlayerTrackType.subtitle, selected: false),
-        ],
-      );
-      addTearDown(fixture.dispose);
-      fixture.player.showOsd();
-      await tester.pumpWidget(
-        MaterialApp(
-          theme: LineupTheme.forName(
-            LineupThemeName.emberSteel,
-            formFactor: profileFor(true).formFactor,
-          ),
-          builder: (context, child) => MediaQuery(
-            data: MediaQuery.of(context)
-                .copyWith(textScaler: TextScaler.linear(scale)),
-            child: _playerTvCanvasBuilder(context, child),
-          ),
-          home: PlayerView(controller: fixture.player, openGuide: () {}),
-        ),
-      );
-      await tester.pumpAndSettle();
+    for (final (control, key) in [
+      ('sleep', 'sleep-timer-picker'),
+      ('audio', 'player-track-popover'),
+      ('subtitles', 'player-track-popover'),
+    ]) {
+      testWidgets(
+        'TV $control picker uses the OSD inset at text scale $scale',
+        (tester) async {
+          await tester.runAsync(loadPinnedTestFonts);
+          tester.view
+            ..devicePixelRatio = 1
+            ..physicalSize = const Size(1920, 1080);
+          addTearDown(tester.view.reset);
+          final maxPickerRight = tester.view.physicalSize.width - 96;
+          final fixture = _Fixture(PlayerState.playing);
+          addTearDown(fixture.dispose);
+          expect(await fixture.player.tune('channel'), isTrue);
+          fixture.native.emitTracks(const [
+            PlayerTrack(id: 1, type: PlayerTrackType.audio, selected: true),
+            PlayerTrack(id: 2, type: PlayerTrackType.subtitle, selected: false),
+          ]);
+          fixture.player.showOsd();
+          await tester.pumpWidget(
+            MaterialApp(
+              theme: LineupTheme.forName(
+                LineupThemeName.emberSteel,
+                formFactor: profileFor(true).formFactor,
+              ),
+              builder: (context, child) => MediaQuery(
+                data: MediaQuery.of(context)
+                    .copyWith(textScaler: TextScaler.linear(scale)),
+                child: _playerTvCanvasBuilder(context, child),
+              ),
+              home: PlayerView(controller: fixture.player, openGuide: () {}),
+            ),
+          );
+          await tester.pumpAndSettle();
 
-      for (final (control, key) in [
-        ('sleep', 'sleep-timer-picker'),
-        ('audio', 'player-track-popover'),
-        ('subtitles', 'player-track-popover'),
-      ]) {
-        final button = find.byKey(Key('player-osd-$control'));
-        await tester.tap(button);
-        await tester.pumpAndSettle();
-        final picker = _drawnRect(tester, find.byKey(Key(key)));
-        final timing = _drawnRect(
-          tester,
-          find.byKey(const Key('player-osd-progress-block')),
-        );
-        expect(picker.right, lessThanOrEqualTo(timing.right + .1));
-        expect(picker.bottom, lessThan(_drawnRect(tester, button).top));
-        expect(picker.bottom, lessThanOrEqualTo(timing.top));
-        if (control == 'sleep') {
-          for (final preset in ['off', '30', '60', '90']) {
-            final option = find.byKey(Key('sleep-timer-$preset'));
-            expect(option.hitTestable(), findsOneWidget);
-            final bounds = _drawnRect(tester, option);
-            expect(bounds.top, greaterThanOrEqualTo(picker.top));
-            expect(bounds.bottom, lessThanOrEqualTo(picker.bottom));
+          for (final expanded in [false, true]) {
+            if (expanded) {
+              fixture.player.showNowPlaying();
+              await tester.pumpAndSettle();
+              expect(
+                find.byKey(const Key('player-now-playing-surface')),
+                findsOneWidget,
+              );
+            }
+            final button = find.byKey(Key('player-osd-$control'));
+            final popup = find.byKey(Key(key));
+            final timing = find.byKey(const Key('player-osd-progress-block'));
+            await tester.tap(button);
+            void expectPlacement({required bool settled}) {
+              final phase = settled ? 'settled' : 'opening frame';
+              final reason = '$control expanded=$expanded $phase';
+              expect(popup, findsOneWidget, reason: reason);
+              final picker = _drawnRect(tester, popup);
+              final progress = _drawnRect(tester, timing);
+              expect(picker.height, greaterThan(0), reason: reason);
+              expect(
+                picker.right,
+                lessThanOrEqualTo(maxPickerRight + .1),
+                reason: reason,
+              );
+              expect(
+                picker.bottom,
+                lessThanOrEqualTo(progress.top),
+                reason: reason,
+              );
+              if (settled) {
+                expect(
+                  picker.bottom,
+                  lessThan(_drawnRect(tester, button).top),
+                  reason: reason,
+                );
+              }
+            }
+
+            await tester.pump();
+            expectPlacement(settled: false);
+            await tester.pumpAndSettle();
+            expectPlacement(settled: true);
+            final picker = _drawnRect(tester, popup);
+            if (control == 'sleep') {
+              for (final preset in ['off', '30', '60', '90']) {
+                final option = find.byKey(Key('sleep-timer-$preset'));
+                expect(option.hitTestable(), findsOneWidget);
+                final bounds = _drawnRect(tester, option);
+                expect(bounds.top, greaterThanOrEqualTo(picker.top));
+                expect(bounds.bottom, lessThanOrEqualTo(picker.bottom));
+              }
+            }
+            fixture.player.closeOverlay();
+            fixture.player.showOsd();
+            await tester.pumpAndSettle();
           }
-        }
-        fixture.player.closeOverlay();
-        fixture.player.showOsd();
-        await tester.pumpAndSettle();
-      }
-      expect(tester.takeException(), isNull);
-      await tester.pumpWidget(const SizedBox.shrink());
-    });
+          expect(tester.takeException(), isNull);
+          await tester.pumpWidget(const SizedBox.shrink());
+        },
+      );
+    }
   }
 
   testWidgets('TV Sleep uses the measured header and tile width up to 720 px', (

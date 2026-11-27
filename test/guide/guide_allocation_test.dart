@@ -806,17 +806,21 @@ void main() {
             expect(completeRows, configuration.tv ? 6 : 5);
             if (configuration.tv && rich) {
               final synopsis = find.byKey(const Key('guide-program-synopsis'));
-              final expected = switch (scale) {
-                1.0 => (1220.0, 680.0),
-                1.15 => (1273.0, 627.0),
-                _ => (1337.0, 563.0),
-              };
               final bounds = tester.getRect(synopsis);
-              expect(bounds.left * configuration.dpr, closeTo(expected.$1, .1));
-              expect(
-                bounds.width * configuration.dpr,
-                closeTo(expected.$2, .1),
-              );
+              if (scale == 1.0) {
+                expect(bounds.left * configuration.dpr, closeTo(1220, .1));
+                expect(bounds.width * configuration.dpr, closeTo(680, .1));
+              } else {
+                // At these scales the measured badge schema sets the split.
+                final identity = tester.getRect(
+                  find.byKey(const Key('guide-program-identity')),
+                );
+                final expectedLeft = identity.right + 32 * canvasScale;
+                expect(
+                  bounds.left * configuration.dpr,
+                  closeTo(expectedLeft * configuration.dpr, .1),
+                );
+              }
               expect(bounds.right * configuration.dpr, closeTo(1900, .1));
               expect(tester.widget<Text>(synopsis).style!.fontSize, 20);
             }

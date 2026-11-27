@@ -5223,7 +5223,7 @@ void main() {
 
   for (final tv in [false, true]) {
     testWidgets(
-      'Guide no-match actions clear and focus the first result TV=$tv',
+      'Guide no-match action clears and focuses the first result TV=$tv',
       (tester) async {
         tester.view
           ..devicePixelRatio = 1
@@ -5264,9 +5264,16 @@ void main() {
         await tester.pumpAndSettle();
         expect(guide.channels, isEmpty);
         final results = find.byKey(const Key('guide-clear-search-results'));
-        final details = find.byKey(const Key('guide-clear-search-details'));
         expect(results, findsOneWidget);
-        expect(details, findsOneWidget);
+        expect(find.text('Clear search'), findsOneWidget);
+        expect(
+          tester.semantics.simulatedAccessibilityTraversal().where(
+            (node) =>
+                node.label == 'Clear search' &&
+                node.getSemanticsData().hasAction(SemanticsAction.tap),
+          ),
+          hasLength(1),
+        );
         if (tv) {
           await tester.testTextInput.receiveAction(TextInputAction.done);
           await tester.pumpAndSettle();
@@ -5278,7 +5285,7 @@ void main() {
           );
           await tester.sendKeyEvent(LogicalKeyboardKey.select);
         } else {
-          await tester.tap(details);
+          await tester.tap(results);
         }
         await tester.pumpAndSettle();
         expect(guide.searchQuery, isEmpty);
@@ -5286,10 +5293,10 @@ void main() {
         expect(guide.focusedChannelId, 'channel-0');
         expect(grid.hasPrimaryFocus, isTrue);
         expect(results, findsNothing);
-        expect(details, findsNothing);
         expect(tunes, 0);
         await tester.pumpWidget(const SizedBox.shrink());
       },
+      semanticsEnabled: true,
     );
   }
 

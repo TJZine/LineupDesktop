@@ -24,6 +24,8 @@ import 'focused_ticker.dart';
 import 'guide_controller.dart';
 import 'guide_playback_placeholder.dart';
 
+const _guideNoMatchesMessage =
+    'No matching channels\nTry another channel name or number.';
 const _guideTimelineGutter = 1.0;
 const _guideEdgeContentInset = 12.0;
 const _guideWatchingGap = 20.0;
@@ -1032,7 +1034,9 @@ class _GuideViewState extends State<GuideView>
             _removeChannelFilterFocus,
           if (!_mergedBar || _showSearchEditor) ...[
             _searchFocus,
-            if (_searchController.text.isNotEmpty) _clearSearchFocus,
+            if (!_canClearSearchFromResults &&
+                _searchController.text.isNotEmpty)
+              _clearSearchFocus,
           ],
           if (!_mergedBar || !_showSearchEditor) ...[
             _earlierFocus,
@@ -1298,7 +1302,6 @@ class _GuideViewState extends State<GuideView>
         compactLogo: policy.compactLogo,
         minimumIdentityWidth: policy.minimumIdentityWidth,
         playbackMessage: widget.playbackMessage,
-        onClearSearch: _clearSearchAction,
         onOpenPlayer: widget.onOpenPlayer,
       ),
     ),
@@ -1322,7 +1325,7 @@ class _GuideViewState extends State<GuideView>
         nowFocus: _nowFocus,
         laterFocus: _laterFocus,
         hoursFocus: _hoursFocus,
-        clearSearchFocus: _clearSearchFocus,
+        clearSearchFocus: _canClearSearchFromResults ? null : _clearSearchFocus,
         removeChannelFilterFocus: _removeChannelFilterFocus,
         onSearchKey: _searchKey,
         onKeyEvent: _toolbarKey,
@@ -1504,12 +1507,8 @@ class _GuideViewState extends State<GuideView>
                         child: channels.isEmpty
                             ? Center(
                                 child: _GuideNoMatches(
-                                  centered: true,
                                   onClearSearch: _clearSearchAction,
                                   focusNode: _clearResultsSearchFocus,
-                                  actionKey: const Key(
-                                    'guide-clear-search-results',
-                                  ),
                                 ),
                               )
                             : ListView.builder(
@@ -2139,7 +2138,7 @@ class _GuideControls extends StatelessWidget {
   final FocusNode nowFocus;
   final FocusNode laterFocus;
   final FocusNode hoursFocus;
-  final FocusNode clearSearchFocus;
+  final FocusNode? clearSearchFocus;
   final FocusNode removeChannelFilterFocus;
   final FocusOnKeyEventCallback onSearchKey;
   final FocusOnKeyEventCallback onKeyEvent;
@@ -2334,14 +2333,15 @@ class _GuideControls extends StatelessWidget {
                           ),
                           // Reserve the suffix slot while keeping its action outside
                           // the native text field's leaf semantics and key handler.
-                          suffixIcon: value.text.isEmpty
-                              ? null
-                              : const SizedBox.shrink(),
+                          suffixIcon:
+                              value.text.isNotEmpty && clearSearchFocus != null
+                              ? const SizedBox.shrink()
+                              : null,
                         ),
                       ),
                 ),
               ),
-              if (value.text.isNotEmpty)
+              if (value.text.isNotEmpty && clearSearchFocus != null)
                 PositionedDirectional(
                   end: 0,
                   top: 0,
@@ -2777,7 +2777,6 @@ class _GuideShowcase extends StatefulWidget {
     required this.compactLogo,
     required this.minimumIdentityWidth,
     required this.playbackMessage,
-    required this.onClearSearch,
     required this.onOpenPlayer,
   });
 
@@ -2788,7 +2787,6 @@ class _GuideShowcase extends StatefulWidget {
   final bool compactLogo;
   final double minimumIdentityWidth;
   final String? playbackMessage;
-  final VoidCallback? onClearSearch;
   final VoidCallback? onOpenPlayer;
 
   @override
@@ -3096,7 +3094,6 @@ class _GuideShowcaseState extends State<_GuideShowcase> {
               compactLogo: widget.compactLogo,
               minimumIdentityWidth: widget.minimumIdentityWidth,
               playbackMessage: widget.playbackMessage,
-              onClearSearch: widget.onClearSearch,
             ),
           ),
         ),
@@ -4543,7 +4540,6 @@ class _Details extends StatelessWidget {
     required this.compactLogo,
     required this.minimumIdentityWidth,
     required this.playbackMessage,
-    required this.onClearSearch,
     required this.bleedLeft,
   });
   final GuideProgram? program;
@@ -4555,7 +4551,6 @@ class _Details extends StatelessWidget {
   final double minimumIdentityWidth;
   final bool bleedLeft;
   final String? playbackMessage;
-  final VoidCallback? onClearSearch;
 
   @override
   Widget build(BuildContext context) {
@@ -4661,7 +4656,6 @@ class _Details extends StatelessWidget {
                             controller: controller,
                             channel: channel,
                             playbackMessage: playbackMessage,
-                            onClearSearch: onClearSearch,
                           )
                         : _ProgramDetails(
                             program: program!,
@@ -4686,34 +4680,21 @@ class _Details extends StatelessWidget {
 }
 
 class _GuideNoMatches extends StatelessWidget {
-  const _GuideNoMatches({
-    required this.centered,
-    required this.onClearSearch,
-    required this.actionKey,
-    this.focusNode,
-  });
+  const _GuideNoMatches({required this.onClearSearch, required this.focusNode});
 
-  final bool centered;
   final VoidCallback? onClearSearch;
-  final Key actionKey;
-  final FocusNode? focusNode;
+  final FocusNode focusNode;
 
   @override
   Widget build(BuildContext context) => SingleChildScrollView(
     child: Column(
       mainAxisSize: MainAxisSize.min,
-      crossAxisAlignment: centered
-          ? CrossAxisAlignment.center
-          : CrossAxisAlignment.start,
       children: [
-        Text(
-          'No matching channels\nTry another channel name or number.',
-          textAlign: centered ? TextAlign.center : TextAlign.start,
-        ),
+        const Text(_guideNoMatchesMessage, textAlign: TextAlign.center),
         if (onClearSearch != null) ...[
           const SizedBox(height: 8),
           TextButton(
-            key: actionKey,
+            key: const Key('guide-clear-search-results'),
             focusNode: focusNode,
             onPressed: onClearSearch,
             child: Text(
@@ -4732,24 +4713,18 @@ class _GuideDetailsPlaceholder extends StatelessWidget {
     required this.controller,
     required this.channel,
     required this.playbackMessage,
-    required this.onClearSearch,
   });
 
   final GuideController controller;
   final Channel? channel;
   final String? playbackMessage;
-  final VoidCallback? onClearSearch;
 
   @override
   Widget build(BuildContext context) {
     if (controller.channels.isEmpty && controller.lineup.channels.isNotEmpty) {
-      return Align(
+      return const Align(
         alignment: Alignment.centerLeft,
-        child: _GuideNoMatches(
-          centered: false,
-          onClearSearch: onClearSearch,
-          actionKey: const Key('guide-clear-search-details'),
-        ),
+        child: Text(_guideNoMatchesMessage),
       );
     }
     final inspected = channel;

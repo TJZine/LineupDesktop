@@ -1647,10 +1647,14 @@ class _Osd extends StatelessWidget {
       _statusLabel(controller.presentedState) ?? '',
       style: osdSecondaryStyle,
     );
-    final progress = _OsdProgress(
-      controller: controller,
-      detailsExpanded: detailsExpanded,
-      part: _OsdProgressPart.timing,
+    final timingAnchor = _PickerAnchorHandle();
+    final progress = _PickerAnchor(
+      handle: timingAnchor,
+      child: _OsdProgress(
+        controller: controller,
+        detailsExpanded: detailsExpanded,
+        part: _OsdProgressPart.timing,
+      ),
     );
     Widget actionGroup(List<Widget> children) =>
         Row(mainAxisSize: MainAxisSize.min, children: children);
@@ -1887,6 +1891,7 @@ class _Osd extends StatelessWidget {
               ? safe.copyWith(bottom: bottomInset)
               : MediaQuery.paddingOf(context),
           anchor: pickerAnchors[anchor],
+          timingAnchor: timingAnchor,
           preferredWidth: type != null
               ? _trackPopoverWidth(context, controller, displays, type)
               : sleepOpen
@@ -3893,6 +3898,7 @@ class _PlayerPickerLayout extends StatelessWidget {
     required this.panel,
     required this.insets,
     required this.anchor,
+    required this.timingAnchor,
     required this.preferredWidth,
     required this.surfaceKey,
     required this.picker,
@@ -3902,6 +3908,7 @@ class _PlayerPickerLayout extends StatelessWidget {
   final Widget panel;
   final EdgeInsets insets;
   final _PickerAnchorHandle? anchor;
+  final _PickerAnchorHandle timingAnchor;
   final double preferredWidth;
   final Key surfaceKey;
   final Widget? picker;
@@ -3910,6 +3917,7 @@ class _PlayerPickerLayout extends StatelessWidget {
   Widget build(BuildContext context) => CustomMultiChildLayout(
     delegate: _PlayerPickerPlacement(
       anchor: anchor,
+      timingAnchor: timingAnchor,
       preferredWidth: preferredWidth,
       insets: insets,
     ),
@@ -3933,8 +3941,24 @@ class _PlayerPickerLayout extends StatelessWidget {
   );
 }
 
-class _PickerAnchorHandle {
-  _RenderPickerAnchor? attachedBox;
+class _PickerAnchorHandle extends ChangeNotifier {
+  _RenderPickerAnchor? _attachedBox;
+  bool _waitingForAttachment = false;
+
+  _RenderPickerAnchor? get attachedBox => _attachedBox;
+  set attachedBox(_RenderPickerAnchor? box) {
+    _attachedBox = box;
+    if (box == null || !_waitingForAttachment) return;
+
+    _waitingForAttachment = false;
+    // LayoutBuilder can mount the replacement after the picker delegate has
+    // already run. Invalidate its fallback placement once layout finishes.
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (identical(_attachedBox, box)) notifyListeners();
+    });
+  }
+
+  void waitForAttachment() => _waitingForAttachment = true;
 }
 
 class _PickerAnchor extends SingleChildRenderObjectWidget {
@@ -3999,11 +4023,17 @@ enum _PickerSlot { panel, popover }
 class _PlayerPickerPlacement extends MultiChildLayoutDelegate {
   _PlayerPickerPlacement({
     required this.anchor,
+    required this.timingAnchor,
     required this.insets,
     required this.preferredWidth,
-  });
+  }) : super(
+         relayout: anchor == null
+             ? null
+             : Listenable.merge([anchor, timingAnchor]),
+       );
 
   final _PickerAnchorHandle? anchor;
+  final _PickerAnchorHandle timingAnchor;
   final EdgeInsets insets;
   final double preferredWidth;
 
@@ -4013,31 +4043,23 @@ class _PlayerPickerPlacement extends MultiChildLayoutDelegate {
     positionChild(_PickerSlot.panel, Offset.zero);
     if (!hasChild(_PickerSlot.popover)) return;
 
-    final target = anchor?.attachedBox;
-    final parent = _layoutParent(target);
-    final rect = target != null && parent != null
-        ? MatrixUtils.transformRect(
-            target.getTransformTo(parent),
-            Offset.zero & target.laidOutSize,
-          )
-        : Rect.fromLTWH(
-            size.width - insets.right,
-            size.height - insets.bottom,
-            0,
-            0,
-          );
+    final target = _anchorBounds(anchor);
+    // The invocation control can detach while Now Playing collapses. The
+    // timing row stays mounted and still bounds the available picker space.
+    final timingTop = _anchorBounds(timingAnchor)?.top ?? insets.top;
+    final safeBottom = math.min(timingTop, size.height - insets.bottom);
     const gap = 8.0;
     final width = math.min(
       preferredWidth,
       math.max(0.0, size.width - insets.horizontal),
     );
-    final right = rect.right.clamp(
+    final right = (target?.right ?? size.width - insets.right).clamp(
       insets.left + width,
       math.max(insets.left + width, size.width - insets.right),
     );
     final bottom = math.max(
       insets.top,
-      math.min(rect.top - gap, size.height - insets.bottom),
+      math.min(target?.top ?? safeBottom, safeBottom) - gap,
     );
     final popover = layoutChild(
       _PickerSlot.popover,
@@ -4050,14 +4072,22 @@ class _PlayerPickerPlacement extends MultiChildLayoutDelegate {
     );
   }
 
-  RenderCustomMultiChildLayoutBox? _layoutParent(RenderObject? target) {
-    RenderObject? node = target;
-    while (node != null) {
-      if (node is RenderCustomMultiChildLayoutBox &&
-          identical(node.delegate, this)) {
-        return node;
+  Rect? _anchorBounds(_PickerAnchorHandle? handle) {
+    final box = handle?.attachedBox;
+    if (box == null) {
+      handle?.waitForAttachment();
+      return null;
+    }
+    RenderObject? parent = box.parent;
+    while (parent != null) {
+      if (parent is RenderCustomMultiChildLayoutBox &&
+          identical(parent.delegate, this)) {
+        return MatrixUtils.transformRect(
+          box.getTransformTo(parent),
+          Offset.zero & box.laidOutSize,
+        );
       }
-      node = node.parent;
+      parent = parent.parent;
     }
     return null;
   }

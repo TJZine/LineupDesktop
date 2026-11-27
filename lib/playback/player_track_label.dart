@@ -533,6 +533,15 @@ final _languageWordContinuation = RegExp(r'^[\p{L}\p{M}\p{N}]', unicode: true);
 final _parenthesizedQualifier = RegExp(r'^\s*\(([^)]+)\)');
 final _regionCode = RegExp(r'^(?:[a-z]{2}|[0-9]{3})$', caseSensitive: false);
 
+// UK is a common display alias for the catalog's GB region.
+final _recognizedRegionCodes = {
+  'uk',
+  for (final language in LanguageCodes.values)
+    if (language.code.split('_') case [_, ..., final region]
+        when _regionCode.hasMatch(region))
+      region.toLowerCase(),
+};
+
 bool _startsWithLanguage(String title, String language) {
   if (!title.startsWith(language)) return false;
   final suffix = title.substring(language.length);
@@ -540,7 +549,7 @@ bool _startsWithLanguage(String title, String language) {
   final qualifier = _parenthesizedQualifier.firstMatch(suffix)?.group(1);
   if (qualifier == null) return true;
   // Preserve region codes such as UK and the catalog's named variants.
-  return !_regionCode.hasMatch(qualifier) &&
+  return !_recognizedRegionCodes.contains(qualifier) &&
       !LanguageCodes.values.any(
         (code) => _equivalenceKey(code.englishName) == '$language ($qualifier)',
       );

@@ -518,6 +518,7 @@ void main() {
         ('es', 'Spanish', 'Spanish 880 Hz', 'Spanish 880 Hz'),
         ('en', 'English', 'eNGLISH: Text', 'eNGLISH: Text'),
         ('en', 'English', 'Styled ASS', 'English · Styled ASS'),
+        ('en', 'English', 'English (HD)', 'English (HD)'),
         ('en', 'English', 'English (UK)', 'English · English (UK)'),
         (
           'en',
