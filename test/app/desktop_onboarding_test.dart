@@ -2005,6 +2005,19 @@ void main() {
     await show(tester, controller, textScale: 1.75);
 
     Rect rect(String key) => tester.getRect(find.byKey(ValueKey(key)));
+    final qr = find.byKey(const ValueKey('linking-qr-slot'));
+    Color? qrColor() =>
+        (tester
+                    .widget<Container>(
+                      find
+                          .descendant(of: qr, matching: find.byType(Container))
+                          .first,
+                    )
+                    .decoration
+                as BoxDecoration)
+            .color;
+    final subdued = LineupTheme.of(tester.element(qr)).elevatedSurface;
+    expect(qrColor(), const Color(0xFFF3E8D2));
     final codeState = [
       rect('linking-code-slot'),
       rect('linking-action-slot'),
@@ -2027,6 +2040,7 @@ void main() {
       ..fixtureActor.present(LineupPresentation(error: (null,)));
     controller.notifyListeners();
     await tester.pump();
+    expect(qrColor(), subdued);
     final expiredState = [
       rect('linking-code-slot'),
       rect('linking-action-slot'),
@@ -2051,6 +2065,11 @@ void main() {
       );
     controller.notifyListeners();
     await tester.pump();
+    expect(qrColor(), subdued);
+    final retry = tester.widget<FilledButton>(
+      find.widgetWithText(FilledButton, 'Get a new code'),
+    );
+    expect(retry.focusNode!.hasPrimaryFocus, isTrue);
     final failureState = [
       rect('linking-code-slot'),
       rect('linking-action-slot'),

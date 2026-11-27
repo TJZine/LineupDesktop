@@ -1647,10 +1647,14 @@ class _Osd extends StatelessWidget {
       _statusLabel(controller.presentedState) ?? '',
       style: osdSecondaryStyle,
     );
-    final progress = _OsdProgress(
-      controller: controller,
-      detailsExpanded: detailsExpanded,
-      part: _OsdProgressPart.timing,
+    final timingAnchor = _PickerAnchorHandle();
+    final progress = _PickerAnchor(
+      handle: timingAnchor,
+      child: _OsdProgress(
+        controller: controller,
+        detailsExpanded: detailsExpanded,
+        part: _OsdProgressPart.timing,
+      ),
     );
     Widget actionGroup(List<Widget> children) =>
         Row(mainAxisSize: MainAxisSize.min, children: children);
@@ -1883,7 +1887,12 @@ class _Osd extends StatelessWidget {
         _PlayerPickerLayout(
           controller: controller,
           panel: panel,
+          insets: DeviceProfile.of(context).isTv
+              ? safe.copyWith(bottom: bottomInset)
+              : MediaQuery.paddingOf(context),
           anchor: pickerAnchors[anchor],
+          timingAnchor: timingAnchor,
+          waitForAnchor: sleepOpen && DeviceProfile.of(context).isTv,
           preferredWidth: type != null
               ? _trackPopoverWidth(context, controller, displays, type)
               : sleepOpen
@@ -3888,7 +3897,10 @@ class _PlayerPickerLayout extends StatelessWidget {
   const _PlayerPickerLayout({
     required this.controller,
     required this.panel,
+    required this.insets,
     required this.anchor,
+    required this.timingAnchor,
+    required this.waitForAnchor,
     required this.preferredWidth,
     required this.surfaceKey,
     required this.picker,
@@ -3896,42 +3908,64 @@ class _PlayerPickerLayout extends StatelessWidget {
 
   final PlayerCoordinator controller;
   final Widget panel;
+  final EdgeInsets insets;
   final _PickerAnchorHandle? anchor;
+  final _PickerAnchorHandle timingAnchor;
+  final bool waitForAnchor;
   final double preferredWidth;
   final Key surfaceKey;
   final Widget? picker;
 
   @override
-  Widget build(BuildContext context) => CustomMultiChildLayout(
-    delegate: _PlayerPickerPlacement(
-      anchor: anchor,
-      preferredWidth: preferredWidth,
-      insets: DeviceProfile.of(context).isTv
-          ? LineupCanvas.contentInsets(context)
-          : MediaQuery.paddingOf(context),
-    ),
-    children: [
-      LayoutId(id: _PickerSlot.panel, child: panel),
-      if (picker case final picker?)
-        LayoutId(
-          id: _PickerSlot.popover,
-          child: Material(
-            key: surfaceKey,
-            color: _overlayColor(context, controller),
-            borderRadius: const BorderRadius.all(Radius.circular(8)),
-            child: GestureDetector(
-              behavior: HitTestBehavior.opaque,
-              onTap: () {},
-              child: picker,
+  Widget build(BuildContext context) => ClipRect(
+    clipBehavior: waitForAnchor ? Clip.hardEdge : Clip.none,
+    child: CustomMultiChildLayout(
+      delegate: _PlayerPickerPlacement(
+        anchor: anchor,
+        timingAnchor: timingAnchor,
+        waitForAnchor: waitForAnchor,
+        preferredWidth: preferredWidth,
+        insets: insets,
+      ),
+      children: [
+        LayoutId(id: _PickerSlot.panel, child: panel),
+        if (picker case final picker?)
+          LayoutId(
+            id: _PickerSlot.popover,
+            child: Material(
+              key: surfaceKey,
+              color: _overlayColor(context, controller),
+              borderRadius: const BorderRadius.all(Radius.circular(8)),
+              child: GestureDetector(
+                behavior: HitTestBehavior.opaque,
+                onTap: () {},
+                child: picker,
+              ),
             ),
           ),
-        ),
-    ],
+      ],
+    ),
   );
 }
 
-class _PickerAnchorHandle {
-  _RenderPickerAnchor? attachedBox;
+class _PickerAnchorHandle extends ChangeNotifier {
+  _RenderPickerAnchor? _attachedBox;
+  bool _waitingForAttachment = false;
+
+  _RenderPickerAnchor? get attachedBox => _attachedBox;
+  set attachedBox(_RenderPickerAnchor? box) {
+    _attachedBox = box;
+    if (box == null || !_waitingForAttachment) return;
+
+    _waitingForAttachment = false;
+    // LayoutBuilder can mount the replacement after the picker delegate has
+    // already run. Invalidate its fallback placement once layout finishes.
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (identical(_attachedBox, box)) notifyListeners();
+    });
+  }
+
+  void waitForAttachment() => _waitingForAttachment = true;
 }
 
 class _PickerAnchor extends SingleChildRenderObjectWidget {
@@ -3996,11 +4030,19 @@ enum _PickerSlot { panel, popover }
 class _PlayerPickerPlacement extends MultiChildLayoutDelegate {
   _PlayerPickerPlacement({
     required this.anchor,
+    required this.timingAnchor,
+    required this.waitForAnchor,
     required this.insets,
     required this.preferredWidth,
-  });
+  }) : super(
+         relayout: anchor == null
+             ? null
+             : Listenable.merge([anchor, timingAnchor]),
+       );
 
   final _PickerAnchorHandle? anchor;
+  final _PickerAnchorHandle timingAnchor;
+  final bool waitForAnchor;
   final EdgeInsets insets;
   final double preferredWidth;
 
@@ -4010,29 +4052,24 @@ class _PlayerPickerPlacement extends MultiChildLayoutDelegate {
     positionChild(_PickerSlot.panel, Offset.zero);
     if (!hasChild(_PickerSlot.popover)) return;
 
-    final target = anchor?.attachedBox;
-    final parent = _layoutParent(target);
-    final rect = target != null && parent != null
-        ? MatrixUtils.transformRect(
-            target.getTransformTo(parent),
-            Offset.zero & target.laidOutSize,
-          )
-        : Rect.fromLTWH(
-            size.width - insets.right,
-            size.height - insets.bottom,
-            0,
-            0,
-          );
+    final target = _anchorBounds(anchor);
+    // The invocation control can detach while Now Playing collapses. The
+    // timing row stays mounted and still bounds the available picker space.
+    final timingTop = _anchorBounds(timingAnchor)?.top ?? insets.top;
+    final safeBottom = math.min(timingTop, size.height - insets.bottom);
     const gap = 8.0;
     final width = math.min(
       preferredWidth,
       math.max(0.0, size.width - insets.horizontal),
     );
-    final right = rect.right.clamp(
+    final right = (target?.right ?? size.width - insets.right).clamp(
       insets.left + width,
       math.max(insets.left + width, size.width - insets.right),
     );
-    final bottom = math.max(insets.top, rect.top - gap);
+    final bottom = math.max(
+      insets.top,
+      math.min(target?.top ?? safeBottom, safeBottom) - gap,
+    );
     final popover = layoutChild(
       _PickerSlot.popover,
       BoxConstraints.tightFor(width: width)
@@ -4040,18 +4077,31 @@ class _PlayerPickerPlacement extends MultiChildLayoutDelegate {
     );
     positionChild(
       _PickerSlot.popover,
-      Offset(right - popover.width, bottom - popover.height),
+      // The new compact Sleep button attaches after this layout during
+      // collapse. Keep the fallback outside the clip until it has an anchor.
+      Offset(
+        right - popover.width,
+        waitForAnchor && target == null ? size.height : bottom - popover.height,
+      ),
     );
   }
 
-  RenderCustomMultiChildLayoutBox? _layoutParent(RenderObject? target) {
-    RenderObject? node = target;
-    while (node != null) {
-      if (node is RenderCustomMultiChildLayoutBox &&
-          identical(node.delegate, this)) {
-        return node;
+  Rect? _anchorBounds(_PickerAnchorHandle? handle) {
+    final box = handle?.attachedBox;
+    if (box == null) {
+      handle?.waitForAttachment();
+      return null;
+    }
+    RenderObject? parent = box.parent;
+    while (parent != null) {
+      if (parent is RenderCustomMultiChildLayoutBox &&
+          identical(parent.delegate, this)) {
+        return MatrixUtils.transformRect(
+          box.getTransformTo(parent),
+          Offset.zero & box.laidOutSize,
+        );
       }
-      node = node.parent;
+      parent = parent.parent;
     }
     return null;
   }
@@ -4717,6 +4767,17 @@ class _NowPlayingInfoState extends State<_NowPlayingInfo> {
   final _close = FocusNode(debugLabel: 'More info Close');
   final _reader = FocusNode(debugLabel: 'More info reading');
   final _scroll = ScrollController();
+  bool _hasOverflow = false;
+
+  bool _updateOverflow(ScrollMetricsNotification notification) {
+    if (notification.depth == 0) {
+      final hasOverflow = notification.metrics.maxScrollExtent > 0;
+      if (_hasOverflow != hasOverflow) {
+        setState(() => _hasOverflow = hasOverflow);
+      }
+    }
+    return false;
+  }
 
   @override
   void dispose() {
@@ -4777,7 +4838,14 @@ class _NowPlayingInfoState extends State<_NowPlayingInfo> {
       widget.controller,
       widget.program,
     );
-    return Material(
+    const scrollHint = 'Up/Down Scroll · Back Close';
+    final hintStyle = Theme.of(context).textTheme.bodySmall?.copyWith(
+      color: LineupTheme.of(context).secondaryText,
+      fontSize: DeviceProfile.of(context).isTv
+          ? LineupTypography.tvTextFloor
+          : null,
+    );
+    final view = Material(
       type: MaterialType.transparency,
       child: FocusScope(
         onKeyEvent: _key,
@@ -4990,21 +5058,31 @@ class _NowPlayingInfoState extends State<_NowPlayingInfo> {
               ),
               Padding(
                 padding: const EdgeInsets.only(top: 20),
-                child: Text(
-                  'Up/Down Scroll · Back Close',
-                  key: const Key('player-more-info-hint'),
-                  style: Theme.of(context).textTheme.bodySmall?.copyWith(
-                    color: LineupTheme.of(context).secondaryText,
-                    fontSize: DeviceProfile.of(context).isTv
-                        ? LineupTypography.tvTextFloor
-                        : null,
-                  ),
+                child: Stack(
+                  children: [
+                    // Keep the same footer height even when the full hint
+                    // would wrap at the current width and text scale.
+                    if (!_hasOverflow)
+                      Opacity(
+                        opacity: 0,
+                        child: Text(scrollHint, style: hintStyle),
+                      ),
+                    Text(
+                      _hasOverflow ? scrollHint : 'Back Close',
+                      key: const Key('player-more-info-hint'),
+                      style: hintStyle,
+                    ),
+                  ],
                 ),
               ),
             ],
           ),
         ),
       ),
+    );
+    return NotificationListener<ScrollMetricsNotification>(
+      onNotification: _updateOverflow,
+      child: view,
     );
   }
 }

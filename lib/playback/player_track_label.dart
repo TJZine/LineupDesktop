@@ -327,10 +327,16 @@ _BaseDisplay _baseDisplay(PlayerTrack track, _TrackFacts facts) {
       ? facts.purposes.firstOrNull
       : null;
   final qualifier = title ?? primaryPurpose;
+  final titleNamesLanguage =
+      title != null &&
+      languageKey != null &&
+      _startsWithLanguage(titleKey!, languageKey);
   final primary = facts.language == null
       ? qualifier ?? _fallbackTrackLabel(track.type, track.id)
       : qualifier == null
       ? facts.language!
+      : titleNamesLanguage
+      ? title
       : '${facts.language} · $qualifier';
   final secondary = <String>[];
   final seen = <String>{};
@@ -374,6 +380,9 @@ String? _compactText(
   if (title == null || !sameCompact || !titleDiffers) {
     return purposeText.isEmpty ? language : '$language · $purposeText';
   }
+  if (base.primaryText == title) {
+    return purposeText.isEmpty ? title : '$title · $purposeText';
+  }
   final detail = purposeText.isEmpty ? title : '$purposeText · $title';
   return '$language · $detail';
 }
@@ -412,7 +421,7 @@ String _spokenFact(String fact) => switch (fact) {
   final parts = _clean(value)?.split(RegExp(r'[-_]'));
   if (parts == null || parts.length < 2) return (language: full, region: null);
   final last = parts.last;
-  if (!RegExp(r'^(?:[A-Za-z]{2}|[0-9]{3})$').hasMatch(last)) {
+  if (!_regionCode.hasMatch(last)) {
     return (language: full, region: null);
   }
   final base = _language(parts.take(parts.length - 1).join('-'));
@@ -518,6 +527,32 @@ String? _clean(String? value) {
 String? _equivalenceKey(String? value) {
   final cleaned = _clean(value);
   return cleaned?.replaceAll(RegExp(r'[\s_-]+'), ' ').trim().toLowerCase();
+}
+
+final _languageWordContinuation = RegExp(r'^[\p{L}\p{M}\p{N}]', unicode: true);
+final _parenthesizedQualifier = RegExp(r'^\s*\(([^)]+)\)');
+final _regionCode = RegExp(r'^(?:[a-z]{2}|[0-9]{3})$', caseSensitive: false);
+
+// UK is a common display alias for the catalog's GB region.
+final _recognizedRegionCodes = {
+  'uk',
+  for (final language in LanguageCodes.values)
+    if (language.code.split('_') case [_, ..., final region]
+        when _regionCode.hasMatch(region))
+      region.toLowerCase(),
+};
+
+bool _startsWithLanguage(String title, String language) {
+  if (!title.startsWith(language)) return false;
+  final suffix = title.substring(language.length);
+  if (_languageWordContinuation.hasMatch(suffix)) return false;
+  final qualifier = _parenthesizedQualifier.firstMatch(suffix)?.group(1);
+  if (qualifier == null) return true;
+  // Preserve region codes such as UK and the catalog's named variants.
+  return !_recognizedRegionCodes.contains(qualifier) &&
+      !LanguageCodes.values.any(
+        (code) => _equivalenceKey(code.englishName) == '$language ($qualifier)',
+      );
 }
 
 String _visibleKey(String primary, Iterable<String> secondary) =>

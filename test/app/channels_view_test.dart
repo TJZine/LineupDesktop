@@ -1195,6 +1195,80 @@ void main() {
     }
   });
 
+  for (final tv in [false, true]) {
+    testWidgets(
+      'Clear search is reachable and focuses the first channel TV=$tv',
+      (tester) async {
+        final controller = _RecordingDirectoryController(
+          scenario: LineupScenario(
+            stage: SetupStage.ready,
+            channels: [
+              _channel('first', 1, 'First'),
+              _channel('second', 2, 'Second'),
+            ],
+          ),
+        );
+        addTearDown(controller.dispose);
+        await tester.pumpWidget(
+          UiFixture(controller: controller, profile: profileFor(tv)).build(),
+        );
+        await tester.pumpAndSettle();
+        await openDestination(tester, 'Channels');
+
+        final search = find.byKey(const Key('channels-search'));
+        await tester.enterText(search, 'no matching channel');
+        await tester.pumpAndSettle();
+        expect(find.text('No matching channels'), findsOneWidget);
+        final clear = find.byKey(const Key('channels-clear-search-results'));
+        if (tv) {
+          await tester.testTextInput.receiveAction(TextInputAction.done);
+          await tester.pumpAndSettle();
+          await tester.sendKeyEvent(LogicalKeyboardKey.arrowDown);
+          await tester.pumpAndSettle();
+          expect(
+            Focus.of(tester.element(find.text('Clear search'))).hasFocus,
+            isTrue,
+          );
+          await tester.sendKeyEvent(LogicalKeyboardKey.select);
+        } else {
+          expect(
+            tester.widget<TextField>(search).focusNode!.hasPrimaryFocus,
+            isTrue,
+          );
+          final resultsFocus = Focus.of(
+            tester.element(find.text('Clear search')),
+          );
+          for (var tab = 0; tab < 12 && !resultsFocus.hasPrimaryFocus; tab++) {
+            await tester.sendKeyEvent(LogicalKeyboardKey.tab);
+            await tester.pumpAndSettle();
+          }
+          expect(resultsFocus.hasPrimaryFocus, isTrue);
+          await tester.sendKeyEvent(LogicalKeyboardKey.enter);
+        }
+        await tester.pumpAndSettle();
+        expect(tester.widget<TextField>(search).controller!.text, isEmpty);
+        expect(clear, findsNothing);
+        final first = find.byKey(const ValueKey('channel-row-first'));
+        expect(
+          tester
+              .widget<InkWell>(
+                find
+                    .descendant(of: first, matching: find.byType(InkWell))
+                    .first,
+              )
+              .focusNode!
+              .hasPrimaryFocus,
+          isTrue,
+        );
+        expect(
+          find.byKey(const ValueKey('channel-row-second')),
+          findsOneWidget,
+        );
+        await tester.pumpWidget(const SizedBox.shrink());
+      },
+    );
+  }
+
   testWidgets(
     'selected-only Back restores search focus for an empty filtered projection',
     (tester) async {

@@ -1518,6 +1518,60 @@ void main() {
     }
   }
 
+  testWidgets('More info advertises scrolling only when the reader overflows', (
+    tester,
+  ) async {
+    await tester.binding.setSurfaceSize(const Size(1280, 720));
+    addTearDown(() => tester.binding.setSurfaceSize(null));
+    final reader = find.byKey(const Key('player-more-info-scroll'));
+    final hint = find.byKey(const Key('player-more-info-hint'));
+    Rect? readerBounds;
+
+    for (final overflow in [false, true]) {
+      final fixture = _Fixture(
+        PlayerState.playing,
+        richItemOverride: _fixtureItem(
+          0,
+          rich: true,
+          duration: const Duration(hours: 24),
+          summary: overflow
+              ? List.filled(100, 'A lengthy program synopsis.').join(' ')
+              : 'Short synopsis.',
+        ),
+      );
+      try {
+        await fixture.player.tune('channel');
+        fixture.player.showNowPlaying();
+        fixture.player.showProgramInfo();
+        await tester.pumpWidget(
+          MaterialApp(
+            theme: LineupTheme.forName(
+              LineupThemeName.emberSteel,
+              formFactor: profileFor(true).formFactor,
+            ),
+            builder: _playerTvCanvasBuilder,
+            home: PlayerView(controller: fixture.player, openGuide: () {}),
+          ),
+        );
+        await tester.pumpAndSettle();
+        final position = tester
+            .widget<SingleChildScrollView>(reader)
+            .controller!
+            .position;
+        expect(position.maxScrollExtent, overflow ? greaterThan(0) : 0);
+        expect(
+          tester.widget<Text>(hint).data,
+          overflow ? 'Up/Down Scroll · Back Close' : 'Back Close',
+        );
+        readerBounds ??= _drawnRect(tester, reader);
+        expect(_drawnRect(tester, reader), readerBounds);
+      } finally {
+        await tester.pumpWidget(const SizedBox.shrink());
+        fixture.dispose();
+      }
+    }
+  });
+
   testWidgets('O1 amendment reader owns initial focus', (tester) async {
     final fixture = _amendmentFixture();
     await _openInfoForAmendment(tester, fixture);
@@ -3620,6 +3674,119 @@ void main() {
     await tester.pumpWidget(const SizedBox.shrink());
     fixture.dispose();
   });
+
+  for (final scale in [1.0, 1.3]) {
+    for (final (control, key) in [
+      ('sleep', 'sleep-timer-picker'),
+      ('audio', 'player-track-popover'),
+      ('subtitles', 'player-track-popover'),
+    ]) {
+      testWidgets(
+        'TV $control picker uses the OSD inset at text scale $scale',
+        (tester) async {
+          await tester.runAsync(loadPinnedTestFonts);
+          tester.view
+            ..devicePixelRatio = 1
+            ..physicalSize = const Size(1920, 1080);
+          addTearDown(tester.view.reset);
+          final maxPickerRight = tester.view.physicalSize.width - 96;
+          final fixture = _Fixture(PlayerState.playing);
+          addTearDown(fixture.dispose);
+          expect(await fixture.player.tune('channel'), isTrue);
+          fixture.native.emitTracks(const [
+            PlayerTrack(id: 1, type: PlayerTrackType.audio, selected: true),
+            PlayerTrack(id: 2, type: PlayerTrackType.subtitle, selected: false),
+          ]);
+          fixture.player.showOsd();
+          await tester.pumpWidget(
+            MaterialApp(
+              theme: LineupTheme.forName(
+                LineupThemeName.emberSteel,
+                formFactor: profileFor(true).formFactor,
+              ),
+              builder: (context, child) => MediaQuery(
+                data: MediaQuery.of(context)
+                    .copyWith(textScaler: TextScaler.linear(scale)),
+                child: _playerTvCanvasBuilder(context, child),
+              ),
+              home: PlayerView(controller: fixture.player, openGuide: () {}),
+            ),
+          );
+          await tester.pumpAndSettle();
+
+          for (final expanded in [false, true]) {
+            if (expanded) {
+              fixture.player.showNowPlaying();
+              await tester.pumpAndSettle();
+              expect(
+                find.byKey(const Key('player-now-playing-surface')),
+                findsOneWidget,
+              );
+            }
+            final button = find.byKey(Key('player-osd-$control'));
+            final popup = find.byKey(Key(key));
+            final timing = find.byKey(const Key('player-osd-progress-block'));
+            await tester.tap(button);
+            void expectPlacement(String phase) {
+              final reason = '$control expanded=$expanded $phase';
+              expect(popup, findsOneWidget, reason: reason);
+              final picker = _drawnRect(tester, popup);
+              final progress = _drawnRect(tester, timing);
+              expect(picker.height, greaterThan(0), reason: reason);
+              expect(
+                picker.right,
+                lessThanOrEqualTo(maxPickerRight + .1),
+                reason: reason,
+              );
+              expect(
+                picker.bottom,
+                lessThanOrEqualTo(progress.top),
+                reason: reason,
+              );
+              expect(
+                picker.bottom,
+                lessThan(_drawnRect(tester, button).top),
+                reason: reason,
+              );
+            }
+
+            await tester.pump();
+            // Inspect every frame up to the first one that can paint inside
+            // the player. An unanchored picker may be outside its clip.
+            final screen = Offset.zero & tester.view.physicalSize;
+            var firstVisible = false;
+            for (var frame = 0; frame < 8; frame++) {
+              if (popup.evaluate().isNotEmpty &&
+                  _drawnRect(tester, popup).overlaps(screen)) {
+                expectPlacement('first visible frame');
+                firstVisible = true;
+                break;
+              }
+              await tester.pump(const Duration(milliseconds: 16));
+            }
+            expect(firstVisible, isTrue, reason: '$control expanded=$expanded');
+            await tester.pumpAndSettle();
+            expectPlacement('settled');
+            final picker = _drawnRect(tester, popup);
+            if (control == 'sleep') {
+              for (final preset in ['off', '30', '60', '90']) {
+                final option = find.byKey(Key('sleep-timer-$preset'));
+                expect(option.hitTestable(), findsOneWidget);
+                final bounds = _drawnRect(tester, option);
+                expect(bounds.top, greaterThanOrEqualTo(picker.top));
+                expect(bounds.bottom, lessThanOrEqualTo(picker.bottom));
+              }
+            }
+            fixture.player.closeOverlay();
+            fixture.player.showOsd();
+            await tester.pumpAndSettle();
+          }
+          expect(tester.takeException(), isNull);
+          await tester.pumpWidget(const SizedBox.shrink());
+        },
+      );
+    }
+  }
 
   testWidgets('TV Sleep uses the measured header and tile width up to 720 px', (
     tester,
@@ -7409,6 +7576,29 @@ void main() {
           .getSemanticsData();
       expect(subtitlesSemantics.flagsCollection.isEnabled, Tristate.isTrue);
       expect(subtitlesSemantics.hasAction(SemanticsAction.tap), isTrue);
+
+      fixture.native.emitTracks(const [
+        PlayerTrack(
+          id: 8,
+          type: PlayerTrackType.subtitle,
+          selected: true,
+          title: 'English text',
+          language: 'en',
+        ),
+        PlayerTrack(
+          id: 9,
+          type: PlayerTrackType.subtitle,
+          selected: false,
+          title: 'Styled ASS',
+          language: 'en',
+        ),
+      ]);
+      await tester.pumpAndSettle();
+      expect(
+        find.text('Subtitles English text', findRichText: true),
+        findsOneWidget,
+      );
+      expect(materialTooltip('Subtitle track: English text'), findsOneWidget);
       await tester.pumpWidget(const SizedBox.shrink());
       fixture.dispose();
     },

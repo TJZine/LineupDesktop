@@ -5,6 +5,7 @@ import 'dart:ui' as ui;
 import 'package:flutter/foundation.dart'
     show TargetPlatform, defaultTargetPlatform, setEquals;
 import 'package:material_ui/material_ui.dart';
+import 'package:flutter/semantics.dart' show OrdinalSortKey;
 import 'package:flutter/services.dart';
 import 'package:lineup_desktop/platform/device_profile.dart';
 
@@ -23,6 +24,8 @@ import 'focused_ticker.dart';
 import 'guide_controller.dart';
 import 'guide_playback_placeholder.dart';
 
+const _guideNoMatchesMessage =
+    'No matching channels\nTry another channel name or number.';
 const _guideTimelineGutter = 1.0;
 const _guideEdgeContentInset = 12.0;
 const _guideWatchingGap = 20.0;
@@ -469,6 +472,9 @@ class _GuideViewState extends State<GuideView>
   final _laterFocus = FocusNode(debugLabel: 'Guide later');
   final _hoursFocus = FocusNode(debugLabel: 'Guide hours picker');
   final _clearSearchFocus = FocusNode(debugLabel: 'Guide clear search');
+  final _clearResultsSearchFocus = FocusNode(
+    debugLabel: 'Guide clear search in results',
+  );
   final _removeChannelFilterFocus = FocusNode(
     debugLabel: 'Guide remove channel filter',
   );
@@ -604,6 +610,7 @@ class _GuideViewState extends State<GuideView>
     _laterFocus.dispose();
     _hoursFocus.dispose();
     _clearSearchFocus.dispose();
+    _clearResultsSearchFocus.dispose();
     _removeChannelFilterFocus.dispose();
     _searchController
       ..removeListener(_searchChanged)
@@ -626,6 +633,26 @@ class _GuideViewState extends State<GuideView>
     } finally {
       _publishingSearchEdit = false;
     }
+  }
+
+  bool get _canClearSearchFromResults =>
+      widget.controller.channels.isEmpty &&
+      widget.controller.searchQuery.isNotEmpty;
+
+  VoidCallback? get _clearSearchAction =>
+      _canClearSearchFromResults ? _clearSearchFromNoMatches : null;
+
+  void _clearSearchFromNoMatches() {
+    _searchController.clear();
+    final guide = widget.controller;
+    if (guide.channels.isEmpty) {
+      _openSearch();
+      return;
+    }
+    if (guide.focusedChannelIndex > 0) {
+      guide.moveVertical(-guide.focusedChannelIndex);
+    }
+    (widget.focusNode ?? _guideFocus).requestFocus();
   }
 
   KeyEventResult _searchKey(FocusNode node, KeyEvent event) {
@@ -960,7 +987,11 @@ class _GuideViewState extends State<GuideView>
         widget.controller.moveVertical(-1);
       }
     } else if (key == LogicalKeyboardKey.arrowDown) {
-      widget.controller.moveVertical(1);
+      if (_canClearSearchFromResults) {
+        _clearResultsSearchFocus.requestFocus();
+      } else {
+        widget.controller.moveVertical(1);
+      }
     } else if (key == LogicalKeyboardKey.arrowLeft) {
       widget.controller.moveHorizontal(-1);
     } else if (key == LogicalKeyboardKey.arrowRight) {
@@ -1199,7 +1230,11 @@ class _GuideViewState extends State<GuideView>
       if (_empty && widget.onSetUpChannels == null) {
         return KeyEventResult.ignored;
       }
-      final target = _empty ? _setupFocus : widget.focusNode ?? _guideFocus;
+      final target = _empty
+          ? _setupFocus
+          : _canClearSearchFromResults
+          ? _clearResultsSearchFocus
+          : widget.focusNode ?? _guideFocus;
       target.requestFocus();
       return KeyEventResult.handled;
     }
@@ -1468,10 +1503,10 @@ class _GuideViewState extends State<GuideView>
                       ),
                       Expanded(
                         child: channels.isEmpty
-                            ? const Center(
-                                child: Text(
-                                  'No matching channels\nTry another channel name or number.',
-                                  textAlign: TextAlign.center,
+                            ? Center(
+                                child: _GuideNoMatches(
+                                  onClearSearch: _clearSearchAction,
+                                  focusNode: _clearResultsSearchFocus,
                                 ),
                               )
                             : ListView.builder(
@@ -4441,13 +4476,18 @@ class _TvGuideSchema {
       reserveLogo ? 64.0 : 0.0,
     );
     final badgeHeight = line(_GuideStyles.badge(context)) + 8;
+    final metadataHeight = line(_GuideStyles.metadata);
     final identity =
         line(_GuideStyles.channel) +
         titleHeight +
         line(_GuideStyles.episode) +
-        line(_GuideStyles.metadata) * 2 +
+        metadataHeight +
         badgeHeight +
-        gap * 5;
+        gap * 4;
+    // Airtime moved out of the identity. Its row and leading gap are
+    // reserved here alongside the existing bar and optional message.
+    final timing = gap + metadataHeight + gap + 4;
+    final message = metadataHeight;
     // A finite display budget for the five badge roles, independent of the
     // inspected program. Include the wider supported catalog codes; raw values
     // outside this budget retain their text/semantics but ellipsize on TV.
@@ -4477,7 +4517,7 @@ class _TvGuideSchema {
             .reduce((a, b) => a + b) +
         6 * 4;
     return _TvGuideSchema(
-      (identity + gap + 4 + line(_GuideStyles.metadata) + 28).ceilToDouble(),
+      (identity + timing + message + 28).ceilToDouble(),
       line(_GuideStyles.rowTitle) +
           line(_GuideStyles.rowSecondary(context)) +
           18,
@@ -4636,6 +4676,35 @@ class _Details extends StatelessWidget {
   }
 }
 
+class _GuideNoMatches extends StatelessWidget {
+  const _GuideNoMatches({required this.onClearSearch, required this.focusNode});
+
+  final VoidCallback? onClearSearch;
+  final FocusNode focusNode;
+
+  @override
+  Widget build(BuildContext context) => SingleChildScrollView(
+    child: Column(
+      mainAxisSize: MainAxisSize.min,
+      children: [
+        const Text(_guideNoMatchesMessage, textAlign: TextAlign.center),
+        if (onClearSearch != null) ...[
+          const SizedBox(height: 8),
+          TextButton(
+            key: const Key('guide-clear-search-results'),
+            focusNode: focusNode,
+            onPressed: onClearSearch,
+            child: Text(
+              'Clear search',
+              style: LineupTypography.tvLabelStyle(context),
+            ),
+          ),
+        ],
+      ],
+    ),
+  );
+}
+
 class _GuideDetailsPlaceholder extends StatelessWidget {
   const _GuideDetailsPlaceholder({
     required this.controller,
@@ -4652,9 +4721,7 @@ class _GuideDetailsPlaceholder extends StatelessWidget {
     if (controller.channels.isEmpty && controller.lineup.channels.isNotEmpty) {
       return const Align(
         alignment: Alignment.centerLeft,
-        child: Text(
-          'No matching channels\nTry another channel name or number.',
-        ),
+        child: Text(_guideNoMatchesMessage),
       );
     }
     final inspected = channel;
@@ -4677,17 +4744,20 @@ class _GuideDetailsPlaceholder extends StatelessWidget {
     final identity = '${inspected.number}  ${inspected.name}';
     final identityStyle = Theme.of(context).textTheme.labelLarge
         ?.copyWith(color: roles.progressFill, fontWeight: FontWeight.w600);
+    final details = Column(
+      mainAxisSize: MainAxisSize.min,
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Text(identity, style: identityStyle),
+        const SizedBox(height: 8),
+        Text(status),
+      ],
+    );
     return Align(
       alignment: Alignment.centerLeft,
-      child: Column(
-        mainAxisSize: MainAxisSize.min,
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          Text(identity, style: identityStyle),
-          const SizedBox(height: 8),
-          Text(status),
-        ],
-      ),
+      child: DeviceProfile.of(context).isTv
+          ? details
+          : SingleChildScrollView(primary: false, child: details),
     );
   }
 }
@@ -4772,6 +4842,8 @@ class _ProgramDetails extends StatelessWidget {
           enlarged: enlarged,
         );
         final mergeFacts = dense && !enlarged;
+        // Merged facts share the same row budget at every density.
+        final singleTimingLine = isTv || mergeFacts;
         final gap = dense ? 4.0 : 10.0;
         final unscaledLogoSlot = dense ? 42.0 : 64.0;
         final contentScale = isTv || dense
@@ -4789,7 +4861,9 @@ class _ProgramDetails extends StatelessWidget {
           fontSize: 22 * contentScale,
         );
         final synopsisStyle = bodyStyle.copyWith(
-          fontSize: 18 * (1 + (contentScale - 1) / 2),
+          fontSize: isTv
+              ? LineupTypography.tvTextFloor
+              : 18 * (1 + (contentScale - 1) / 2),
         );
         final identityFlex = _GuideInformationLayout.identityFlex(
           height: box.maxHeight,
@@ -4832,28 +4906,41 @@ class _ProgramDetails extends StatelessWidget {
           style: titleStyle,
         );
         final eyebrowToTitle = line(channelStyle) + gap;
+        final titleHeight = math.max(line(scaledTitleStyle), logoSlot);
+        final minimumIdentityHeight = eyebrowToTitle + titleHeight;
         final metadataHeight = line(metadataStyle);
         final badgeHeight = line(_GuideStyles.badge(context)) + 8;
         final reservedIdentity =
-            eyebrowToTitle +
-            math.max(line(scaledTitleStyle), logoSlot) +
+            minimumIdentityHeight +
             gap +
             line(episodeStyle) +
-            gap +
-            metadataHeight +
             (mergeFacts ? 0 : gap + metadataHeight) +
             gap +
             badgeHeight;
-        final progressReserve = gap + 4;
+        final timingReserve = gap + metadataHeight + gap + 4;
         final messageReserve = playbackMessage == null ? 0 : metadataHeight;
         final centerOffset = math.max(
           0.0,
-          (box.maxHeight -
-                  progressReserve -
-                  messageReserve -
-                  reservedIdentity) /
+          (box.maxHeight - timingReserve - messageReserve - reservedIdentity) /
               2,
         );
+        final airtime = mergeFacts && factsLine.isNotEmpty
+            ? '$timeLine · $factsLine'
+            : timeLine;
+        final airtimeHeight = singleTimingLine
+            ? metadataHeight
+            : _guideMeasuredText(
+                context,
+                airtime,
+                inherited.merge(metadataStyle),
+                width: box.maxWidth,
+              ).height;
+        // Keep at least the eyebrow and title in view when timing is pinned.
+        // A shorter band scrolls the full details, including wrapped airtime.
+        final actualTimingHeight =
+            timingReserve - metadataHeight + airtimeHeight + messageReserve;
+        final scrollDetails =
+            !isTv && box.maxHeight < minimumIdentityHeight + actualTimingHeight;
         final identity = Column(
           key: const Key('guide-program-identity'),
           crossAxisAlignment: CrossAxisAlignment.start,
@@ -4885,16 +4972,6 @@ class _ProgramDetails extends StatelessWidget {
                 style: episodeStyle,
               ),
             ],
-            SizedBox(height: gap),
-            Text(
-              mergeFacts && factsLine.isNotEmpty
-                  ? '$timeLine · $factsLine'
-                  : timeLine,
-              key: const Key('guide-program-meta'),
-              maxLines: isTv ? 1 : null,
-              overflow: isTv ? TextOverflow.ellipsis : null,
-              style: metadataStyle,
-            ),
             if (!mergeFacts && factsLine.isNotEmpty) ...[
               SizedBox(height: gap),
               Text(
@@ -4942,69 +5019,109 @@ class _ProgramDetails extends StatelessWidget {
             ],
           ],
         );
-        return Column(
-          crossAxisAlignment: CrossAxisAlignment.stretch,
-          children: [
-            Expanded(
-              child: Padding(
-                padding: EdgeInsets.only(top: centerOffset),
-                child: Row(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    SizedBox(
-                      width: identityWidth,
-                      child: isTv
-                          ? identity
-                          : SingleChildScrollView(child: identity),
-                    ),
-                    if (hasSynopsis && rowWidth > identityWidth) ...[
-                      const SizedBox(width: 32),
-                      Expanded(
-                        child: Padding(
-                          padding: EdgeInsets.only(top: eyebrowToTitle),
-                          child: LayoutBuilder(
-                            builder: (context, synopsisBox) => Text(
-                              item.summary!,
-                              key: const Key('guide-program-synopsis'),
-                              maxLines: math.max(
-                                1,
-                                (synopsisBox.maxHeight / line(synopsisStyle))
-                                    .floor(),
-                              ),
-                              overflow: TextOverflow.ellipsis,
-                              style: synopsisStyle,
-                            ),
+        Widget readingOrder(double order, Widget child) => Semantics(
+          container: true,
+          sortKey: OrdinalSortKey(order),
+          child: child,
+        );
+        final introduction = Padding(
+          padding: EdgeInsets.only(top: scrollDetails ? 0 : centerOffset),
+          child: Row(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              readingOrder(
+                0,
+                SizedBox(
+                  width: identityWidth,
+                  child: isTv || scrollDetails
+                      ? identity
+                      : SingleChildScrollView(child: identity),
+                ),
+              ),
+              if (hasSynopsis && rowWidth > identityWidth) ...[
+                const SizedBox(width: 32),
+                Expanded(
+                  child: readingOrder(
+                    1,
+                    Padding(
+                      padding: EdgeInsets.only(top: eyebrowToTitle),
+                      child: LayoutBuilder(
+                        builder: (context, synopsisBox) => Text(
+                          item.summary!,
+                          key: const Key('guide-program-synopsis'),
+                          maxLines: math.max(
+                            1,
+                            (math.min(synopsisBox.maxHeight, box.maxHeight) /
+                                    line(synopsisStyle))
+                                .floor(),
                           ),
+                          overflow: TextOverflow.ellipsis,
+                          style: synopsisStyle,
                         ),
                       ),
-                    ],
-                  ],
+                    ),
+                  ),
                 ),
+              ],
+            ],
+          ),
+        );
+        final details = Column(
+          crossAxisAlignment: CrossAxisAlignment.stretch,
+          children: [
+            if (scrollDetails) introduction else Expanded(child: introduction),
+            SizedBox(height: gap),
+            readingOrder(
+              2,
+              Column(
+                mainAxisSize: MainAxisSize.min,
+                crossAxisAlignment: CrossAxisAlignment.stretch,
+                children: [
+                  if (playbackMessage != null)
+                    Text(
+                      playbackMessage!,
+                      key: const Key('guide-playback-message'),
+                      maxLines: 1,
+                      overflow: TextOverflow.ellipsis,
+                      style: metadataStyle,
+                    ),
+                  Text(
+                    airtime,
+                    key: const Key('guide-program-meta'),
+                    maxLines: singleTimingLine ? 1 : null,
+                    overflow: singleTimingLine ? TextOverflow.ellipsis : null,
+                    style: metadataStyle,
+                  ),
+                  SizedBox(height: gap),
+                  if (current)
+                    Semantics(
+                      label:
+                          '${_duration(elapsed)} elapsed, $remaining remaining',
+                      child: LinearProgressIndicator(
+                        key: const Key('guide-program-progress'),
+                        value: duration.inMilliseconds <= 0
+                            ? 0
+                            : elapsed.inMilliseconds / duration.inMilliseconds,
+                        minHeight: 4,
+                      ),
+                    )
+                  else
+                    const SizedBox(height: 4),
+                ],
               ),
             ),
-            if (playbackMessage != null)
-              Text(
-                playbackMessage!,
-                key: const Key('guide-playback-message'),
-                maxLines: 1,
-                overflow: TextOverflow.ellipsis,
-                style: metadataStyle,
-              ),
-            SizedBox(height: gap),
-            if (current)
-              Semantics(
-                label: '${_duration(elapsed)} elapsed, $remaining remaining',
-                child: LinearProgressIndicator(
-                  key: const Key('guide-program-progress'),
-                  value: duration.inMilliseconds <= 0
-                      ? 0
-                      : elapsed.inMilliseconds / duration.inMilliseconds,
-                  minHeight: 4,
-                ),
-              )
-            else
-              const SizedBox(height: 4),
           ],
+        );
+        return Semantics(
+          container: true,
+          explicitChildNodes: true,
+          child: scrollDetails
+              ? SingleChildScrollView(
+                  key: const Key('guide-program-details-scroll'),
+                  primary: false,
+                  child: details,
+                )
+              : details,
         );
       },
     );

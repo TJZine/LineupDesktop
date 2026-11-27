@@ -782,7 +782,7 @@ void main() {
   );
 
   testWidgets(
-    'enlarged Guide metadata wraps with content at the start of each rendered line',
+    'enlarged Guide facts wrap with content at the start of each line and airtime spans the timing row',
     (tester) async {
       tester.view
         ..devicePixelRatio = 1
@@ -843,10 +843,7 @@ void main() {
       await tester.pumpAndSettle();
       final time = find.byKey(const Key('guide-program-meta'));
       final facts = find.byKey(const Key('guide-info-genres'));
-      expect(
-        tester.getRect(facts).top,
-        greaterThan(tester.getRect(time).bottom),
-      );
+      expect(tester.getRect(facts).bottom, lessThan(tester.getRect(time).top));
       expect(
         tester.widget<Text>(time).data!.replaceAll('\u00a0', ' '),
         '${_testTime(start.toLocal())}–${_testTime(start.add(const Duration(minutes: 48)).toLocal())} · 43m left',
@@ -869,7 +866,7 @@ void main() {
           final top = boxes.first.top;
           lines[top] = '${lines[top] ?? ''}$character';
         }
-        expect(lines.length, greaterThan(1), reason: text);
+        expect(lines.length, finder == time ? 1 : greaterThan(1), reason: text);
         for (final line in lines.values) {
           expect(line.startsWith('·'), isFalse, reason: '$text: $line');
         }
@@ -878,6 +875,185 @@ void main() {
       expect(tester.takeException(), isNull);
     },
   );
+
+  for (final (size, scale) in [
+    (const Size(800, 600), 1.5),
+    (const Size(1024, 768), 2.0),
+  ]) {
+    testWidgets(
+      'short desktop Guide details can scroll to airtime $size at $scale',
+      (tester) async {
+        await tester.runAsync(loadPinnedTestFonts);
+        tester.view
+          ..devicePixelRatio = 1
+          ..physicalSize = size;
+        addTearDown(tester.view.reset);
+        final now = DateTime.utc(2026, 1, 15, 15, 17);
+        final lineup = _Lineup(
+          40,
+          anchor: now.subtract(const Duration(minutes: 17)),
+        );
+        final first = lineup.channels.first;
+        lineup.fixtureActor.replaceChannels([
+          Channel(
+            id: first.id,
+            number: first.number,
+            name: first.name,
+            playbackMode: first.playbackMode,
+            anchor: first.anchor,
+            shuffleSeed: first.shuffleSeed,
+            source: const ManualSource([
+              ChannelItem(
+                id: 'short-band-program',
+                title: 'Program 0',
+                duration: Duration(hours: 24),
+                summary: 'A synthetic synopsis for the short desktop band.',
+              ),
+            ]),
+          ),
+          ...lineup.channels.skip(1),
+        ]);
+        final load = Completer<void>();
+        final guide = GuideController(
+          lineup: lineup,
+          clock: () => now,
+          loadSchedule: (channel) async {
+            await load.future;
+            return _schedule(channel);
+          },
+        );
+        addTearDown(lineup.dispose);
+        addTearDown(guide.dispose);
+        await tester.pumpWidget(
+          MaterialApp(
+            theme: LineupTheme.forName(LineupThemeName.emberSteel),
+            builder: (context, child) => MediaQuery(
+              data: MediaQuery.of(context)
+                  .copyWith(textScaler: TextScaler.linear(scale)),
+              child: _desktopCanvasChild(child!),
+            ),
+            home: GuideView(
+              controller: guide,
+              pictureInPicture: const ColoredBox(color: Colors.black),
+              onClose: (_, _) {},
+              onTune: (_) async {},
+            ),
+          ),
+        );
+        await tester.pump();
+        expect(
+          find.descendant(
+            of: find.byKey(const Key('guide-information-details')),
+            matching: find.text('Loading schedule…'),
+          ),
+          findsOneWidget,
+        );
+        // Capture the loading layout separately so it cannot mask the loaded one.
+        final placeholderException = tester.takeException();
+
+        load.complete();
+        await tester.pumpAndSettle();
+        final time = find.byKey(const Key('guide-program-meta'));
+        final progress = find.byKey(const Key('guide-program-progress'));
+        expect(guide.focusedProgram, isNotNull);
+        expect(time, findsOneWidget);
+        expect(
+          tester.takeException(),
+          isNull,
+          reason: 'Loaded program details',
+        );
+        final viewport = find.byKey(const Key('guide-program-details-scroll'));
+        expect(viewport, findsOneWidget);
+        final airtime = tester.renderObject<RenderParagraph>(time);
+        expect(airtime.maxLines, isNull);
+        expect(airtime.didExceedMaxLines, isFalse);
+        expect(airtime.text.toPlainText(), contains('23h 43m left'));
+        expect(find.byKey(const Key('guide-program-synopsis')), findsOneWidget);
+        expect(
+          _drawnRect(tester, progress).top,
+          greaterThan(_drawnRect(tester, viewport).bottom),
+        );
+        await tester.ensureVisible(progress);
+        await tester.pumpAndSettle();
+        expect(progress.hitTestable(), findsOneWidget);
+        expect(
+          _drawnRect(tester, time).bottom,
+          lessThan(_drawnRect(tester, progress).top),
+        );
+        expect(placeholderException, isNull, reason: 'Loading placeholder');
+        expect(tester.takeException(), isNull);
+      },
+    );
+  }
+
+  testWidgets('dense desktop keeps long merged facts within the timing row', (
+    tester,
+  ) async {
+    tester.view
+      ..devicePixelRatio = 1
+      ..physicalSize = const Size(800, 600);
+    addTearDown(tester.view.reset);
+    final now = DateTime(2026, 1, 15, 3, 17);
+    final lineup = _Lineup(2, anchor: now.subtract(const Duration(minutes: 5)));
+    lineup.fixtureActor.replaceChannels([
+      for (final channel in lineup.channels)
+        Channel(
+          id: channel.id,
+          number: channel.number,
+          name: channel.name,
+          playbackMode: channel.playbackMode,
+          anchor: channel.anchor,
+          shuffleSeed: channel.shuffleSeed,
+          source: ManualSource([
+            ChannelItem(
+              id: 'summary-${channel.id}',
+              title: 'Synthetic program',
+              duration: const Duration(minutes: 48),
+              genres: channel.id == 'channel-0'
+                  ? const [
+                      'Long-form international culture and current affairs',
+                      'Classic historical and archaeological documentaries',
+                      'Independent science fiction and speculative fiction',
+                    ]
+                  : const [],
+            ),
+          ]),
+        ),
+    ]);
+    final guide = GuideController(
+      lineup: lineup,
+      clock: () => now,
+      loadSchedule: (channel) async => _schedule(channel),
+    );
+    addTearDown(lineup.dispose);
+    addTearDown(guide.dispose);
+    await tester.pumpWidget(
+      MaterialApp(
+        builder: _guideCanvasBuilder,
+        home: GuideView(
+          controller: guide,
+          pictureInPicture: const ColoredBox(color: Colors.black),
+          onClose: (_, _) {},
+          onTune: (_) async {},
+        ),
+      ),
+    );
+    await tester.pumpAndSettle();
+    final time = find.byKey(const Key('guide-program-meta'));
+    expect(tester.widget<Text>(time).data, contains('Long-form'));
+    expect(find.byKey(const Key('guide-info-genres')), findsNothing);
+    expect(
+      tester.renderObject<RenderParagraph>(time).didExceedMaxLines,
+      isTrue,
+    );
+    final origin = tester.getTopLeft(time);
+
+    guide.moveVertical(1);
+    await tester.pumpAndSettle();
+    expect(tester.widget<Text>(time).data, isNot(contains('Long-form')));
+    expect(tester.getTopLeft(time), origin);
+    expect(tester.takeException(), isNull);
+  });
 
   testWidgets(
     'Guide detail time line follows start-inclusive and end-exclusive airing boundaries',
@@ -947,6 +1123,8 @@ void main() {
         expect(program.scheduled.end, end);
         final range =
             '${_testTime(start.toLocal())}–${_testTime(end.toLocal())}';
+        final time = find.byKey(const Key('guide-program-meta'));
+        final timeOrigin = tester.getTopLeft(time);
         for (final (at, suffix, progressLabel) in [
           (start.subtract(const Duration(seconds: 1)), ' · 48m', null),
           (start, ' · 48m left', '0m elapsed, 48m remaining'),
@@ -966,10 +1144,9 @@ void main() {
           now = at;
           guide.focusProgram(program);
           await tester.pumpAndSettle();
+          expect(tester.getTopLeft(time), timeOrigin);
           expect(
-            tester
-                .widget<Text>(find.byKey(const Key('guide-program-meta')))
-                .data,
+            tester.widget<Text>(time).data,
             '$range$suffix',
             reason: '$at',
           );
@@ -5153,6 +5330,103 @@ void main() {
     }
     await tester.pumpWidget(const SizedBox.shrink());
   });
+
+  for (final tv in [false, true]) {
+    testWidgets(
+      'Guide no-match action clears and focuses the first result TV=$tv',
+      (tester) async {
+        tester.view
+          ..devicePixelRatio = 1
+          ..physicalSize = const Size(1920, 1080);
+        addTearDown(tester.view.reset);
+        final lineup = _Lineup(3);
+        final guide = GuideController(
+          lineup: lineup,
+          loadSchedule: (channel) async => _schedule(channel),
+        );
+        final grid = FocusNode();
+        addTearDown(lineup.dispose);
+        addTearDown(guide.dispose);
+        addTearDown(grid.dispose);
+        var tunes = 0;
+        await tester.pumpWidget(
+          MaterialApp(
+            theme: LineupTheme.forName(
+              LineupThemeName.emberSteel,
+              formFactor: profileFor(tv).formFactor,
+            ),
+            builder: _guideCanvasBuilderFor(tv),
+            home: GuideView(
+              controller: guide,
+              focusNode: grid,
+              pictureInPicture: const ColoredBox(color: Colors.black),
+              onClose: (_, _) {},
+              onTune: (_) async => tunes++,
+            ),
+          ),
+        );
+        await tester.pumpAndSettle();
+        guide.moveVertical(1);
+        expect(guide.focusedChannelId, 'channel-1');
+        await _openGuideSearch(tester);
+        final search = find.byKey(const Key('guide-channel-search'));
+        await tester.enterText(search, 'no matching channel');
+        await tester.pumpAndSettle();
+        expect(guide.channels, isEmpty);
+        final results = find.byKey(const Key('guide-clear-search-results'));
+        expect(results, findsOneWidget);
+        expect(find.text('Clear search'), findsOneWidget);
+        final band = find.byKey(const Key('guide-information-details'));
+        expect(
+          find.descendant(
+            of: band,
+            matching: find.textContaining('No matching channels'),
+          ),
+          findsOneWidget,
+        );
+        expect(
+          find.descendant(of: band, matching: find.byType(TextButton)),
+          findsNothing,
+        );
+        final resultsAction = tester.getSemantics(results).getSemanticsData();
+        expect(resultsAction.label, 'Clear search');
+        expect(resultsAction.hasAction(SemanticsAction.tap), isTrue);
+        if (tv) {
+          await tester.testTextInput.receiveAction(TextInputAction.done);
+          await tester.pumpAndSettle();
+          await tester.sendKeyEvent(LogicalKeyboardKey.arrowDown);
+          await tester.pumpAndSettle();
+          expect(
+            tester.widget<TextButton>(results).focusNode!.hasPrimaryFocus,
+            isTrue,
+          );
+          await tester.sendKeyEvent(LogicalKeyboardKey.select);
+        } else {
+          expect(
+            tester.widget<TextField>(search).focusNode!.hasPrimaryFocus,
+            isTrue,
+          );
+          final resultsFocus = tester.widget<TextButton>(results).focusNode!;
+          // The editor's own clear control and toolbar actions remain in traversal.
+          for (var tab = 0; tab < 12 && !resultsFocus.hasPrimaryFocus; tab++) {
+            await tester.sendKeyEvent(LogicalKeyboardKey.tab);
+            await tester.pumpAndSettle();
+          }
+          expect(resultsFocus.hasPrimaryFocus, isTrue);
+          await tester.sendKeyEvent(LogicalKeyboardKey.enter);
+        }
+        await tester.pumpAndSettle();
+        expect(guide.searchQuery, isEmpty);
+        expect(guide.channels, hasLength(3));
+        expect(guide.focusedChannelId, 'channel-0');
+        expect(grid.hasPrimaryFocus, isTrue);
+        expect(results, findsNothing);
+        expect(tunes, 0);
+        await tester.pumpWidget(const SizedBox.shrink());
+      },
+      semanticsEnabled: true,
+    );
+  }
 
   testWidgets('search owns Escape and Enter focus without tuning', (
     tester,

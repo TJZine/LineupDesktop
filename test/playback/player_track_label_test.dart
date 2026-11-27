@@ -513,6 +513,48 @@ void main() {
   });
 
   group('formatPlayerTrackDisplay de-duplication and peers', () {
+    test('drops a repeated whole language word and keeps qualifications', () {
+      for (final (language, spoken, title, expected) in [
+        ('es', 'Spanish', 'Spanish 880 Hz', 'Spanish 880 Hz'),
+        ('en', 'English', 'eNGLISH: Text', 'eNGLISH: Text'),
+        ('en', 'English', 'Styled ASS', 'English · Styled ASS'),
+        ('en', 'English', 'English (HD)', 'English (HD)'),
+        ('en', 'English', 'English (UK)', 'English · English (UK)'),
+        (
+          'en',
+          'English',
+          'English (United Kingdom)',
+          'English · English (United Kingdom)',
+        ),
+        ('en', 'English', 'English (Styled ASS)', 'English (Styled ASS)'),
+        ('en', 'English', 'Englishman mix', 'English · Englishman mix'),
+        ('en', 'English', 'Englishé mix', 'English · Englishé mix'),
+      ]) {
+        final display = formatPlayerTrackDisplay(
+          _track(language: language, title: title),
+        );
+        expect(display.primaryText, expected);
+        expect(display.semanticsText, contains('$spoken, $title'));
+      }
+      final commentary = formatPlayerTrackDisplay(
+        _track(language: 'en', title: 'English archival mix', commentary: true),
+      );
+      expect(commentary.primaryText, 'English archival mix');
+      expect(commentary.secondaryFacts, ['Commentary']);
+      final subtitle = formatPlayerTrackDisplay(
+        _track(
+          type: PlayerTrackType.subtitle,
+          language: 'en',
+          title: 'English text',
+          hearingImpaired: true,
+          forced: true,
+        ),
+      );
+      expect(subtitle.primaryText, 'English text');
+      expect(subtitle.secondaryFacts, ['SDH', 'Forced']);
+      expect(subtitle.compactText, 'English · SDH · Forced');
+    });
+
     test('suppresses language, codec, and exact purpose title duplicates', () {
       final display = formatPlayerTrackDisplay(
         _track(
