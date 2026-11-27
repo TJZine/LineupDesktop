@@ -222,6 +222,11 @@ class _StudioManualEditorState extends State<_StudioManualEditor>
             (entry: entries[index], index: index),
     ];
     final countLabel = '${visible.length} matching · ${entries.length} added';
+    final rundownControls = DeviceProfile.of(context).isTv
+        ? rundownQuery.isEmpty
+              ? 'Use Move to… or the arrows on each program to reorder'
+              : 'Clear search to reorder'
+        : 'Alt+Up/Down reorders · Delete removes${rundownQuery.isEmpty ? '' : ' · Clear search to drag reorder'}';
     return LineupCompactControls(
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.stretch,
@@ -554,7 +559,7 @@ class _StudioManualEditorState extends State<_StudioManualEditor>
             Text(
               entries.isEmpty
                   ? 'No programs selected. Return to Browse library to add programming.'
-                  : '${rundownEntries.length} of ${entries.length} shown · Alt+Up/Down reorders · Delete removes${rundownQuery.isEmpty ? '' : ' · Clear search to drag reorder'}',
+                  : '${rundownEntries.length} of ${entries.length} shown · $rundownControls',
               style: _studioSupportStyle(context),
             ),
             SizedBox(height: 8),

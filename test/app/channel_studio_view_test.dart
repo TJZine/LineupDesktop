@@ -714,6 +714,72 @@ void main() {
     );
   });
 
+  for (final tv in [false, true]) {
+    testWidgets('Studio rundown hint names available controls TV=$tv', (
+      tester,
+    ) async {
+      final channel = _channel(
+        id: 'manual-hint',
+        number: 1,
+        name: 'Manual',
+        source: const ManualSource([
+          ChannelItem(
+            id: 'first',
+            title: 'First',
+            duration: Duration(minutes: 20),
+          ),
+          ChannelItem(
+            id: 'second',
+            title: 'Second',
+            duration: Duration(minutes: 20),
+          ),
+        ]),
+      );
+      final controller = _RecordingSaveController(
+        scenario: LineupScenario(channels: [channel]),
+      );
+      addTearDown(controller.dispose);
+      await tester.pumpWidget(
+        _studio(
+          controller,
+          ChannelStudioMode.editCustom,
+          channel: channel,
+          profile: profileFor(tv),
+        ),
+      );
+      await _settleAirCheck(tester);
+
+      void expectHint(String count, String controls) {
+        final hint = find.text('$count · $controls');
+        expect(hint, findsOneWidget);
+        if (tv) {
+          final text = tester.widget<Text>(hint).data!;
+          for (final key in ['Alt', 'Delete', 'drag']) {
+            expect(text, isNot(contains(key)));
+          }
+        }
+      }
+
+      expectHint(
+        '2 of 2 shown',
+        tv
+            ? 'Use Move to… or the arrows on each program to reorder'
+            : 'Alt+Up/Down reorders · Delete removes',
+      );
+      await tester.enterText(
+        find.byKey(const Key('studio-rundown-search')),
+        'Second',
+      );
+      await tester.pumpAndSettle();
+      expectHint(
+        '1 of 2 shown',
+        tv ? 'Clear search to reorder' : 'Alt+Up/Down reorders · Delete removes · Clear search to drag reorder',
+      );
+      expect(tester.takeException(), isNull);
+      await tester.pumpWidget(const SizedBox.shrink());
+    });
+  }
+
   testWidgets('Studio rundown icon actions expose accessible names', (
     tester,
   ) async {
