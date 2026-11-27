@@ -4744,17 +4744,20 @@ class _GuideDetailsPlaceholder extends StatelessWidget {
     final identity = '${inspected.number}  ${inspected.name}';
     final identityStyle = Theme.of(context).textTheme.labelLarge
         ?.copyWith(color: roles.progressFill, fontWeight: FontWeight.w600);
+    final details = Column(
+      mainAxisSize: MainAxisSize.min,
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Text(identity, style: identityStyle),
+        const SizedBox(height: 8),
+        Text(status),
+      ],
+    );
     return Align(
       alignment: Alignment.centerLeft,
-      child: Column(
-        mainAxisSize: MainAxisSize.min,
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          Text(identity, style: identityStyle),
-          const SizedBox(height: 8),
-          Text(status),
-        ],
-      ),
+      child: DeviceProfile.of(context).isTv
+          ? details
+          : SingleChildScrollView(primary: false, child: details),
     );
   }
 }
@@ -4903,11 +4906,12 @@ class _ProgramDetails extends StatelessWidget {
           style: titleStyle,
         );
         final eyebrowToTitle = line(channelStyle) + gap;
+        final titleHeight = math.max(line(scaledTitleStyle), logoSlot);
+        final minimumIdentityHeight = eyebrowToTitle + titleHeight;
         final metadataHeight = line(metadataStyle);
         final badgeHeight = line(_GuideStyles.badge(context)) + 8;
         final reservedIdentity =
-            eyebrowToTitle +
-            math.max(line(scaledTitleStyle), logoSlot) +
+            minimumIdentityHeight +
             gap +
             line(episodeStyle) +
             (mergeFacts ? 0 : gap + metadataHeight) +
@@ -4920,6 +4924,23 @@ class _ProgramDetails extends StatelessWidget {
           (box.maxHeight - timingReserve - messageReserve - reservedIdentity) /
               2,
         );
+        final airtime = mergeFacts && factsLine.isNotEmpty
+            ? '$timeLine · $factsLine'
+            : timeLine;
+        final airtimeHeight = singleTimingLine
+            ? metadataHeight
+            : _guideMeasuredText(
+                context,
+                airtime,
+                inherited.merge(metadataStyle),
+                width: box.maxWidth,
+              ).height;
+        // Keep at least the eyebrow and title in view when timing is pinned.
+        // A shorter band scrolls the full details, including wrapped airtime.
+        final actualTimingHeight =
+            timingReserve - metadataHeight + airtimeHeight + messageReserve;
+        final scrollDetails =
+            !isTv && box.maxHeight < minimumIdentityHeight + actualTimingHeight;
         final identity = Column(
           key: const Key('guide-program-identity'),
           crossAxisAlignment: CrossAxisAlignment.start,
@@ -5003,52 +5024,52 @@ class _ProgramDetails extends StatelessWidget {
           sortKey: OrdinalSortKey(order),
           child: child,
         );
+        final introduction = Padding(
+          padding: EdgeInsets.only(top: scrollDetails ? 0 : centerOffset),
+          child: Row(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              readingOrder(
+                0,
+                SizedBox(
+                  width: identityWidth,
+                  child: isTv || scrollDetails
+                      ? identity
+                      : SingleChildScrollView(child: identity),
+                ),
+              ),
+              if (hasSynopsis && rowWidth > identityWidth) ...[
+                const SizedBox(width: 32),
+                Expanded(
+                  child: readingOrder(
+                    1,
+                    Padding(
+                      padding: EdgeInsets.only(top: eyebrowToTitle),
+                      child: LayoutBuilder(
+                        builder: (context, synopsisBox) => Text(
+                          item.summary!,
+                          key: const Key('guide-program-synopsis'),
+                          maxLines: math.max(
+                            1,
+                            (math.min(synopsisBox.maxHeight, box.maxHeight) /
+                                    line(synopsisStyle))
+                                .floor(),
+                          ),
+                          overflow: TextOverflow.ellipsis,
+                          style: synopsisStyle,
+                        ),
+                      ),
+                    ),
+                  ),
+                ),
+              ],
+            ],
+          ),
+        );
         final details = Column(
           crossAxisAlignment: CrossAxisAlignment.stretch,
           children: [
-            Expanded(
-              child: Padding(
-                padding: EdgeInsets.only(top: centerOffset),
-                child: Row(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    readingOrder(
-                      0,
-                      SizedBox(
-                        width: identityWidth,
-                        child: isTv
-                            ? identity
-                            : SingleChildScrollView(child: identity),
-                      ),
-                    ),
-                    if (hasSynopsis && rowWidth > identityWidth) ...[
-                      const SizedBox(width: 32),
-                      Expanded(
-                        child: readingOrder(
-                          1,
-                          Padding(
-                            padding: EdgeInsets.only(top: eyebrowToTitle),
-                            child: LayoutBuilder(
-                              builder: (context, synopsisBox) => Text(
-                                item.summary!,
-                                key: const Key('guide-program-synopsis'),
-                                maxLines: math.max(
-                                  1,
-                                  (synopsisBox.maxHeight / line(synopsisStyle))
-                                      .floor(),
-                                ),
-                                overflow: TextOverflow.ellipsis,
-                                style: synopsisStyle,
-                              ),
-                            ),
-                          ),
-                        ),
-                      ),
-                    ],
-                  ],
-                ),
-              ),
-            ),
+            if (scrollDetails) introduction else Expanded(child: introduction),
             SizedBox(height: gap),
             readingOrder(
               2,
@@ -5065,9 +5086,7 @@ class _ProgramDetails extends StatelessWidget {
                       style: metadataStyle,
                     ),
                   Text(
-                    mergeFacts && factsLine.isNotEmpty
-                        ? '$timeLine · $factsLine'
-                        : timeLine,
+                    airtime,
                     key: const Key('guide-program-meta'),
                     maxLines: singleTimingLine ? 1 : null,
                     overflow: singleTimingLine ? TextOverflow.ellipsis : null,
@@ -5096,7 +5115,13 @@ class _ProgramDetails extends StatelessWidget {
         return Semantics(
           container: true,
           explicitChildNodes: true,
-          child: details,
+          child: scrollDetails
+              ? SingleChildScrollView(
+                  key: const Key('guide-program-details-scroll'),
+                  primary: false,
+                  child: details,
+                )
+              : details,
         );
       },
     );

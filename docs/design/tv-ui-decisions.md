@@ -164,14 +164,14 @@ decision, 2026-11-16; Astra P-D4 adaptive-clearance decision, 2026-11-17.
 
 **Picture.**
 - Width = `max(GuidePlaybackPlaceholder.minimumSize.width, min(info·16/9, 0.32·W, W − 12 − 40 − 32 − schema.identityWidth − 400·s))`.
-- The 324 cu reference height and the 400 cu synopsis floor are named design constants in the implementation. The lower bound preserves space for the idle/error/Retry placeholder; it does not change approved pixels at 1920×1080.
+- The TV picture-width calculation reserves `400·s` for the synopsis via `_guideSynopsisWidthFloor * textScale`. The picture uses a 324 cu reference height. The lower bound preserves space for the idle/error/Retry placeholder at the approved 1920×1080 geometry.
 - The picture is top-aligned exactly like desktop, at (0, 82), with no surround band.
 - The native aperture keeps following Flutter geometry.
 
 **Identity and synopsis.**
-- Identity is at least the measured badge schema and the responsive fraction of the text row. It takes any space left over beyond the synopsis measure.
-- The synopsis takes the remainder up to its 34 em measure. It keeps its line clamp and ellipsis.
-- Nothing depends on the focused program.
+- When a synopsis exists, identity is at least the measured badge schema and the responsive fraction of the text row. It takes any space left over beyond the synopsis measure.
+- The synopsis takes the remainder up to its 34 em measure. It keeps its line clamp and ellipsis. When a listing has no synopsis, identity takes the full details width.
+- The band and picture geometry are independent of the focused program.
 
 **Rail number.**
 - The column width is the measured width of `1000` in the number style: Inter 28, w500, tabular, scaled. That gives 74/85/96 cu.
@@ -301,7 +301,8 @@ Resulting rail widths at 1920:
 
 ### UI audit decision, 2026-11-26
 
-- Airtime and remaining time sit directly above the progress bar on TV and desktop, at a fixed position for every listing. The bar's space remains reserved for listings outside the current airtime.
+- Airtime and remaining time stay pinned directly above the progress bar on TV and in desktop bands with room for the timing group. At enlarged desktop text, airtime may wrap. It grows upward and its last line stays directly above the bar. In short desktop bands, airtime and the bar scroll with the other program details. The bar's space remains reserved for listings outside the current airtime.
+- In dense mode at standard text size (`dense && !enlarged`), facts are spoken once, with airtime after the synopsis.
 - The TV synopsis uses the 20 px TV text floor at the existing 34 em measure. At 1920 × 1080 and 1.0×, that gives a 680 px column starting at approximately x1221.
 - The band height, picture, rows and rail retain their existing dimensions.
 

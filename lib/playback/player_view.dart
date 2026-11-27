@@ -1892,6 +1892,7 @@ class _Osd extends StatelessWidget {
               : MediaQuery.paddingOf(context),
           anchor: pickerAnchors[anchor],
           timingAnchor: timingAnchor,
+          waitForAnchor: sleepOpen && DeviceProfile.of(context).isTv,
           preferredWidth: type != null
               ? _trackPopoverWidth(context, controller, displays, type)
               : sleepOpen
@@ -3899,6 +3900,7 @@ class _PlayerPickerLayout extends StatelessWidget {
     required this.insets,
     required this.anchor,
     required this.timingAnchor,
+    required this.waitForAnchor,
     required this.preferredWidth,
     required this.surfaceKey,
     required this.picker,
@@ -3909,35 +3911,40 @@ class _PlayerPickerLayout extends StatelessWidget {
   final EdgeInsets insets;
   final _PickerAnchorHandle? anchor;
   final _PickerAnchorHandle timingAnchor;
+  final bool waitForAnchor;
   final double preferredWidth;
   final Key surfaceKey;
   final Widget? picker;
 
   @override
-  Widget build(BuildContext context) => CustomMultiChildLayout(
-    delegate: _PlayerPickerPlacement(
-      anchor: anchor,
-      timingAnchor: timingAnchor,
-      preferredWidth: preferredWidth,
-      insets: insets,
-    ),
-    children: [
-      LayoutId(id: _PickerSlot.panel, child: panel),
-      if (picker case final picker?)
-        LayoutId(
-          id: _PickerSlot.popover,
-          child: Material(
-            key: surfaceKey,
-            color: _overlayColor(context, controller),
-            borderRadius: const BorderRadius.all(Radius.circular(8)),
-            child: GestureDetector(
-              behavior: HitTestBehavior.opaque,
-              onTap: () {},
-              child: picker,
+  Widget build(BuildContext context) => ClipRect(
+    clipBehavior: waitForAnchor ? Clip.hardEdge : Clip.none,
+    child: CustomMultiChildLayout(
+      delegate: _PlayerPickerPlacement(
+        anchor: anchor,
+        timingAnchor: timingAnchor,
+        waitForAnchor: waitForAnchor,
+        preferredWidth: preferredWidth,
+        insets: insets,
+      ),
+      children: [
+        LayoutId(id: _PickerSlot.panel, child: panel),
+        if (picker case final picker?)
+          LayoutId(
+            id: _PickerSlot.popover,
+            child: Material(
+              key: surfaceKey,
+              color: _overlayColor(context, controller),
+              borderRadius: const BorderRadius.all(Radius.circular(8)),
+              child: GestureDetector(
+                behavior: HitTestBehavior.opaque,
+                onTap: () {},
+                child: picker,
+              ),
             ),
           ),
-        ),
-    ],
+      ],
+    ),
   );
 }
 
@@ -4024,6 +4031,7 @@ class _PlayerPickerPlacement extends MultiChildLayoutDelegate {
   _PlayerPickerPlacement({
     required this.anchor,
     required this.timingAnchor,
+    required this.waitForAnchor,
     required this.insets,
     required this.preferredWidth,
   }) : super(
@@ -4034,6 +4042,7 @@ class _PlayerPickerPlacement extends MultiChildLayoutDelegate {
 
   final _PickerAnchorHandle? anchor;
   final _PickerAnchorHandle timingAnchor;
+  final bool waitForAnchor;
   final EdgeInsets insets;
   final double preferredWidth;
 
@@ -4068,7 +4077,12 @@ class _PlayerPickerPlacement extends MultiChildLayoutDelegate {
     );
     positionChild(
       _PickerSlot.popover,
-      Offset(right - popover.width, bottom - popover.height),
+      // The new compact Sleep button attaches after this layout during
+      // collapse. Keep the fallback outside the clip until it has an anchor.
+      Offset(
+        right - popover.width,
+        waitForAnchor && target == null ? size.height : bottom - popover.height,
+      ),
     );
   }
 

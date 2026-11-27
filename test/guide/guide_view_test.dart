@@ -876,6 +876,116 @@ void main() {
     },
   );
 
+  for (final (size, scale) in [
+    (const Size(800, 600), 1.5),
+    (const Size(1024, 768), 2.0),
+  ]) {
+    testWidgets(
+      'short desktop Guide details can scroll to airtime $size at $scale',
+      (tester) async {
+        await tester.runAsync(loadPinnedTestFonts);
+        tester.view
+          ..devicePixelRatio = 1
+          ..physicalSize = size;
+        addTearDown(tester.view.reset);
+        final now = DateTime.utc(2026, 1, 15, 15, 17);
+        final lineup = _Lineup(
+          40,
+          anchor: now.subtract(const Duration(minutes: 17)),
+        );
+        final first = lineup.channels.first;
+        lineup.fixtureActor.replaceChannels([
+          Channel(
+            id: first.id,
+            number: first.number,
+            name: first.name,
+            playbackMode: first.playbackMode,
+            anchor: first.anchor,
+            shuffleSeed: first.shuffleSeed,
+            source: const ManualSource([
+              ChannelItem(
+                id: 'short-band-program',
+                title: 'Program 0',
+                duration: Duration(hours: 24),
+                summary: 'A synthetic synopsis for the short desktop band.',
+              ),
+            ]),
+          ),
+          ...lineup.channels.skip(1),
+        ]);
+        final load = Completer<void>();
+        final guide = GuideController(
+          lineup: lineup,
+          clock: () => now,
+          loadSchedule: (channel) async {
+            await load.future;
+            return _schedule(channel);
+          },
+        );
+        addTearDown(lineup.dispose);
+        addTearDown(guide.dispose);
+        await tester.pumpWidget(
+          MaterialApp(
+            theme: LineupTheme.forName(LineupThemeName.emberSteel),
+            builder: (context, child) => MediaQuery(
+              data: MediaQuery.of(context)
+                  .copyWith(textScaler: TextScaler.linear(scale)),
+              child: _desktopCanvasChild(child!),
+            ),
+            home: GuideView(
+              controller: guide,
+              pictureInPicture: const ColoredBox(color: Colors.black),
+              onClose: (_, _) {},
+              onTune: (_) async {},
+            ),
+          ),
+        );
+        await tester.pump();
+        expect(
+          find.descendant(
+            of: find.byKey(const Key('guide-information-details')),
+            matching: find.text('Loading schedule…'),
+          ),
+          findsOneWidget,
+        );
+        // Capture the loading layout separately so it cannot mask the loaded one.
+        final placeholderException = tester.takeException();
+
+        load.complete();
+        await tester.pumpAndSettle();
+        final time = find.byKey(const Key('guide-program-meta'));
+        final progress = find.byKey(const Key('guide-program-progress'));
+        expect(guide.focusedProgram, isNotNull);
+        expect(time, findsOneWidget);
+        expect(
+          tester.takeException(),
+          isNull,
+          reason: 'Loaded program details',
+        );
+        final viewport = find.byKey(const Key('guide-program-details-scroll'));
+        expect(viewport, findsOneWidget);
+        final airtime = tester.renderObject<RenderParagraph>(time);
+        expect(airtime.maxLines, isNull);
+        expect(airtime.didExceedMaxLines, isFalse);
+        expect(airtime.text.toPlainText(), contains('23h 43m left'));
+        expect(find.byKey(const Key('guide-program-synopsis')), findsOneWidget);
+        expect(
+          _drawnRect(tester, progress).top,
+          greaterThan(_drawnRect(tester, viewport).bottom),
+        );
+        await tester.ensureVisible(progress);
+        await tester.pumpAndSettle();
+        expect(progress.hitTestable(), findsOneWidget);
+        expect(
+          _drawnRect(tester, time).bottom,
+          lessThan(_drawnRect(tester, progress).top),
+        );
+        expect(placeholderException, isNull, reason: 'Loading placeholder');
+        expect(tester.takeException(), isNull);
+      },
+    );
+  }
+
   testWidgets('dense desktop keeps long merged facts within the timing row', (
     tester,
   ) async {
@@ -5292,7 +5402,18 @@ void main() {
           );
           await tester.sendKeyEvent(LogicalKeyboardKey.select);
         } else {
-          await tester.tap(results);
+          expect(
+            tester.widget<TextField>(search).focusNode!.hasPrimaryFocus,
+            isTrue,
+          );
+          final resultsFocus = tester.widget<TextButton>(results).focusNode!;
+          // The editor's own clear control and toolbar actions remain in traversal.
+          for (var tab = 0; tab < 12 && !resultsFocus.hasPrimaryFocus; tab++) {
+            await tester.sendKeyEvent(LogicalKeyboardKey.tab);
+            await tester.pumpAndSettle();
+          }
+          expect(resultsFocus.hasPrimaryFocus, isTrue);
+          await tester.sendKeyEvent(LogicalKeyboardKey.enter);
         }
         await tester.pumpAndSettle();
         expect(guide.searchQuery, isEmpty);

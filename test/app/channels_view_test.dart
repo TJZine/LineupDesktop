@@ -1231,9 +1231,19 @@ void main() {
           );
           await tester.sendKeyEvent(LogicalKeyboardKey.select);
         } else {
-          await tester.ensureVisible(clear);
-          await tester.pumpAndSettle();
-          await tester.tap(clear);
+          expect(
+            tester.widget<TextField>(search).focusNode!.hasPrimaryFocus,
+            isTrue,
+          );
+          final resultsFocus = Focus.of(
+            tester.element(find.text('Clear search')),
+          );
+          for (var tab = 0; tab < 12 && !resultsFocus.hasPrimaryFocus; tab++) {
+            await tester.sendKeyEvent(LogicalKeyboardKey.tab);
+            await tester.pumpAndSettle();
+          }
+          expect(resultsFocus.hasPrimaryFocus, isTrue);
+          await tester.sendKeyEvent(LogicalKeyboardKey.enter);
         }
         await tester.pumpAndSettle();
         expect(tester.widget<TextField>(search).controller!.text, isEmpty);

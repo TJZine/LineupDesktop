@@ -922,6 +922,16 @@ void main() {
               expect(tester.widget<ListView>(list).itemExtent, rowHeight);
             }
           }
+          if (configuration.name == 'tv-normal-1.0-largefalse' && rich) {
+            guide.focusProgram(guide.row('channel-1').programs.first);
+            await tester.pumpAndSettle();
+            expect(
+              tester
+                  .widget<Text>(find.byKey(const Key('guide-info-channel')))
+                  .data,
+              contains('2  Synthetic channel 2'),
+            );
+          }
           expect(tester.takeException(), isNull);
         } finally {
           await tester.pumpWidget(const SizedBox.shrink());

@@ -3727,8 +3727,7 @@ void main() {
             final popup = find.byKey(Key(key));
             final timing = find.byKey(const Key('player-osd-progress-block'));
             await tester.tap(button);
-            void expectPlacement({required bool settled}) {
-              final phase = settled ? 'settled' : 'opening frame';
+            void expectPlacement(String phase) {
               final reason = '$control expanded=$expanded $phase';
               expect(popup, findsOneWidget, reason: reason);
               final picker = _drawnRect(tester, popup);
@@ -3744,19 +3743,30 @@ void main() {
                 lessThanOrEqualTo(progress.top),
                 reason: reason,
               );
-              if (settled) {
-                expect(
-                  picker.bottom,
-                  lessThan(_drawnRect(tester, button).top),
-                  reason: reason,
-                );
-              }
+              expect(
+                picker.bottom,
+                lessThan(_drawnRect(tester, button).top),
+                reason: reason,
+              );
             }
 
             await tester.pump();
-            expectPlacement(settled: false);
+            // Inspect every frame up to the first one that can paint inside
+            // the player. An unanchored picker may be outside its clip.
+            final screen = Offset.zero & tester.view.physicalSize;
+            var firstVisible = false;
+            for (var frame = 0; frame < 8; frame++) {
+              if (popup.evaluate().isNotEmpty &&
+                  _drawnRect(tester, popup).overlaps(screen)) {
+                expectPlacement('first visible frame');
+                firstVisible = true;
+                break;
+              }
+              await tester.pump(const Duration(milliseconds: 16));
+            }
+            expect(firstVisible, isTrue, reason: '$control expanded=$expanded');
             await tester.pumpAndSettle();
-            expectPlacement(settled: true);
+            expectPlacement('settled');
             final picker = _drawnRect(tester, popup);
             if (control == 'sleep') {
               for (final preset in ['off', '30', '60', '90']) {
