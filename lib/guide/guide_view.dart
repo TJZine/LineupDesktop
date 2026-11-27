@@ -1034,9 +1034,7 @@ class _GuideViewState extends State<GuideView>
             _removeChannelFilterFocus,
           if (!_mergedBar || _showSearchEditor) ...[
             _searchFocus,
-            if (!_canClearSearchFromResults &&
-                _searchController.text.isNotEmpty)
-              _clearSearchFocus,
+            if (_searchController.text.isNotEmpty) _clearSearchFocus,
           ],
           if (!_mergedBar || !_showSearchEditor) ...[
             _earlierFocus,
@@ -1325,7 +1323,7 @@ class _GuideViewState extends State<GuideView>
         nowFocus: _nowFocus,
         laterFocus: _laterFocus,
         hoursFocus: _hoursFocus,
-        clearSearchFocus: _canClearSearchFromResults ? null : _clearSearchFocus,
+        clearSearchFocus: _clearSearchFocus,
         removeChannelFilterFocus: _removeChannelFilterFocus,
         onSearchKey: _searchKey,
         onKeyEvent: _toolbarKey,
@@ -2138,7 +2136,7 @@ class _GuideControls extends StatelessWidget {
   final FocusNode nowFocus;
   final FocusNode laterFocus;
   final FocusNode hoursFocus;
-  final FocusNode? clearSearchFocus;
+  final FocusNode clearSearchFocus;
   final FocusNode removeChannelFilterFocus;
   final FocusOnKeyEventCallback onSearchKey;
   final FocusOnKeyEventCallback onKeyEvent;
@@ -2333,15 +2331,14 @@ class _GuideControls extends StatelessWidget {
                           ),
                           // Reserve the suffix slot while keeping its action outside
                           // the native text field's leaf semantics and key handler.
-                          suffixIcon:
-                              value.text.isNotEmpty && clearSearchFocus != null
-                              ? const SizedBox.shrink()
-                              : null,
+                          suffixIcon: value.text.isEmpty
+                              ? null
+                              : const SizedBox.shrink(),
                         ),
                       ),
                 ),
               ),
-              if (value.text.isNotEmpty && clearSearchFocus != null)
+              if (value.text.isNotEmpty)
                 PositionedDirectional(
                   end: 0,
                   top: 0,

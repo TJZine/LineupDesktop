@@ -5266,14 +5266,21 @@ void main() {
         final results = find.byKey(const Key('guide-clear-search-results'));
         expect(results, findsOneWidget);
         expect(find.text('Clear search'), findsOneWidget);
+        final band = find.byKey(const Key('guide-information-details'));
         expect(
-          tester.semantics.simulatedAccessibilityTraversal().where(
-            (node) =>
-                node.label == 'Clear search' &&
-                node.getSemanticsData().hasAction(SemanticsAction.tap),
+          find.descendant(
+            of: band,
+            matching: find.textContaining('No matching channels'),
           ),
-          hasLength(1),
+          findsOneWidget,
         );
+        expect(
+          find.descendant(of: band, matching: find.byType(TextButton)),
+          findsNothing,
+        );
+        final resultsAction = tester.getSemantics(results).getSemanticsData();
+        expect(resultsAction.label, 'Clear search');
+        expect(resultsAction.hasAction(SemanticsAction.tap), isTrue);
         if (tv) {
           await tester.testTextInput.receiveAction(TextInputAction.done);
           await tester.pumpAndSettle();
