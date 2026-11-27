@@ -191,11 +191,19 @@ class _DiagnosticsViewState extends State<DiagnosticsView> {
                         SizedBox(height: 32),
                         _eventsHeader(context, snapshot, currentEvents, unseen),
                         if (!snapshot.recordingEnabled)
-                          SizedBox(
-                            height: 180,
+                          ConstrainedBox(
+                            key: const Key('diagnostics-recording-off'),
+                            constraints: const BoxConstraints(minHeight: 180),
                             child: LineupEmptyState(
                               title: 'Diagnostic recording is off',
-                              message: 'Enable recording in Settings > Support, then reproduce the issue.',
+                              message: 'Turn on recording, then reproduce the issue.',
+                              action: TextButton(
+                                key: const Key(
+                                  'diagnostics-recording-settings-message',
+                                ),
+                                onPressed: widget.onRecordingSettings,
+                                child: const Text('Recording settings'),
+                              ),
                             ),
                           )
                         else if (_visibleEvents.isEmpty)
@@ -725,6 +733,7 @@ class _DiagnosticsViewState extends State<DiagnosticsView> {
         newEvents,
         recording,
         TextButton(
+          key: const Key('diagnostics-recording-settings-header'),
           onPressed: widget.onRecordingSettings,
           child: const Text('Recording settings'),
         ),
