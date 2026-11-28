@@ -2,7 +2,7 @@ name: CI
 
 on:
   push:
-    branches: [main, 'platform/**']
+    branches: [main, pre-release, 'platform/**']
   pull_request:
   workflow_dispatch:
 
@@ -14,6 +14,26 @@ concurrency:
   cancel-in-progress: true
 
 jobs:
+  release-source:
+    name: Verify release source
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - name: Fetch the release source check at the workflow revision
+        env:
+          GH_TOKEN: ${{ github.token }}
+          WORKFLOW_SHA: ${{ github.workflow_sha }}
+        run: |
+          gh api -H 'Accept: application/vnd.github.raw+json' \
+            "repos/${GITHUB_REPOSITORY}/contents/tool/ci/release-source.py?ref=${WORKFLOW_SHA}" \
+            > "$RUNNER_TEMP/release-source.py"
+      - name: Check release pull request source
+        env:
+          PR_BASE_REF: ${{ github.base_ref }}
+          PR_HEAD_REF: ${{ github.head_ref }}
+          PR_HEAD_REPOSITORY: ${{ github.event.pull_request.head.repo.full_name }}
+        run: python3 -I "$RUNNER_TEMP/release-source.py"
+
   verify:
     name: Verify Dart
     runs-on: ubuntu-latest
@@ -71,7 +91,7 @@ jobs:
         uses: gradle/actions/setup-gradle@8da46b539cd8fe6ab27ca75128919a18d757604c # v6.4.1
         with:
           cache-provider: basic
-          cache-read-only: ${{ github.event_name != 'push' || github.ref != 'refs/heads/main' }}
+          cache-read-only: ${{ github.event_name != 'push' || (github.ref != 'refs/heads/main' && github.ref != 'refs/heads/pre-release') }}
           validate-wrappers: false
       - name: Build disposable-key ARM development APK
         run: flutter build apk --debug --target-platform android-arm,android-arm64
@@ -945,6 +965,7 @@ jobs:
     name: Required CI checks
     if: always()
     needs:
+      - release-source
       - verify
       - android
       - android-startup
