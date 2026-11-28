@@ -88,7 +88,7 @@ Windows native code, split by what macOS needs:
 
 | Decision | Resolution |
 | --- | --- |
-| Repository strategy | One repository and one Flutter app (CQ plan §9.1). Work branches from `main` and lands by squash merge. |
+| Repository strategy | One repository and one Flutter app (CQ plan §9.1). Work branches from `pre-release` and lands there by squash merge. |
 | Media engine | libmpv. AVFoundation alone lacks MKV, ASS subtitles, and several Plex direct-play codecs, and it would have to synthesize mpv's state vocabulary. |
 | HDR | Required in the first macOS release, including Dolby Vision profiles 5 and 8. Not negotiable. |
 | Presentation and HDR route | Route C: `gpu-next` on MoltenVK, embedded in our view through one LGPL mpv patch (§4.3). Spike S1 verified HDR10, HLG, and Dolby Vision profiles 5 and 8.1. Route A is ruled out because its renderer cannot render Dolby Vision profile 5. Route B (Flutter texture) is ruled out because it cannot output HDR. |

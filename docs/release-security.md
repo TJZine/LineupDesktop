@@ -317,8 +317,8 @@ Run candidate binaries only in the separate acceptance context.
 
 ## Manual advisory review
 
-The Security workflow (pushes to `main`, pull requests, its weekly schedule and
-manual dispatch) scans `pubspec.lock`. Gradle verification
+The Security workflow (pushes to `main` and `pre-release`, pull requests, its
+weekly schedule and manual dispatch) scans `pubspec.lock`. Gradle verification
 metadata is a conservative inventory, not proof of runtime resolution. At
 release time, run the documented inventory scan and review the resolved
 `runtime-dependencies.txt` from the CI artifact:
@@ -376,22 +376,38 @@ fixture did not exercise public-release selection or clean-host acceptance.
 
 Prepare release notes with the source SHA, run and attempt links, platform and
 toolchain identities, signer or unsigned status, and exact asset digests.
-After the artifact checks, the maintainer can reserve a version and create a
-draft for exact-download acceptance. This procedure creates the protected tag
-before the draft. Include only the intended platforms' asset and checksum pairs.
+After the artifact checks, the maintainer can create a draft for exact-download
+acceptance. Use the protected tag created by the
+[branch release procedure](DEVELOPMENT.md#branches-and-releases). Resolve it on
+GitHub and stop if it is absent or points anywhere other than the reviewed
+release commit. Include only the intended platforms' asset and checksum pairs.
 If a platform fails acceptance, remove only its assets from the draft. Retire
 the version if no platform ships.
 
 ```sh
-git tag RELEASE_TAG SOURCE_SHA
-git push origin refs/tags/RELEASE_TAG
-test "$(gh api repos/TJZine/LineupDesktop/git/ref/tags/RELEASE_TAG --jq '.object.sha')" = SOURCE_SHA
-gh release create RELEASE_TAG -R TJZine/LineupDesktop --verify-tag --draft \
-  --title "RELEASE_TITLE" --notes-file /trusted/approved-release-notes.txt \
-  /final/lineup-final.apk /final/lineup-final.apk.sha256 \
-  /final/WINDOWS_ZIP /final/WINDOWS_ZIP.sha256
-gh release view RELEASE_TAG -R TJZine/LineupDesktop
-gh release download RELEASE_TAG -R TJZine/LineupDesktop --dir new-draft-download
+(
+  set -e
+  release_tag=RELEASE_TAG
+  source_sha=SOURCE_SHA
+  tag_ref="refs/tags/$release_tag"
+  tag_refs=$(git ls-remote --exit-code https://github.com/TJZine/LineupDesktop.git \
+    "$tag_ref" "$tag_ref^{}")
+  tag_commit=$(awk -v ref="$tag_ref" '
+    $2 == ref { direct = $1 }
+    $2 == ref "^{}" { peeled = $1 }
+    END { print (peeled == "" ? direct : peeled) }
+  ' <<< "$tag_refs")
+  if [ "$tag_commit" != "$source_sha" ]; then
+    echo "Release tag does not match the reviewed source commit." >&2
+    exit 1
+  fi
+  gh release create "$release_tag" -R TJZine/LineupDesktop --verify-tag --draft \
+    --title "RELEASE_TITLE" --notes-file /trusted/approved-release-notes.txt \
+    /final/lineup-final.apk /final/lineup-final.apk.sha256 \
+    /final/WINDOWS_ZIP /final/WINDOWS_ZIP.sha256
+  gh release view "$release_tag" -R TJZine/LineupDesktop
+  gh release download "$release_tag" -R TJZine/LineupDesktop --dir new-draft-download
+)
 ```
 
 Verify draft download hashes and run [Release acceptance](release-acceptance.md)

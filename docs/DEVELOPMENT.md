@@ -18,6 +18,34 @@ use `git show bfaee636748f2a0d442f3690b7ba5262d32ff17c:<path>`; the historical
 `initial-build` milestone is relevant only to an explicitly identified older
 observation. Neither historical branch is a compatibility target.
 
+## Branches and releases
+
+`pre-release` is GitHub's default branch and the integration branch. Squash-merge
+feature, fix, and chore PRs into it. Every user-facing PR into `pre-release`
+adds a line under **Unreleased** in the [changelog](../CHANGELOG.md). Internal
+changes require no changelog entry.
+
+`main` receives releases only. Each release is one squash commit that includes
+the version bump and any final release fixes.
+
+1. Open a release preparation PR into `pre-release`. Set `pubspec.yaml` to
+   `version: X.Y.Z+N`, increasing `N` on every release so Android's versionCode
+   rises. Move the **Unreleased** entries under the new version.
+2. Squash-merge a PR from `pre-release` to `main`. Title the squash commit
+   `Lineup X.Y.Z` and use that version's changelog section as its body.
+3. Create `sync/main-X.Y.Z` from the current `pre-release`. Merge the exact
+   release SHA into the sync branch. Use `--allow-unrelated-histories` only for
+   0.1.0. Open a PR from the sync branch into `pre-release` and merge it with a
+   merge commit. Run `git fetch --no-tags origin pre-release`, then verify that
+   `git merge-base --is-ancestor RELEASE_SHA origin/pre-release` succeeds.
+4. Create `vX.Y.Z` on the release commit on `main` and push that tag to GitHub.
+
+After the back-merge, **Files changed** in the next release PR shows only new
+work. Its **Commits** list can still include earlier integration commits.
+
+[Release security](release-security.md) documents artifact verification, signing,
+and the Windows package dispatch.
+
 ## Architecture practice
 
 [Architecture](architecture.md#accepted-ownership) owns the current
@@ -820,8 +848,11 @@ manifest, Windows patches, affected source/process fixtures and consumer scripts
 and workflow changes select `engine-required`; package-only changes select only
 the application/package job. Ordinary `lib/` or `windows/` product edits alone do
 not select them. Manual dispatch or an unavailable comparison base selects both.
-Pushes to `main` and to `platform/**` branches run CI automatically; other
-branches need a PR or an explicitly authorized manual run for hosted proof.
+Pushes to `main`, `pre-release`, and `platform/**` branches run CI automatically.
+Other branches need a PR or an explicitly authorized manual run for hosted proof.
+Security also runs on pushes to `main` and `pre-release`. Only pushes to those
+two branches can write the Android build's Gradle dependency cache. GitHub uses
+`pre-release` as the default branch for code scanning.
 
 The engine-test matrix has separate Debug and Release jobs, each with its own
 sync, fresh unittest-enabled recipe build and 180-minute budget. Each runs full
