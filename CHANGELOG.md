@@ -12,12 +12,12 @@
 
 ### Across platforms
 
-- Link Plex with a QR code or PIN, choose a Plex Home profile, and select a server and libraries.
+- Scan the QR code or visit plex.tv/link, enter the displayed code, then choose a Plex Home profile, server and libraries.
 - Generate scheduled channels from libraries, playlists, collections, and categories such as genre or decade.
 - Browse the Guide with picture-in-picture playback, filter channels, and tune in to programs that are on now.
 - Watch live channels with a mini Guide, direct channel entry, a sleep timer, and optional pause and seek controls.
 - Choose audio and subtitle tracks and customize how text subtitles look.
-- Use Channel Studio to create, edit, or duplicate custom channels and order hand-picked programs.
+- In Channel Studio, create and edit custom channels, copy generated channels into custom ones, and order hand-picked programs.
 - Adjust themes, Guide hours, text size, motion, and focus indicators in Settings.
 - Enable redacted Diagnostics to review playback and connection details and copy a support report.
 

@@ -33,10 +33,15 @@ the version bump and any final release fixes.
    rises. Move the **Unreleased** entries under the new version.
 2. Squash-merge a PR from `pre-release` to `main`. Title the squash commit
    `Lineup X.Y.Z` and use that version's changelog section as its body.
-3. Open a back-merge PR from `main` to `pre-release` and use a merge commit.
-   The trees match immediately after the release squash. The merge commit
-   advances the merge base so the next release PR shows only new work.
-4. Tag the release commit on `main` as `vX.Y.Z`.
+3. Create `sync/main-X.Y.Z` from the current `pre-release`. Merge the exact
+   release SHA into the sync branch. Use `--allow-unrelated-histories` only for
+   0.1.0. Open a PR from the sync branch into `pre-release` and merge it with a
+   merge commit. Run `git fetch --no-tags origin pre-release`, then verify that
+   `git merge-base --is-ancestor RELEASE_SHA origin/pre-release` succeeds.
+4. Create `vX.Y.Z` on the release commit on `main` and push that tag to GitHub.
+
+After the back-merge, **Files changed** in the next release PR shows only new
+work. Its **Commits** list can still include earlier integration commits.
 
 [Release security](release-security.md) documents artifact verification, signing,
 and the Windows package dispatch.

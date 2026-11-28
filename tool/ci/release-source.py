@@ -6,17 +6,20 @@ import sys
 
 
 def main():
-    if os.environ['GITHUB_EVENT_NAME'] != 'pull_request':
-        return 0
-    if os.environ['PR_BASE_REF'] != 'main':
-        return 0
+    repository = os.environ.get('GITHUB_REPOSITORY')
     if (
-        os.environ['PR_HEAD_REF'] == 'pre-release'
-        and os.environ['PR_HEAD_REPOSITORY'] == os.environ['GITHUB_REPOSITORY']
+        os.environ.get('GITHUB_EVENT_NAME') == 'pull_request_target'
+        and os.environ.get('PR_BASE_REF') == 'main'
+        and os.environ.get('PR_HEAD_REF') == 'pre-release'
+        and repository
+        and os.environ.get('PR_HEAD_REPOSITORY') == repository
     ):
         return 0
-    print('Pull requests to main must come from the pre-release branch in this repository.',
-          file=sys.stderr)
+    print(
+        'Expected a pull_request_target event for a PR from the pre-release branch '
+        'in this repository into main.',
+        file=sys.stderr,
+    )
     return 1
 
 

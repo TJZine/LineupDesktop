@@ -6,48 +6,53 @@ from pathlib import Path
 
 SCRIPT = Path(__file__).with_name('release-source.py')
 REPOSITORY = 'owner/lineup'
+RELEASE_EVENT = {
+    'GITHUB_EVENT_NAME': 'pull_request_target',
+    'GITHUB_REPOSITORY': REPOSITORY,
+    'PR_BASE_REF': 'main',
+    'PR_HEAD_REF': 'pre-release',
+    'PR_HEAD_REPOSITORY': REPOSITORY,
+}
 
 
 class ReleaseSourceTest(unittest.TestCase):
-    def check(self, event, base='', head='', repository=''):
+    def check(self, **overrides):
+        env = {**os.environ, **RELEASE_EVENT, **overrides}
         return subprocess.run(
             [sys.executable, '-I', str(SCRIPT)],
-            env={
-                **os.environ,
-                'GITHUB_EVENT_NAME': event,
-                'GITHUB_REPOSITORY': REPOSITORY,
-                'PR_BASE_REF': base,
-                'PR_HEAD_REF': head,
-                'PR_HEAD_REPOSITORY': repository,
-            },
+            env={key: value for key, value in env.items() if value is not None},
             capture_output=True,
             text=True,
         )
 
-    def test_non_pull_request_events_succeed(self):
-        for event in ('push', 'workflow_dispatch'):
-            with self.subTest(event=event):
-                self.assertEqual(0, self.check(event).returncode)
+    def assert_rejected(self, **overrides):
+        result = self.check(**overrides)
+        self.assertEqual(1, result.returncode)
+        self.assertIn('Expected a pull_request_target event', result.stderr)
 
-    def test_pull_request_to_pre_release_succeeds(self):
-        result = self.check('pull_request', 'pre-release', 'feature/guide', 'fork/lineup')
-        self.assertEqual(0, result.returncode)
+    def test_unexpected_events_are_rejected(self):
+        for event in ('pull_request', 'push', 'workflow_dispatch'):
+            with self.subTest(event=event):
+                self.assert_rejected(GITHUB_EVENT_NAME=event)
 
     def test_same_repository_release_pull_request_succeeds(self):
-        result = self.check('pull_request', 'main', 'pre-release', REPOSITORY)
-        self.assertEqual(0, result.returncode)
+        self.assertEqual(0, self.check().returncode)
 
-    def test_other_sources_for_main_are_rejected(self):
-        for head, repository in (
-            ('feature/guide', REPOSITORY),
-            ('pre-release', 'fork/lineup'),
-            ('pre-release', ''),
-            ('', REPOSITORY),
+    def test_other_branches_and_repositories_are_rejected(self):
+        for key, value in (
+            ('PR_BASE_REF', 'pre-release'),
+            ('PR_HEAD_REF', 'feature/guide'),
+            ('PR_HEAD_REPOSITORY', 'fork/lineup'),
         ):
-            with self.subTest(head=head, repository=repository):
-                result = self.check('pull_request', 'main', head, repository)
-                self.assertEqual(1, result.returncode)
-                self.assertIn('Pull requests to main must come from', result.stderr)
+            with self.subTest(key=key, value=value):
+                self.assert_rejected(**{key: value})
+
+    def test_missing_or_empty_metadata_is_rejected(self):
+        for key in RELEASE_EVENT:
+            for value in (None, ''):
+                with self.subTest(key=key, value=value):
+                    self.assert_rejected(**{key: value})
+        self.assert_rejected(GITHUB_REPOSITORY='', PR_HEAD_REPOSITORY='')
 
 
 if __name__ == '__main__':

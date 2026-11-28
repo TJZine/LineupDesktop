@@ -12,8 +12,11 @@ authorized redesign.
 ## Branches and releases
 
 Target feature, fix, and chore PRs at `pre-release` and squash-merge them.
-Only release PRs from `pre-release` target `main`. The release back-merge PR
-from `main` to `pre-release` is the only PR that uses a merge commit.
+Only release PRs from `pre-release` target `main`. For the release back-merge,
+branch `sync/main-X.Y.Z` from current `pre-release`, merge the exact release SHA
+into it, then open a PR into `pre-release`. This is the only PR that uses a
+merge commit. Afterward, fetch `origin/pre-release` and verify that it contains
+the release SHA as an ancestor. Use `--allow-unrelated-histories` only for 0.1.0.
 See [Branches and releases](../docs/DEVELOPMENT.md#branches-and-releases).
 
 ## Optional delegation presets

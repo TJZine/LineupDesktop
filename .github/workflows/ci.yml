@@ -10,30 +10,10 @@ permissions:
   contents: read
 
 concurrency:
-  group: ${{ github.workflow }}-${{ github.event_name }}-${{ github.head_ref || github.ref }}
+  group: ${{ github.workflow }}-${{ github.event_name }}-${{ github.event.pull_request.number || github.ref }}
   cancel-in-progress: true
 
 jobs:
-  release-source:
-    name: Verify release source
-    runs-on: ubuntu-latest
-    timeout-minutes: 5
-    steps:
-      - name: Fetch the release source check at the workflow revision
-        env:
-          GH_TOKEN: ${{ github.token }}
-          WORKFLOW_SHA: ${{ github.workflow_sha }}
-        run: |
-          gh api -H 'Accept: application/vnd.github.raw+json' \
-            "repos/${GITHUB_REPOSITORY}/contents/tool/ci/release-source.py?ref=${WORKFLOW_SHA}" \
-            > "$RUNNER_TEMP/release-source.py"
-      - name: Check release pull request source
-        env:
-          PR_BASE_REF: ${{ github.base_ref }}
-          PR_HEAD_REF: ${{ github.head_ref }}
-          PR_HEAD_REPOSITORY: ${{ github.event.pull_request.head.repo.full_name }}
-        run: python3 -I "$RUNNER_TEMP/release-source.py"
-
   verify:
     name: Verify Dart
     runs-on: ubuntu-latest
@@ -965,7 +945,6 @@ jobs:
     name: Required CI checks
     if: always()
     needs:
-      - release-source
       - verify
       - android
       - android-startup

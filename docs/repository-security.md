@@ -9,7 +9,6 @@ document describes repository settings and source checks.
 The stable `Required CI checks` job in `.github/workflows/ci.yml` requires these
 unconditional jobs to succeed:
 
-- `release-source`
 - `verify`
 - `android`
 - `android-startup`
@@ -18,9 +17,6 @@ unconditional jobs to succeed:
 - `windows-release-policy`
 - `build-windows`
 - `release-inputs`
-
-The `release-source` job requires pull requests to `main` to come from the same
-repository's `pre-release` branch.
 
 It also evaluates `windows-engine-tests` and `build-windows-engine` according to
 the explicit `engine-required` and `package-required` outputs from
@@ -31,7 +27,13 @@ checks. Windows engine tests may skip only when `engine-required` is
 explicitly `false`. The patched-engine/package build may skip only when both
 release-input outputs are explicitly `false`.
 
-Run the source-level aggregation fixtures from the repository root:
+The separate **Verify release source** check uses the workflow and script on the
+default branch. It requires PRs to `main` to come from this repository's
+`pre-release` branch and rechecks edited PRs. The check catches branch selection
+mistakes. Another workflow could report the same check name, so enforcement
+against hostile PRs depends on the maintainer, who alone can merge.
+
+Run the source-level aggregation and release-source tests from the repository root:
 
 ```sh
 python3 -m unittest discover -s tool/ci -p '*_test.py'
@@ -48,13 +50,24 @@ establish GitHub enforcement.
    require Security workflow checks or code-scanning merge protection until
    those checks have run green and their names are stable.
 
-2. In GitHub repository settings, create an active branch ruleset for the
-   default branch. Require pull requests, zero approvals while solo-maintained,
-   resolved review conversations, up-to-date branches, and the observed
-   `Required CI checks` source. Bind required checks to GitHub Actions where the
-   ruleset supports the expected integration. Restrict deletion and force
-   pushes, apply the rules to administrators, and keep the routine bypass list
-   empty.
+2. In GitHub repository settings, create active branch rulesets for `main` and
+   `pre-release`.
+
+   | Branch | Merge methods | Required checks |
+   | --- | --- | --- |
+   | `main` | Squash only | `Required CI checks`, `Verify release source` |
+   | `pre-release` | Squash and merge commits | `Required CI checks` |
+
+   On both branches, require pull requests, zero approvals while solo-maintained,
+   resolved review conversations, and branches up to date with their base. Bind
+   required checks to GitHub Actions where the ruleset supports the expected
+   integration. Restrict deletion and force pushes, apply the rules to
+   administrators, and keep the routine bypass list empty.
+
+   A release PR to `main` is up to date once the previous release's `main` SHA is
+   in `pre-release` history. Before requiring `Verify release source`, confirm
+   the repository's Actions event policy permits the workflow and observe it
+   running from the default branch on a PR to `main`.
 
    Do **not** enable **Require review from Code Owners** or **Require approval
    of the most recent reviewable push** while `CODEOWNERS` contains `* @TJZine`:

@@ -7,8 +7,8 @@
 </p>
 
 <p align="center">
-  <a href="https://github.com/TJZine/LineupDesktop/actions/workflows/ci.yml?query=branch%3Amain">
-    <img src="https://github.com/TJZine/LineupDesktop/actions/workflows/ci.yml/badge.svg?branch=main" alt="CI status">
+  <a href="https://github.com/TJZine/LineupDesktop/actions/workflows/ci.yml?query=branch%3Apre-release">
+    <img src="https://github.com/TJZine/LineupDesktop/actions/workflows/ci.yml/badge.svg?branch=pre-release" alt="CI status">
   </a>
   <a href="LICENSE">
     <img src="https://img.shields.io/badge/license-Apache--2.0-blue.svg" alt="Apache 2.0 license">

@@ -53,7 +53,6 @@ class RequiredChecksTest(unittest.TestCase):
         self.assertTrue(checks.failures(needs))
 
     def test_workflow_job_inventory_and_always_execution(self):
-        self.assertIn('release-source', checks.UNCONDITIONAL)
         workflow = (ROOT / '.github/workflows/ci.yml').read_text()
         jobs = set(re.findall(r'^  ([a-z][a-z0-9-]+):$', workflow, re.MULTILINE))
         # Top-level event/concurrency maps also use two-space indentation.

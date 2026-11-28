@@ -6,8 +6,8 @@ import os
 import sys
 
 UNCONDITIONAL = (
-    'release-source', 'verify', 'android', 'android-startup', 'build-macos',
-    'macos-player-core', 'windows-release-policy', 'build-windows', 'release-inputs',
+    'verify', 'android', 'android-startup', 'build-macos', 'macos-player-core',
+    'windows-release-policy', 'build-windows', 'release-inputs',
 )
 CONDITIONAL = ('windows-engine-tests', 'build-windows-engine')
 
