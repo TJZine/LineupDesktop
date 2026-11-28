@@ -9,6 +9,13 @@ Recheck the referenced commands, owners, and active branch for the current
 task. The paths below are starting points, not permanent restrictions on an
 authorized redesign.
 
+## Branches and releases
+
+Target feature, fix, and chore PRs at `pre-release` and squash-merge them.
+Only release PRs from `pre-release` target `main`. The release back-merge PR
+from `main` to `pre-release` is the only PR that uses a merge commit.
+See [Branches and releases](../docs/DEVELOPMENT.md#branches-and-releases).
+
 ## Optional delegation presets
 
 The project provides Codex role shortcuts for user-requested delegation. Their

@@ -9,13 +9,18 @@ document describes repository settings and source checks.
 The stable `Required CI checks` job in `.github/workflows/ci.yml` requires these
 unconditional jobs to succeed:
 
+- `release-source`
 - `verify`
 - `android`
+- `android-startup`
 - `build-macos`
 - `macos-player-core`
 - `windows-release-policy`
 - `build-windows`
 - `release-inputs`
+
+The `release-source` job requires pull requests to `main` to come from the same
+repository's `pre-release` branch.
 
 It also evaluates `windows-engine-tests` and `build-windows-engine` according to
 the explicit `engine-required` and `package-required` outputs from
@@ -105,8 +110,9 @@ standing routine bypass. Preserve unrelated ownership rules. The current
 `tool/security/osv-scan.sh` downloads pinned OSV-Scanner 2.7.1 release bytes,
 checks the committed upstream digest, runs live affected/fixed Pub controls, and
 scans explicit committed inputs. The Security workflow, which runs on pushes to
-`main`, pull requests, its weekly schedule and manual dispatch, scans only the
-current `pubspec.lock`. Scanner failures and vulnerabilities fail visibly.
+`main` and `pre-release`, pull requests, its weekly schedule and manual dispatch,
+scans only the current `pubspec.lock`. Scanner failures and vulnerabilities fail
+visibly.
 Network or API errors cannot satisfy the affected/fixed controls.
 
 Run the Pub scan locally from the repository root:
