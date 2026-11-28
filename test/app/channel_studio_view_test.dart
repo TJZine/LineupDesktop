@@ -714,6 +714,150 @@ void main() {
     );
   });
 
+  for (final tv in [false, true]) {
+    testWidgets('Studio rundown hint names available controls TV=$tv', (
+      tester,
+    ) async {
+      final channel = _channel(
+        id: 'manual-hint',
+        number: 1,
+        name: 'Manual',
+        source: const ManualSource([
+          ChannelItem(
+            id: 'first',
+            title: 'First',
+            duration: Duration(minutes: 20),
+          ),
+          ChannelItem(
+            id: 'second',
+            title: 'Second',
+            duration: Duration(minutes: 20),
+          ),
+        ]),
+      );
+      final controller = _RecordingSaveController(
+        scenario: LineupScenario(channels: [channel]),
+      );
+      addTearDown(controller.dispose);
+      await tester.pumpWidget(
+        _studio(
+          controller,
+          ChannelStudioMode.editCustom,
+          channel: channel,
+          profile: profileFor(tv),
+        ),
+      );
+      await _settleAirCheck(tester);
+
+      void expectHint(String count, String controls) {
+        final hint = find.text('$count · $controls');
+        expect(hint, findsOneWidget);
+        if (tv) {
+          final text = tester.widget<Text>(hint).data!;
+          for (final key in ['Alt', 'Delete', 'drag', 'Clear search']) {
+            expect(text, isNot(contains(key)));
+          }
+        }
+      }
+
+      const tvControls =
+          'Use Move to… or the arrows on each program to reorder';
+      const desktopControls = 'Alt+Up/Down reorders · Delete removes';
+      const desktopFilteredControls =
+          '$desktopControls · Clear search to drag reorder';
+      expectHint('2 programs', tv ? tvControls : desktopControls);
+      await tester.enterText(
+        find.byKey(const Key('studio-rundown-search')),
+        's',
+      );
+      await tester.pumpAndSettle();
+      expectHint('2 programs', tv ? tvControls : desktopFilteredControls);
+      await tester.enterText(
+        find.byKey(const Key('studio-rundown-search')),
+        'Second',
+      );
+      await tester.pumpAndSettle();
+      expectHint('1 of 2 shown', tv ? tvControls : desktopFilteredControls);
+      expect(tester.takeException(), isNull);
+      await tester.pumpWidget(const SizedBox.shrink());
+    });
+  }
+
+  testWidgets(
+    'manual counts distinguish total programs from filtered matches',
+    (tester) async {
+      final media = [
+        for (var index = 0; index < 20; index++)
+          _media('program-$index', title: 'Program $index'),
+      ];
+      final channel = _channel(
+        id: 'manual-counts',
+        number: 1,
+        name: 'Manual counts',
+        source: ManualSource([
+          for (final item in media)
+            ChannelItem(
+              id: item.id,
+              title: item.title,
+              duration: item.duration,
+            ),
+        ]),
+      );
+      final controller = _RecordingSaveController(
+        scenario: LineupScenario(channels: [channel], availableMedia: media),
+      );
+      addTearDown(controller.dispose);
+      await tester.pumpWidget(
+        _studio(controller, ChannelStudioMode.editCustom, channel: channel),
+      );
+      await _settleAirCheck(tester);
+      expect(find.text('20 added'), findsOneWidget);
+      expect(
+        find.text('20 programs · Alt+Up/Down reorders · Delete removes'),
+        findsOneWidget,
+      );
+      expect(find.textContaining('1 of 20'), findsWidgets);
+      final rundownSearch = find.byKey(const Key('studio-rundown-search'));
+      await tester.enterText(rundownSearch, 'Program');
+      await tester.pumpAndSettle();
+      expect(
+        find.text(
+          '20 programs · Alt+Up/Down reorders · Delete removes · Clear search to drag reorder',
+        ),
+        findsOneWidget,
+      );
+      await tester.enterText(rundownSearch, 'Program 1');
+      await tester.pumpAndSettle();
+      expect(
+        find.text(
+          '11 of 20 shown · Alt+Up/Down reorders · Delete removes · Clear search to drag reorder',
+        ),
+        findsOneWidget,
+      );
+      expect(find.textContaining('2 of 20'), findsWidgets);
+
+      await _selectStudioStage(tester, 'studio-manual-browse-stage');
+      final browseSearch = find.byKey(const Key('studio-search'));
+      await tester.enterText(browseSearch, 'Program');
+      await tester.pumpAndSettle();
+      expect(find.text('20 matching · 20 added'), findsOneWidget);
+      await tester.enterText(browseSearch, 'Program 1');
+      await tester.pumpAndSettle();
+      expect(find.text('11 matching · 20 added'), findsOneWidget);
+      await tester.enterText(browseSearch, '');
+      await tester.pump(const Duration(milliseconds: 300));
+      expect(find.text('20 added'), findsOneWidget);
+      expect(
+        tester
+            .widgetList<Semantics>(find.byType(Semantics))
+            .where((widget) => widget.properties.liveRegion == true)
+            .map((widget) => widget.properties.label),
+        contains('20 added'),
+      );
+      expect(tester.takeException(), isNull);
+    },
+  );
+
   testWidgets('Studio rundown icon actions expose accessible names', (
     tester,
   ) async {
@@ -3768,7 +3912,7 @@ void main() {
       renderedSelection();
       await tester.pump();
 
-      expect(find.text('1 matching · 0 added'), findsOneWidget);
+      expect(find.text('0 added'), findsOneWidget);
       expect(find.byKey(const Key('studio-result-candidate-a')), findsNothing);
       expect(
         find.byKey(const Key('studio-result-candidate-b')),
@@ -5066,7 +5210,7 @@ void main() {
       );
       await tester.pumpAndSettle();
 
-      expect(find.text('1199 matching · 1200 added'), findsOneWidget);
+      expect(find.text('1200 added'), findsOneWidget);
       expect(find.text('Unavailable — retained until removed'), findsOneWidget);
       expect(controller.playableInventoryReads, lessThanOrEqualTo(4));
 

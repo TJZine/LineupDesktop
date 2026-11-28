@@ -221,7 +221,13 @@ class _StudioManualEditorState extends State<_StudioManualEditor>
           ).contains(rundownQuery))
             (entry: entries[index], index: index),
     ];
-    final countLabel = '${visible.length} matching · ${entries.length} added';
+    final countLabel = _formatCountLabel(visible.length, entries.length);
+    final rundownCount = rundownEntries.length == entries.length
+        ? '${entries.length} ${entries.length == 1 ? 'program' : 'programs'}'
+        : '${rundownEntries.length} of ${entries.length} shown';
+    final rundownControls = DeviceProfile.of(context).isTv
+        ? 'Use Move to… or the arrows on each program to reorder'
+        : 'Alt+Up/Down reorders · Delete removes${rundownQuery.isEmpty ? '' : ' · Clear search to drag reorder'}';
     return LineupCompactControls(
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.stretch,
@@ -554,7 +560,7 @@ class _StudioManualEditorState extends State<_StudioManualEditor>
             Text(
               entries.isEmpty
                   ? 'No programs selected. Return to Browse library to add programming.'
-                  : '${rundownEntries.length} of ${entries.length} shown · Alt+Up/Down reorders · Delete removes${rundownQuery.isEmpty ? '' : ' · Clear search to drag reorder'}',
+                  : '$rundownCount · $rundownControls',
               style: _studioSupportStyle(context),
             ),
             SizedBox(height: 8),
@@ -644,7 +650,16 @@ class _StudioManualEditorState extends State<_StudioManualEditor>
   );
 
   String get _countLabel =>
-      '${_manualMatches.length} matching · ${_rundown.occurrences.length} added';
+      _formatCountLabel(_manualMatches.length, _rundown.occurrences.length);
+
+  String _formatCountLabel(int matching, int added) => [
+    if (_search.text.trim().isNotEmpty ||
+        _manualLibraryId != null ||
+        _manualMediaType != null ||
+        _manualFilters.isNotEmpty)
+      '$matching matching',
+    '$added added',
+  ].join(' · ');
 
   Widget _rundownRow(
     ManualOccurrence entry,

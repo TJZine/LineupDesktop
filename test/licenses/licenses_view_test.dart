@@ -433,6 +433,159 @@ void main() {
     expect(left, 1);
   });
 
+  for (final configuration in [
+    (
+      name: 'desktop wide',
+      size: const Size(1920, 1080),
+      scale: 1.0,
+      tv: false,
+      wrapped: false,
+    ),
+    (
+      name: 'desktop narrow enlarged',
+      size: const Size(640, 600),
+      scale: 2.0,
+      tv: false,
+      wrapped: true,
+    ),
+    (
+      name: 'TV enlarged',
+      size: const Size(1920, 1080),
+      scale: 1.3,
+      tv: true,
+      wrapped: false,
+    ),
+  ]) {
+    testWidgets(
+      'copy feedback reserves the document origin ${configuration.name}',
+      (tester) async {
+        var failCopy = false;
+        binding.defaultBinaryMessenger.setMockMethodCallHandler(
+          SystemChannels.platform,
+          (call) async {
+            if (call.method == 'Clipboard.setData' && failCopy) {
+              throw PlatformException(code: 'clipboard-unavailable');
+            }
+            return null;
+          },
+        );
+        addTearDown(
+          () => binding.defaultBinaryMessenger.setMockMethodCallHandler(
+            SystemChannels.platform,
+            null,
+          ),
+        );
+        const firstParagraph = 'First license paragraph.';
+        await show(
+          tester,
+          [
+            LicenseSource(
+              'Runtime',
+              () async => [
+                LicenseItem.document(
+                  'notice',
+                  'Notice',
+                  () async => '$firstParagraph\n\nSecond license paragraph.',
+                ),
+              ],
+            ),
+          ],
+          size: configuration.size,
+          scale: configuration.scale,
+          isTv: configuration.tv,
+        );
+        await open(tester, 'Notice');
+        final copy = find.widgetWithText(TextButton, 'Copy document');
+        await tester.ensureVisible(copy);
+        await tester.pumpAndSettle();
+        final paragraphOrigin = tester.getTopLeft(find.text(firstParagraph));
+        final copyBounds = tester.getRect(copy);
+        final paragraph = find.descendant(
+          of: find.text(firstParagraph),
+          matching: find.byType(RichText),
+        );
+        expect(
+          tester.widget<RichText>(paragraph).selectionRegistrar,
+          isNotNull,
+        );
+        final feedbackStack = find
+            .ancestor(
+              of: find.byKey(const Key('licenses-copy-feedback')),
+              matching: find.byType(Stack),
+            )
+            .first;
+        for (final text in tester.widgetList<RichText>(
+          find.descendant(of: feedbackStack, matching: find.byType(RichText)),
+        )) {
+          expect(text.selectionRegistrar, isNull);
+        }
+
+        expect(
+          tester.semantics.simulatedAccessibilityTraversal().where(
+            (node) =>
+                node.label.contains('Could not copy the document. Try again.'),
+          ),
+          isEmpty,
+        );
+
+        for (final failed in [false, true]) {
+          failCopy = failed;
+          await tester.tap(copy);
+          await tester.pumpAndSettle();
+          final feedbackLabel = failed
+              ? 'Could not copy the document. Try again.'
+              : 'Document copied';
+          final feedback = find.descendant(
+            of: find.byKey(const Key('licenses-copy-feedback')),
+            matching: find.text(feedbackLabel),
+          );
+          expect(feedback, findsOneWidget);
+          expect(
+            tester
+                .widget<RichText>(
+                  find.descendant(
+                    of: feedback,
+                    matching: find.byType(RichText),
+                  ),
+                )
+                .selectionRegistrar,
+            isNull,
+          );
+          expect(tester.getTopLeft(find.text(firstParagraph)), paragraphOrigin);
+          final feedbackBounds = tester.getRect(feedback);
+          if (configuration.wrapped) {
+            expect(feedbackBounds.top, greaterThanOrEqualTo(copyBounds.bottom));
+          } else {
+            expect(feedbackBounds.left, greaterThan(copyBounds.right));
+            expect(feedbackBounds.center.dy, closeTo(copyBounds.center.dy, .1));
+          }
+          final feedbackNodes = tester.semantics
+              .simulatedAccessibilityTraversal()
+              .where((node) => node.label == feedbackLabel);
+          expect(feedbackNodes, hasLength(1));
+          expect(
+            feedbackNodes.single
+                .getSemanticsData()
+                .flagsCollection
+                .isLiveRegion,
+            isTrue,
+          );
+          final ink = tester
+              .renderObject<RenderParagraph>(
+                find.descendant(of: feedback, matching: find.byType(RichText)),
+              )
+              .text
+              .style!
+              .color;
+          expect(ink, LineupTheme.of(tester.element(feedback)).secondaryText);
+          expect(tester.takeException(), isNull);
+        }
+        await tester.pumpWidget(const SizedBox.shrink());
+      },
+      semanticsEnabled: true,
+    );
+  }
+
   testWidgets(
     'group partial failure, loading, retry and dispose ignore stale work',
     (tester) async {

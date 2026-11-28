@@ -8,6 +8,9 @@ import '../ui/app_theme.dart';
 import '../ui/app_ui.dart';
 import 'licenses_repository.dart';
 
+const _copySucceeded = 'Document copied';
+const _copyFailed = 'Could not copy the document. Try again.';
+
 class LicensesView extends StatefulWidget {
   const LicensesView({
     required this.onBack,
@@ -457,75 +460,104 @@ class LicensesViewState extends State<LicensesView> {
     }
   }
 
-  Widget _document(_ReadingPage page) =>
-      FutureBuilder<({String? text, bool failed})>(
-        future: page.text,
-        builder: (context, snapshot) {
-          if (snapshot.connectionState != ConnectionState.done) {
-            return Semantics(
-              liveRegion: true,
-              child: const Text('Loading license document…'),
-            );
-          }
-          if (snapshot.data?.failed == true) {
-            return _failure('This license document could not be loaded.', () {
-              setState(() {
-                page.text = _read(page.item!);
-              });
-            });
-          }
-          if (!snapshot.hasData) {
-            return Semantics(
-              liveRegion: true,
-              child: Text('Loading license document…'),
-            );
-          }
-          // Separate paragraphs stay readable to assistive technology and selectable
-          // together. Raw source text is never interpreted as markup or links.
-          return Column(
-            crossAxisAlignment: CrossAxisAlignment.stretch,
+  Widget _document(
+    _ReadingPage page,
+  ) => FutureBuilder<({String? text, bool failed})>(
+    future: page.text,
+    builder: (context, snapshot) {
+      if (snapshot.connectionState != ConnectionState.done) {
+        return Semantics(
+          liveRegion: true,
+          child: const Text('Loading license document…'),
+        );
+      }
+      if (snapshot.data?.failed == true) {
+        return _failure('This license document could not be loaded.', () {
+          setState(() {
+            page.text = _read(page.item!);
+          });
+        });
+      }
+      if (!snapshot.hasData) {
+        return Semantics(
+          liveRegion: true,
+          child: Text('Loading license document…'),
+        );
+      }
+      // Separate paragraphs stay readable to assistive technology and selectable
+      // together. Raw source text is never interpreted as markup or links.
+      return Column(
+        crossAxisAlignment: CrossAxisAlignment.stretch,
+        children: [
+          Wrap(
+            spacing: 12,
+            runSpacing: 8,
+            crossAxisAlignment: WrapCrossAlignment.center,
             children: [
-              Align(
-                alignment: Alignment.centerLeft,
-                child: TextButton(
-                  focusNode: page.copy,
-                  style: DeviceProfile.of(context).isTv
-                      ? LineupTheme.buttonStyle(
-                          LineupTheme.of(context),
-                          LineupButtonTier.text,
-                          focusVisible: LineupFocusScope.visible(context),
-                        )
-                      : null,
-                  onPressed: () => _copy(page, snapshot.requireData.text!),
-                  child: _readingActionLabel('Copy document'),
-                ),
+              TextButton(
+                focusNode: page.copy,
+                style: DeviceProfile.of(context).isTv
+                    ? LineupTheme.buttonStyle(
+                        LineupTheme.of(context),
+                        LineupButtonTier.text,
+                        focusVisible: LineupFocusScope.visible(context),
+                      )
+                    : null,
+                onPressed: () => _copy(page, snapshot.requireData.text!),
+                child: _readingActionLabel('Copy document'),
               ),
-              if (page.copyFeedback != null)
-                Semantics(liveRegion: true, child: Text(page.copyFeedback!)),
-              for (final paragraph in snapshot.requireData.text!.split('\n\n'))
-                Padding(
-                  padding: const EdgeInsets.only(bottom: 16),
-                  child: Text(
-                    paragraph,
-                    softWrap: true,
-                    style: Theme.of(context).textTheme.bodyLarge?.copyWith(
-                      height: 1.5,
-                      color: LineupTheme.of(context).primaryText,
-                    ),
+              SelectionContainer.disabled(
+                child: DefaultTextStyle.merge(
+                  style: TextStyle(
+                    color: LineupTheme.of(context).secondaryText,
+                  ),
+                  child: Stack(
+                    alignment: Alignment.centerLeft,
+                    children: [
+                      // Reserve the longest response before copying, including
+                      // its wrapped height when it moves below the action.
+                      const Visibility(
+                        visible: false,
+                        maintainSize: true,
+                        maintainAnimation: true,
+                        maintainState: true,
+                        child: Text(_copyFailed),
+                      ),
+                      Semantics(
+                        key: const Key('licenses-copy-feedback'),
+                        liveRegion: true,
+                        child: Text(page.copyFeedback ?? ''),
+                      ),
+                    ],
                   ),
                 ),
+              ),
             ],
-          );
-        },
+          ),
+          for (final paragraph in snapshot.requireData.text!.split('\n\n'))
+            Padding(
+              padding: const EdgeInsets.only(bottom: 16),
+              child: Text(
+                paragraph,
+                softWrap: true,
+                style: Theme.of(context).textTheme.bodyLarge?.copyWith(
+                  height: 1.5,
+                  color: LineupTheme.of(context).primaryText,
+                ),
+              ),
+            ),
+        ],
       );
+    },
+  );
 
   Future<void> _copy(_ReadingPage page, String text) async {
     String feedback;
     try {
       await Clipboard.setData(ClipboardData(text: text));
-      feedback = 'Document copied';
+      feedback = _copySucceeded;
     } catch (_) {
-      feedback = 'Could not copy the document. Try again.';
+      feedback = _copyFailed;
     }
     if (mounted && _page == page) setState(() => page.copyFeedback = feedback);
   }

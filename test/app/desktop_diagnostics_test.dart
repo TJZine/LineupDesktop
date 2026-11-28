@@ -293,7 +293,9 @@ void main() {
         final technical = find.byKey(
           const PageStorageKey('diagnostic-technical-details'),
         );
-        final recording = find.widgetWithText(TextButton, 'Recording settings');
+        final recording = find.byKey(
+          const Key('diagnostics-recording-settings-header'),
+        );
         // Enter through normal remote traversal, with no pointer or requestFocus.
         await key(LogicalKeyboardKey.arrowDown);
         expect(focusedIn(copy), isTrue);
@@ -364,6 +366,91 @@ void main() {
       }
     },
   );
+
+  for (final (tv, scale) in [(true, 1.0), (true, 1.3), (false, 2.0)]) {
+    testWidgets(
+      'recording-off settings action fits and activates TV=$tv scale=$scale',
+      (tester) async {
+        tester.view
+          ..physicalSize = const Size(1920, 1080)
+          ..devicePixelRatio = 1;
+        addTearDown(tester.view.reset);
+        tester.platformDispatcher.textScaleFactorTestValue = scale;
+        addTearDown(tester.platformDispatcher.clearTextScaleFactorTestValue);
+        final controller = FixtureController();
+        addTearDown(controller.dispose);
+        var calls = 0;
+        await show(
+          tester,
+          controller,
+          isTv: tv,
+          onRecordingSettings: () => calls++,
+        );
+        await tester.pumpAndSettle();
+        final inline = find.byKey(
+          const Key('diagnostics-recording-settings-message'),
+        );
+        final header = find.byKey(
+          const Key('diagnostics-recording-settings-header'),
+        );
+        final offState = find.byKey(const Key('diagnostics-recording-off'));
+        bool focused(Finder button) => Focus.of(
+          tester.element(
+            find.descendant(
+              of: button,
+              matching: find.text('Recording settings'),
+            ),
+          ),
+        ).hasPrimaryFocus;
+
+        if (tv) {
+          final label = find.descendant(
+            of: inline,
+            matching: find.text('Recording settings'),
+          );
+          final paragraph = find.descendant(
+            of: label,
+            matching: find.byType(RichText),
+          );
+          expect(tester.widget<RichText>(paragraph).text.style?.fontSize, 20);
+          await tester.sendKeyEvent(LogicalKeyboardKey.arrowDown);
+          await tester.pumpAndSettle();
+          expect(
+            Focus.of(tester.element(find.text('Copy redacted report')))
+                .hasPrimaryFocus,
+            isTrue,
+          );
+          for (var step = 0; step < 6 && !focused(header); step++) {
+            await tester.sendKeyEvent(LogicalKeyboardKey.arrowDown);
+            await tester.pumpAndSettle();
+          }
+          expect(focused(header), isTrue);
+          await tester.sendKeyEvent(LogicalKeyboardKey.arrowDown);
+          await tester.pumpAndSettle();
+          expect(focused(inline), isTrue);
+          await tester.sendKeyEvent(LogicalKeyboardKey.select);
+        } else {
+          await tester.ensureVisible(inline);
+          await tester.pumpAndSettle();
+          await tester.tap(inline);
+        }
+        await tester.pumpAndSettle();
+        expect(calls, 1);
+        final stateBounds = tester.getRect(offState);
+        for (final content in [
+          find.text('Diagnostic recording is off'),
+          find.text('Turn on recording, then reproduce the issue.'),
+          inline,
+        ]) {
+          final bounds = tester.getRect(content);
+          expect(bounds.top, greaterThanOrEqualTo(stateBounds.top));
+          expect(bounds.bottom, lessThanOrEqualTo(stateBounds.bottom));
+        }
+        expect(inline.hitTestable(), findsOneWidget);
+        expect(tester.takeException(), isNull);
+      },
+    );
+  }
 
   testWidgets('diagnostics exposes its report and technical details', (
     tester,
